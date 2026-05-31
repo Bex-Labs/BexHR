@@ -88,6 +88,15 @@ const state = {
   // Controls the temporary bottom-right manager notification.
   dashboardToastTimeoutId: null,
 
+  // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
+  // In-memory only. This compares the currently visible manager team before
+  // and after a refresh/focus reload so the manager gets a toast when HR adds
+  // or removes employees from their reporting line.
+  // No team, employee, leave, payroll, or decision data is written to browser storage.
+  hasLoadedTeamAssignmentSnapshot: false,
+  isTeamAssignmentFocusRefreshInProgress: false,
+  lastTeamAssignmentFocusRefreshAt: 0,
+
   dom: {},
 };
 
@@ -779,6 +788,161 @@ function hideManagerDashboardToast() {
   }
 }
 
+// MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
+// Stable key for comparing manager team membership before and after refresh.
+// Prefer employees.id because employee_reporting_lines is keyed to employee rows.
+function getManagerTeamAssignmentMemberKey(member = {}) {
+  return String(
+    member.id ||
+    member.raw?.id ||
+    member.work_email ||
+    member.employeeFullName ||
+    "",
+  ).trim();
+}
+
+// MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
+// Friendly label for manager-facing assignment change notifications.
+function getManagerTeamAssignmentMemberName(member = {}) {
+  return String(
+    member.employeeFullName ||
+    member.raw?.full_name ||
+    member.work_email ||
+    "Employee",
+  ).trim();
+}
+
+// MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
+// Build an in-memory lookup of visible team assignments.
+function buildManagerTeamAssignmentMap(teamMembers = []) {
+  const map = new Map();
+
+  (Array.isArray(teamMembers) ? teamMembers : []).forEach((member) => {
+    const key = getManagerTeamAssignmentMemberKey(member);
+    if (!key) return;
+
+    map.set(key, getManagerTeamAssignmentMemberName(member));
+  });
+
+  return map;
+}
+
+// MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
+// Keep toast copy short. Large teams should not produce a long notification.
+function formatManagerTeamAssignmentNames(names = []) {
+  const cleanNames = names
+    .map((name) => String(name || "").trim())
+    .filter(Boolean);
+
+  if (!cleanNames.length) return "employee record";
+
+  if (cleanNames.length <= 2) {
+    return cleanNames.join(", ");
+  }
+
+  return `${cleanNames.slice(0, 2).join(", ")} +${cleanNames.length - 2} more`;
+}
+
+// MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
+// Compare the previously visible team with the newly loaded team.
+// This gives managers feedback when HR changes or removes line-manager
+// assignments, without changing HR save logic, RLS, leave approval, or payroll.
+function notifyManagerTeamAssignmentChanges(nextTeamMembers = []) {
+  const previousTeamMembers = Array.isArray(state.teamMembers)
+    ? state.teamMembers
+    : [];
+
+  const previousMap = buildManagerTeamAssignmentMap(previousTeamMembers);
+  const nextMap = buildManagerTeamAssignmentMap(nextTeamMembers);
+
+  // First successful load establishes the snapshot only. Do not show a false
+  // "added" toast when the manager first opens the dashboard.
+  if (!state.hasLoadedTeamAssignmentSnapshot) {
+    state.hasLoadedTeamAssignmentSnapshot = true;
+    return;
+  }
+
+  const removedNames = [...previousMap.entries()]
+    .filter(([key]) => !nextMap.has(key))
+    .map(([, name]) => name);
+
+  const addedNames = [...nextMap.entries()]
+    .filter(([key]) => !previousMap.has(key))
+    .map(([, name]) => name);
+
+  if (!removedNames.length && !addedNames.length) return;
+
+  if (removedNames.length && addedNames.length) {
+    // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N-FIX
+    // HR wording: the manager is the line manager; employees are added to or
+    // removed from the manager's team/reporting line.
+    showManagerDashboardToast(
+      "info",
+      "Team assignment updated",
+      `${formatManagerTeamAssignmentNames(removedNames)} removed from your team; ${formatManagerTeamAssignmentNames(addedNames)} added to your team.`,
+    );
+    return;
+  }
+
+  if (removedNames.length) {
+    // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N-FIX
+    // Use manager-facing HR wording, not "employee assigned to you as line manager".
+    showManagerDashboardToast(
+      "warning",
+      "Employee removed from your team",
+      removedNames.length === 1
+        ? `You are no longer ${formatManagerTeamAssignmentNames(removedNames)}'s line manager.`
+        : `${formatManagerTeamAssignmentNames(removedNames)} are no longer in your team.`,
+    );
+    return;
+  }
+
+  // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N-FIX
+  // Added employee wording: employee joins the manager's team; manager becomes
+  // their line manager.
+  showManagerDashboardToast(
+    "success",
+    "Employee added to your team",
+    addedNames.length === 1
+      ? `${formatManagerTeamAssignmentNames(addedNames)} has been added to your team. You are now their line manager.`
+      : `${formatManagerTeamAssignmentNames(addedNames)} have been added to your team.`,
+  );
+}
+
+// MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
+// When the manager returns to the Team workspace, refresh the assignment view.
+// This catches HR reporting-line changes without needing a full page reload.
+async function refreshManagerTeamAssignmentsOnFocus() {
+  if (document.hidden) return;
+
+  const isTeamWorkspaceVisible =
+    state.dom.managerTeamSection &&
+    !state.dom.managerTeamSection.classList.contains("d-none");
+
+  if (!isTeamWorkspaceVisible) return;
+
+  const now = Date.now();
+  const minimumRefreshGapMs = 15000;
+
+  if (
+    state.isTeamAssignmentFocusRefreshInProgress ||
+    now - state.lastTeamAssignmentFocusRefreshAt < minimumRefreshGapMs
+  ) {
+    return;
+  }
+
+  state.isTeamAssignmentFocusRefreshInProgress = true;
+  state.lastTeamAssignmentFocusRefreshAt = now;
+
+  try {
+    await refreshManagerWorkspace();
+  } catch (error) {
+    console.warn("Manager team assignment focus refresh failed:", error);
+  } finally {
+    state.isTeamAssignmentFocusRefreshInProgress = false;
+  }
+}
+
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
 // Business-friendly notification title for manager decisions.
 function getLeaveDecisionToastTitle(status = "") {
@@ -864,6 +1028,20 @@ function bindEvents() {
 
   state.dom.refreshTeamBtn?.addEventListener("click", async () => {
     await refreshManagerWorkspace();
+  });
+
+  // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
+  // Refresh the Team workspace when the manager returns to the browser tab.
+  // If HR changed reporting lines while the manager was away, the dashboard
+  // reloads the assignment list and shows a toast for added/removed employees.
+  window.addEventListener("focus", () => {
+    void refreshManagerTeamAssignmentsOnFocus();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      void refreshManagerTeamAssignmentsOnFocus();
+    }
   });
 
   state.dom.teamSearchInput?.addEventListener("input", () => {
@@ -3220,6 +3398,14 @@ async function loadAssignedTeamMembers() {
     const assignedEmployeeIds = [...reportingLineByEmployeeId.keys()];
 
     if (!assignedEmployeeIds.length) {
+      // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
+      // If HR removes all reporting-line assignments while the manager has the
+      // dashboard open, show a manager-facing toast and clear the visible team.
+      notifyManagerTeamAssignmentChanges([]);
+
+      state.teamMembers = [];
+      state.filteredTeamMembers = [];
+
       showPageAlert(
         "warning",
         "No active reporting-line employees were found for this manager.",
@@ -3359,6 +3545,11 @@ async function loadAssignedTeamMembers() {
         ),
       };
     });
+
+    // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
+    // Compare before overwriting state.teamMembers so added/removed employees
+    // can be reported to the manager via toast.
+    notifyManagerTeamAssignmentChanges(enrichedTeamMembers);
 
     state.teamMembers = enrichedTeamMembers;
     applyTeamFilter();

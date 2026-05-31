@@ -26,6 +26,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Summary first, Full Employee List next, then create/import actions.
     alignEmployeeWorkspaceCardOrder();
 
+    // HR REVIEW WORKSPACE SEPARATION - STEP 1P
+    // Move HR review/audit cards out of People before default card collapse
+    // runs, so collapse/double-click behaviour remains consistent.
+    alignHrReviewWorkspaceCardOrder();
+
     // SETUP WORKSPACE FUNCTIONAL GROUPING - STEP 1A
     // Creates a lightweight visual header inside Setup.
     // These headers group existing cards by HR/payroll function without
@@ -280,6 +285,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Load employee-submitted correction requests after employees are loaded,
     // so the queue can resolve employee names from state.employees.
     await refreshProfileCorrectionRequestsWorkspace();
+
+    // HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+    // Load manager leave decisions after employees are loaded, so HR can see
+    // employee names, departments, decision makers, comments, and decision dates.
+    await refreshRecentManagerLeaveDecisionsWorkspace();
 
     // DYNAMIC EDUCATION SUGGESTIONS - STEP 1A
     // Load saved schools/courses into the Education datalists after HR access
@@ -1659,6 +1669,12 @@ const state = {
   // This is read-only in this step; decision actions come after the queue is confirmed.
   profileCorrectionRequests: [],
 
+  // HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+  // Holds manager-approved, rejected, and returned leave decisions for HR audit.
+  // This does not create a separate manual reporting process; it surfaces the
+  // existing leave_requests decision audit fields to HR.
+  recentManagerLeaveDecisionRecords: [],
+
   // HR PROFILE CORRECTION REQUESTS UX - STEP 1I
   // Temporary workflow return context.
   // Set only when HR opens the employee edit form from a correction request.
@@ -2805,7 +2821,11 @@ function getCurrentTenantContext() {
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
 // Only these top-level HR workspaces are safe to restore after browser refresh.
 function isValidHrWorkspaceKey(workspace = "") {
-  return ["profile", "employees", "setup", "payroll", "selfservice"].includes(
+  // HR REVIEW WORKSPACE SEPARATION - STEP 1P
+  // Review is a real top-level HR workspace, safe to remember across refresh.
+  // It stores only the workspace key, not employee, leave, payroll, salary,
+  // bank, or decision data.
+  return ["profile", "employees", "review", "setup", "payroll", "selfservice"].includes(
     String(workspace || "").trim(),
   );
 }
@@ -2925,6 +2945,7 @@ function suppressHrWorkspaceFlashDuringStartup() {
   [
     state.dom.hrProfileSection,
     state.dom.hrEmployeesSection,
+    state.dom.hrReviewSection,
     state.dom.hrSetupSection,
     state.dom.hrPayrollSection,
   ].forEach((section) => {
@@ -3356,6 +3377,11 @@ function cacheDomElements() {
     hrTabProfileBtn: document.getElementById("hrTabProfileBtn"),
     hrTabEmployeesBtn: document.getElementById("hrTabEmployeesBtn"),
 
+    // HR REVIEW WORKSPACE SEPARATION - STEP 1P
+    // Dedicated HR oversight workspace for review/audit cards that should not
+    // distract from People master-data maintenance.
+    hrTabReviewBtn: document.getElementById("hrTabReviewBtn"),
+
     // WORKSPACE REARRANGEMENT - STEP 1C
     // New Setup workspace tab for organisation, payroll, deduction, and bank master data.
     hrTabSetupBtn: document.getElementById("hrTabSetupBtn"),
@@ -3367,8 +3393,19 @@ function cacheDomElements() {
     // Cache the primary Run Payroll workflow button in the HR workspace header.
     runPayrollActionBtn: document.getElementById("runPayrollActionBtn"),
 
+    // HR REVIEW WORKSPACE SEPARATION - STEP 1P-FIX 2
+    // Cache all top-level HR workspace sections.
+    // Without these section references, switchHrWorkspace() cannot hide/show
+    // each workspace correctly, and the review cards cannot be moved safely
+    // into the dedicated HR Review workspace.
     hrProfileSection: document.getElementById("hrProfileSection"),
     hrEmployeesSection: document.getElementById("hrEmployeesSection"),
+
+    // HR Review is system-wide HR functionality.
+    // Alpatech branding remains tenant-scoped elsewhere; this workspace is
+    // not Alpatech-only.
+    hrReviewSection: document.getElementById("hrReviewSection"),
+    hrReviewLandingCard: document.getElementById("hrReviewLandingCard"),
 
     // WORKSPACE REARRANGEMENT - STEP 1C
     // Setup section receives existing setup/master-data cards at runtime.
@@ -3700,6 +3737,21 @@ function cacheDomElements() {
     profileCorrectionRequestsEmptyState: document.getElementById("profileCorrectionRequestsEmptyState"),
     profileCorrectionRequestsTableWrapper: document.getElementById("profileCorrectionRequestsTableWrapper"),
     profileCorrectionRequestsTableBody: document.getElementById("profileCorrectionRequestsTableBody"),
+
+    // HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+    // HR-side central audit panel for manager leave decisions.
+    recentManagerLeaveDecisionsCard: document.getElementById("recentManagerLeaveDecisionsCard"),
+    refreshManagerLeaveDecisionsBtn: document.getElementById("refreshManagerLeaveDecisionsBtn"),
+    toggleManagerLeaveDecisionsBtn: document.getElementById("toggleManagerLeaveDecisionsBtn"),
+    managerLeaveDecisionsCollapse: document.getElementById("managerLeaveDecisionsCollapse"),
+    managerLeaveDecisionTotalCount: document.getElementById("managerLeaveDecisionTotalCount"),
+    managerLeaveDecisionApprovedCount: document.getElementById("managerLeaveDecisionApprovedCount"),
+    managerLeaveDecisionExceptionCount: document.getElementById("managerLeaveDecisionExceptionCount"),
+    managerLeaveDecisionLatestValue: document.getElementById("managerLeaveDecisionLatestValue"),
+    managerLeaveDecisionsStatus: document.getElementById("managerLeaveDecisionsStatus"),
+    managerLeaveDecisionsEmptyState: document.getElementById("managerLeaveDecisionsEmptyState"),
+    managerLeaveDecisionsTableWrapper: document.getElementById("managerLeaveDecisionsTableWrapper"),
+    managerLeaveDecisionsTableBody: document.getElementById("managerLeaveDecisionsTableBody"),
 
     // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1B
     // Cache the Batch Employee Import UI elements added to the Employees workspace.
@@ -4327,6 +4379,14 @@ function getDashboardWorkingCardPairs() {
     // labels, and textareas so HR does not accidentally collapse while reviewing
     // or saving a request decision.
     [state.dom.toggleProfileCorrectionRequestsBtn, state.dom.profileCorrectionRequestsCollapse],
+
+    // HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O-FIX
+    // Recent Manager Leave Decisions is an HR audit/reference panel.
+    // Keep it collapsed by default and give it the same double-click collapse
+    // behaviour as other long HR working cards. This does not change leave
+    // approval, leave balance, manager workflow, or employee records.
+    [state.dom.toggleManagerLeaveDecisionsBtn, state.dom.managerLeaveDecisionsCollapse],
+
     [state.dom.toggleEmployeeFormCardBtn, state.dom.employeeFormCardCollapse],
     [state.dom.toggleBankDirectoryCardBtn, state.dom.bankDirectoryCardCollapse],
     [state.dom.toggleEmployeeBankDetailsCardBtn, state.dom.employeeBankDetailsCardCollapse],
@@ -8048,11 +8108,6 @@ function alignEmployeeWorkspaceCardOrder() {
   const employeeListCard =
     state.dom.employeeListCardCollapse?.closest(".dashboard-section-card");
 
-  // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
-  // Keep correction requests near the top of People because they are HR action work,
-  // not setup data and not payroll processing.
-  const profileCorrectionRequestsCard = state.dom.profileCorrectionRequestsCard;
-
   const employeeFormCard =
     state.dom.employeeFormCardCollapse?.closest(".dashboard-section-card");
 
@@ -8069,9 +8124,12 @@ function alignEmployeeWorkspaceCardOrder() {
     return;
   }
 
+  // HR REVIEW WORKSPACE SEPARATION - STEP 1P
+  // People is now employee master-data focused only:
+  // Summary -> Full Employee List -> Create Employee Profile -> Batch Import.
+  // Review/audit cards are moved separately into HR Review.
   [
     employeeSummaryCard,
-    profileCorrectionRequestsCard,
     employeeListCard,
     employeeFormCard,
     batchEmployeeImportCard,
@@ -8079,16 +8137,39 @@ function alignEmployeeWorkspaceCardOrder() {
     card.classList.add("mb-4");
   });
 
-  // Move cards from bottom to top in the desired People sequence.
   employeeSummaryCard.insertAdjacentElement("afterend", batchEmployeeImportCard);
   employeeSummaryCard.insertAdjacentElement("afterend", employeeFormCard);
   employeeSummaryCard.insertAdjacentElement("afterend", employeeListCard);
+}
 
-  // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
-  // Final insertion keeps this queue directly after the People summary.
-  profileCorrectionRequestsCard?.insertAdjacentElement
-    ? employeeSummaryCard.insertAdjacentElement("afterend", profileCorrectionRequestsCard)
-    : null;
+// HR REVIEW WORKSPACE SEPARATION - STEP 1P
+// Move review/audit cards out of People into the dedicated HR Review workspace.
+// Existing IDs and event bindings remain intact because the cards are moved,
+// not recreated.
+function alignHrReviewWorkspaceCardOrder() {
+  const reviewSection = state.dom.hrReviewSection;
+  const reviewLandingCard = state.dom.hrReviewLandingCard;
+  const profileCorrectionRequestsCard = state.dom.profileCorrectionRequestsCard;
+  const recentManagerLeaveDecisionsCard =
+    state.dom.recentManagerLeaveDecisionsCard;
+
+  if (!reviewSection || !reviewLandingCard) return;
+
+  [
+    reviewLandingCard,
+    profileCorrectionRequestsCard,
+    recentManagerLeaveDecisionsCard,
+  ].filter(Boolean).forEach((card) => {
+    card.classList.add("mb-4");
+  });
+
+  if (recentManagerLeaveDecisionsCard) {
+    reviewLandingCard.insertAdjacentElement("afterend", recentManagerLeaveDecisionsCard);
+  }
+
+  if (profileCorrectionRequestsCard) {
+    reviewLandingCard.insertAdjacentElement("afterend", profileCorrectionRequestsCard);
+  }
 }
 
 function bindEvents() {
@@ -8173,6 +8254,21 @@ function bindEvents() {
     switchHrWorkspace("employees");
     applyEmployeeSearch();
     syncSelectAllEmployeesForPayrollCheckbox();
+  });
+
+  // HR REVIEW WORKSPACE SEPARATION - STEP 1P
+  // HR Review is operational oversight. It should clear payroll-selection
+  // state but must not reset payroll forms or setup forms.
+  state.dom.hrTabReviewBtn?.addEventListener("click", async () => {
+    state.isRunPayrollSelectionMode = false;
+    state.selectedEmployeesForPayroll.clear();
+    state.dom.runPayrollSelectionNotice?.classList.add("d-none");
+
+    rememberHrWorkspace("review");
+    switchHrWorkspace("review");
+
+    await refreshProfileCorrectionRequestsWorkspace();
+    await refreshRecentManagerLeaveDecisionsWorkspace();
   });
 
   // WORKSPACE REARRANGEMENT - STEP 1G
@@ -8307,6 +8403,39 @@ function bindEvents() {
       state.dom.profileCorrectionRequestsCollapse,
       true,
     );
+  });
+
+  // HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+  // HR can refresh the central manager decision audit without asking managers
+  // to report normal leave decisions manually.
+  state.dom.refreshManagerLeaveDecisionsBtn?.addEventListener("click", async () => {
+    await refreshRecentManagerLeaveDecisionsWorkspace({ showAlert: true });
+  });
+
+  // HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+  // When a manager decision is made in another tab in the same browser session,
+  // refresh HR's audit panel and show a toast. Cross-user live push should be
+  // handled later by a database-backed notification/realtime mechanism.
+  window.addEventListener("storage", (event) => {
+    if (event.key !== "hrPayrollLeaveDecisionSync") return;
+
+    refreshRecentManagerLeaveDecisionsWorkspace({ showToast: true }).catch((error) => {
+      console.warn("HR manager leave decision sync refresh failed:", error);
+    });
+  });
+
+  window.addEventListener("focus", () => {
+    // HR REVIEW WORKSPACE SEPARATION - STEP 1P
+    // Refresh manager leave-decision audit only when HR Review is visible.
+    // People should stay focused on employee records.
+    if (
+      state.dom.hrReviewSection &&
+      !state.dom.hrReviewSection.classList.contains("d-none")
+    ) {
+      refreshRecentManagerLeaveDecisionsWorkspace().catch((error) => {
+        console.warn("HR manager leave decision focus refresh failed:", error);
+      });
+    }
   });
 
   state.dom.employeeCreateForm?.addEventListener("submit", async (event) => {
@@ -8554,6 +8683,13 @@ function bindEvents() {
   bindCardCollapseToggle(
     state.dom.toggleProfileCorrectionRequestsBtn,
     state.dom.profileCorrectionRequestsCollapse,
+  );
+
+  // HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+  // Bind the central HR audit panel for manager leave decisions.
+  bindCardCollapseToggle(
+    state.dom.toggleManagerLeaveDecisionsBtn,
+    state.dom.managerLeaveDecisionsCollapse,
   );
 
   // MANAGE ORGANIZATION CARD - STEP 3
@@ -13155,15 +13291,16 @@ function sortProfileCorrectionRequests(records = []) {
 // Smart default:
 // - open HR work should stay visible;
 // - fully closed/no-work queue should stay compact.
-// This only collapses the queue details, not the summary tiles.
+// HR REVIEW WORKSPACE SEPARATION - STEP 1P-FIX 3
+// Keep Profile Correction Requests collapsed by default for workspace uniformity.
+// Open request counts still show in the summary tiles, but the detailed queue
+// should not force itself open just because review work exists.
+// HR can deliberately expand it when they want to work the queue.
 function syncProfileCorrectionRequestsSmartCollapse(records = []) {
-  const requests = Array.isArray(records) ? records : [];
-  const hasOpenRequests = requests.some(isOpenProfileCorrectionRequest);
-
   setDashboardCardExpanded(
     state.dom.toggleProfileCorrectionRequestsBtn,
     state.dom.profileCorrectionRequestsCollapse,
-    hasOpenRequests,
+    false,
   );
 }
 
@@ -13805,6 +13942,408 @@ async function handleProfileCorrectionRequestDecisionSave(requestId) {
     );
   } finally {
     setWorkspaceRefreshLoading(saveButton, false);
+  }
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// These statuses represent manager decisions HR can audit centrally.
+// Pending Approval remains manager work-in-progress and is not shown here.
+function isHrManagerLeaveDecisionStatus(status = "") {
+  return [
+    "approved",
+    "rejected",
+    "returned",
+    "returned for clarification",
+  ].includes(normalizeText(status));
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// Build all leave identity values used in this app for the current tenant.
+// leave_requests.employee_id may point to employees.id, user_id/profile id,
+// or legacy identity values depending on when the request was created.
+function getHrLeaveIdentityCandidatesForEmployee(employee = {}) {
+  return [
+    employee.id,
+    employee.user_id,
+    employee.profile_id,
+    employee.auth_user_id,
+    employee.profile_user_id,
+    employee.employee_user_id,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// One lookup lets HR resolve leave_requests rows back to the tenant-filtered
+// employees already loaded in the People workspace.
+function buildHrEmployeeByLeaveIdentityMap() {
+  const map = new Map();
+
+  (Array.isArray(state.employees) ? state.employees : []).forEach((employee) => {
+    getHrLeaveIdentityCandidatesForEmployee(employee).forEach((candidate) => {
+      if (!map.has(candidate)) {
+        map.set(candidate, employee);
+      }
+    });
+  });
+
+  return map;
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// Keep employee display logic local and defensive.
+function getHrLeaveDecisionEmployeeName(employee = {}) {
+  const firstName = String(employee.first_name || "").trim();
+  const lastName = String(employee.last_name || "").trim();
+  const combinedName = `${firstName} ${lastName}`.trim();
+
+  return (
+    combinedName ||
+    employee.full_name ||
+    employee.name ||
+    "Unknown Employee"
+  );
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// Status badge styling for HR's manager-decision audit panel.
+function getHrLeaveDecisionStatusBadgeClass(status = "") {
+  const normalizedStatus = normalizeText(status);
+
+  if (normalizedStatus === "approved") return "text-bg-success";
+  if (normalizedStatus === "rejected") return "text-bg-danger";
+  if (
+    normalizedStatus === "returned" ||
+    normalizedStatus === "returned for clarification"
+  ) {
+    return "text-bg-warning";
+  }
+
+  return "text-bg-secondary";
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// Compact display label while preserving the stored status in title/aria-label.
+function getHrLeaveDecisionStatusLabel(status = "") {
+  const normalizedStatus = normalizeText(status);
+
+  if (normalizedStatus === "returned for clarification") return "Returned";
+  if (normalizedStatus === "returned") return "Returned";
+
+  return status || "--";
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// Local panel status message. This stays separate from the global page alert.
+function setManagerLeaveDecisionsStatus(type = "info", message = "") {
+  const status = state.dom.managerLeaveDecisionsStatus;
+  if (!status) return;
+
+  if (!message) {
+    status.className = "alert d-none mb-4";
+    status.textContent = "";
+    return;
+  }
+
+  status.className = `alert alert-${type} border mb-4`;
+  status.textContent = message;
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// Loading state mirrors the HR correction request table pattern.
+function renderRecentManagerLeaveDecisionsLoadingState() {
+  const tbody = state.dom.managerLeaveDecisionsTableBody;
+  if (!tbody) return;
+
+  state.dom.managerLeaveDecisionsEmptyState?.classList.add("d-none");
+  state.dom.managerLeaveDecisionsTableWrapper?.classList.remove("d-none");
+
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="6" class="text-center text-secondary py-4">
+        Loading recent manager leave decisions...
+      </td>
+    </tr>
+  `;
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// Summary tiles for HR oversight.
+function updateRecentManagerLeaveDecisionSummary(records = []) {
+  const decisions = Array.isArray(records) ? records : [];
+
+  const approvedCount = decisions.filter(
+    (record) => normalizeText(record.status) === "approved",
+  ).length;
+
+  const exceptionCount = decisions.filter((record) =>
+    ["rejected", "returned", "returned for clarification"].includes(
+      normalizeText(record.status),
+    ),
+  ).length;
+
+  if (state.dom.managerLeaveDecisionTotalCount) {
+    state.dom.managerLeaveDecisionTotalCount.textContent = String(decisions.length);
+  }
+
+  if (state.dom.managerLeaveDecisionApprovedCount) {
+    state.dom.managerLeaveDecisionApprovedCount.textContent = String(approvedCount);
+  }
+
+  if (state.dom.managerLeaveDecisionExceptionCount) {
+    state.dom.managerLeaveDecisionExceptionCount.textContent = String(exceptionCount);
+  }
+
+  if (state.dom.managerLeaveDecisionLatestValue) {
+    const latestDecision = decisions[0];
+    state.dom.managerLeaveDecisionLatestValue.textContent = latestDecision
+      ? formatDate(latestDecision.decision_at || latestDecision.submitted_at)
+      : "--";
+  }
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// Render HR's central audit table. This is display-only and does not alter
+// leave balance, employee records, manager records, or leave_requests data.
+function renderRecentManagerLeaveDecisions(records = []) {
+  const tbody = state.dom.managerLeaveDecisionsTableBody;
+  if (!tbody) return;
+
+  const decisions = Array.isArray(records) ? records : [];
+
+  updateRecentManagerLeaveDecisionSummary(decisions);
+
+  tbody.innerHTML = "";
+
+  if (!decisions.length) {
+    state.dom.managerLeaveDecisionsEmptyState?.classList.remove("d-none");
+    state.dom.managerLeaveDecisionsTableWrapper?.classList.add("d-none");
+    return;
+  }
+
+  state.dom.managerLeaveDecisionsEmptyState?.classList.add("d-none");
+  state.dom.managerLeaveDecisionsTableWrapper?.classList.remove("d-none");
+
+  decisions.forEach((decision) => {
+    const row = document.createElement("tr");
+
+    const employeeName = decision.employeeName || "Unknown Employee";
+    const employeeEmail = decision.employeeEmail || "--";
+    const department = decision.employeeDepartment || "--";
+    const leaveTypeName = decision.leaveTypeName || "Leave";
+
+    // HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O-FIX 4
+    // Stack leave dates and decision date/time so the HR audit table does not
+    // stretch sideways or mismatch headers and body content.
+    const leaveStartDate = formatDate(decision.start_date);
+    const leaveEndDate = formatDate(decision.end_date);
+    const decisionDateTime = formatDateTime(decision.decision_at || decision.submitted_at);
+    const decisionDateSeparatorIndex = String(decisionDateTime).lastIndexOf(",");
+    const decisionDateLabel =
+      decisionDateSeparatorIndex > -1
+        ? String(decisionDateTime).slice(0, decisionDateSeparatorIndex).trim()
+        : decisionDateTime;
+    const decisionTimeLabel =
+      decisionDateSeparatorIndex > -1
+        ? String(decisionDateTime).slice(decisionDateSeparatorIndex + 1).trim()
+        : "";
+
+    const managerName = decision.decision_by_name || "Manager";
+    const comment = String(decision.decision_comment || "").trim();
+
+    row.innerHTML = `
+      <td class="px-3 py-3 align-top">
+        <!-- HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O-FIX 4
+             Compact identity stack: readable, aligned, and not over-wide. -->
+        <div class="fw-semibold lh-sm mb-1">${escapeHtml(employeeName)}</div>
+        <div class="text-secondary small text-break lh-sm">${escapeHtml(employeeEmail)}</div>
+        <div class="text-secondary small mt-2 lh-sm">${escapeHtml(department)}</div>
+      </td>
+
+      <td class="px-3 py-3 align-top">
+        <div class="fw-semibold lh-sm mb-2">${escapeHtml(leaveTypeName)}</div>
+
+        <div class="small text-secondary lh-sm">
+          <span class="fw-semibold text-dark">From:</span>
+          ${escapeHtml(leaveStartDate)}
+        </div>
+
+        <div class="small text-secondary lh-sm mt-1">
+          <span class="fw-semibold text-dark">To:</span>
+          ${escapeHtml(leaveEndDate)}
+        </div>
+
+        <div class="mt-2">
+          <span class="badge rounded-pill text-bg-light border text-dark px-3 py-2">
+            ${escapeHtml(decision.total_days || "--")} day${Number(decision.total_days || 0) === 1 ? "" : "s"}
+          </span>
+        </div>
+      </td>
+
+      <td class="px-3 py-3 align-top text-center">
+        <span class="badge ${getHrLeaveDecisionStatusBadgeClass(decision.status)}"
+          title="${escapeHtml(decision.status || "--")}"
+          aria-label="${escapeHtml(decision.status || "--")}">
+          ${escapeHtml(getHrLeaveDecisionStatusLabel(decision.status))}
+        </span>
+      </td>
+
+      <td class="px-3 py-3 align-top">
+        <div class="fw-semibold lh-sm mb-1">${escapeHtml(managerName)}</div>
+        <div class="text-secondary small lh-sm">Manager workflow</div>
+      </td>
+
+      <td class="px-3 py-3 align-top">
+        <!-- HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O-FIX 5
+             Professional HR audit display:
+             - show the manager's note as plain audit text;
+             - avoid boxed styling that looks like an editable input;
+             - keep empty notes clear without making them look like an error. -->
+        ${
+          comment
+            ? `
+              <div class="small lh-sm text-break" title="${escapeHtml(comment)}">
+                <span class="text-secondary">“</span>${escapeHtml(comment)}<span class="text-secondary">”</span>
+              </div>
+            `
+            : `
+              <span class="text-secondary small fst-italic">
+                No manager note recorded
+              </span>
+            `
+        }
+      </td>
+
+      <td class="px-3 py-3 align-top">
+        <div class="fw-semibold small lh-sm">${escapeHtml(decisionDateLabel)}</div>
+        ${
+          decisionTimeLabel
+            ? `<div class="text-secondary small lh-sm mt-1">${escapeHtml(decisionTimeLabel)}</div>`
+            : ""
+        }
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  });
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// Load recent manager decisions for the current tenant only.
+// Tenant safety comes from state.employees, which is already tenant-filtered.
+async function loadRecentManagerLeaveDecisions() {
+  const supabase = getSupabaseClient();
+  const employeeByLeaveIdentity = buildHrEmployeeByLeaveIdentityMap();
+  const leaveIdentityCandidates = [...employeeByLeaveIdentity.keys()];
+
+  if (!leaveIdentityCandidates.length) {
+    state.recentManagerLeaveDecisionRecords = [];
+    renderRecentManagerLeaveDecisions([]);
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("leave_requests")
+    .select(`
+      id,
+      employee_id,
+      leave_type_id,
+      start_date,
+      end_date,
+      total_days,
+      status,
+      reason,
+      submitted_at,
+      decision_at,
+      decision_by,
+      decision_by_name,
+      decision_comment,
+      leave_types (
+        id,
+        code,
+        name
+      )
+    `)
+    .in("employee_id", leaveIdentityCandidates)
+    .not("decision_at", "is", null)
+    .order("decision_at", { ascending: false })
+    .limit(100);
+
+  if (error) throw error;
+
+  const decisions = (Array.isArray(data) ? data : [])
+    .filter((row) => isHrManagerLeaveDecisionStatus(row.status))
+    .map((row) => {
+      const employee = employeeByLeaveIdentity.get(String(row.employee_id)) || {};
+
+      return {
+        ...row,
+        employeeName: getHrLeaveDecisionEmployeeName(employee),
+        employeeEmail:
+          employee.work_email ||
+          employee.email ||
+          "--",
+        employeeDepartment:
+          employee.department ||
+          employee.department_name ||
+          "--",
+        leaveTypeName:
+          row.leave_types?.name ||
+          "Unknown Leave Type",
+      };
+    });
+
+  state.recentManagerLeaveDecisionRecords = decisions;
+  renderRecentManagerLeaveDecisions(decisions);
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// Public refresh wrapper for startup, manual refresh, focus refresh, and
+// manager-decision localStorage sync from another tab in the same browser.
+async function refreshRecentManagerLeaveDecisionsWorkspace(options = {}) {
+  const { showAlert = false, showToast = false } = options;
+
+  if (!state.dom.recentManagerLeaveDecisionsCard) return;
+
+  const button = state.dom.refreshManagerLeaveDecisionsBtn;
+  const startedAt = Date.now();
+
+  try {
+    setWorkspaceRefreshLoading(button, true, "Refreshing...");
+    renderRecentManagerLeaveDecisionsLoadingState();
+    setManagerLeaveDecisionsStatus("info", "");
+
+    await waitForNextPaint();
+    await loadRecentManagerLeaveDecisions();
+
+    if (showAlert) {
+      showPageAlert(
+        "success",
+        `${state.recentManagerLeaveDecisionRecords.length} manager leave decision(s) loaded.`,
+      );
+    }
+
+    if (showToast) {
+      showDashboardToast(
+        "info",
+        "Manager leave decisions updated",
+        "HR leave decision audit has been refreshed.",
+      );
+    }
+  } catch (error) {
+    console.error("Error loading manager leave decisions:", error);
+
+    state.recentManagerLeaveDecisionRecords = [];
+    renderRecentManagerLeaveDecisions([]);
+
+    setManagerLeaveDecisionsStatus(
+      "danger",
+      error.message || "Manager leave decisions could not be loaded.",
+    );
+  } finally {
+    await waitForMinimumLoadingFeedback(startedAt, 400);
+    setWorkspaceRefreshLoading(button, false);
   }
 }
 
@@ -19152,17 +19691,22 @@ function startRunPayrollSelectionFlow() {
 function switchHrWorkspace(workspace) {
   const isProfile = workspace === "profile";
   const isEmployees = workspace === "employees";
+
+  // HR REVIEW WORKSPACE SEPARATION - STEP 1P
+  // HR Review is separate from People, Setup, and Payroll.
+  // It contains oversight/audit work only.
+  const isReview = workspace === "review";
+
   const isSetup = workspace === "setup";
   const isPayroll = workspace === "payroll";
 
   // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1A
   // My Self-Service is the signed-in HR user's own leave and payroll view.
-  // Keep it in the same top-level workspace switch as Profile, People,
-  // Setup, and Payroll so it is visible after click, refresh, or restore.
   const isSelfService = workspace === "selfservice";
 
   state.dom.hrProfileSection?.classList.toggle("d-none", !isProfile);
   state.dom.hrEmployeesSection?.classList.toggle("d-none", !isEmployees);
+  state.dom.hrReviewSection?.classList.toggle("d-none", !isReview);
   state.dom.hrSetupSection?.classList.toggle("d-none", !isSetup);
   state.dom.hrPayrollSection?.classList.toggle("d-none", !isPayroll);
   state.dom.hrSelfServiceSection?.classList.toggle("d-none", !isSelfService);
@@ -19175,6 +19719,12 @@ function switchHrWorkspace(workspace) {
 
   if (state.dom.hrTabEmployeesBtn) {
     state.dom.hrTabEmployeesBtn.className = isEmployees
+      ? "btn btn-primary dashboard-action-btn text-nowrap"
+      : "btn btn-outline-primary dashboard-action-btn text-nowrap";
+  }
+
+  if (state.dom.hrTabReviewBtn) {
+    state.dom.hrTabReviewBtn.className = isReview
       ? "btn btn-primary dashboard-action-btn text-nowrap"
       : "btn btn-outline-primary dashboard-action-btn text-nowrap";
   }
@@ -19202,18 +19752,21 @@ function switchHrWorkspace(workspace) {
       ? "Profile"
       : isEmployees
         ? "People"
-        : isSetup
-          ? "Setup & Master Data"
-          : isPayroll
-            ? "Payroll Processing"
-            : "My Self-Service";
+        : isReview
+          ? "HR Review"
+          : isSetup
+            ? "Setup & Configuration"
+            : isPayroll
+              ? "Payroll Processing"
+              : "My Self-Service";
   }
 
-  // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1A
+  // HR REVIEW WORKSPACE SEPARATION - STEP 1P
   // Keep the left sidebar active state aligned with the selected workspace.
   const sidebarMap = [
     { id: "sidebarProfileBtn", active: isProfile },
     { id: "sidebarPeopleBtn", active: isEmployees },
+    { id: "sidebarReviewBtn", active: isReview },
     { id: "sidebarSetupBtn", active: isSetup },
     { id: "sidebarPayrollBtn", active: isPayroll },
     { id: "sidebarSelfServiceBtn", active: isSelfService },
@@ -19224,9 +19777,6 @@ function switchHrWorkspace(workspace) {
     if (element) element.classList.toggle("active", active);
   });
 
-  // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1A
-  // If the workspace is restored after refresh/login, initialise the shared
-  // EmployeeSelfService module even when HR did not manually click the tab.
   if (isSelfService) {
     initHrSelfServiceOnFirstOpen();
   }
@@ -26249,10 +26799,26 @@ async function toggleEmployeeManagerRole(employeeId) {
     }
 
     if (!profile) {
-      showPageAlert(
+      // MANAGER ROLE ASSIGNMENT UX - STEP 1K
+      // No login profile means the employee cannot be routed to Manager
+      // Dashboard yet. Refresh the People list automatically and show the same
+      // floating toast pattern used by successful role updates, so HR does not
+      // have to manually refresh to understand the outcome.
+      const missingLoginMessage =
+        roleSyncResult?.message ||
+        `No login account found for ${fullName}. Send a login invite first, or ask the employee to activate their account before trying again.`;
+
+      await loadAuthProfilesForLinkage();
+      await loadEmployees();
+
+      showPageAlert("warning", missingLoginMessage);
+
+      showDashboardToast(
         "warning",
-        `No login account found for ${fullName}. If they have already activated their account, try refreshing the People list and trying again. Otherwise, send them a login invite first.`,
+        "Login account required",
+        missingLoginMessage,
       );
+
       return;
     }
 
@@ -29901,12 +30467,17 @@ function buildAlpatechDocumentBrandHeaderHtml({
             <img src="assets/alpatech-flame.png" alt="" style="display:block;width:18px;height:26px;object-fit:contain;" />
           </span>
 
+          <!-- ALPATECH PAYSLIP VIEW LOGO REFINEMENT - STEP 1J
+               Straight vertical divider only for Alpatech payslip/document view headers.
+               PDF output is intentionally not changed. -->
+          <span aria-hidden="true" style="display:inline-block;width:1px;height:26px;background:rgba(148,163,184,0.62);margin:0 7px 0 5px;"></span>
+
           <span style="color:#0b5f95;font-size:1.18rem;font-weight:500;letter-spacing:0.16em;line-height:1;">
             ALPATECH
           </span>
         </div>
 
-        <div style="color:#667085;font-size:0.82rem;margin-top:4px;margin-left:24px;">
+        <div style="color:#667085;font-size:0.82rem;margin-top:4px;margin-left:40px;">
           ${escapeHtml(documentLabel)}
         </div>
       </div>

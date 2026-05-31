@@ -1662,12 +1662,17 @@
               <img src="assets/alpatech-flame.png" alt="" style="display:block;width:18px;height:26px;object-fit:contain;" />
             </span>
 
+            <!-- ALPATECH PAYSLIP VIEW LOGO REFINEMENT - STEP 1J
+                 Straight vertical divider only for HR/Manager self-service payslip preview.
+                 PDF output is intentionally not changed. -->
+            <span aria-hidden="true" style="display:inline-block;width:1px;height:26px;background:rgba(148,163,184,0.62);margin:0 7px 0 5px;"></span>
+
             <span style="color:#0b5f95;font-size:1.18rem;font-weight:500;letter-spacing:0.16em;line-height:1;">
               ALPATECH
             </span>
           </div>
 
-          <div style="color:#667085;font-size:0.82rem;margin-top:4px;margin-left:24px;">
+          <div style="color:#667085;font-size:0.82rem;margin-top:4px;margin-left:40px;">
             Confidential employee payslip
           </div>
         </div>
@@ -2423,6 +2428,23 @@
       bindSsPayrollEvents();
       ssState.isInitialized = true;
     }
+
+    // SYSTEM-WIDE SELF-SERVICE PAYROLL FIRST-PAINT FIX - STEP 1G
+    // Self-Service defaults to Payroll for HR/Manager staff. Switch the visible
+    // sub-section before any async data loading starts so the page does not
+    // briefly show Leave Management before Payroll History appears.
+    // This is UI timing only; it does not change leave, payroll, payslip,
+    // authorisation, tenant filtering, or Alpatech branding logic.
+    switchSsSubSection("payroll");
+
+    // SYSTEM-WIDE SELF-SERVICE PAYROLL FIRST-PAINT FIX - STEP 1G
+    // Keep Payroll History visibly open during loading. The final init block
+    // below repeats this after data loads, so this only prevents first-paint flash.
+    setSsCardExpanded(
+      ssState.dom.ssTogglePayrollHistoryCardBtn,
+      ssState.dom.ssPayrollHistoryCardCollapse,
+      true,
+    );
 
     // Load data
     clearSsAlert();

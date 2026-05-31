@@ -123,7 +123,7 @@
             sidebarBrand.className = "bexhr-sidebar-brand alpatech-sidebar-brand";
             sidebarBrand.innerHTML =
               '<span class="alpatech-brand-mark" aria-hidden="true">' +
-                '<img src="assets/alpatech-flame.png" alt="" />' +
+              '<img src="assets/alpatech-flame.png" alt="" />' +
               '</span>';
           }
 
@@ -131,22 +131,22 @@
           if (heroBrandingBlock) {
             heroBrandingBlock.innerHTML =
               '<div class="alpatech-hero-content">' +
-                '<div class="alpatech-hero-kicker-row">' +
-                  '<div class="alpatech-hero-brand" aria-label="Alpatech HR and Payroll Workspace">' +
-                    '<span class="alpatech-brand-mark alpatech-hero-mark" aria-hidden="true">' +
-                      '<img src="assets/alpatech-flame.png" alt="" />' +
-                    '</span>' +
-                    '<span class="alpatech-brand-wordmark">ALPATECH</span>' +
-                  '</div>' +
-                  '<div class="hero-badge alpatech-hero-badge">' +
-                    '<i class="bi bi-truck"></i>' +
-                    ' HR & Payroll Workspace' +
-                  '</div>' +
-                '</div>' +
-                '<h1 class="display-6 fw-bold mb-2">People Operations Dashboard</h1>' +
-                '<p class="mb-0 alpatech-hero-copy">' +
-                  'Manage Alpatech employee records, supporting documents, payroll processing, payslips, and payment exports in one place.' +
-                '</p>' +
+              '<div class="alpatech-hero-kicker-row">' +
+              '<div class="alpatech-hero-brand" aria-label="Alpatech HR and Payroll Workspace">' +
+              '<span class="alpatech-brand-mark alpatech-hero-mark" aria-hidden="true">' +
+              '<img src="assets/alpatech-flame.png" alt="" />' +
+              '</span>' +
+              '<span class="alpatech-brand-wordmark">ALPATECH</span>' +
+              '</div>' +
+              '<div class="hero-badge alpatech-hero-badge">' +
+              '<i class="bi bi-truck"></i>' +
+              ' HR & Payroll Workspace' +
+              '</div>' +
+              '</div>' +
+              '<h1 class="display-6 fw-bold mb-2">People Operations Dashboard</h1>' +
+              '<p class="mb-0 alpatech-hero-copy">' +
+              'Manage Alpatech employee records, supporting documents, payroll processing, payslips, and payment exports in one place.' +
+              '</p>' +
               '</div>';
           }
 
@@ -209,6 +209,19 @@
           <span>People</span>
         </button>
       </li>
+
+      <!-- HR REVIEW WORKSPACE SEPARATION - STEP 1P
+           HR Review sits after People and before Setup/Payroll because it is
+           operational HR oversight, not employee master-data maintenance and
+           not system configuration. -->
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarReviewBtn"
+          onclick="document.getElementById('hrTabReviewBtn').click()" title="HR Review">
+          <i class="bi bi-clipboard-check"></i>
+          <span>HR Review</span>
+        </button>
+      </li>
+
       <li>
         <button class="bexhr-sidebar-item" id="sidebarSetupBtn"
           onclick="document.getElementById('hrTabSetupBtn').click()" title="Setup">
@@ -301,7 +314,7 @@
        and aligns with the reduced tab labels. -->
             <h2 class="section-heading h4 mb-1">HR Workspace</h2>
             <p class="section-subtext mb-0">
-              Switch between your profile, people, setup data, and payroll processing.
+              Switch between your profile, people records, HR reviews, setup data, and payroll processing.
             </p>
           </div>
 
@@ -323,6 +336,13 @@
             <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
               id="hrTabEmployeesBtn">
               <i class="bi bi-people me-2"></i>People
+            </button>
+
+            <!-- HR REVIEW WORKSPACE SEPARATION - STEP 1P
+                 Dedicated HR oversight workspace for employee correction requests
+                 and manager leave decision visibility. -->
+            <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap" id="hrTabReviewBtn">
+              <i class="bi bi-clipboard-check me-2"></i>HR Review
             </button>
 
             <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap" id="hrTabSetupBtn">
@@ -621,6 +641,126 @@
                   </tr>
                 </thead>
                 <tbody id="profileCorrectionRequestsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+           HR should not rely on managers manually reporting normal leave decisions.
+           This panel gives HR a central view of manager-approved, rejected,
+           and returned leave requests using the existing leave_requests audit fields. -->
+      <section class="card dashboard-section-card mb-4" id="recentManagerLeaveDecisionsCard">
+        <div class="card-body p-4 p-lg-5">
+          <div class="mb-4">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+              <div class="flex-grow-1">
+                <h2 class="section-heading h4 mb-1">Recent Manager Leave Decisions</h2>
+                <p class="section-subtext mb-0">
+                  Review manager-approved, rejected, and returned leave requests without requiring manual HR reporting.
+                </p>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 align-self-start">
+                <button type="button" id="refreshManagerLeaveDecisionsBtn"
+                  class="btn btn-outline-primary dashboard-action-btn align-self-start">
+                  <i class="bi bi-arrow-clockwise me-2"></i>
+                  Refresh Decisions
+                </button>
+
+                <button type="button" id="toggleManagerLeaveDecisionsBtn"
+                  class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                  aria-controls="managerLeaveDecisionsCollapse">
+                  <i class="bi bi-chevron-up me-2"></i>
+                  <span>Collapse</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-4 mb-4">
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Total Decisions</div>
+                <div class="summary-tile-value h6 mb-0" id="managerLeaveDecisionTotalCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Approved</div>
+                <div class="summary-tile-value h6 mb-0" id="managerLeaveDecisionApprovedCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Rejected / Returned</div>
+                <div class="summary-tile-value h6 mb-0" id="managerLeaveDecisionExceptionCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Latest Decision</div>
+                <div class="summary-tile-value h6 mb-0" id="managerLeaveDecisionLatestValue">--</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="managerLeaveDecisionsCollapse">
+            <!-- HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O-FIX 2
+                 Simple defensible wording:
+                 this panel is for HR visibility and audit review only.
+                 It does not claim that exception workflows are already built. -->
+            <div class="alert alert-light border mb-4">
+              <div class="fw-semibold mb-1">Why this is shown</div>
+              <div class="small text-secondary">
+                Manager leave decisions are recorded here for HR visibility. HR can confirm without asking the manager
+                to report it separately.
+              </div>
+            </div>
+
+            <div id="managerLeaveDecisionsStatus" class="alert d-none mb-4" role="status"></div>
+
+            <div id="managerLeaveDecisionsEmptyState" class="alert alert-light border mb-0">
+              No manager leave decisions have been recorded yet.
+            </div>
+
+            <!-- HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O-FIX 4
+                 Clean HR audit table:
+                 - compact enough to fit normal desktop card width;
+                 - dates are stacked in the rendered row;
+                 - vertical inner scroll protects the main HR page;
+                 - horizontal scroll remains available only on smaller screens;
+                 - existing tbody ID stays unchanged for current JavaScript wiring. -->
+            <div class="dashboard-table-hint">Swipe to view more →</div>
+            <div id="managerLeaveDecisionsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+              style="max-height: 340px; overflow-y: auto; overflow-x: auto;">
+              <table class="table align-middle mb-0" style="table-layout: fixed; width: 100%; min-width: 860px;">
+                <colgroup>
+                  <col style="width: 22%;" />
+                  <col style="width: 18%;" />
+                  <col style="width: 10%;" />
+                  <col style="width: 15%;" />
+                  <col style="width: 21%;" />
+                  <col style="width: 14%;" />
+                </colgroup>
+
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
+                  <tr>
+                    <th class="small text-secondary text-uppercase text-nowrap px-3">Employee</th>
+                    <th class="small text-secondary text-uppercase text-nowrap px-3">Leave</th>
+                    <th class="small text-secondary text-uppercase text-center text-nowrap px-3">Decision</th>
+                    <th class="small text-secondary text-uppercase text-nowrap px-3">Manager</th>
+                    <!-- HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O-FIX 5
+     HR wording: this is the manager's recorded decision note, not a form comment box. -->
+                    <th class="small text-secondary text-uppercase text-nowrap px-3">Manager Note</th>
+                    <th class="small text-secondary text-uppercase text-nowrap px-3">Decision Date</th>
+                  </tr>
+                </thead>
+                <tbody id="managerLeaveDecisionsTableBody"></tbody>
               </table>
             </div>
           </div>
@@ -2580,6 +2720,43 @@ Disable browser address autofill popup on HR employee address fields. -->
 
             <!-- DESCRIPTION ITEM 1 - STEP 5A
                Close the Full Employee List collapsible content wrapper. -->
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- HR REVIEW WORKSPACE SEPARATION - STEP 1P
+         HR Review is for operational review and audit visibility:
+         - Profile Correction Requests
+         - Recent Manager Leave Decisions
+
+         JavaScript moves the existing cards here so their IDs, event handlers,
+         counters, filters, refresh buttons, collapse behaviour, and Supabase
+         loading logic remain intact. -->
+    <section id="hrReviewSection" class="workspace-section d-none">
+      <section id="hrReviewLandingCard" class="card dashboard-section-card mb-4">
+        <div class="card-body p-4 p-lg-5">
+          <div class="mb-4">
+            <h2 class="section-heading h4 mb-1">HR Review</h2>
+            <p class="section-subtext mb-0">
+              Review employee-submitted profile corrections and manager leave decisions separately from employee master records.
+            </p>
+          </div>
+
+          <div class="row g-4">
+            <div class="col-md-6 col-xl-6">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Profile Reviews</div>
+                <div class="summary-tile-value h6 mb-0">Employee correction requests</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-6">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Leave Decision Visibility</div>
+                <div class="summary-tile-value h6 mb-0">Manager decision audit</div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -5811,6 +5988,13 @@ Disable browser address autofill popup on HR employee address fields. -->
                       <th class="small text-secondary text-uppercase text-nowrap">Deductions</th>
                       <th class="small text-secondary text-uppercase text-nowrap">Net</th>
                       <th class="small text-secondary text-uppercase text-center text-nowrap">Status</th>
+                      <!-- SYSTEM-WIDE SELF-SERVICE PAYSLIP VIEW - STEP 1F
+                           HR My Self-Service should match Employee and Manager:
+                           View opens a read-only payslip preview, PDF downloads a copy.
+                           The View action is system-wide; Alpatech branding remains
+                           tenant-scoped inside employee-self-service.js. -->
+                      <th class="small text-secondary text-uppercase text-center text-nowrap"
+                        data-ss-payslip-view-column="true">View</th>
                       <th class="small text-secondary text-uppercase text-center text-nowrap">PDF</th>
                     </tr>
                   </thead>
@@ -5970,7 +6154,7 @@ Disable browser address autofill popup on HR employee address fields. -->
           var key = sessionStorage.key(i);
           if (key && key.indexOf(PREFIX) === 0) {
             var val = sessionStorage.getItem(key);
-            if (val === "employees" || val === "setup" || val === "payroll" || val === "selfservice") {
+            if (val === "employees" || val === "review" || val === "setup" || val === "payroll" || val === "selfservice") {
               workspace = val;
             }
             break;
@@ -5985,6 +6169,7 @@ Disable browser address autofill popup on HR employee address fields. -->
           // Show the remembered section (hidden by default in HTML)
           var sectionIds = {
             employees: "hrEmployeesSection",
+            review: "hrReviewSection",
             setup: "hrSetupSection",
             payroll: "hrPayrollSection",
             selfservice: "hrSelfServiceSection"
@@ -6001,6 +6186,7 @@ Disable browser address autofill popup on HR employee address fields. -->
           // Activate the correct tab button
           var btnIds = {
             employees: "hrTabEmployeesBtn",
+            review: "hrTabReviewBtn",
             setup: "hrTabSetupBtn",
             payroll: "hrTabPayrollBtn",
             selfservice: "hrTabSelfServiceBtn"

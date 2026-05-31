@@ -4569,12 +4569,17 @@ function buildEmployeeAlpatechDocumentBrandHeaderHtml({
             <img src="assets/alpatech-flame.png" alt="" style="display:block;width:18px;height:26px;object-fit:contain;" />
           </span>
 
+          <!-- ALPATECH PAYSLIP VIEW LOGO REFINEMENT - STEP 1J
+               Straight vertical divider only for Alpatech employee payslip preview.
+               PDF output is intentionally not changed. -->
+          <span aria-hidden="true" style="display:inline-block;width:1px;height:26px;background:rgba(148,163,184,0.62);margin:0 7px 0 5px;"></span>
+
           <span style="color:#0b5f95;font-size:1.18rem;font-weight:500;letter-spacing:0.16em;line-height:1;">
             ALPATECH
           </span>
         </div>
 
-        <div style="color:#667085;font-size:0.82rem;margin-top:4px;margin-left:24px;">
+        <div style="color:#667085;font-size:0.82rem;margin-top:4px;margin-left:40px;">
           ${escapeHtml(documentLabel)}
         </div>
       </div>

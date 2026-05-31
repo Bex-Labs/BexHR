@@ -466,6 +466,52 @@ body.alpatech-workspace .hero-meta-card {
   object-fit: contain;
 }
 
+/* ALPATECH LOGO REFINEMENT - STEP 1I
+   Add the subtle divider/slash between the flame icon and ALPATECH wordmark.
+
+   HR/product behaviour:
+   - Visual branding only.
+   - Applies only inside Alpatech workspace shell branding.
+   - Does not affect tenant logic, payroll, payslip, leave, email, or access.
+   - Keeps non-Alpatech BexHR branding unchanged. */
+body.alpatech-workspace .alpatech-hero-brand .alpatech-brand-mark::after {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 34px;
+  margin-left: 0.55rem;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(148, 163, 184, 0.35) 16%,
+    rgba(148, 163, 184, 0.72) 50%,
+    rgba(148, 163, 184, 0.35) 84%,
+    transparent 100%
+  );
+  transform: none;
+}
+
+/* ALPATECH LOGO REFINEMENT - STEP 1I-FIX 2
+   Sidebar uses .bexhr-sidebar-brand::after for the ALPATECH wordmark,
+   so the safest sidebar-only divider is a real right border on the flame
+   mark itself. This creates: Flame | ALPATECH. */
+body.alpatech-workspace .bexhr-sidebar-brand .alpatech-brand-mark {
+  padding-right: 0.55rem;
+  margin-right: 0.1rem;
+  border-right: 1px solid rgba(148, 163, 184, 0.65);
+}
+
+/* ALPATECH LOGO REFINEMENT - STEP 1I
+   Tighten the wordmark spacing after adding the divider so the logo still
+   feels like one composed brand mark rather than three separated items. */
+body.alpatech-workspace .alpatech-hero-brand {
+  gap: 0.55rem;
+}
+
+body.alpatech-workspace .bexhr-sidebar-brand {
+  gap: 0.45rem;
+}
+
 .alpatech-hero-mark img {
   width: 30px;
   height: 40px;
