@@ -55,6 +55,16 @@
     </ul>
 
     <div class="bexhr-sidebar-footer">
+      <!-- GUIDED HELP LAYER - ADMIN STEP 1T
+           Desktop sidebar access for the Admin operating guide.
+           This uses Bootstrap's modal trigger attributes, so no new
+           admin-dashboard.js logic is required. -->
+      <button type="button" class="bexhr-sidebar-item" data-bs-toggle="modal"
+        data-bs-target="#adminOperatingGuideModal" title="Help Guide">
+        <i class="bi bi-question-circle"></i>
+        <span>Help Guide</span>
+      </button>
+
       <button class="bexhr-sidebar-item" onclick="document.getElementById('logoutBtn')?.click()" title="Sign out">
         <i class="bi bi-box-arrow-left"></i>
         <span>Sign out</span>
@@ -148,6 +158,15 @@
             <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
               id="adminTabTenantsBtn">
               <i class="bi bi-building me-2"></i>Companies
+            </button>
+
+            <!-- GUIDED HELP LAYER - ADMIN STEP 1T
+                 Mobile/tablet access for the Admin operating guide.
+                 The desktop sidebar has its own trigger because the shared
+                 workspace switcher is hidden on larger screens. -->
+            <button type="button" class="btn btn-outline-secondary dashboard-action-btn text-nowrap"
+              data-bs-toggle="modal" data-bs-target="#adminOperatingGuideModal">
+              <i class="bi bi-question-circle me-2"></i>Help Guide
             </button>
           </div>
         </div>
@@ -1012,6 +1031,123 @@
           <button type="button" id="dashboardToastCloseBtn" class="btn btn-sm btn-light border rounded-circle"
             aria-label="Close notification">
             <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- GUIDED HELP LAYER - ADMIN STEP 1T
+       On-demand Admin workflow guide.
+
+       Professional UX rule:
+       - Admin operational pages show work first.
+       - Help is available when needed.
+       - This does not change profile, company, access, invite, email setup,
+         password reset, tenant, Supabase, or role logic. -->
+  <div class="modal fade" id="adminOperatingGuideModal" tabindex="-1"
+    aria-labelledby="adminOperatingGuideModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+      <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+        <div class="modal-header border-0 px-4 pt-4 pb-0 d-flex justify-content-between align-items-start gap-3">
+          <div class="flex-grow-1">
+            <h5 class="modal-title fw-bold mb-1" id="adminOperatingGuideModalLabel">
+              <i class="bi bi-question-circle me-2 text-primary"></i>How this Admin dashboard works
+            </h5>
+            <p class="text-secondary small mb-0">
+              A quick guide to where each platform administration task belongs.
+            </p>
+          </div>
+
+          <!-- GUIDED HELP LAYER - ADMIN STEP 1T-FIX
+               Match Employee/HR guide close-button styling.
+               This is visual alignment only; Bootstrap still closes the modal. -->
+          <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+            data-bs-dismiss="modal" aria-label="Close Admin operating guide">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <div class="modal-body px-4 py-4">
+          <div class="row g-4">
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-person-circle me-2 text-primary"></i>Profile
+                </div>
+                <div class="small text-secondary">
+                  View and maintain your own administrator profile details and profile photo.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-grid me-2 text-primary"></i>Overview
+                </div>
+                <div class="small text-secondary">
+                  Review platform-level company counts, active companies, linked users, and unlinked access risks.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-building me-2 text-primary"></i>Companies
+                </div>
+                <div class="small text-secondary">
+                  Create and maintain company workspaces, Company IDs, company status, and user-to-company access.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-building-add me-2 text-primary"></i>Company Identity
+                </div>
+                <div class="small text-secondary">
+                  Use this area to create or update the company name, login Company ID, and workspace status.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-envelope-check me-2 text-primary"></i>Email Setup
+                </div>
+                <div class="small text-secondary">
+                  Register approved validation recipients and review controlled email delivery history for each company.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-person-check me-2 text-primary"></i>User Access Setup
+                </div>
+                <div class="small text-secondary">
+                  Invite company users, assign users to company workspaces, and reset passwords where required.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="alert alert-light border rounded-4 mt-4 mb-0">
+            <div class="fw-semibold mb-1">Operating rule</div>
+            <div class="small text-secondary">
+              Use Admin for platform-level setup only. Company HR teams should use the HR dashboard for employee records, payroll setup, leave visibility, and HR operations.
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer border-0 bg-light px-4 pb-4 pt-3">
+          <button type="button" class="btn btn-outline-secondary dashboard-action-btn" data-bs-dismiss="modal">
+            Close Guide
           </button>
         </div>
       </div>

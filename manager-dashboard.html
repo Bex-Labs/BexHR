@@ -220,6 +220,17 @@
     </ul>
 
     <div class="bexhr-sidebar-footer">
+      <!-- GUIDED HELP LAYER - MANAGER STEP 1V
+           Desktop sidebar access for the Manager operating guide.
+           This is system-wide manager guidance. It does not change
+           Alpatech branding, team visibility, leave approval, reporting-line,
+           self-service, payroll, payslip, Supabase, session, or access logic. -->
+      <button type="button" class="bexhr-sidebar-item" data-bs-toggle="modal"
+        data-bs-target="#managerOperatingGuideModal" title="Help Guide">
+        <i class="bi bi-question-circle"></i>
+        <span>Help Guide</span>
+      </button>
+
       <button class="bexhr-sidebar-item" onclick="document.getElementById('logoutBtn')?.click()" title="Sign out">
         <i class="bi bi-box-arrow-left"></i>
         <span>Sign out</span>
@@ -309,6 +320,15 @@
             <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
               id="managerTabSelfServiceBtn">
               <i class="bi bi-person-badge me-2"></i>My Self-Service
+            </button>
+
+            <!-- GUIDED HELP LAYER - MANAGER STEP 1V
+                 Mobile/tablet access for the Manager operating guide.
+                 The desktop sidebar has its own trigger because the shared
+                 workspace switcher is hidden on larger screens. -->
+            <button type="button" class="btn btn-outline-secondary dashboard-action-btn text-nowrap"
+              data-bs-toggle="modal" data-bs-target="#managerOperatingGuideModal">
+              <i class="bi bi-question-circle me-2"></i>Help Guide
             </button>
           </div>
         </div>
@@ -1348,10 +1368,123 @@
     </div>
   </div>
 
-  <!-- EMPLOYEE SELF-SERVICE SECTION (MANAGER)
-       Managers use this section to manage their own leave and payroll
-       as employees. All DOM IDs are prefixed with "ss" to avoid conflicts. -->
+  <!-- GUIDED HELP LAYER - MANAGER STEP 1V
+       On-demand Manager workflow guide.
 
+       Professional UX rule:
+       - Manager operational pages show work first.
+       - Help is available when needed.
+       - This does not change team visibility, leave approval, reporting-line,
+         self-service, payroll, payslip, Alpatech branding, tenant, Supabase,
+         session, or access logic. -->
+  <div class="modal fade" id="managerOperatingGuideModal" tabindex="-1"
+    aria-labelledby="managerOperatingGuideModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+      <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+        <div class="modal-header border-0 px-4 pt-4 pb-0 d-flex justify-content-between align-items-start gap-3">
+          <div class="flex-grow-1">
+            <h5 class="modal-title fw-bold mb-1" id="managerOperatingGuideModalLabel">
+              <i class="bi bi-question-circle me-2 text-primary"></i>How this Manager dashboard works
+            </h5>
+            <p class="text-secondary small mb-0">
+              A quick guide to your manager workspace, team actions, and self-service tasks.
+            </p>
+          </div>
+
+          <!-- GUIDED HELP LAYER - MANAGER STEP 1V-FIX
+               Match Employee/HR guide close-button styling.
+               This is visual alignment only; Bootstrap still closes the modal. -->
+          <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+            data-bs-dismiss="modal" aria-label="Close Manager operating guide">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <div class="modal-body px-4 py-4">
+          <div class="row g-4">
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-person-circle me-2 text-primary"></i>Profile
+                </div>
+                <div class="small text-secondary">
+                  View and update your own manager profile details and profile photo where allowed.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-people me-2 text-primary"></i>Team Management
+                </div>
+                <div class="small text-secondary">
+                  Review employees currently assigned to your reporting line and check team access readiness.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-calendar-check me-2 text-primary"></i>Pending Leave Requests
+                </div>
+                <div class="small text-secondary">
+                  Expand this panel to review pending team leave requests, check readiness, then approve, reject, or return for clarification.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-clipboard-check me-2 text-primary"></i>Processed Decisions
+                </div>
+                <div class="small text-secondary">
+                  Use this as manager decision history. Approved, rejected, and returned requests are shown here for audit visibility.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-calendar-week me-2 text-primary"></i>Team Leave Schedule
+                </div>
+                <div class="small text-secondary">
+                  Review approved current and upcoming leave so you can plan cover and spot team overlap risks.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-person-badge me-2 text-primary"></i>My Self-Service
+                </div>
+                <div class="small text-secondary">
+                  Manage your own leave and view your own payroll and payslip history, just like an employee.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="alert alert-light border rounded-4 mt-4 mb-0">
+            <div class="fw-semibold mb-1">Operating rule</div>
+            <div class="small text-secondary">
+              Use Team Management for employees assigned to you. Use My Self-Service only for your own leave and payroll. Contact HR if team assignments, leave eligibility, or employee records appear incorrect.
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer border-0 bg-light px-4 pb-4 pt-3">
+          <button type="button" class="btn btn-outline-secondary dashboard-action-btn" data-bs-dismiss="modal">
+            Close Guide
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
      First-paint restore for Manager workspace.

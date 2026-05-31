@@ -246,6 +246,17 @@
     </ul>
 
     <div class="bexhr-sidebar-footer">
+      <!-- GUIDED HELP LAYER - STEP 1R-FIX 3
+           Desktop sidebar access for the HR operating guide.
+           The existing Help Guide button still remains in the mobile
+           workspace switcher. This sidebar action simply proxies to it,
+           so we avoid duplicate IDs and avoid changing modal JavaScript. -->
+      <button type="button" class="bexhr-sidebar-item"
+        onclick="document.getElementById('openHrOperatingGuideBtn')?.click()" title="Help Guide">
+        <i class="bi bi-question-circle"></i>
+        <span>Help Guide</span>
+      </button>
+
       <button class="bexhr-sidebar-item" onclick="document.getElementById('logoutBtn')?.click()" title="Sign out">
         <i class="bi bi-box-arrow-left"></i>
         <span>Sign out</span>
@@ -356,6 +367,15 @@
             <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
               id="hrTabSelfServiceBtn">
               <i class="bi bi-person-badge me-2"></i>My Self-Service
+            </button>
+
+            <!-- GUIDED HELP LAYER - STEP 1R-FIX
+                 Keep help available on demand without pushing operational
+                 workspace content down the page. This is system-wide guidance,
+                 not Alpatech-only branding. -->
+            <button type="button" class="btn btn-outline-secondary dashboard-action-btn text-nowrap"
+              id="openHrOperatingGuideBtn">
+              <i class="bi bi-question-circle me-2"></i>Help Guide
             </button>
 
           </div>
@@ -6053,6 +6073,118 @@ Disable browser address autofill popup on HR employee address fields. -->
       </div>
     </div>
   </div>
+
+    <!-- GUIDED HELP LAYER - STEP 1R-FIX
+       On-demand HR workflow guide.
+       Professional UX pattern:
+       - operational pages show work first;
+       - help is available when needed;
+       - no employee, payroll, leave, setup, tenant, or Supabase logic changes. -->
+  <div id="hrOperatingGuideModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
+    style="z-index: 1058; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
+    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
+      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 920px; max-height: 92vh; overflow: auto;">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
+          <div>
+            <h2 class="h4 mb-1">How this HR dashboard works</h2>
+            <p class="text-secondary mb-0">
+              A quick guide to where each HR task belongs.
+            </p>
+          </div>
+
+          <button type="button" id="closeHrOperatingGuideBtn" class="btn btn-sm btn-outline-secondary"
+            aria-label="Close HR operating guide">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <div class="card-body p-4">
+          <div class="row g-4">
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-person-circle me-2 text-primary"></i>Profile
+                </div>
+                <div class="small text-secondary">
+                  View your own HR profile and update allowed personal profile details.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-people me-2 text-primary"></i>People
+                </div>
+                <div class="small text-secondary">
+                  Maintain employee master records, reporting lines, documents, and account readiness.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-clipboard-check me-2 text-primary"></i>HR Review
+                </div>
+                <div class="small text-secondary">
+                  Review profile correction requests and manager leave decision visibility.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-sliders me-2 text-primary"></i>Setup
+                </div>
+                <div class="small text-secondary">
+                  Maintain organisation details, payroll rules, deductions, banks, and email validation settings.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-cash-coin me-2 text-primary"></i>Payroll
+                </div>
+                <div class="small text-secondary">
+                  Prepare payroll, finalise payroll records, preview payslips, export CSV files, and send payslip notifications.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-person-badge me-2 text-primary"></i>Self-Service
+                </div>
+                <div class="small text-secondary">
+                  View your own leave, payroll history, payslips, and self-service profile information.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="alert alert-light border mt-4 mb-0">
+            <div class="fw-semibold mb-1">Operating rule</div>
+            <div class="small text-secondary">
+              Start with the workspace that matches the task: People for employee records, HR Review for review work, Setup for configuration, and Payroll for payroll processing.
+            </div>
+          </div>
+        </div>
+
+        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
+          <button type="button" id="closeHrOperatingGuideFooterBtn"
+            class="btn btn-outline-secondary dashboard-action-btn">
+            Close Guide
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- PAYROLL SECURE DELIVERY - STEP 2F-3A
      Payslip Preview modal.
      HR uses this to review finalised payslip content before or after

@@ -3369,6 +3369,14 @@ function cacheDomElements() {
   state.dom = {
     pageAlert: document.getElementById("pageAlert"),
 
+    // GUIDED HELP LAYER - STEP 1R-FIX
+    // On-demand HR operating guide modal.
+    // This keeps help available without occupying operational workspace space.
+    openHrOperatingGuideBtn: document.getElementById("openHrOperatingGuideBtn"),
+    hrOperatingGuideModal: document.getElementById("hrOperatingGuideModal"),
+    closeHrOperatingGuideBtn: document.getElementById("closeHrOperatingGuideBtn"),
+    closeHrOperatingGuideFooterBtn: document.getElementById("closeHrOperatingGuideFooterBtn"),
+
     logoutBtn: document.getElementById("logoutBtn"),
     resetEmployeeFormBtn: document.getElementById("resetEmployeeFormBtn"),
     refreshEmployeesBtn: document.getElementById("refreshEmployeesBtn"),
@@ -8664,6 +8672,30 @@ function bindEvents() {
       toggleAllVisibleEmployeesForPayroll(Boolean(event.target.checked));
     });
   }
+
+  // GUIDED HELP LAYER - STEP 1R-FIX
+  // Help opens as an on-demand modal so operational workspace content stays first.
+  state.dom.openHrOperatingGuideBtn?.addEventListener("click", () => {
+    state.dom.hrOperatingGuideModal?.classList.remove("d-none");
+    state.dom.hrOperatingGuideModal?.setAttribute("aria-hidden", "false");
+  });
+
+  state.dom.closeHrOperatingGuideBtn?.addEventListener("click", () => {
+    state.dom.hrOperatingGuideModal?.classList.add("d-none");
+    state.dom.hrOperatingGuideModal?.setAttribute("aria-hidden", "true");
+  });
+
+  state.dom.closeHrOperatingGuideFooterBtn?.addEventListener("click", () => {
+    state.dom.hrOperatingGuideModal?.classList.add("d-none");
+    state.dom.hrOperatingGuideModal?.setAttribute("aria-hidden", "true");
+  });
+
+  state.dom.hrOperatingGuideModal?.addEventListener("click", (event) => {
+    if (event.target === state.dom.hrOperatingGuideModal) {
+      state.dom.hrOperatingGuideModal.classList.add("d-none");
+      state.dom.hrOperatingGuideModal.setAttribute("aria-hidden", "true");
+    }
+  });
 
   // DESCRIPTION ITEM 1 - STEP 5
   // Bind collapsible behavior for the two HR workspace cards.

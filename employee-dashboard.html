@@ -227,6 +227,17 @@
     </ul>
 
     <div class="bexhr-sidebar-footer">
+      <!-- GUIDED HELP LAYER - EMPLOYEE STEP 1U
+           Desktop sidebar access for the Employee operating guide.
+           This is system-wide employee guidance. It does not change
+           Alpatech branding, profile, leave, payroll, payslip, PDF,
+           Supabase, session, or role/access behaviour. -->
+      <button type="button" class="bexhr-sidebar-item" id="openEmployeeOperatingGuideSidebarBtn"
+        title="Help Guide">
+        <i class="bi bi-question-circle"></i>
+        <span>Help Guide</span>
+      </button>
+
       <button class="bexhr-sidebar-item" onclick="document.getElementById('logoutBtn')?.click()" title="Sign out">
         <i class="bi bi-box-arrow-left"></i>
         <span>Sign out</span>
@@ -310,6 +321,15 @@
 
             <button type="button" class="btn btn-outline-primary dashboard-action-btn" id="navPayrollBtn">
               <i class="bi bi-cash-coin me-2"></i>Payroll
+            </button>
+
+            <!-- GUIDED HELP LAYER - EMPLOYEE STEP 1U
+                 Mobile/tablet access for the Employee operating guide.
+                 The desktop sidebar has its own trigger because the shared
+                 workspace switcher is hidden on larger screens. -->
+            <button type="button" class="btn btn-outline-secondary dashboard-action-btn"
+              id="openEmployeeOperatingGuideBtn">
+              <i class="bi bi-question-circle me-2"></i>Help Guide
             </button>
           </div>
         </div>
@@ -1234,6 +1254,119 @@
       <i class="bi bi-arrow-up"></i>
     </button>
   </main>
+
+    <!-- GUIDED HELP LAYER - EMPLOYEE STEP 1U
+       On-demand Employee workflow guide.
+
+       Professional UX rule:
+       - Employee operational pages show work first.
+       - Help is available when needed.
+       - This does not change profile, leave, payroll, payslip, PDF,
+         Alpatech branding, tenant, Supabase, session, or access logic. -->
+  <div id="employeeOperatingGuideModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
+    style="z-index: 1058; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
+    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
+      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 920px; max-height: 92vh; overflow: auto;">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
+          <div>
+            <h2 class="h4 mb-1">How this Employee dashboard works</h2>
+            <p class="text-secondary mb-0">
+              A quick guide to your employee self-service tasks.
+            </p>
+          </div>
+
+          <button type="button" id="closeEmployeeOperatingGuideBtn" class="btn btn-sm btn-outline-secondary"
+            aria-label="Close Employee operating guide">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <div class="card-body p-4">
+          <div class="row g-4">
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-person-circle me-2 text-primary"></i>Profile
+                </div>
+                <div class="small text-secondary">
+                  View your employee account details, profile photo, manager, role, department, and HR-held profile information.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-flag me-2 text-primary"></i>Correction Requests
+                </div>
+                <div class="small text-secondary">
+                  Submit a correction request when HR-held profile information looks incorrect. HR reviews the request before records are changed.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-calendar-check me-2 text-primary"></i>Leave
+                </div>
+                <div class="small text-secondary">
+                  Review leave balances, submit leave requests, track request history, and check manager decisions.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-arrow-repeat me-2 text-primary"></i>Returned Leave
+                </div>
+                <div class="small text-secondary">
+                  If a manager returns a leave request for clarification, edit the returned request and resubmit it for review.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-cash-coin me-2 text-primary"></i>Payroll
+                </div>
+                <div class="small text-secondary">
+                  View your latest authorised payslip summary and refresh payroll information when needed.
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-4">
+              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
+                <div class="fw-bold mb-2">
+                  <i class="bi bi-file-earmark-pdf me-2 text-primary"></i>Payslip History
+                </div>
+                <div class="small text-secondary">
+                  Expand Payroll History to review authorised pay cycles, view payslip details, and download payslip PDFs.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="alert alert-light border rounded-4 mt-4 mb-0">
+            <div class="fw-semibold mb-1">Operating rule</div>
+            <div class="small text-secondary">
+              Use this dashboard for your own self-service only. Contact HR if your profile, leave eligibility, or payroll information appears incorrect.
+            </div>
+          </div>
+        </div>
+
+        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
+          <button type="button" id="closeEmployeeOperatingGuideFooterBtn"
+            class="btn btn-outline-secondary dashboard-action-btn">
+            Close Guide
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
      First-paint restore for Employee workspace.

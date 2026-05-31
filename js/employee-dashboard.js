@@ -662,6 +662,16 @@ function cacheDomElements() {
   state.dom = {
     pageAlert: document.getElementById("pageAlert"),
 
+    // GUIDED HELP LAYER - EMPLOYEE STEP 1U
+    // On-demand Employee operating guide.
+    // This is guidance only; it does not alter profile, leave, payroll,
+    // payslip, PDF, tenant branding, Supabase, session, or access behaviour.
+    openEmployeeOperatingGuideBtn: document.getElementById("openEmployeeOperatingGuideBtn"),
+    openEmployeeOperatingGuideSidebarBtn: document.getElementById("openEmployeeOperatingGuideSidebarBtn"),
+    employeeOperatingGuideModal: document.getElementById("employeeOperatingGuideModal"),
+    closeEmployeeOperatingGuideBtn: document.getElementById("closeEmployeeOperatingGuideBtn"),
+    closeEmployeeOperatingGuideFooterBtn: document.getElementById("closeEmployeeOperatingGuideFooterBtn"),
+
     // EMPLOYEE UI CLEANUP - STEP 1I
     // Floating Back-to-Top button used only for page navigation.
     scrollToTopBtn: document.getElementById("scrollToTopBtn"),
@@ -853,6 +863,29 @@ function bindNavigationEvents() {
 }
 
 function bindUtilityEvents() {
+  // GUIDED HELP LAYER - EMPLOYEE STEP 1U
+  // Help opens as an on-demand modal so employee self-service content stays first.
+  const openEmployeeOperatingGuide = () => {
+    state.dom.employeeOperatingGuideModal?.classList.remove("d-none");
+    state.dom.employeeOperatingGuideModal?.setAttribute("aria-hidden", "false");
+  };
+
+  const closeEmployeeOperatingGuide = () => {
+    state.dom.employeeOperatingGuideModal?.classList.add("d-none");
+    state.dom.employeeOperatingGuideModal?.setAttribute("aria-hidden", "true");
+  };
+
+  state.dom.openEmployeeOperatingGuideBtn?.addEventListener("click", openEmployeeOperatingGuide);
+  state.dom.openEmployeeOperatingGuideSidebarBtn?.addEventListener("click", openEmployeeOperatingGuide);
+  state.dom.closeEmployeeOperatingGuideBtn?.addEventListener("click", closeEmployeeOperatingGuide);
+  state.dom.closeEmployeeOperatingGuideFooterBtn?.addEventListener("click", closeEmployeeOperatingGuide);
+
+  state.dom.employeeOperatingGuideModal?.addEventListener("click", (event) => {
+    if (event.target === state.dom.employeeOperatingGuideModal) {
+      closeEmployeeOperatingGuide();
+    }
+  });
+
   state.dom.logoutBtn?.addEventListener("click", async () => {
     // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
     // Logout must reset the next Employee session to Profile.
