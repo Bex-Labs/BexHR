@@ -1653,22 +1653,31 @@
                   </select>
                 </div>
 
-                <div class="col-md-6 col-xl-4">
-                  <label for="identificationIssueState" class="form-label fw-semibold">
-                    Issuing State / Authority
+                <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7B
+                     This is the selected document's own number.
+                     It is shown for Passport, Driver's Licence, Voter's Card/PVC,
+                     Birth Certificate, and Other. It stays hidden for NIN Slip
+                     because the NIN field below is the primary number in that case. -->
+                <div id="identificationDocumentNumberFieldCol" class="col-md-6 col-xl-4 d-none">
+                  <label id="identificationDocumentNumberLabel" for="identificationDocumentNumber"
+                    class="form-label fw-semibold">
+                    Identification Document Number
                   </label>
-                  <select id="identificationIssueState" class="form-select">
-                    <option value="">Select issuing state or authority</option>
-                  </select>
-                  <div class="form-text">
-                    Some identity documents are issued by a federal authority rather than a state.
+                  <input type="text" id="identificationDocumentNumber" class="form-control"
+                    placeholder="Enter document number" maxlength="40" autocomplete="off" />
+                  <div class="form-text" id="identificationDocumentNumberHelp">
+                    Enter the number printed on the selected identification document.
+                  </div>
+                  <div class="invalid-feedback">
+                    Document number is required for the selected means of identification.
                   </div>
                 </div>
 
-                <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
-                     NIN is only relevant when National ID / NIN Slip is selected.
-                     Keep this field hidden by default and let JavaScript show it
-                     only when the selected Means of Identification requires it. -->
+                <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7B
+                     NIN is a separate statutory identifier.
+                     It is required for NIN Slip, but can also be captured alongside
+                     Passport, Driver's Licence, Voter's Card/PVC, Birth Certificate,
+                     or Other ID where HR needs it. -->
                 <div id="ninFieldCol" class="col-md-6 col-xl-4 d-none">
                   <label for="nin" class="form-label fw-semibold">
                     NIN
@@ -1676,12 +1685,29 @@
                   <input type="text" id="nin" class="form-control" placeholder="Enter 11-digit NIN" inputmode="numeric"
                     maxlength="11" />
                   <div class="form-text">
-                    Required only when National ID / NIN Slip is used as the primary identification document.
+                    Required for National ID / NIN Slip. Optional for other identification documents when available.
                   </div>
                   <div class="invalid-feedback">
                     NIN must be exactly 11 digits when provided.
                   </div>
                 </div>
+
+                <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7B
+                     State of Issuance is required as a separate HR/statutory field.
+                     It must be available for all supported means of identification
+                     because NSITF/payment reporting may require state information. -->
+                <div class="col-md-6 col-xl-4">
+                  <label for="identificationIssueState" class="form-label fw-semibold">
+                    State of Issuance
+                  </label>
+                  <select id="identificationIssueState" class="form-select" disabled>
+                    <option value="">Select means of identification first</option>
+                  </select>
+                  <div class="form-text">
+                    Select the state of issuance required for HR/statutory reporting.
+                  </div>
+                </div>
+
 
                 <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5B
                      HR should not scroll down to Supporting Documents just to attach

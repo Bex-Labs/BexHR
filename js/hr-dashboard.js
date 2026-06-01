@@ -597,32 +597,20 @@ const NIGERIAN_STATE_OPTIONS = [
 // Issuing authority options change based on the selected means of identification.
 // This avoids forcing a state for documents that are normally federal/authority-issued.
 function getIdentityIssuingAuthorityOptions(meansOfIdentification = "") {
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7B
+  // Keep the function name for code safety, but the field now behaves as
+  // State of Issuance, not issuing authority.
+  //
+  // HR/business rule:
+  // State of Issuance must be available for every selected means of
+  // identification because NSITF/payment reporting may require state data.
   const selectedType = String(meansOfIdentification || "").trim();
 
-  if (selectedType === "National ID / NIN Slip") {
-    return ["Federal / NIMC"];
+  if (!selectedType) {
+    return [];
   }
 
-  if (selectedType === "International Passport") {
-    return ["Federal / Nigerian Immigration Service"];
-  }
-
-  if (selectedType === "Driver's Licence") {
-    return ["Federal Road Safety Corps", ...NIGERIAN_STATE_OPTIONS];
-  }
-
-  if (selectedType === "Voter's Card / PVC") {
-    return ["Independent National Electoral Commission", ...NIGERIAN_STATE_OPTIONS];
-  }
-
-  if (selectedType === "Birth Certificate") {
-    return ["National Population Commission", ...NIGERIAN_STATE_OPTIONS];
-  }
-
-  return [
-    "Federal / Other Authority",
-    ...NIGERIAN_STATE_OPTIONS,
-  ];
+  return NIGERIAN_STATE_OPTIONS;
 }
 
 // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
@@ -1599,7 +1587,7 @@ function syncIdentificationIssueStateOptions(preferredValue = "", { clearCurrent
     state.dom.identificationIssueState,
     options,
     selectedMeans
-      ? "Select issuing state or authority"
+      ? "Select state of issuance"
       : "Select means of identification first",
     preferredValue,
   );
@@ -1609,27 +1597,107 @@ function syncIdentificationIssueStateOptions(preferredValue = "", { clearCurrent
   }
 }
 
-// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
-// NIN is required only for National ID / NIN Slip.
-// Other identity documents should not expose or save NIN data.
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
+// NIN remains required only when National ID / NIN Slip is the primary ID.
 function isNinRequiredForMeansOfIdentification(meansOfIdentification = "") {
   return String(meansOfIdentification || "").trim() === "National ID / NIN Slip";
 }
 
-// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
-// Show NIN only when required. When HR switches away from National ID / NIN Slip,
-// clear the field so stale sensitive NIN data is not accidentally saved.
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
+// Passport, Driver's Licence, Voter's Card/PVC, Birth Certificate, and Other
+// need a separate primary document number. National ID / NIN Slip uses NIN.
+function isIdentificationDocumentNumberRequiredForMeansOfIdentification(meansOfIdentification = "") {
+  const selectedMeans = String(meansOfIdentification || "").trim();
+
+  return Boolean(
+    selectedMeans &&
+    selectedMeans !== "National ID / NIN Slip",
+  );
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
+// Show the primary document number field only for non-NIN primary IDs.
+// This is UI behaviour only; employee save validation still enforces the rule.
+function syncIdentificationDocumentNumberVisibility({ clearWhenHidden = false } = {}) {
+  const selectedMeans = String(
+    state.dom.meansOfIdentification?.value || "",
+  ).trim();
+
+  const shouldShowDocumentNumber =
+    isIdentificationDocumentNumberRequiredForMeansOfIdentification(selectedMeans);
+
+  state.dom.identificationDocumentNumberFieldCol?.classList.toggle(
+    "d-none",
+    !shouldShowDocumentNumber,
+  );
+
+  if (state.dom.identificationDocumentNumber) {
+    state.dom.identificationDocumentNumber.required = shouldShowDocumentNumber;
+    state.dom.identificationDocumentNumber.classList.remove("is-invalid");
+
+    let label = "Identification Document Number";
+    let placeholder = "Enter document number";
+    let helpText = "Enter the number printed on the selected identification document.";
+
+    if (selectedMeans === "International Passport") {
+      label = "Passport Number";
+      placeholder = "Enter passport number";
+      helpText = "Enter the international passport number.";
+    } else if (selectedMeans === "Driver's Licence") {
+      label = "Driver's Licence Number";
+      placeholder = "Enter driver's licence number";
+      helpText = "Enter the driver's licence number.";
+    } else if (selectedMeans === "Voter's Card / PVC") {
+      label = "Voter's Card / PVC Number";
+      placeholder = "Enter voter card / PVC number";
+      helpText = "Enter the voter card or PVC number.";
+    } else if (selectedMeans === "Birth Certificate") {
+      label = "Birth Certificate Number";
+      placeholder = "Enter birth certificate number";
+      helpText = "Enter the birth certificate number.";
+    } else if (selectedMeans === "Other") {
+      label = "Other ID Number";
+      placeholder = "Enter other ID number";
+      helpText = "Enter the number shown on the selected identification document.";
+    }
+
+    if (state.dom.identificationDocumentNumberLabel) {
+      state.dom.identificationDocumentNumberLabel.textContent = label;
+    }
+
+    if (state.dom.identificationDocumentNumberHelp) {
+      state.dom.identificationDocumentNumberHelp.textContent = helpText;
+    }
+
+    state.dom.identificationDocumentNumber.placeholder = placeholder;
+
+    if (!shouldShowDocumentNumber && clearWhenHidden) {
+      state.dom.identificationDocumentNumber.value = "";
+    }
+  }
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
+// Show NIN for any selected means of identification.
+// It is required for National ID / NIN Slip and optional for other IDs.
+// If no means of identification is selected, hide and clear NIN.
 function syncNinFieldVisibility({ clearWhenHidden = false } = {}) {
   const selectedMeans = String(
     state.dom.meansOfIdentification?.value || "",
   ).trim();
 
-  const shouldShowNin = isNinRequiredForMeansOfIdentification(selectedMeans);
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7B
+  // NIN should show for every selected ID type:
+  // - required for National ID / NIN Slip;
+  // - optional but allowed for Passport, Driver's Licence, Voter's Card/PVC,
+  //   Birth Certificate, and Other.
+  const shouldShowNin = Boolean(selectedMeans);
+  const shouldRequireNin = isNinRequiredForMeansOfIdentification(selectedMeans);
 
   state.dom.ninFieldCol?.classList.toggle("d-none", !shouldShowNin);
 
   if (state.dom.nin) {
-    state.dom.nin.required = shouldShowNin;
+    state.dom.nin.required = shouldRequireNin;
     state.dom.nin.classList.remove("is-invalid");
 
     if (!shouldShowNin && clearWhenHidden) {
@@ -1644,6 +1712,10 @@ function populateEmployeeOriginAndIdentityDropdowns() {
   populateStateOfOriginOptions();
   syncLocalGovernmentAreaOptions();
   syncIdentificationIssueStateOptions();
+
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
+  // Keep primary document number and NIN visibility aligned on form load/reset.
+  syncIdentificationDocumentNumberVisibility({ clearWhenHidden: true });
   syncNinFieldVisibility({ clearWhenHidden: true });
 }
 
@@ -3571,10 +3643,21 @@ function cacheDomElements() {
     localGovernmentArea: document.getElementById("localGovernmentArea"),
     town: document.getElementById("town"),
     meansOfIdentification: document.getElementById("meansOfIdentification"),
+
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
+    // Primary document number is separate from NIN.
+    // This supports Passport, Driver's Licence, Voter's Card/PVC,
+    // Birth Certificate, and Other ID numbers while keeping NIN separate.
+    identificationDocumentNumberFieldCol: document.getElementById("identificationDocumentNumberFieldCol"),
+    identificationDocumentNumberLabel: document.getElementById("identificationDocumentNumberLabel"),
+    identificationDocumentNumber: document.getElementById("identificationDocumentNumber"),
+    identificationDocumentNumberHelp: document.getElementById("identificationDocumentNumberHelp"),
+
     identificationIssueState: document.getElementById("identificationIssueState"),
 
-    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
-    // NIN field wrapper is shown only when National ID / NIN Slip is selected.
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
+    // NIN is separate from the selected primary document.
+    // It is required for National ID / NIN Slip, and optional for other IDs.
     ninFieldCol: document.getElementById("ninFieldCol"),
     nin: document.getElementById("nin"),
 
@@ -5484,13 +5567,13 @@ async function redirectToProfileCorrectionRequestsAfterEmployeeSave() {
 
   openProfileCorrectionRequestsCard();
 
-// HR PROFILE CORRECTION REQUESTS UX - STEP 1I COPY FIX
-// Use the same lifecycle wording as the dropdown status.
-// After the employee profile save, HR only needs to close the request.
-setProfileCorrectionRequestsStatus(
-  "info",
-  "Employee profile was saved. Review the correction request, add your HR response, then select Completed to close the request.",
-);
+  // HR PROFILE CORRECTION REQUESTS UX - STEP 1I COPY FIX
+  // Use the same lifecycle wording as the dropdown status.
+  // After the employee profile save, HR only needs to close the request.
+  setProfileCorrectionRequestsStatus(
+    "info",
+    "Employee profile was saved. Review the correction request, add your HR response, then select Completed to close the request.",
+  );
 
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
@@ -8532,6 +8615,11 @@ function bindEvents() {
     state.dom.localGovernmentArea,
     state.dom.town,
     state.dom.meansOfIdentification,
+
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
+    // Changing the ID document number should refresh employee save readiness.
+    state.dom.identificationDocumentNumber,
+
     state.dom.identificationIssueState,
     state.dom.nin,
 
@@ -8629,11 +8717,17 @@ function bindEvents() {
   });
 
   state.dom.meansOfIdentification?.addEventListener("change", () => {
-    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6B
-    // Means of Identification controls issuing authority and NIN visibility.
-    // Always clear the previous issuing authority after a manual type change
-    // so HR cannot save a stale saved value by mistake.
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7B
+    // Means of Identification controls:
+    // 1. selected document number field,
+    // 2. separate NIN field,
+    // 3. State of Issuance.
+    //
+    // This matches the HR feedback:
+    // Passport/Licence/Voter Card must have their own number field,
+    // NIN remains separate, and State of Issuance is always available.
     syncIdentificationIssueStateOptions("", { clearCurrentValue: true });
+    syncIdentificationDocumentNumberVisibility({ clearWhenHidden: true });
     syncNinFieldVisibility({ clearWhenHidden: true });
     updateEmployeeSaveButtonState();
   });
@@ -10372,6 +10466,21 @@ async function handleBatchEmployeeCsvImport() {
         ? `${preparedRows.length} employee row(s) were imported into Batch Employee Review. Review them before creating employee profiles.`
         : "No employee rows were imported. Please check the CSV values and try again.",
     );
+
+    // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 2B
+    // After HR imports a CSV, move them directly to Batch Employee Review
+    // when there are either valid rows OR skipped rows.
+    // This makes both success and warning outcomes visible without HR
+    // manually scrolling down to find the review/skipped-row result.
+    // This is navigation only; it does not save employees or change validation.
+    if ((preparedRows.length || skippedRows.length) && state.dom.batchEmployeeReviewPanel) {
+      window.requestAnimationFrame(() => {
+        state.dom.batchEmployeeReviewPanel.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    }
   } catch (error) {
     console.error("Error importing employee CSV:", error);
 
@@ -14232,28 +14341,26 @@ function renderRecentManagerLeaveDecisions(records = []) {
              - show the manager's note as plain audit text;
              - avoid boxed styling that looks like an editable input;
              - keep empty notes clear without making them look like an error. -->
-        ${
-          comment
-            ? `
+        ${comment
+        ? `
               <div class="small lh-sm text-break" title="${escapeHtml(comment)}">
                 <span class="text-secondary">“</span>${escapeHtml(comment)}<span class="text-secondary">”</span>
               </div>
             `
-            : `
+        : `
               <span class="text-secondary small fst-italic">
                 No manager note recorded
               </span>
             `
-        }
+      }
       </td>
 
       <td class="px-3 py-3 align-top">
         <div class="fw-semibold small lh-sm">${escapeHtml(decisionDateLabel)}</div>
-        ${
-          decisionTimeLabel
-            ? `<div class="text-secondary small lh-sm mt-1">${escapeHtml(decisionTimeLabel)}</div>`
-            : ""
-        }
+        ${decisionTimeLabel
+        ? `<div class="text-secondary small lh-sm mt-1">${escapeHtml(decisionTimeLabel)}</div>`
+        : ""
+      }
       </td>
     `;
 
@@ -24373,11 +24480,11 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
 
   const employeeFilledFormHeaderHtml = isAlpatechEmployeeFilledForm
     ? buildAlpatechDocumentBrandHeaderHtml({
-        documentLabel: "Read-only HR Employee Record",
-        rightTitle: "Employee Record",
-        rightLine1: fullName,
-        rightLine2: employee.employee_number ? `Employee No: ${employee.employee_number}` : "",
-      })
+      documentLabel: "Read-only HR Employee Record",
+      rightTitle: "Employee Record",
+      rightLine1: fullName,
+      rightLine2: employee.employee_number ? `Employee No: ${employee.employee_number}` : "",
+    })
     : "";
 
   const employeeFilledFormOrganizationLabel = isAlpatechEmployeeFilledForm
@@ -24390,9 +24497,9 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
 
   const employeeFilledFormEmployerFallbackHtml =
     isAlpatechEmployeeFilledForm &&
-    !organizationContactLines.length &&
-    !organizationAddress &&
-    !organizationRegistrationLines.length
+      !organizationContactLines.length &&
+      !organizationAddress &&
+      !organizationRegistrationLines.length
       ? `<div class="text-secondary small">Company details not yet completed in Organization Setup.</div>`
       : "";
 
@@ -25118,15 +25225,21 @@ function enterEmployeeEditMode(employee) {
     state.dom.meansOfIdentification.value = employee.means_of_identification || "";
   }
 
+  if (state.dom.identificationDocumentNumber) {
+    state.dom.identificationDocumentNumber.value = employee.identification_document_number || "";
+  }
+
   syncIdentificationIssueStateOptions(employee.identification_issue_state || "");
 
   if (state.dom.nin) {
     state.dom.nin.value = employee.nin || "";
   }
 
-  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
-  // In edit mode, show saved NIN only when the saved Means of Identification
-  // is National ID / NIN Slip. Otherwise hide and clear stale NIN from the form.
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
+  // In edit mode, restore both values correctly:
+  // - document number for Passport/Licence/Voter Card/Birth Certificate/Other;
+  // - NIN for National ID/NIN Slip and optionally for other selected IDs.
+  syncIdentificationDocumentNumberVisibility({ clearWhenHidden: true });
   syncNinFieldVisibility({ clearWhenHidden: true });
 
   if (state.dom.exitDate) state.dom.exitDate.value = employee.exit_date || "";
@@ -25397,10 +25510,13 @@ function validateEmployeeForm() {
   // It must not block employee create/update, even when empty.
   state.dom.approverEmail?.classList.remove("is-invalid");
 
-  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 4A
-  // These new HR biodata fields are optional, but when HR enters them,
-  // they must remain internally consistent before employee save/update.
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
+  // Identity fields are optional until HR selects a means of identification.
+  // Once a non-NIN document is selected, its document number is required.
+  // NIN is required for National ID / NIN Slip and optional for other IDs,
+  // but when entered it must still be exactly 11 digits.
   state.dom.alternativePhoneNumber?.classList.remove("is-invalid");
+  state.dom.identificationDocumentNumber?.classList.remove("is-invalid");
   state.dom.nin?.classList.remove("is-invalid");
 
   const primaryPhoneDigits = String(state.dom.phoneNumber?.value || "")
@@ -25427,6 +25543,28 @@ function validateEmployeeForm() {
     state.dom.meansOfIdentification?.value || "",
   ).trim();
 
+  const isDocumentNumberRequired =
+    isIdentificationDocumentNumberRequiredForMeansOfIdentification(
+      selectedMeansOfIdentification,
+    );
+
+  const identificationDocumentNumberValue = String(
+    state.dom.identificationDocumentNumber?.value || "",
+  ).trim();
+
+  if (isDocumentNumberRequired && !identificationDocumentNumberValue) {
+    state.dom.identificationDocumentNumber?.classList.add("is-invalid");
+    isValid = false;
+    if (!firstInvalidField) {
+      firstInvalidField = state.dom.identificationDocumentNumber;
+    }
+
+    showPageAlert(
+      "warning",
+      "Identification Document Number is required for the selected means of identification.",
+    );
+  }
+
   const isNinRequired = isNinRequiredForMeansOfIdentification(
     selectedMeansOfIdentification,
   );
@@ -25444,14 +25582,14 @@ function validateEmployeeForm() {
     );
   }
 
-  if (isNinRequired && ninValue && !/^\d{11}$/.test(ninValue)) {
+  if (ninValue && !/^\d{11}$/.test(ninValue)) {
     state.dom.nin?.classList.add("is-invalid");
     isValid = false;
     if (!firstInvalidField) firstInvalidField = state.dom.nin;
 
     showPageAlert(
       "warning",
-      "NIN must be exactly 11 digits.",
+      "NIN must be exactly 11 digits when provided.",
     );
   }
 
@@ -25479,17 +25617,23 @@ function buildEmployeePayload() {
     state.dom.employmentStatus?.value || "active",
   ).trim();
 
-  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
-  // Save NIN only when the selected Means of Identification requires it.
-  // For Passport, Driver's Licence, Voter's Card/PVC, Birth Certificate, or Other,
-  // NIN should remain hidden and stored as null.
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
+  // Keep the primary ID document number separate from NIN.
+  // For National ID / NIN Slip, NIN is the primary identifier and document
+  // number is stored as null. For other documents, document number is stored
+  // separately and NIN may also be stored when provided.
   const selectedMeansOfIdentificationForPayload = String(
     state.dom.meansOfIdentification?.value || "",
   ).trim();
 
-  const ninForPayload = isNinRequiredForMeansOfIdentification(
-    selectedMeansOfIdentificationForPayload,
-  )
+  const identificationDocumentNumberForPayload =
+    isIdentificationDocumentNumberRequiredForMeansOfIdentification(
+      selectedMeansOfIdentificationForPayload,
+    )
+      ? String(state.dom.identificationDocumentNumber?.value || "").trim()
+      : "";
+
+  const ninForPayload = selectedMeansOfIdentificationForPayload
     ? String(state.dom.nin?.value || "").trim()
     : "";
 
@@ -25526,6 +25670,8 @@ function buildEmployeePayload() {
       String(state.dom.alternativePhoneNumber?.value || "").trim() || null,
     means_of_identification:
       selectedMeansOfIdentificationForPayload || null,
+    identification_document_number:
+      identificationDocumentNumberForPayload || null,
     identification_issue_state:
       String(state.dom.identificationIssueState?.value || "").trim() || null,
     nin: ninForPayload || null,
@@ -27309,13 +27455,27 @@ async function handleEmployeeSave() {
     // The database now protects Employee Number from duplicates.
     // If a rare duplicate happens, show HR a clear message instead of
     // exposing a raw Supabase duplicate-key error.
+    //
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3F
+    // The database also protects NIN and primary ID document numbers from
+    // duplicates. Convert those database constraint errors into HR-friendly
+    // page alerts and notification toasts.
     const errorMessage = String(error.message || "").toLowerCase();
+    const errorDetails = String(error.details || "").toLowerCase();
+    const errorHint = String(error.hint || "").toLowerCase();
+    const errorCode = String(error.code || "").toLowerCase();
+    const combinedErrorText = [
+      errorMessage,
+      errorDetails,
+      errorHint,
+      errorCode,
+    ].join(" ");
 
     const isDuplicateEmployeeNumber =
-      errorMessage.includes("uq_employees_employee_number_normalised") ||
+      combinedErrorText.includes("uq_employees_employee_number_normalised") ||
       (
-        errorMessage.includes("duplicate key value") &&
-        errorMessage.includes("employee_number")
+        combinedErrorText.includes("duplicate key value") &&
+        combinedErrorText.includes("employee_number")
       );
 
     if (isDuplicateEmployeeNumber && !isEditMode) {
@@ -27330,12 +27490,85 @@ async function handleEmployeeSave() {
         "The generated Employee Number was already taken. Please click Create Employee Profile again so the system can generate the next available number.",
       );
 
+      showDashboardToast(
+        "warning",
+        "Employee number already exists",
+        "The system blocked a duplicate employee number. Try saving again so the next available number can be generated.",
+      );
+
+      return;
+    }
+
+    const isDuplicateNin =
+      combinedErrorText.includes("employees_unique_nin_per_tenant_idx") ||
+      (
+        combinedErrorText.includes("duplicate key value") &&
+        combinedErrorText.includes("nin")
+      );
+
+    if (isDuplicateNin) {
+      state.dom.nin?.classList.add("is-invalid");
+
+      state.dom.nin?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+
+      showPageAlert(
+        "warning",
+        "This NIN already exists on another employee record. Please confirm the employee details or enter the correct NIN before saving.",
+      );
+
+      showDashboardToast(
+        "warning",
+        "Duplicate NIN blocked",
+        "This NIN is already assigned to another employee record.",
+      );
+
+      return;
+    }
+
+    const isDuplicateIdentificationDocumentNumber =
+      combinedErrorText.includes("employees_unique_identification_document_per_tenant_idx") ||
+      (
+        combinedErrorText.includes("duplicate key value") &&
+        (
+          combinedErrorText.includes("identification_document_number") ||
+          combinedErrorText.includes("means_of_identification")
+        )
+      );
+
+    if (isDuplicateIdentificationDocumentNumber) {
+      state.dom.identificationDocumentNumber?.classList.add("is-invalid");
+
+      state.dom.identificationDocumentNumber?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+
+      showPageAlert(
+        "warning",
+        "This identification document number already exists for the selected means of identification. Please confirm the employee details or enter the correct document number before saving.",
+      );
+
+      showDashboardToast(
+        "warning",
+        "Duplicate ID number blocked",
+        "This document number is already assigned to another employee record.",
+      );
+
       return;
     }
 
     showPageAlert(
       "danger",
       error.message || "Employee profile could not be saved.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Employee save failed",
+      "Employee profile could not be saved. Please review the form and try again.",
     );
   } finally {
     setEmployeeSaveLoading(false, isEditMode);
@@ -30636,14 +30869,14 @@ function renderPayslipPreview(payrollRecord) {
 
   const alpatechPayslipHeaderHtml = isAlpatechPayslip
     ? buildAlpatechDocumentBrandHeaderHtml({
-        documentLabel: "Confidential Payroll Payslip",
-        rightTitle: "HR & Payroll",
-        rightLine1: payrollRecord.pay_cycle || "Payroll",
-        rightLine2: formatDate(payrollRecord.pay_date),
-      })
+      documentLabel: "Confidential Payroll Payslip",
+      rightTitle: "HR & Payroll",
+      rightLine1: payrollRecord.pay_cycle || "Payroll",
+      rightLine2: formatDate(payrollRecord.pay_date),
+    })
     : "";
 
-    // ALPATECH PAYSLIP BRANDING - STEP 2B
+  // ALPATECH PAYSLIP BRANDING - STEP 2B
   // Avoid repeating "Alpatech" twice on the payslip.
   // For Alpatech, the company identity is already shown in the branded
   // letterhead, so the body card should show employer details only.
@@ -30657,9 +30890,9 @@ function renderPayslipPreview(payrollRecord) {
 
   const payslipEmployerFallbackHtml =
     isAlpatechPayslip &&
-    !organizationContactLines.length &&
-    !organizationAddress &&
-    !organizationRegistrationLines.length
+      !organizationContactLines.length &&
+      !organizationAddress &&
+      !organizationRegistrationLines.length
       ? `<div class="text-secondary small">Company details not yet completed in Organization Setup.</div>`
       : "";
 
