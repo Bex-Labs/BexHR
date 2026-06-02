@@ -166,6 +166,105 @@
     ssState.identity.linkedUserId = employee.user_id || ssState.currentUser?.id || null;
   }
 
+  // LEAVE ELIGIBILITY / REQUEST LEAVE VISIBILITY - STEP 1B
+  // Normalise the signed-in HR/Manager/Employee self-service user's gender
+  // from the resolved employee record.
+  function getNormalisedSsEmployeeGenderForLeaveEligibility() {
+    const rawGender = ssNormalizeText(
+      ssState.employeeRecord?.gender ||
+      ssState.employeeRecord?.sex ||
+      ssState.employeeRecord?.gender_identity ||
+      "",
+    );
+
+    if (["female", "f", "woman"].includes(rawGender)) {
+      return "female";
+    }
+
+    if (["male", "m", "man"].includes(rawGender)) {
+      return "male";
+    }
+
+    return "";
+  }
+
+  // LEAVE ELIGIBILITY / REQUEST LEAVE VISIBILITY - STEP 1B
+  // Hide ineligible leave types from HR/Manager My Self-Service dropdowns.
+  function isSsLeaveTypeVisibleForEmployeeProfile(leaveType = {}) {
+    const eligibilityRule = ssNormalizeText(
+      leaveType.eligibility_rule ||
+      leaveType.eligibilityRule ||
+      "all_employees",
+    );
+
+    if (eligibilityRule === "all_employees" || eligibilityRule === "hr_review_only") {
+      return true;
+    }
+
+    const employeeGender = getNormalisedSsEmployeeGenderForLeaveEligibility();
+
+    if (!employeeGender && (eligibilityRule === "female_only" || eligibilityRule === "male_only")) {
+      return false;
+    }
+
+    if (eligibilityRule === "female_only") {
+      return employeeGender === "female";
+    }
+
+    if (eligibilityRule === "male_only") {
+      return employeeGender === "male";
+    }
+
+    return true;
+  }
+
+  // LEAVE ELIGIBILITY / REQUEST LEAVE VISIBILITY - STEP 1B
+  // Defensive guard for stale dropdown state, old browser cache, or manual DOM changes.
+  function getSsLeaveTypeEligibilityBlock(leaveType = {}) {
+    if (!leaveType.id) return null;
+
+    const eligibilityRule = ssNormalizeText(
+      leaveType.eligibilityRule || "all_employees",
+    );
+
+    if (eligibilityRule === "all_employees") {
+      return null;
+    }
+
+    if (eligibilityRule === "hr_review_only") {
+      return {
+        message:
+          `${leaveType.name || "This leave type"} requires HR review before it can be requested through self-service. Please contact HR for support.`,
+      };
+    }
+
+    const employeeGender = getNormalisedSsEmployeeGenderForLeaveEligibility();
+
+    if (!employeeGender && (eligibilityRule === "female_only" || eligibilityRule === "male_only")) {
+      return {
+        message:
+          `${leaveType.name || "This leave type"} eligibility could not be verified from your employee profile. Please contact HR to check your profile details.`,
+      };
+    }
+
+    if (eligibilityRule === "female_only" && employeeGender === "female") {
+      return null;
+    }
+
+    if (eligibilityRule === "male_only" && employeeGender === "male") {
+      return null;
+    }
+
+    if (eligibilityRule === "female_only" || eligibilityRule === "male_only") {
+      return {
+        message:
+          `${leaveType.name || "This leave type"} is not available for your employee profile. Please contact HR if this is incorrect or requires special handling.`,
+      };
+    }
+
+    return null;
+  }
+
   // -----------------------------------------------------------------------
   // DOM caching
   // -----------------------------------------------------------------------
@@ -792,7 +891,10 @@
 
     select.innerHTML = `<option value="">Select leave type</option>`;
 
-    (data || []).forEach((leaveType) => {
+    // LEAVE ELIGIBILITY / REQUEST LEAVE VISIBILITY - STEP 1B
+    // Only show leave types the signed-in HR/Manager/Employee user can request.
+    // This keeps the dropdown aligned with the visible leave balances.
+    (data || []).filter(isSsLeaveTypeVisibleForEmployeeProfile).forEach((leaveType) => {
       const option = document.createElement("option");
       option.value = leaveType.id;
       option.textContent = leaveType.name;
@@ -1137,11 +1239,32 @@
     const startDate = ssState.dom.ssStartDate?.value || "";
     const endDate = ssState.dom.ssEndDate?.value || "";
 
-    if (!leaveTypeId || !startDate || !endDate) return null;
+    if (!leaveTypeId) return null;
 
     const selectedOption = ssState.dom.ssLeaveType?.options[
       ssState.dom.ssLeaveType?.selectedIndex
     ];
+
+    // LEAVE ELIGIBILITY / REQUEST LEAVE VISIBILITY - STEP 1B
+    // Check eligibility before date checks so stale or manually selected
+    // ineligible leave types are blocked immediately.
+    const selectedLeaveType = {
+      id: String(leaveTypeId || "").trim(),
+      name: String(selectedOption?.textContent || "").trim(),
+      code: String(selectedOption?.dataset?.code || "").trim(),
+      eligibilityRule: String(
+        selectedOption?.dataset?.eligibilityRule || "all_employees",
+      ).trim(),
+    };
+
+    const eligibilityBlock = getSsLeaveTypeEligibilityBlock(selectedLeaveType);
+
+    if (eligibilityBlock) {
+      return eligibilityBlock;
+    }
+
+    if (!startDate || !endDate) return null;
+
     const leaveTypeName = ssNormalizeText(selectedOption?.textContent || "");
     const isSingleApplicationType = SINGLE_APPLICATION_LEAVE_TYPE_KEYWORDS.some((kw) =>
       leaveTypeName.includes(kw),

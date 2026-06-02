@@ -3345,6 +3345,43 @@ function getNormalisedEmployeeGenderForLeaveEligibility() {
   return "";
 }
 
+// LEAVE ELIGIBILITY / REQUEST LEAVE VISIBILITY - STEP 1B
+// Hide gender-specific leave types from the Request Leave dropdown when
+// the signed-in employee profile is not eligible.
+//
+// HR behaviour:
+// - Female employees see Maternity Leave, not Paternity Leave.
+// - Male employees see Paternity Leave, not Maternity Leave.
+// - Unknown/blank gender does not show gender-specific leave until HR fixes
+//   the employee profile, avoiding a misleading request option.
+function isLeaveTypeVisibleForEmployeeProfile(leaveType = {}) {
+  const eligibilityRule = normalizeText(
+    leaveType.eligibility_rule ||
+    leaveType.eligibilityRule ||
+    "all_employees",
+  );
+
+  if (eligibilityRule === "all_employees" || eligibilityRule === "hr_review_only") {
+    return true;
+  }
+
+  const employeeGender = getNormalisedEmployeeGenderForLeaveEligibility();
+
+  if (!employeeGender && (eligibilityRule === "female_only" || eligibilityRule === "male_only")) {
+    return false;
+  }
+
+  if (eligibilityRule === "female_only") {
+    return employeeGender === "female";
+  }
+
+  if (eligibilityRule === "male_only") {
+    return employeeGender === "male";
+  }
+
+  return true;
+}
+
 // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1C
 // HR-facing leave eligibility guard.
 // Keep the employee message neutral and professional. Do not expose sensitive
@@ -3443,7 +3480,10 @@ async function loadLeaveTypes() {
 
   state.dom.leaveType.innerHTML = `<option value="">Select leave type</option>`;
 
-  (data || []).forEach((leaveType) => {
+  // LEAVE ELIGIBILITY / REQUEST LEAVE VISIBILITY - STEP 1B
+  // Only show leave types the signed-in employee can actually request.
+  // The existing policy block remains as a defensive guard.
+  (data || []).filter(isLeaveTypeVisibleForEmployeeProfile).forEach((leaveType) => {
     const option = document.createElement("option");
     option.value = leaveType.id;
     option.textContent = leaveType.name;
