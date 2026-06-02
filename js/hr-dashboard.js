@@ -11119,8 +11119,50 @@ function resetEmployeeReportingLineRows() {
 // EMPLOYEE BIODATA COMPLETION - STEP 3C
 // Keep the existing employee table fields aligned with the selected primary manager.
 // This preserves current workflow behaviour while child rows support multiple managers.
+// EMPLOYEE BIODATA COMPLETION - STEP 3C
+// Keep the existing employee table fields aligned with the selected primary manager.
+// This preserves current workflow behaviour while child rows support multiple managers.
 function syncPrimaryReportingLineSnapshotToEmployeeFields() {
   applyAssignedLineManagerSelection();
+}
+
+// MANAGER REPORTING LINE VISIBILITY - STEP 1G
+// Resolve a reporting-line manager to a real employees.id value.
+//
+// HR behaviour:
+// - Manager Dashboard visibility depends on employee_reporting_lines.manager_employee_id.
+// - Legacy saved:<email> options are useful for display, but cannot be inserted
+//   into employee_reporting_lines because manager_employee_id must be a real
+//   employee row id.
+// - This helper resolves either a real employee id or a saved manager email
+//   back to the matching active employee record.
+function resolveReportingLineManagerEmployeeId(row = {}) {
+  const rawManagerId = String(row.managerEmployeeId || "").trim();
+  const rawManagerEmail = String(row.managerEmail || "").trim().toLowerCase();
+
+  if (rawManagerId && !rawManagerId.startsWith("saved:")) {
+    return rawManagerId;
+  }
+
+  const savedEmail = rawManagerId.startsWith("saved:")
+    ? rawManagerId.replace(/^saved:/i, "").trim().toLowerCase()
+    : "";
+
+  const managerEmail = rawManagerEmail || savedEmail;
+
+  if (!managerEmail) {
+    return "";
+  }
+
+  const matchedManager = (state.employees || []).find((employee) => {
+    const employeeEmail = String(employee.work_email || "")
+      .trim()
+      .toLowerCase();
+
+    return employeeEmail && employeeEmail === managerEmail;
+  });
+
+  return String(matchedManager?.id || "").trim();
 }
 
 // EMPLOYEE BIODATA COMPLETION - STEP 3C
@@ -11128,31 +11170,45 @@ function syncPrimaryReportingLineSnapshotToEmployeeFields() {
 function getEmployeeReportingLinesFromForm() {
   const rows = [];
 
-  const primaryManagerId = String(
-    state.dom.assignedLineManagerEmployeeId?.value || "",
-  ).trim();
+  const primarySelect = state.dom.assignedLineManagerEmployeeId;
+  const primarySelectedOption = primarySelect?.selectedOptions?.[0] || null;
 
-  if (primaryManagerId && !primaryManagerId.startsWith("saved:")) {
+  const primaryManagerId = String(primarySelect?.value || "").trim();
+  const primaryManagerEmail = String(
+    primarySelectedOption?.dataset?.managerEmail || "",
+  ).trim().toLowerCase();
+
+  // MANAGER REPORTING LINE VISIBILITY - STEP 1G
+  // Include the primary manager as a reporting-line row.
+  // If the value is a legacy saved:<email> option, the save step resolves it
+  // back to the real employee id before inserting employee_reporting_lines.
+  if (primaryManagerId) {
     rows.push({
       managerEmployeeId: primaryManagerId,
+      managerEmail: primaryManagerEmail,
       managerType: "Primary",
       effectiveDate: state.dom.employmentDate?.value || null,
       status: "Active",
       notes: "Primary reporting line",
+      rowElement: primarySelect,
     });
   }
 
   state.dom.employeeReportingLinesList
     ?.querySelectorAll("[data-employee-reporting-line-row]")
     .forEach((row) => {
-      // EMPLOYEE BIODATA COMPLETION - STEP 3H
-      // Additional manager UI is intentionally simple.
-      // Effective Date defaults to Employment Date, Status defaults to Active,
-      // and Notes stays null unless a future maintenance screen exposes it.
+      const managerSelect = row.querySelector("[data-reporting-line-manager-id]");
+      const selectedOption = managerSelect?.selectedOptions?.[0] || null;
+
+      // MANAGER REPORTING LINE VISIBILITY - STEP 1G
+      // Additional managers are saved as Secondary reporting lines.
+      // Store manager email as a fallback resolver so saved/display values
+      // can still be resolved to a real employees.id before insert.
       rows.push({
-        managerEmployeeId: String(
-          row.querySelector("[data-reporting-line-manager-id]")?.value || "",
-        ).trim(),
+        managerEmployeeId: String(managerSelect?.value || "").trim(),
+        managerEmail: String(
+          selectedOption?.dataset?.managerEmail || "",
+        ).trim().toLowerCase(),
         managerType: String(
           row.querySelector("[data-reporting-line-manager-type]")?.value || "Secondary",
         ).trim(),
@@ -11172,52 +11228,126 @@ function getEmployeeReportingLinesFromForm() {
 // and the same manager cannot be assigned twice.
 function validateEmployeeReportingLines() {
   const rows = getEmployeeReportingLinesFromForm();
-  const managerIds = [];
+  const managerRowsById = new Map();
   let isValid = true;
   let firstInvalidField = null;
 
-  state.dom.employeeReportingLinesList
-    ?.querySelectorAll("[data-reporting-line-manager-id]")
-    .forEach((select) => {
-      select.classList.remove("is-invalid");
-    });
+  // MANAGER REPORTING LINE VISIBILITY - STEP 1G
+  // Clear previous validation from both the primary manager dropdown and
+  // additional secondary manager rows before re-validating.
+  [
+    state.dom.assignedLineManagerEmployeeId,
+    ...Array.from(
+      state.dom.employeeReportingLinesList?.querySelectorAll(
+        "[data-reporting-line-manager-id]",
+      ) || [],
+    ),
+  ].forEach((select) => {
+    select?.classList.remove("is-invalid");
+  });
+
+  function getReportingLineManagerSelect(row = {}) {
+    if (row.rowElement?.matches?.("select")) {
+      return row.rowElement;
+    }
+
+    return (
+      row.rowElement?.querySelector?.("[data-reporting-line-manager-id]") ||
+      (normalizeText(row.managerType) === "primary"
+        ? state.dom.assignedLineManagerEmployeeId
+        : null)
+    );
+  }
+
+  function markReportingLineRowInvalid(row = {}, shouldSetFocus = false) {
+    const managerSelect = getReportingLineManagerSelect(row);
+
+    managerSelect?.classList.add("is-invalid");
+
+    if (shouldSetFocus && !firstInvalidField) {
+      firstInvalidField = managerSelect;
+    }
+
+    return managerSelect;
+  }
 
   rows.forEach((row) => {
-    if (!row.managerEmployeeId) {
-      const managerSelect = row.rowElement?.querySelector("[data-reporting-line-manager-id]");
-      managerSelect?.classList.add("is-invalid");
+    const managerId = String(row.managerEmployeeId || "").trim();
+
+    if (!managerId) {
+      markReportingLineRowInvalid(row, true);
       isValid = false;
-      if (!firstInvalidField) firstInvalidField = managerSelect;
       return;
     }
 
-    managerIds.push(row.managerEmployeeId);
+    const existingRow = managerRowsById.get(managerId);
+
+    if (existingRow) {
+      // MANAGER REPORTING LINE VISIBILITY - STEP 1G
+      // A manager can be assigned once only for the same employee.
+      // This prevents duplicate Primary/Secondary assignments while still
+      // allowing one employee to have different primary and secondary managers.
+      //
+      // UX behaviour:
+      // - mark both duplicate selects invalid;
+      // - focus/scroll to the duplicate row HR just added/selected;
+      // - show both page alert and dashboard toast.
+      markReportingLineRowInvalid(row, true);
+      markReportingLineRowInvalid(existingRow, false);
+      isValid = false;
+      return;
+    }
+
+    managerRowsById.set(managerId, row);
   });
 
-  const duplicateManagerId = managerIds.find(
-    (managerId, index) => managerIds.indexOf(managerId) !== index,
-  );
-
-  if (duplicateManagerId) {
-    state.dom.employeeReportingLinesList
-      ?.querySelectorAll("[data-reporting-line-manager-id]")
-      .forEach((select) => {
-        if (select.value === duplicateManagerId) {
-          select.classList.add("is-invalid");
-        }
-      });
-
-    showPageAlert(
-      "warning",
-      "The same manager cannot be assigned more than once on the employee reporting lines.",
-    );
-
-    isValid = false;
-  }
-
   if (!isValid) {
-    if (firstInvalidField?.focus) {
-      firstInvalidField.focus();
+    const hasDuplicateManager =
+      rows.length !== managerRowsById.size &&
+      rows.some((row) => String(row.managerEmployeeId || "").trim());
+
+    if (hasDuplicateManager) {
+      showPageAlert(
+        "warning",
+        "The same manager cannot be assigned more than once on the employee reporting lines.",
+      );
+
+      showDashboardToast(
+        "warning",
+        "Duplicate manager assignment blocked",
+        "Remove the duplicate secondary manager row or select a different manager before saving.",
+      );
+    } else {
+      showPageAlert(
+        "warning",
+        "Select a secondary manager or remove the incomplete reporting-line row before saving.",
+      );
+
+      showDashboardToast(
+        "warning",
+        "Reporting line incomplete",
+        "Complete the secondary manager row or remove it before saving.",
+      );
+    }
+
+    if (firstInvalidField) {
+      const target =
+        firstInvalidField.closest?.("[data-employee-reporting-line-row]") ||
+        firstInvalidField.closest?.(".col-md-6") ||
+        firstInvalidField;
+
+      window.requestAnimationFrame(() => {
+        if (typeof scrollToDashboardTarget === "function") {
+          scrollToDashboardTarget(target, 96);
+        } else {
+          target.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }
+
+        firstInvalidField.focus?.({ preventScroll: true });
+      });
     }
 
     return false;
@@ -11239,12 +11369,24 @@ async function saveEmployeeReportingLinesForEmployee(employeeId) {
   // Reporting line child rows inherit the same tenant as the employee record.
   const tenantId = getRequiredTenantIdForHrEmployeeData();
 
+  // MANAGER REPORTING LINE VISIBILITY - STEP 1D
+  // Convert the HR form rows into database-safe reporting-line records.
+  // The Manager Dashboard cannot use legacy text manager names; it needs
+  // employee_reporting_lines.manager_employee_id to contain a real employees.id.
+  // MANAGER REPORTING LINE VISIBILITY - STEP 1G
+  // Convert the HR form rows into database-safe reporting-line records.
+  // The Manager Dashboard cannot use legacy text manager names; it needs
+  // employee_reporting_lines.manager_employee_id to contain a real employees.id.
   const reportingRows = getEmployeeReportingLinesFromForm()
-    .filter((row) => row.managerEmployeeId)
+    .map((row) => ({
+      ...row,
+      resolvedManagerEmployeeId: resolveReportingLineManagerEmployeeId(row),
+    }))
+    .filter((row) => row.resolvedManagerEmployeeId)
     .map((row) => ({
       employee_id: employeeKey,
       tenant_id: tenantId,
-      manager_employee_id: row.managerEmployeeId,
+      manager_employee_id: row.resolvedManagerEmployeeId,
       manager_type: row.managerType || "Secondary",
       effective_date: row.effectiveDate || null,
       status: row.status || "Active",

@@ -3423,14 +3423,51 @@ async function loadAssignedTeamMembers() {
 
     if (employeeError) throw employeeError;
 
-    // MANAGER DASHBOARD WIRING - STEP 2A
-    // Keep only employees backed by active employee_reporting_lines rows.
-    // The table query is explicit, so the page no longer depends on broad
-    // employees RLS or legacy manager-name fields for assignment scope.
-    const matchedEmployees = (Array.isArray(employeeRows) ? employeeRows : [])
-      .filter((employee) =>
-        reportingLineByEmployeeId.has(String(employee.id)),
-      );
+    // MANAGER REPORTING LINE VISIBILITY - STEP 1O-B
+    // Build the manager-visible employee list from direct employee rows where
+    // RLS allows them, and from the manager-safe reporting-line RPC where a
+    // secondary manager's direct employees lookup is restricted.
+    //
+    // HR behaviour:
+    // - Primary manager visibility remains unchanged.
+    // - Secondary manager visibility is preserved.
+    // - The dashboard must not drop a valid reporting-line employee just
+    //   because the second employees table lookup returned fewer rows.
+    const employeeRowsById = new Map(
+      (Array.isArray(employeeRows) ? employeeRows : []).map((employee) => [
+        String(employee.id || "").trim(),
+        employee,
+      ]),
+    );
+
+    const matchedEmployees = Array.from(reportingLineByEmployeeId.values())
+      .map((reportingLineRow) => {
+        const employeeId = String(reportingLineRow.employee_id || "").trim();
+        const directEmployeeRow = employeeRowsById.get(employeeId);
+
+        if (directEmployeeRow) {
+          return directEmployeeRow;
+        }
+
+        return {
+          id: employeeId,
+          employee_number: reportingLineRow.employee_number || "",
+          first_name: reportingLineRow.first_name || "",
+          last_name: reportingLineRow.last_name || "",
+          work_email: reportingLineRow.work_email || "",
+          department: reportingLineRow.department || "",
+          job_title: reportingLineRow.job_title || "",
+          employment_date: reportingLineRow.employment_date || "",
+          user_id: reportingLineRow.user_id || "",
+          status: reportingLineRow.employee_status || "active",
+
+          // MANAGER REPORTING LINE VISIBILITY - STEP 1O-B
+          // Marker only for debugging/future support. Rendering uses the same
+          // normal employee helper functions below.
+          __fromReportingLineRpc: true,
+        };
+      })
+      .filter((employee) => String(employee.id || "").trim());
 
     // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-F
     // Load manager-safe portal access status for all employees currently in
