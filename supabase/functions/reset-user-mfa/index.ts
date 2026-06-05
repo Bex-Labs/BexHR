@@ -73,6 +73,47 @@ function getFactorsFromAdminResponse(data: unknown) {
     return Array.from(uniqueFactors.values());
 }
 
+// HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 4A-2
+// Write an Admin security audit row from the secure Edge Function.
+// This runs with the service-role client server-side only; the browser never
+// writes directly to admin_security_audit_logs.
+async function writeAdminSecurityAuditLog(
+    serviceClient: ReturnType<typeof createClient>,
+    payload: {
+        eventType: string;
+        actionStatus: string;
+        actorUserId?: string | null;
+        actorEmail?: string | null;
+        targetUserId?: string | null;
+        targetEmail?: string | null;
+        targetRole?: string | null;
+        targetTenantId?: string | null;
+        deletedFactorCount?: number;
+        details?: Record<string, unknown>;
+    },
+) {
+    const { error } = await serviceClient
+        .from("admin_security_audit_logs")
+        .insert({
+            event_type: payload.eventType,
+            action_status: payload.actionStatus,
+            actor_user_id: payload.actorUserId || null,
+            actor_email: payload.actorEmail || null,
+            target_user_id: payload.targetUserId || null,
+            target_email: payload.targetEmail || null,
+            target_role: payload.targetRole || null,
+            target_tenant_id: payload.targetTenantId || null,
+            deleted_factor_count: payload.deletedFactorCount || 0,
+            details: payload.details || {},
+        });
+
+    if (error) {
+        // Audit write failure must be visible in function logs, but it should not
+        // falsely report MFA reset failure after factors were already deleted.
+        console.error("Admin security audit log write failed:", error);
+    }
+}
+
 Deno.serve(async (req) => {
     if (req.method === "OPTIONS") {
         return new Response("ok", {
@@ -162,8 +203,24 @@ Deno.serve(async (req) => {
             );
         }
 
-        const callerUserId = callerUserData.user.id;
+        // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 4A-2 FIX
+        // Deno deploy type-checking can treat Supabase user.id as possibly undefined
+        // even after the guard above. Convert it to a definite non-empty string once.
+        const callerUserId = String(callerUserData.user.id || "").trim();
 
+        if (!callerUserId) {
+            return jsonResponse(
+                {
+                    success: false,
+                    message: "Admin session user id could not be resolved.",
+                },
+                401,
+            );
+        }
+
+                // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 4A-2 FIX
+        // Keep the Supabase query chain unbroken. A stray semicolon before .eq()
+        // causes Edge Function bundling to fail with "Expression expected".
         const {
             data: callerProfile,
             error: callerProfileError,
@@ -208,7 +265,7 @@ Deno.serve(async (req) => {
 
         let targetQuery = serviceClient
             .from("profiles")
-            .select("id, email, full_name, role, is_active");
+            .select("id, email, full_name, role, is_active, tenant_id");
 
         if (targetUserId) {
             targetQuery = targetQuery.eq("id", targetUserId);
@@ -246,6 +303,24 @@ Deno.serve(async (req) => {
         }
 
         if (normaliseRole(targetProfile.role) !== "hr") {
+            // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 4A-2
+            // Audit blocked attempts too, because they are security-relevant.
+            await writeAdminSecurityAuditLog(serviceClient, {
+                eventType: "hr_mfa_reset",
+                actionStatus: "failed",
+                actorUserId: callerUserId,
+                actorEmail: callerProfile.email || callerUserData.user.email || null,
+                targetUserId: targetProfile.id,
+                targetEmail: targetProfile.email || targetEmail || null,
+                targetRole: targetProfile.role || null,
+                targetTenantId: targetProfile.tenant_id || null,
+                deletedFactorCount: 0,
+                details: {
+                    reason: "target_not_hr",
+                    message: "Only HR users can be reset from the HR MFA reset workflow.",
+                },
+            });
+
             return jsonResponse(
                 {
                     success: false,
@@ -301,6 +376,25 @@ Deno.serve(async (req) => {
                 status: getFactorStatus(factor) || "unknown",
             });
         }
+
+        // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 4A-2
+        // Audit every completed Admin HR MFA reset attempt.
+        // deletedCount = 0 is still useful as a skipped/no-factor audit event.
+        await writeAdminSecurityAuditLog(serviceClient, {
+            eventType: "hr_mfa_reset",
+            actionStatus: deletedCount > 0 ? "success" : "skipped",
+            actorUserId: callerUserId,
+            actorEmail: callerProfile.email || callerUserData.user.email || null,
+            targetUserId: targetProfile.id,
+            targetEmail: targetProfile.email || targetEmail || null,
+            targetRole: targetProfile.role || null,
+            targetTenantId: targetProfile.tenant_id || null,
+            deletedFactorCount: deletedCount,
+            details: {
+                deletedFactors,
+                targetName: targetProfile.full_name || targetProfile.email,
+            },
+        });
 
         return jsonResponse({
             success: true,
