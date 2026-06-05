@@ -59,8 +59,8 @@
            Desktop sidebar access for the Admin operating guide.
            This uses Bootstrap's modal trigger attributes, so no new
            admin-dashboard.js logic is required. -->
-      <button type="button" class="bexhr-sidebar-item" data-bs-toggle="modal"
-        data-bs-target="#adminOperatingGuideModal" title="Help Guide">
+      <button type="button" class="bexhr-sidebar-item" data-bs-toggle="modal" data-bs-target="#adminOperatingGuideModal"
+        title="Help Guide">
         <i class="bi bi-question-circle"></i>
         <span>Help Guide</span>
       </button>
@@ -494,8 +494,11 @@
                         <span id="saveTenantBtnText">Create Company</span>
                       </button>
 
+                      <!-- REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1C
+     Cancel Edit discards an active company edit, so use the same red
+     outline pattern as HR edit-cancel actions. -->
                       <button type="button" id="cancelTenantEditBtn"
-                        class="btn btn-outline-secondary dashboard-action-btn d-none">
+                        class="btn btn-outline-danger dashboard-action-btn d-none">
                         <i class="bi bi-x-circle me-2"></i>
                         Cancel Edit
                       </button>
@@ -673,8 +676,11 @@
                         <span id="saveAdminEmailRecipientBtnText">Add Approved Recipient</span>
                       </button>
 
+                      <!-- REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1C
+     Cancel Edit discards an active approved-recipient edit. Keep this
+     visually consistent with other edit-cancel actions. -->
                       <button type="button" id="cancelAdminEmailRecipientEditBtn"
-                        class="btn btn-outline-secondary dashboard-action-btn d-none">
+                        class="btn btn-outline-danger dashboard-action-btn d-none">
                         <i class="bi bi-x-circle me-2"></i>
                         Cancel Edit
                       </button>
@@ -810,7 +816,7 @@
                 </div>
               </div>
 
-<!-- ADMIN-CREATED COMPANY USERS TO EMPLOYEE RECORDS - STEP 3A
+              <!-- ADMIN-CREATED COMPANY USERS TO EMPLOYEE RECORDS - STEP 3A
        This form calls the secure invite-company-user Edge Function first.
        After invite/profile access succeeds, Admin JS calls a secure RPC to
        create or link the minimum employee record needed for HR list, payroll,
@@ -931,8 +937,11 @@
                         <span id="saveProfileTenantLinkBtnText">Save Access Setup</span>
                       </button>
 
+                      <!-- REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1C
+     Cancel Edit discards an active user/company access edit. Use red
+     outline to distinguish it from neutral clear/refresh actions. -->
                       <button type="button" id="cancelProfileTenantLinkEditBtn"
-                        class="btn btn-outline-secondary dashboard-action-btn d-none">
+                        class="btn btn-outline-danger dashboard-action-btn d-none">
                         <i class="bi bi-x-circle me-2"></i>
                         Cancel Edit
                       </button>
@@ -1037,7 +1046,7 @@
     </div>
   </div>
 
-    <!-- GUIDED HELP LAYER - ADMIN STEP 1T
+  <!-- GUIDED HELP LAYER - ADMIN STEP 1T
        On-demand Admin workflow guide.
 
        Professional UX rule:
@@ -1045,8 +1054,8 @@
        - Help is available when needed.
        - This does not change profile, company, access, invite, email setup,
          password reset, tenant, Supabase, or role logic. -->
-  <div class="modal fade" id="adminOperatingGuideModal" tabindex="-1"
-    aria-labelledby="adminOperatingGuideModalLabel" aria-hidden="true">
+  <div class="modal fade" id="adminOperatingGuideModal" tabindex="-1" aria-labelledby="adminOperatingGuideModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
       <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
         <div class="modal-header border-0 px-4 pt-4 pb-0 d-flex justify-content-between align-items-start gap-3">
@@ -1062,8 +1071,8 @@
           <!-- GUIDED HELP LAYER - ADMIN STEP 1T-FIX
                Match Employee/HR guide close-button styling.
                This is visual alignment only; Bootstrap still closes the modal. -->
-          <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0"
-            data-bs-dismiss="modal" aria-label="Close Admin operating guide">
+          <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0" data-bs-dismiss="modal"
+            aria-label="Close Admin operating guide">
             <i class="bi bi-x-lg"></i>
           </button>
         </div>
@@ -1140,7 +1149,8 @@
           <div class="alert alert-light border rounded-4 mt-4 mb-0">
             <div class="fw-semibold mb-1">Operating rule</div>
             <div class="small text-secondary">
-              Use Admin for platform-level setup only. Company HR teams should use the HR dashboard for employee records, payroll setup, leave visibility, and HR operations.
+              Use Admin for platform-level setup only. Company HR teams should use the HR dashboard for employee
+              records, payroll setup, leave visibility, and HR operations.
             </div>
           </div>
         </div>

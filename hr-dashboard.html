@@ -758,14 +758,23 @@
             <div class="dashboard-table-hint">Swipe to view more →</div>
             <div id="managerLeaveDecisionsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
               style="max-height: 340px; overflow-y: auto; overflow-x: auto;">
-              <table class="table align-middle mb-0" style="table-layout: fixed; width: 100%; min-width: 860px;">
+              <!-- HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+     Add one controlled Action column for HR-only approved-leave cancellation.
+     The action column is intentionally narrow and only shows a red outline
+     Cancel Leave button for Approved rows. -->
+              <table class="table align-middle mb-0" style="table-layout: fixed; width: 100%; min-width: 0;">
+                <!-- HR APPROVED LEAVE CANCELLATION UI - STEP 1A-FIX 3
+     The Action column now uses an icon-only red outline button.
+     Keep the table at 100% width so the HR Review card does not create
+     a horizontal scrollbar on normal desktop widths. -->
                 <colgroup>
-                  <col style="width: 22%;" />
-                  <col style="width: 18%;" />
-                  <col style="width: 10%;" />
-                  <col style="width: 15%;" />
-                  <col style="width: 21%;" />
+                  <col style="width: 17%;" />
+                  <col style="width: 16%;" />
+                  <col style="width: 9%;" />
                   <col style="width: 14%;" />
+                  <col style="width: 25%;" />
+                  <col style="width: 11%;" />
+                  <col style="width: 8%;" />
                 </colgroup>
 
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
@@ -778,6 +787,10 @@
      HR wording: this is the manager's recorded decision note, not a form comment box. -->
                     <th class="small text-secondary text-uppercase text-nowrap px-3">Manager Note</th>
                     <th class="small text-secondary text-uppercase text-nowrap px-3">Decision Date</th>
+
+                    <!-- HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+     HR-controlled action column. Managers do not see or use this table. -->
+                    <th class="small text-secondary text-uppercase text-center text-nowrap px-3">Action</th>
                   </tr>
                 </thead>
                 <tbody id="managerLeaveDecisionsTableBody"></tbody>
@@ -1040,8 +1053,11 @@
                       <span id="organizationDepartmentSubmitLabel">Create Department</span>
                     </button>
 
+                    <!-- REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1C
+     Cancel Edit discards an active Department edit, so use the same
+     red outline pattern as other HR edit-cancel actions. -->
                     <button type="button" id="cancelOrganizationDepartmentEditBtn"
-                      class="btn btn-outline-secondary dashboard-action-btn d-none">
+                      class="btn btn-outline-danger dashboard-action-btn d-none">
                       <i class="bi bi-x-circle me-2"></i>
                       Cancel Edit
                     </button>
@@ -1146,8 +1162,11 @@
                       <span id="organizationJobTitleSubmitLabel">Create Job Title</span>
                     </button>
 
+                    <!-- REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1C
+     Cancel Edit discards an active Job Title edit, so use danger outline
+     consistently with the rest of HR setup edit mode. -->
                     <button type="button" id="cancelOrganizationJobTitleEditBtn"
-                      class="btn btn-outline-secondary dashboard-action-btn d-none">
+                      class="btn btn-outline-danger dashboard-action-btn d-none">
                       <i class="bi bi-x-circle me-2"></i>
                       Cancel Edit
                     </button>
@@ -2785,7 +2804,8 @@ Disable browser address autofill popup on HR employee address fields. -->
           <div class="mb-4">
             <h2 class="section-heading h4 mb-1">HR Review</h2>
             <p class="section-subtext mb-0">
-              Review employee-submitted profile corrections and manager leave decisions separately from employee master records.
+              Review employee-submitted profile corrections and manager leave decisions separately from employee master
+              records.
             </p>
           </div>
 
@@ -3266,8 +3286,11 @@ Disable browser address autofill popup on HR employee address fields. -->
                 <!-- BANK DIRECTORY - STEP 6C
      Keep Cancel visible in create mode as well as edit mode,
      so Bank Directory matches Employee Bank Details UX. -->
+                <!-- REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1C
+     Bank Directory Cancel exits/discards the active bank form state.
+     Match Employee Bank Details and other HR edit-cancel actions. -->
                 <button type="button" id="cancelBankDirectoryEditBtn"
-                  class="btn btn-outline-secondary dashboard-action-btn">
+                  class="btn btn-outline-danger dashboard-action-btn">
                   <i class="bi bi-x-circle me-2"></i>Cancel
                 </button>
               </div>
@@ -6100,7 +6123,7 @@ Disable browser address autofill popup on HR employee address fields. -->
     </div>
   </div>
 
-    <!-- GUIDED HELP LAYER - STEP 1R-FIX
+  <!-- GUIDED HELP LAYER - STEP 1R-FIX
        On-demand HR workflow guide.
        Professional UX pattern:
        - operational pages show work first;
@@ -6176,7 +6199,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                   <i class="bi bi-cash-coin me-2 text-primary"></i>Payroll
                 </div>
                 <div class="small text-secondary">
-                  Prepare payroll, finalise payroll records, preview payslips, export CSV files, and send payslip notifications.
+                  Prepare payroll, finalise payroll records, preview payslips, export CSV files, and send payslip
+                  notifications.
                 </div>
               </div>
             </div>
@@ -6196,7 +6220,8 @@ Disable browser address autofill popup on HR employee address fields. -->
           <div class="alert alert-light border mt-4 mb-0">
             <div class="fw-semibold mb-1">Operating rule</div>
             <div class="small text-secondary">
-              Start with the workspace that matches the task: People for employee records, HR Review for review work, Setup for configuration, and Payroll for payroll processing.
+              Start with the workspace that matches the task: People for employee records, HR Review for review work,
+              Setup for configuration, and Payroll for payroll processing.
             </div>
           </div>
         </div>
@@ -6205,6 +6230,63 @@ Disable browser address autofill popup on HR employee address fields. -->
           <button type="button" id="closeHrOperatingGuideFooterBtn"
             class="btn btn-outline-secondary dashboard-action-btn">
             Close Guide
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+     Controlled HR cancellation modal for approved leave.
+     HR must provide a reason. The backend RPC restores balance once only
+     and records cancellation audit fields. -->
+  <div id="hrCancelApprovedLeaveModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
+    style="z-index: 1062; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
+    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
+      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 680px;">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
+          <div>
+            <h2 id="hrCancelApprovedLeaveTitle" class="h4 mb-1">Cancel Approved Leave</h2>
+            <p class="text-secondary mb-0">
+              Use this only when HR needs to reverse an approved leave request and restore the employee balance.
+            </p>
+          </div>
+
+          <button type="button" id="closeHrCancelApprovedLeaveModalBtn" class="btn btn-sm btn-outline-secondary"
+            aria-label="Close leave cancellation form">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <div class="card-body p-4">
+          <div id="hrCancelApprovedLeaveSummary" class="alert alert-light border mb-4">
+            Select an approved leave decision to cancel.
+          </div>
+
+          <label for="hrCancelApprovedLeaveReason" class="form-label fw-semibold">
+            Cancellation Reason <span class="text-danger">*</span>
+          </label>
+          <textarea id="hrCancelApprovedLeaveReason" class="form-control" rows="4"
+            placeholder="Explain why HR is cancelling this approved leave."></textarea>
+          <div id="hrCancelApprovedLeaveReasonFeedback" class="invalid-feedback">
+            Enter a cancellation reason before continuing.
+          </div>
+
+          <div class="form-text">
+            This action changes the leave status to Cancelled and restores the employee balance once only.
+          </div>
+        </div>
+
+        <div class="card-footer bg-light border-0 d-flex flex-wrap justify-content-end gap-2 p-4">
+          <button type="button" id="cancelHrCancelApprovedLeaveModalBtn"
+            class="btn btn-outline-secondary dashboard-action-btn">
+            Close
+          </button>
+
+          <button type="button" id="confirmHrCancelApprovedLeaveBtn" class="btn btn-danger dashboard-action-btn"
+            disabled>
+            <i class="bi bi-x-octagon me-2"></i>
+            <span id="confirmHrCancelApprovedLeaveBtnText">Cancel Approved Leave</span>
           </button>
         </div>
       </div>

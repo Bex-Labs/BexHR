@@ -1352,7 +1352,17 @@ async function refreshEmployeeLeaveBalancesManually() {
   try {
     setRefreshButtonLoading(state.dom.refreshLeaveBalancesBtn, true);
     await waitForNextPaint();
+
+    // LEAVE BALANCE ELIGIBILITY VISIBILITY - STEP 1E
+    // Refresh the employee record first so gender changes made by HR are
+    // reflected before filtering Maternity/Paternity balance cards.
+    await loadEmployeeRecord(
+      state.currentUser.id,
+      state.currentUser.email || state.currentProfile?.email,
+    );
+
     await loadEmployeeLeaveBalances();
+    await loadLeaveTypes();
     await loadEmployeeLeaveRequests();
     clearPageAlert();
     showPageAlert("success", "Leave balances refreshed successfully.");
@@ -2957,7 +2967,16 @@ function renderLeaveBalances(balances) {
 
   grid.innerHTML = "";
 
-  if (!balances.length) {
+  // LEAVE BALANCE ELIGIBILITY VISIBILITY - STEP 1E
+  // Balance cards must follow the same gender eligibility rule as the
+  // Request Leave dropdown. The database can keep all balance rows for audit
+  // and future profile changes, but employees should only see currently
+  // applicable leave types in self-service.
+  const visibleBalances = (Array.isArray(balances) ? balances : []).filter((balance) =>
+    isLeaveTypeVisibleForEmployeeProfile(balance.leave_types || {}),
+  );
+
+  if (!visibleBalances.length) {
     state.dom.leaveBalancesEmptyState?.classList.remove("d-none");
     state.dom.leaveBalancesGrid?.classList.add("d-none");
     return;
@@ -2966,7 +2985,7 @@ function renderLeaveBalances(balances) {
   state.dom.leaveBalancesEmptyState?.classList.add("d-none");
   state.dom.leaveBalancesGrid?.classList.remove("d-none");
 
-  balances.forEach((balance) => {
+  visibleBalances.forEach((balance) => {
     const leaveTypeName = balance.leave_types?.name || "Unknown Leave Type";
 
     const entitledDays = Number(balance.entitled_days || 0);
@@ -3785,6 +3804,13 @@ async function loadEmployeeLeaveRequests() {
       decision_by,
       decision_by_name,
       decision_comment,
+      cancelled_at,
+      cancelled_by,
+      cancelled_by_name,
+      cancellation_reason,
+      cancelled_from_status,
+      balance_restored_at,
+      balance_restored_days,
       leave_types (
         name
       )
@@ -3823,6 +3849,144 @@ async function loadEmployeeLeaveRequests() {
   updateLeaveSubmitButtonState();
 }
 
+// EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+// Cancelled leave is HR reversal/audit information, not a normal manager
+// decision comment. These helpers keep employee-facing wording accurate
+// across Latest Leave Decision and My Leave History.
+function isCancelledLeaveRequestAudit(request = {}) {
+  return normalizeText(request.status) === "cancelled" || Boolean(request.cancelled_at);
+}
+
+function getCancelledLeaveActionDate(request = {}) {
+  return formatDateTime(request.cancelled_at || request.decision_at || request.submitted_at);
+}
+
+function getCancelledLeaveActionBy(request = {}) {
+  return (
+    request.cancelled_by_name ||
+    request.cancelled_by ||
+    "HR"
+  );
+}
+
+// EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A-FIX 1
+// Show the HR capacity beside the cancelling user's name.
+// The name identifies who performed the action; "Cancelled by HR" explains
+// the authority/context of the action to the employee.
+function buildCancelledLeaveActionByHtml(request = {}, options = {}) {
+  const compact = Boolean(options.compact);
+  const nameClass = compact ? "fw-semibold small" : "fw-semibold";
+
+  return `
+    <div class="${nameClass}">
+      ${escapeHtml(getCancelledLeaveActionBy(request))}
+    </div>
+    <div class="text-secondary small mt-1">
+      Cancelled by HR
+    </div>
+  `;
+}
+
+function getCancelledLeaveReason(request = {}) {
+  return String(request.cancellation_reason || "").trim() || "No cancellation reason recorded.";
+}
+
+function getCancelledLeaveBalanceRestoredLabel(request = {}) {
+  const restoredDays = Number(request.balance_restored_days || 0);
+
+  if (!Number.isFinite(restoredDays) || restoredDays <= 0) {
+    return "Not recorded";
+  }
+
+  return `${restoredDays} day(s)`;
+}
+
+function getOriginalManagerDecisionLabel(request = {}) {
+  const originalStatus = request.cancelled_from_status || "Approved";
+  const managerName = request.decision_by_name || "Manager / Supervisor";
+  const decisionDate = request.decision_at ? formatDateTime(request.decision_at) : "";
+
+  return decisionDate
+    ? `${originalStatus} by ${managerName} on ${decisionDate}`
+    : `${originalStatus} by ${managerName}`;
+}
+
+function buildEmployeeLeaveHistoryAuditHtml(request = {}) {
+  if (isCancelledLeaveRequestAudit(request)) {
+    return `
+      <!-- EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+           HR cancellation gets its own employee-facing audit labels.
+           Do not show cancellation reason as a manager comment. -->
+      <div class="row g-3">
+        <div class="col-12 col-md-4">
+          <div class="bg-light border rounded-3 p-2 h-100">
+            <div class="small text-secondary mb-1">Cancellation Date</div>
+            <div class="fw-semibold">${escapeHtml(getCancelledLeaveActionDate(request))}</div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <div class="bg-light border rounded-3 p-2 h-100">
+            <div class="small text-secondary mb-1">Cancelled By</div>
+            ${buildCancelledLeaveActionByHtml(request)}
+          </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <div class="bg-light border rounded-3 p-2 h-100">
+            <div class="small text-secondary mb-1">Balance Restored</div>
+            <div class="fw-semibold">${escapeHtml(getCancelledLeaveBalanceRestoredLabel(request))}</div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="bg-light border rounded-3 p-2 h-100">
+            <div class="small text-secondary mb-1">Cancellation Reason</div>
+            <div class="fw-semibold">${escapeHtml(getCancelledLeaveReason(request))}</div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="small text-secondary">
+            Original manager decision: ${escapeHtml(getOriginalManagerDecisionLabel(request))}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const decisionAt = formatDateTime(request.decision_at);
+  const comment = request.decision_comment || "No comment provided.";
+  const normalizedStatus = normalizeText(request.status || "");
+
+  const decisionLabel =
+    request.decision_at ||
+      normalizedStatus === "approved" ||
+      normalizedStatus === "rejected" ||
+      normalizedStatus === "returned for clarification" ||
+      normalizedStatus === "returned"
+      ? decisionAt
+      : "Awaiting decision";
+
+  return `
+    <div class="row g-3">
+      <div class="col-12 col-md-6">
+        <div class="bg-light border rounded-3 p-2 h-100">
+          <div class="small text-secondary mb-1">Decision Date</div>
+          <div class="fw-semibold">${escapeHtml(decisionLabel)}</div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-6">
+        <div class="bg-light border rounded-3 p-2 h-100">
+          <div class="small text-secondary mb-1">Manager Comment</div>
+          <div class="fw-semibold">${escapeHtml(comment)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderLeaveRequests(requests) {
   const list = state.dom.leaveRequestsList;
   if (!list) return;
@@ -3848,37 +4012,33 @@ function renderLeaveRequests(requests) {
     const endDate = formatDate(request.end_date);
     const totalDays = Number(request.total_days || 0);
     const submittedAt = formatDateTime(request.submitted_at);
-    const decisionAt = formatDateTime(request.decision_at);
-    const comment = request.decision_comment || "No comment provided.";
+    // EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+    // Cancelled records use HR cancellation audit display, not manager-comment display.
+    const isCancelledAudit = isCancelledLeaveRequestAudit(request);
 
     const toneClass =
-      normalizedStatus === "approved"
-        ? "border-success"
-        : normalizedStatus === "rejected"
-          ? "border-danger"
-          : normalizedStatus === "returned for clarification" ||
-            normalizedStatus === "returned"
-            ? "border-warning"
-            : "border-secondary";
+      isCancelledAudit
+        ? "border-secondary"
+        : normalizedStatus === "approved"
+          ? "border-success"
+          : normalizedStatus === "rejected"
+            ? "border-danger"
+            : normalizedStatus === "returned for clarification" ||
+              normalizedStatus === "returned"
+              ? "border-warning"
+              : "border-secondary";
 
     const iconClass =
-      normalizedStatus === "approved"
-        ? "bi-check-circle-fill text-success"
-        : normalizedStatus === "rejected"
-          ? "bi-x-circle-fill text-danger"
-          : normalizedStatus === "returned for clarification" ||
-            normalizedStatus === "returned"
-            ? "bi-exclamation-circle-fill text-warning"
-            : "bi-hourglass-split text-secondary";
-
-    const decisionLabel =
-      request.decision_at ||
-        normalizedStatus === "approved" ||
-        normalizedStatus === "rejected" ||
-        normalizedStatus === "returned for clarification" ||
-        normalizedStatus === "returned"
-        ? decisionAt
-        : "Awaiting decision";
+      isCancelledAudit
+        ? "bi-x-octagon-fill text-secondary"
+        : normalizedStatus === "approved"
+          ? "bi-check-circle-fill text-success"
+          : normalizedStatus === "rejected"
+            ? "bi-x-circle-fill text-danger"
+            : normalizedStatus === "returned for clarification" ||
+              normalizedStatus === "returned"
+              ? "bi-exclamation-circle-fill text-warning"
+              : "bi-hourglass-split text-secondary";
 
     // RETURNED LEAVE AMENDMENT WORKFLOW - STEP 1C
     // Returned requests should be amendable by the employee. Other statuses
@@ -3936,21 +4096,7 @@ function renderLeaveRequests(requests) {
           </div>
         </div>
 
-        <div class="row g-3">
-          <div class="col-12 col-md-6">
-            <div class="bg-light border rounded-3 p-2 h-100">
-              <div class="small text-secondary mb-1">Decision Date</div>
-              <div class="fw-semibold">${escapeHtml(decisionLabel)}</div>
-            </div>
-          </div>
-
-          <div class="col-12 col-md-6">
-            <div class="bg-light border rounded-3 p-2 h-100">
-              <div class="small text-secondary mb-1">Manager Comment</div>
-              <div class="fw-semibold">${escapeHtml(comment)}</div>
-            </div>
-          </div>
-        </div>
+        ${buildEmployeeLeaveHistoryAuditHtml(request)}
 
         ${editAndResubmitActionHtml}
       </div>
@@ -3969,16 +4115,21 @@ function renderLeaveRequests(requests) {
 
 function renderLatestDecisionCard(requests) {
   const decisionItems = requests
-    .filter(
-      (item) =>
+    .filter((item) => {
+      const status = normalizeText(item.status);
+
+      return (
+        isCancelledLeaveRequestAudit(item) ||
         !!item.decision_at ||
-        normalizeText(item.status) === "approved" ||
-        normalizeText(item.status) === "rejected" ||
-        normalizeText(item.status) === "returned for clarification",
-    )
+        status === "approved" ||
+        status === "rejected" ||
+        status === "returned" ||
+        status === "returned for clarification"
+      );
+    })
     .sort((a, b) => {
-      const aValue = a.decision_at || a.submitted_at || "";
-      const bValue = b.decision_at || b.submitted_at || "";
+      const aValue = a.cancelled_at || a.decision_at || a.submitted_at || "";
+      const bValue = b.cancelled_at || b.decision_at || b.submitted_at || "";
       return new Date(bValue) - new Date(aValue);
     });
 
@@ -3992,45 +4143,80 @@ function renderLatestDecisionCard(requests) {
   const leaveTypeName = latest.leave_types?.name || "Unknown Leave Type";
   const statusText = latest.status || "Decision Recorded";
   const normalizedStatus = normalizeText(statusText);
+  const isCancelledAudit = isCancelledLeaveRequestAudit(latest);
 
-  const decisionDate = formatDateTime(latest.decision_at || latest.submitted_at);
+  const actionDate = isCancelledAudit
+    ? getCancelledLeaveActionDate(latest)
+    : formatDateTime(latest.decision_at || latest.submitted_at);
+
   const requestedPeriod = `${formatDate(latest.start_date)} to ${formatDate(
     latest.end_date,
   )}`;
+
   const totalDays = Number(latest.total_days || 0);
-  const decisionBy = latest.decision_by_name || "Manager / Supervisor";
-  const decisionComment = latest.decision_comment || "No comment provided.";
+
+  const actionBy = isCancelledAudit
+    ? getCancelledLeaveActionBy(latest)
+    : latest.decision_by_name || "Manager / Supervisor";
+
+  const actionByLabel = isCancelledAudit ? "Cancelled By" : "Decision By";
+  const noteLabel = isCancelledAudit ? "Cancellation Reason" : "Manager Comment";
+
+  const noteText = isCancelledAudit
+    ? getCancelledLeaveReason(latest)
+    : latest.decision_comment || "No comment provided.";
 
   const statusBadgeClass = getDecisionStatusBadgeClass(statusText);
 
   const outcomeTone =
-    normalizedStatus === "approved"
-      ? "border-success bg-success-subtle"
-      : normalizedStatus === "rejected"
-        ? "border-danger bg-danger-subtle"
-        : normalizedStatus === "returned for clarification" ||
-          normalizedStatus === "returned"
-          ? "border-warning bg-warning-subtle"
-          : "border-secondary bg-light";
+    isCancelledAudit
+      ? "border-secondary bg-light"
+      : normalizedStatus === "approved"
+        ? "border-success bg-success-subtle"
+        : normalizedStatus === "rejected"
+          ? "border-danger bg-danger-subtle"
+          : normalizedStatus === "returned for clarification" ||
+            normalizedStatus === "returned"
+            ? "border-warning bg-warning-subtle"
+            : "border-secondary bg-light";
 
   const outcomeIcon =
-    normalizedStatus === "approved"
-      ? "bi-check-circle-fill text-success"
-      : normalizedStatus === "rejected"
-        ? "bi-x-circle-fill text-danger"
-        : normalizedStatus === "returned for clarification" ||
-          normalizedStatus === "returned"
-          ? "bi-exclamation-circle-fill text-warning"
-          : "bi-info-circle-fill text-secondary";
+    isCancelledAudit
+      ? "bi-x-octagon-fill text-secondary"
+      : normalizedStatus === "approved"
+        ? "bi-check-circle-fill text-success"
+        : normalizedStatus === "rejected"
+          ? "bi-x-circle-fill text-danger"
+          : normalizedStatus === "returned for clarification" ||
+            normalizedStatus === "returned"
+            ? "bi-exclamation-circle-fill text-warning"
+            : "bi-info-circle-fill text-secondary";
+
+  const cancellationAuditHtml = isCancelledAudit
+    ? `
+      <!-- EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+           Show the original manager approval separately from HR cancellation. -->
+      <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6">
+          <div class="bg-white border rounded-3 p-3 h-100">
+            <div class="info-tile-label mb-1">Balance Restored</div>
+            <div class="fw-semibold">${escapeHtml(getCancelledLeaveBalanceRestoredLabel(latest))}</div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <div class="bg-white border rounded-3 p-3 h-100">
+            <div class="info-tile-label mb-1">Original Manager Decision</div>
+            <div class="fw-semibold">${escapeHtml(getOriginalManagerDecisionLabel(latest))}</div>
+          </div>
+        </div>
+      </div>
+    `
+    : "";
 
   state.dom.latestDecisionEmptyState?.classList.add("d-none");
   state.dom.latestDecisionCard?.classList.remove("d-none");
 
-  // EMPLOYEE UI CLEANUP - STEP 1M
-  // Professional HR-style decision summary:
-  // - Decision outcome is visually dominant
-  // - Leave type, period, approver, and comment are grouped clearly
-  // - Presentation only; leave request data is not changed.
   state.dom.latestDecisionCard.innerHTML = `
     <div class="info-tile border-start border-4 ${outcomeTone}">
       <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-4">
@@ -4040,7 +4226,9 @@ function renderLatestDecisionCard(requests) {
           </div>
 
           <div>
-            <div class="info-tile-label mb-1">Latest Decision</div>
+            <div class="info-tile-label mb-1">
+              ${isCancelledAudit ? "Latest Leave Update" : "Latest Decision"}
+            </div>
             <div class="d-flex flex-wrap align-items-center gap-2">
               <span class="badge ${statusBadgeClass} fs-6">
                 ${escapeHtml(statusText)}
@@ -4053,8 +4241,10 @@ function renderLatestDecisionCard(requests) {
         </div>
 
         <div class="text-lg-end">
-          <div class="info-tile-label mb-1">Decision Date & Time</div>
-          <div class="fw-semibold">${escapeHtml(decisionDate)}</div>
+          <div class="info-tile-label mb-1">
+            ${isCancelledAudit ? "Cancellation Date & Time" : "Decision Date & Time"}
+          </div>
+          <div class="fw-semibold">${escapeHtml(actionDate)}</div>
         </div>
       </div>
 
@@ -4075,15 +4265,20 @@ function renderLatestDecisionCard(requests) {
 
         <div class="col-12 col-md-4">
           <div class="bg-white border rounded-3 p-3 h-100">
-            <div class="info-tile-label mb-1">Decision By</div>
-            <div class="fw-semibold">${escapeHtml(decisionBy)}</div>
+<div class="info-tile-label mb-1">${escapeHtml(actionByLabel)}</div>
+${isCancelledAudit
+      ? buildCancelledLeaveActionByHtml(latest)
+      : `<div class="fw-semibold">${escapeHtml(actionBy)}</div>`
+    }
           </div>
         </div>
       </div>
 
+      ${cancellationAuditHtml}
+
       <div class="bg-white border rounded-3 p-3">
-        <div class="info-tile-label mb-1">Manager Comment</div>
-        <div class="fw-semibold">${escapeHtml(decisionComment)}</div>
+        <div class="info-tile-label mb-1">${escapeHtml(noteLabel)}</div>
+        <div class="fw-semibold">${escapeHtml(noteText)}</div>
       </div>
     </div>
   `;
@@ -5688,6 +5883,8 @@ function getDecisionStatusBadgeClass(status) {
   switch ((status || "").toLowerCase()) {
     case "approved":
       return "text-bg-success";
+    case "cancelled":
+      return "text-bg-secondary";
     case "rejected":
       return "text-bg-danger";
     case "returned":

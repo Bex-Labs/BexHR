@@ -78,6 +78,13 @@ const state = {
   pendingLeaveRequests: [],
   processedLeaveRequests: [],
   teamLeaveSchedule: [],
+
+  // LINE MANAGER LEAVE APPROVAL AUTHORITY - STEP 1I
+  // In-memory FYI tracking for additional reporting managers.
+  // This prevents the same processed leave decision toast from repeating
+  // continuously during the same browser session.
+  seenAdditionalManagerLeaveDecisionFyiKeys: new Set(),
+
   pendingProfileImageFile: null,
   pendingDecisionAction: null,
   pendingDecisionRequest: null,
@@ -788,6 +795,92 @@ function hideManagerDashboardToast() {
   }
 }
 
+// REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1A
+// Let the browser paint a spinner before starting Manager Dashboard reload work.
+function waitForManagerNextPaint() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(resolve);
+    });
+  });
+}
+
+// REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1A
+// Keep fast manager refresh feedback visible long enough to be noticeable.
+function waitForManagerMinimumLoadingFeedback(startedAt, minimumMs = 450) {
+  const elapsedMs = Date.now() - startedAt;
+  const remainingMs = Math.max(minimumMs - elapsedMs, 0);
+
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, remainingMs);
+  });
+}
+
+// REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1A
+// Shared Manager Dashboard button loading helper for manual refresh actions.
+function setManagerRefreshButtonLoading(button, isLoading, loadingText = "Refreshing...") {
+  if (!button) return;
+
+  button.disabled = isLoading;
+
+  if (isLoading) {
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      ${loadingText}
+    `;
+
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+  }
+}
+
+// REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1A
+// Manual Team refresh with visible loading, success, and failure feedback.
+// This does not change reporting-line visibility, leave approval, or RLS logic.
+async function refreshManagerWorkspaceManually() {
+  const button = state.dom.refreshTeamBtn;
+  const startedAt = Date.now();
+
+  try {
+    setManagerRefreshButtonLoading(button, true, "Refreshing...");
+    await waitForManagerNextPaint();
+
+    await refreshManagerWorkspace();
+
+    clearPageAlert();
+    showManagerDashboardToast(
+      "success",
+      "Team refreshed",
+      "Assigned employee records and team leave information were refreshed.",
+    );
+  } catch (error) {
+    console.error("Manual manager team refresh failed:", error);
+
+    const message =
+      error?.message ||
+      "Unable to refresh manager team information right now.";
+
+    showPageAlert("danger", message);
+
+    showManagerDashboardToast(
+      "danger",
+      "Refresh failed",
+      message,
+    );
+  } finally {
+    await waitForManagerMinimumLoadingFeedback(startedAt);
+    setManagerRefreshButtonLoading(button, false);
+  }
+}
+
 // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
 // Stable key for comparing manager team membership before and after refresh.
 // Prefer employees.id because employee_reporting_lines is keyed to employee rows.
@@ -1026,8 +1119,11 @@ function bindEvents() {
     resetDecisionModalState();
   });
 
+  // REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1A
+  // Manual Team refresh should show visible feedback. Without this, the button
+  // looks unresponsive even when the data reload succeeds.
   state.dom.refreshTeamBtn?.addEventListener("click", async () => {
-    await refreshManagerWorkspace();
+    await refreshManagerWorkspaceManually();
   });
 
   // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
@@ -1278,19 +1374,20 @@ async function submitLeaveDecisionFromModal() {
     if (status === "Approved") {
       // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1D
       // Defensive manager-side eligibility check. This blocks old bad pending
-      // rows such as an ineligible Maternity/Paternity request before any
-      // balance update or decision save can occur.
+      // rows such as an ineligible Maternity/Paternity request before the
+      // transactional database decision function is called.
       assertLeaveTypeEligibleForManagerApproval(request);
 
-      // MANAGER DASHBOARD WIRING - STEP 2F
-      // Validate same-employee overlap before reducing balance or saving the
-      // decision. Future leave is allowed, but overlapping approved leave for
-      // the same employee is not HR-safe.
+      // LEAVE APPROVAL IDEMPOTENCY / DOUBLE-DEDUCTION PROTECTION - STEP 1C
+      // Keep the friendly same-employee overlap pre-check for manager feedback.
+      // The database RPC also enforces this under row lock before saving.
       await assertNoOverlappingApprovedLeaveForEmployee(request);
-
-      await applyApprovedLeaveToBalance(request);
     }
 
+    // LEAVE APPROVAL IDEMPOTENCY / DOUBLE-DEDUCTION PROTECTION - STEP 1C
+    // Balance deduction and decision audit are now handled together by the
+    // database function. Do not call applyApprovedLeaveToBalance() here,
+    // otherwise a retry/double-click could deduct entitlement more than once.
     await persistLeaveDecision(request.id, status, comment);
 
     notifyLeaveDecisionChanged();
@@ -2324,6 +2421,107 @@ function getReportingLineRelationshipLabel(reportingLineRow = {}) {
   return "Reporting Line Manager";
 }
 
+// LINE MANAGER LEAVE APPROVAL AUTHORITY - STEP 1I
+// HR-safe default: only the Primary Manager owns approval.
+// Additional managers receive processed-decision visibility for cover planning.
+function isPrimaryReportingManagerRelationship(relationshipLabel = "") {
+  return normalizeText(relationshipLabel).includes("primary");
+}
+
+// LINE MANAGER LEAVE APPROVAL AUTHORITY - STEP 1I
+// A decision is FYI for this manager when the employee is visible through an
+// additional reporting line and the decision was made by another manager.
+function isAdditionalManagerProcessedDecisionFyi(item = {}) {
+  const status = normalizeText(item.status);
+
+  const isProcessedDecision = [
+    "approved",
+    "rejected",
+    "returned",
+    "returned for clarification",
+  ].includes(status);
+
+  if (!isProcessedDecision) return false;
+
+  if (isPrimaryReportingManagerRelationship(item.managerRelationshipLabel)) {
+    return false;
+  }
+
+  const decisionBy = String(item.decision_by || "").trim();
+  const currentUserId = String(state.currentUser?.id || "").trim();
+
+  return Boolean(!decisionBy || decisionBy !== currentUserId);
+}
+
+// LINE MANAGER LEAVE APPROVAL AUTHORITY - STEP 1I
+// Stable in-memory key for preventing repeated FYI toasts in the same session.
+function getAdditionalManagerLeaveDecisionFyiKey(item = {}) {
+  return [
+    item.id || "",
+    item.status || "",
+    item.decision_at || "",
+    item.decision_by || "",
+  ].join("|");
+}
+
+// LINE MANAGER LEAVE APPROVAL AUTHORITY - STEP 1I
+// Short manager-facing wording for processed leave decisions.
+function getProcessedDecisionVerb(status = "") {
+  const normalizedStatus = normalizeText(status);
+
+  if (normalizedStatus === "approved") return "approved";
+  if (normalizedStatus === "rejected") return "rejected";
+  if (
+    normalizedStatus === "returned" ||
+    normalizedStatus === "returned for clarification"
+  ) {
+    return "returned";
+  }
+
+  return "updated";
+}
+
+// LINE MANAGER LEAVE APPROVAL AUTHORITY - STEP 1I
+// Notify additional managers that a primary manager has acted.
+// This is intentionally in-app only. It does not send email, does not create
+// approval rights, and does not write notification data to the database.
+function notifyAdditionalManagersOfProcessedLeaveDecisions(processedRequests = []) {
+  const fyiItems = processedRequests.filter(isAdditionalManagerProcessedDecisionFyi);
+
+  const unseenItems = fyiItems.filter((item) => {
+    const key = getAdditionalManagerLeaveDecisionFyiKey(item);
+
+    if (!key || state.seenAdditionalManagerLeaveDecisionFyiKeys.has(key)) {
+      return false;
+    }
+
+    state.seenAdditionalManagerLeaveDecisionFyiKeys.add(key);
+    return true;
+  });
+
+  if (!unseenItems.length) return;
+
+  if (unseenItems.length === 1) {
+    const item = unseenItems[0];
+    const decisionBy = item.decision_by_name || "The primary manager";
+    const decisionVerb = getProcessedDecisionVerb(item.status);
+
+    showManagerDashboardToast(
+      "info",
+      "Leave decision FYI",
+      `${decisionBy} ${decisionVerb} ${item.employeeName || "an employee"}'s leave request. No action is required from you.`,
+    );
+
+    return;
+  }
+
+  showManagerDashboardToast(
+    "info",
+    "Team leave decisions updated",
+    `${unseenItems.length} leave decisions for employees in your reporting line have been updated. Review Processed Leave Decisions for details.`,
+  );
+}
+
 // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-E
 // Employee portal access should be resolved by linked profile/user ID where
 // available, not email only. This keeps manually seeded/Supabase-created
@@ -2700,6 +2898,8 @@ function getStatusBadgeClass(status) {
   switch (normalizeText(status)) {
     case "approved":
       return "text-bg-success";
+    case "cancelled":
+      return "text-bg-secondary";
     case "rejected":
       return "text-bg-danger";
     case "returned":
@@ -2721,6 +2921,12 @@ function getCompactDecisionStatusLabel(status) {
     normalizedStatus === "returned"
   ) {
     return "Returned";
+  }
+
+  // EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+  // Keep HR cancellation compact in the manager audit table.
+  if (normalizedStatus === "cancelled") {
+    return "Cancelled";
   }
 
   return status || "--";
@@ -3032,6 +3238,32 @@ function buildProcessedRequestPeriodHtml(request = {}) {
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1G
 // Stack decision maker and timestamp so the audit trail is readable.
 function buildProcessedDecisionAuditHtml(request = {}) {
+  const isCancelled = normalizeText(request.status) === "cancelled" || Boolean(request.cancelled_at);
+
+  // EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+  // Manager audit table should show who cancelled the approved leave,
+  // not only the original manager decision owner.
+  if (isCancelled) {
+    const { dateLabel, timeLabel } = formatSubmittedDateTimeParts(
+      request.cancelled_at || request.decision_at,
+    );
+
+    return `
+      <div class="fw-semibold lh-sm">
+        ${escapeHtml(request.cancelled_by_name || request.cancelled_by || "HR")}
+      </div>
+      <div class="text-secondary small mt-1">
+        Cancelled by HR
+      </div>
+      <div class="text-secondary small mt-1">
+        ${escapeHtml(dateLabel)}
+      </div>
+      <div class="text-secondary small mt-1">
+        ${escapeHtml(timeLabel)}
+      </div>
+    `;
+  }
+
   const { dateLabel, timeLabel } = formatSubmittedDateTimeParts(request.decision_at);
 
   return `
@@ -3050,6 +3282,32 @@ function buildProcessedDecisionAuditHtml(request = {}) {
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1G
 // Keep comments readable without making empty comments look like missing rows.
 function buildProcessedDecisionCommentHtml(request = {}) {
+  const isCancelled = normalizeText(request.status) === "cancelled" || Boolean(request.cancelled_at);
+
+  // EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+  // For HR-cancelled leave, the important note is the HR cancellation reason.
+  if (isCancelled) {
+    const reason = String(request.cancellation_reason || "").trim();
+    const restoredDays = Number(request.balance_restored_days || 0);
+    const restoredLabel =
+      Number.isFinite(restoredDays) && restoredDays > 0
+        ? `${restoredDays} day(s) restored`
+        : "Balance restoration not recorded";
+
+    return `
+      <div class="small text-break">
+        ${escapeHtml(reason || "No cancellation reason recorded.")}
+      </div>
+      <div class="small text-secondary mt-2">
+        ${escapeHtml(restoredLabel)}
+      </div>
+      <div class="small text-secondary mt-1">
+        Original manager decision: ${escapeHtml(request.cancelled_from_status || "Approved")}
+        ${request.decision_by_name ? ` by ${escapeHtml(request.decision_by_name)}` : ""}
+      </div>
+    `;
+  }
+
   const comment = String(request.decision_comment || "").trim();
 
   if (!comment) {
@@ -3778,6 +4036,13 @@ async function loadTeamLeaveVisibility() {
         decision_by,
         decision_by_name,
         decision_comment,
+        cancelled_at,
+        cancelled_by,
+        cancelled_by_name,
+        cancellation_reason,
+        cancelled_from_status,
+        balance_restored_at,
+        balance_restored_days,
         leave_types (
           id,
           code,
@@ -3876,6 +4141,12 @@ async function loadTeamLeaveVisibility() {
 
           employeeRecordId: owner.id,
 
+          // LINE MANAGER LEAVE APPROVAL AUTHORITY - STEP 1I
+          // Preserve this manager's relationship to the employee on each leave
+          // item so processed decisions can show FYI behaviour for additional
+          // managers without giving them approval rights.
+          managerRelationshipLabel: owner.relationshipLabel || "",
+
           // MANAGER DASHBOARD WIRING - STEP 2F FIX
           // leave_requests.employee_id can be the linked user/profile ID,
           // while balances use employees.id. Keep all known identity values
@@ -3920,16 +4191,19 @@ async function loadTeamLeaveVisibility() {
 
     const processedRequests = enrichedLeaveItems
       .filter((item) =>
-        ["approved", "rejected", "returned", "returned for clarification"].includes(
+        // EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+        // HR-cancelled leave must remain visible to managers as processed
+        // audit history, but it must not appear in the approved team schedule.
+        ["approved", "rejected", "returned", "returned for clarification", "cancelled"].includes(
           normalizeText(item.status),
         ),
       )
       .sort((left, right) => {
         const leftDate = new Date(
-          left.decision_at || left.submitted_at || left.start_date || 0,
+          left.cancelled_at || left.decision_at || left.submitted_at || left.start_date || 0,
         ).getTime();
         const rightDate = new Date(
-          right.decision_at || right.submitted_at || right.start_date || 0,
+          right.cancelled_at || right.decision_at || right.submitted_at || right.start_date || 0,
         ).getTime();
         return rightDate - leftDate;
       });
@@ -3961,6 +4235,11 @@ async function loadTeamLeaveVisibility() {
       state.pendingLeaveRequests,
       state.teamLeaveSchedule,
     );
+
+    // LINE MANAGER LEAVE APPROVAL AUTHORITY - STEP 1I
+    // Additional managers receive an FYI toast for processed decisions only.
+    // Pending approvals remain primary-manager only.
+    notifyAdditionalManagersOfProcessedLeaveDecisions(state.processedLeaveRequests);
   } catch (error) {
     console.error("Error loading team leave visibility:", error);
     showPageAlert(
@@ -4314,56 +4593,41 @@ async function applyApprovedLeaveToBalance(request) {
   if (updateBalanceError) throw updateBalanceError;
 }
 
+// LEAVE APPROVAL IDEMPOTENCY / DOUBLE-DEDUCTION PROTECTION - STEP 1C
+// Persist manager leave decisions through the transactional Supabase RPC.
+// The RPC locks the leave request, confirms it is still Pending Approval,
+// deducts balance once for approvals, saves decision audit fields, and refuses
+// any second decision attempt. Frontend code must not update balance separately.
 async function persistLeaveDecision(leaveRequestId, status, comment) {
   const supabase = getSupabaseClient();
 
-  const decisionPayload = {
-    status,
-    decision_at: new Date().toISOString(),
-    decision_by: state.currentUser?.id || null,
-    decision_by_name:
-      state.currentProfile?.full_name ||
-      state.currentProfile?.email ||
-      state.currentUser?.email ||
-      "Manager",
-    decision_comment: comment || null,
-  };
-
-  // MANAGER APPROVAL WORKFLOW SMOKE TEST - STEP 1F
-  // A manager decision is not complete unless the audit fields are saved.
-  // Do not fall back to a status-only update, because that creates false
-  // success messages and leaves Employee Leave History unable to show the
-  // decision date, decision maker, or manager comment.
-  const { data, error } = await supabase
-    .from("leave_requests")
-    .update(decisionPayload)
-    .eq("id", leaveRequestId)
-    .select(`
-      id,
-      status,
-      decision_at,
-      decision_by,
-      decision_by_name,
-      decision_comment
-    `)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc(
+    "hrp_apply_leave_decision_once",
+    {
+      p_leave_request_id: leaveRequestId,
+      p_decision_status: status,
+      p_decision_comment: comment || null,
+    },
+  );
 
   if (error) {
     throw error;
   }
 
-  if (!data) {
+  const savedDecision = Array.isArray(data) ? data[0] : data;
+
+  if (!savedDecision) {
     throw new Error(
-      "Leave request was not updated. This usually means the update was blocked by row-level security or the row did not match the update filter.",
+      "Leave decision was not saved. The database did not return a decision confirmation.",
     );
   }
 
   const expectedStatus = normalizeText(status);
-  const savedStatus = normalizeText(data.status);
+  const savedStatus = normalizeText(savedDecision.status);
 
   if (savedStatus !== expectedStatus) {
     throw new Error(
-      `Leave decision save verification failed. Expected status "${status}" but Supabase returned "${data.status || "--"}".`,
+      `Leave decision save verification failed. Expected status "${status}" but Supabase returned "${savedDecision.status || "--"}".`,
     );
   }
 
@@ -4373,17 +4637,17 @@ async function persistLeaveDecision(leaveRequestId, status, comment) {
     "returned",
   ].includes(expectedStatus);
 
-  if (!data.decision_at || !data.decision_by_name) {
+  if (!savedDecision.decision_at || !savedDecision.decision_by_name) {
     throw new Error(
       "Leave decision save verification failed. Decision audit fields were not saved.",
     );
   }
 
-  if (requiresAuditComment && !String(data.decision_comment || "").trim()) {
+  if (requiresAuditComment && !String(savedDecision.decision_comment || "").trim()) {
     throw new Error(
       "Leave decision save verification failed. A rejection or clarification comment was required but was not saved.",
     );
   }
 
-  return data;
+  return savedDecision;
 }

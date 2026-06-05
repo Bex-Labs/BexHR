@@ -30,7 +30,7 @@
         align-items: flex-start;
       }
 
-      #managerSelfServiceSection .ss-leave-main-row > [class*="col-"] {
+      #managerSelfServiceSection .ss-leave-main-row>[class*="col-"] {
         display: flex;
       }
 
@@ -46,7 +46,7 @@
         overflow: hidden;
       }
 
-      #managerSelfServiceSection #ssEmployeeLeaveHistoryCard > .card-body {
+      #managerSelfServiceSection #ssEmployeeLeaveHistoryCard>.card-body {
         display: flex;
         flex-direction: column;
         height: 100%;
@@ -123,7 +123,7 @@
             sidebarBrand.className = "bexhr-sidebar-brand alpatech-sidebar-brand";
             sidebarBrand.innerHTML =
               '<span class="alpatech-brand-mark" aria-hidden="true">' +
-                '<img src="assets/alpatech-flame.png" alt="" />' +
+              '<img src="assets/alpatech-flame.png" alt="" />' +
               '</span>';
           }
 
@@ -131,22 +131,22 @@
           if (heroBrandingBlock) {
             heroBrandingBlock.innerHTML =
               '<div class="alpatech-hero-content">' +
-                '<div class="alpatech-hero-kicker-row">' +
-                  '<div class="alpatech-hero-brand" aria-label="Alpatech Manager Workspace">' +
-                    '<span class="alpatech-brand-mark alpatech-hero-mark" aria-hidden="true">' +
-                      '<img src="assets/alpatech-flame.png" alt="" />' +
-                    '</span>' +
-                    '<span class="alpatech-brand-wordmark">ALPATECH</span>' +
-                  '</div>' +
-                  '<div class="hero-badge alpatech-hero-badge">' +
-                    '<i class="bi bi-diagram-3"></i>' +
-                    ' Manager Workspace' +
-                  '</div>' +
-                '</div>' +
-                '<h1 class="display-6 fw-bold mb-2">Team Operations Dashboard</h1>' +
-                '<p class="mb-0 alpatech-hero-copy">' +
-                  'Review Alpatech team records, leave activity, manager decisions, and your own self-service workspace from one secure dashboard.' +
-                '</p>' +
+              '<div class="alpatech-hero-kicker-row">' +
+              '<div class="alpatech-hero-brand" aria-label="Alpatech Manager Workspace">' +
+              '<span class="alpatech-brand-mark alpatech-hero-mark" aria-hidden="true">' +
+              '<img src="assets/alpatech-flame.png" alt="" />' +
+              '</span>' +
+              '<span class="alpatech-brand-wordmark">ALPATECH</span>' +
+              '</div>' +
+              '<div class="hero-badge alpatech-hero-badge">' +
+              '<i class="bi bi-diagram-3"></i>' +
+              ' Manager Workspace' +
+              '</div>' +
+              '</div>' +
+              '<h1 class="display-6 fw-bold mb-2">Team Operations Dashboard</h1>' +
+              '<p class="mb-0 alpatech-hero-copy">' +
+              'Review Alpatech team records, leave activity, manager decisions, and your own self-service workspace from one secure dashboard.' +
+              '</p>' +
               '</div>';
           }
 
@@ -617,7 +617,7 @@
             <div>
               <h2 class="section-heading h4 mb-1">Processed Leave Decisions</h2>
               <p class="section-subtext mb-0">
-                Review approved, rejected, and returned leave requests with decision history.
+                Review approved, rejected, returned, and HR-cancelled leave requests with decision history.
               </p>
             </div>
 
@@ -1394,8 +1394,8 @@
           <!-- GUIDED HELP LAYER - MANAGER STEP 1V-FIX
                Match Employee/HR guide close-button styling.
                This is visual alignment only; Bootstrap still closes the modal. -->
-          <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0"
-            data-bs-dismiss="modal" aria-label="Close Manager operating guide">
+          <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0" data-bs-dismiss="modal"
+            aria-label="Close Manager operating guide">
             <i class="bi bi-x-lg"></i>
           </button>
         </div>
@@ -1430,7 +1430,8 @@
                   <i class="bi bi-calendar-check me-2 text-primary"></i>Pending Leave Requests
                 </div>
                 <div class="small text-secondary">
-                  Expand this panel to review pending team leave requests, check readiness, then approve, reject, or return for clarification.
+                  Expand this panel to review pending team leave requests, check readiness, then approve, reject, or
+                  return for clarification.
                 </div>
               </div>
             </div>
@@ -1441,7 +1442,8 @@
                   <i class="bi bi-clipboard-check me-2 text-primary"></i>Processed Decisions
                 </div>
                 <div class="small text-secondary">
-                  Use this as manager decision history. Approved, rejected, and returned requests are shown here for audit visibility.
+                  Use this as manager decision history. Approved, rejected, and returned requests are shown here for
+                  audit visibility.
                 </div>
               </div>
             </div>
@@ -1472,7 +1474,8 @@
           <div class="alert alert-light border rounded-4 mt-4 mb-0">
             <div class="fw-semibold mb-1">Operating rule</div>
             <div class="small text-secondary">
-              Use Team Management for employees assigned to you. Use My Self-Service only for your own leave and payroll. Contact HR if team assignments, leave eligibility, or employee records appear incorrect.
+              Use Team Management for employees assigned to you. Use My Self-Service only for your own leave and
+              payroll. Contact HR if team assignments, leave eligibility, or employee records appear incorrect.
             </div>
           </div>
         </div>

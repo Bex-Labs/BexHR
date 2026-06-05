@@ -557,6 +557,124 @@
     }
   }
 
+  // REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1A
+  // Refresh HR/Manager My Self-Service leave balances with visible feedback.
+  // This is shared by HR Dashboard > My Self-Service and Manager Dashboard > My Self-Service.
+  async function refreshSsLeaveBalancesManually() {
+    if (!ssState.currentUser) return;
+
+    const button = ssState.dom.ssRefreshLeaveBalancesBtn;
+
+    try {
+      setSsRefreshButtonLoading(button, true, {
+        loadingLabel: "Refreshing...",
+      });
+
+      await waitForSsNextPaint();
+
+      // LEAVE BALANCE ELIGIBILITY VISIBILITY - STEP 1E
+      // Reload the staff employee record first so HR/Manager Self-Service
+      // immediately reflects gender changes after Refresh Balances.
+      await loadSsEmployeeRecord();
+
+      await loadSsLeaveBalances();
+      await loadSsLeaveTypes();
+      await loadSsLeaveRequests();
+
+      clearSsAlert();
+      showSsAlert("success", "Leave balances refreshed successfully.");
+    } catch (error) {
+      console.error("[SS] Manual leave balances refresh failed:", error);
+
+      showSsAlert(
+        "danger",
+        error.message || "Unable to refresh leave balances right now.",
+      );
+    } finally {
+      setSsRefreshButtonLoading(button, false);
+      scheduleSsLeaveMainCardHeightSync();
+    }
+  }
+
+  // REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1A
+  // Refresh HR/Manager My Self-Service latest decision with visible feedback.
+  // Latest decision is calculated from leave request decision records.
+  async function refreshSsLatestDecisionManually() {
+    if (!ssState.currentUser) return;
+
+    const button = ssState.dom.ssRefreshLatestDecisionBtn;
+
+    try {
+      setSsRefreshButtonLoading(button, true, {
+        loadingLabel: "Refreshing...",
+      });
+
+      await waitForSsNextPaint();
+
+      await loadSsLeaveRequests();
+      await loadSsLeaveBalances();
+
+      clearSsAlert();
+      showSsAlert("success", "Latest leave decision refreshed successfully.");
+    } catch (error) {
+      console.error("[SS] Manual latest leave decision refresh failed:", error);
+
+      showSsAlert(
+        "danger",
+        error.message || "Unable to refresh the latest leave decision right now.",
+      );
+    } finally {
+      setSsRefreshButtonLoading(button, false);
+      scheduleSsLeaveMainCardHeightSync();
+    }
+  }
+
+  // REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1B
+  // Keep very fast clear actions visible long enough for users to see that
+  // the button responded.
+  function waitForSsMinimumLoadingFeedback(startedAt, minimumMs = 350) {
+    const elapsedMs = Date.now() - startedAt;
+    const remainingMs = Math.max(minimumMs - elapsedMs, 0);
+
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, remainingMs);
+    });
+  }
+
+  // REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1B
+  // Clear the HR/Manager My Self-Service Payroll History filters with spinner
+  // feedback. This only resets local filter fields; it does not reload payroll,
+  // change payroll records, or alter payslip authorisation.
+  async function clearSsPayrollFiltersManually() {
+    const button = ssState.dom.ssClearPayrollFiltersBtn;
+    const startedAt = Date.now();
+
+    try {
+      setSsRefreshButtonLoading(button, true, {
+        loadingLabel: "Clearing...",
+      });
+
+      await waitForSsNextPaint();
+
+      if (ssState.dom.ssPayrollSearchInput) {
+        ssState.dom.ssPayrollSearchInput.value = "";
+      }
+
+      if (ssState.dom.ssPayrollDateFromInput) {
+        ssState.dom.ssPayrollDateFromInput.value = "";
+      }
+
+      if (ssState.dom.ssPayrollDateToInput) {
+        ssState.dom.ssPayrollDateToInput.value = "";
+      }
+
+      applySsPayrollFilters();
+    } finally {
+      await waitForSsMinimumLoadingFeedback(startedAt);
+      setSsRefreshButtonLoading(button, false);
+    }
+  }
+
   // HR SELF-SERVICE PAYROLL REFRESH - STEP 1C-3D
   // Refresh the signed-in staff member's own authorised payroll records.
   // This does not run payroll and does not touch HR payroll operations.
@@ -663,8 +781,12 @@
     // One safe double-click collapse binding for Leave Balances only.
     bindSsCardDoubleClickCollapse(btn, body);
 
+    // REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1A
+    // Give HR/Manager My Self-Service Leave Balances the same visible refresh
+    // feedback as Employee Dashboard: disable button, show spinner, reload data,
+    // then restore the original button text.
     ssState.dom.ssRefreshLeaveBalancesBtn?.addEventListener("click", async () => {
-      await loadSsLeaveBalances();
+      await refreshSsLeaveBalancesManually();
     });
   }
 
@@ -689,8 +811,11 @@
     // Allow whole-card shell double-click collapse on Latest Leave Decision.
     bindSsCardDoubleClickCollapse(btn, body);
 
+    // REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1A
+    // Latest Leave Decision is derived from leave requests, so refresh the
+    // request data with visible loading feedback instead of silently reloading.
     ssState.dom.ssRefreshLatestDecisionBtn?.addEventListener("click", async () => {
-      await loadSsLeaveRequests();
+      await refreshSsLatestDecisionManually();
     });
   }
 
@@ -787,11 +912,12 @@
       await refreshSsPayrollManually();
     });
 
-    ssState.dom.ssClearPayrollFiltersBtn?.addEventListener("click", () => {
-      if (ssState.dom.ssPayrollSearchInput) ssState.dom.ssPayrollSearchInput.value = "";
-      if (ssState.dom.ssPayrollDateFromInput) ssState.dom.ssPayrollDateFromInput.value = "";
-      if (ssState.dom.ssPayrollDateToInput) ssState.dom.ssPayrollDateToInput.value = "";
-      applySsPayrollFilters();
+    // REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1B
+    // Clear payroll filters with visible feedback. This shared self-service
+    // module is used by both HR Dashboard > My Self-Service and
+    // Manager Dashboard > My Self-Service.
+    ssState.dom.ssClearPayrollFiltersBtn?.addEventListener("click", async () => {
+      await clearSsPayrollFiltersManually();
     });
 
     ["ssPayrollSearchInput", "ssPayrollDateFromInput", "ssPayrollDateToInput"].forEach((key) => {
@@ -927,7 +1053,8 @@
       leave_types (
         id,
         code,
-        name
+        name,
+        eligibility_rule
       )
     `);
 
@@ -957,7 +1084,15 @@
 
     grid.innerHTML = "";
 
-    if (!balances.length) {
+    // LEAVE BALANCE ELIGIBILITY VISIBILITY - STEP 1E
+    // HR/Manager My Self-Service balance cards must match the Request Leave
+    // dropdown. Keep stored balance rows intact, but only display leave types
+    // currently applicable to the signed-in staff member's HR profile.
+    const visibleBalances = (Array.isArray(balances) ? balances : []).filter((balance) =>
+      isSsLeaveTypeVisibleForEmployeeProfile(balance.leave_types || {}),
+    );
+
+    if (!visibleBalances.length) {
       ssState.dom.ssLeaveBalancesEmptyState?.classList.remove("d-none");
       grid.classList.add("d-none");
       return;
@@ -966,7 +1101,7 @@
     ssState.dom.ssLeaveBalancesEmptyState?.classList.add("d-none");
     grid.classList.remove("d-none");
 
-    balances.forEach((balance) => {
+    visibleBalances.forEach((balance) => {
       const leaveTypeName = balance.leave_types?.name || "Unknown Leave Type";
       const entitled = Number(balance.entitled_days || 0);
       const used = Number(balance.used_days || 0);
@@ -1084,6 +1219,13 @@
       decision_by,
       decision_by_name,
       decision_comment,
+      cancelled_at,
+      cancelled_by,
+      cancelled_by_name,
+      cancellation_reason,
+      cancelled_from_status,
+      balance_restored_at,
+      balance_restored_days,
       leave_types ( name )
     `);
 
@@ -1119,6 +1261,119 @@
     if (normalized === "cancelled") return "text-bg-secondary";
     if (normalized === "returned" || normalized.includes("returned")) return "text-bg-info";
     return "text-bg-secondary";
+  }
+
+  // EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+  // Shared helper for HR My Self-Service and Manager My Self-Service.
+  // Cancelled leave is an HR reversal/audit event, not a manager comment.
+  function isSsCancelledLeaveRequestAudit(request = {}) {
+    return ssNormalizeText(request.status) === "cancelled" || Boolean(request.cancelled_at);
+  }
+
+  function getSsCancelledLeaveActionDate(request = {}) {
+    return ssFormatDateTime(request.cancelled_at || request.decision_at || request.submitted_at);
+  }
+
+  function getSsCancelledLeaveActionBy(request = {}) {
+    return (
+      request.cancelled_by_name ||
+      request.cancelled_by ||
+      "HR"
+    );
+  }
+
+  // EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A-FIX 1
+  // Shared HR/Manager self-service display: show the cancelling user's name
+  // and the HR capacity so staff understand this was an HR cancellation action.
+  function buildSsCancelledLeaveActionByHtml(request = {}, options = {}) {
+    const compact = Boolean(options.compact);
+    const nameClass = compact ? "fw-semibold small" : "fw-semibold";
+
+    return `
+      <div class="${nameClass}">
+        ${ssEscapeHtml(getSsCancelledLeaveActionBy(request))}
+      </div>
+      <div class="text-secondary small mt-1">
+        Cancelled by HR
+      </div>
+    `;
+  }
+
+  function getSsCancelledLeaveReason(request = {}) {
+    return String(request.cancellation_reason || "").trim() || "No cancellation reason recorded.";
+  }
+
+  function getSsCancelledLeaveBalanceRestoredLabel(request = {}) {
+    const restoredDays = Number(request.balance_restored_days || 0);
+
+    if (!Number.isFinite(restoredDays) || restoredDays <= 0) {
+      return "Not recorded";
+    }
+
+    return `${restoredDays} day(s)`;
+  }
+
+  function getSsOriginalManagerDecisionLabel(request = {}) {
+    const originalStatus = request.cancelled_from_status || "Approved";
+    const managerName = request.decision_by_name || "Manager / Supervisor";
+    const decisionDate = request.decision_at ? ssFormatDateTime(request.decision_at) : "";
+
+    return decisionDate
+      ? `${originalStatus} by ${managerName} on ${decisionDate}`
+      : `${originalStatus} by ${managerName}`;
+  }
+
+  function buildSsLeaveHistoryAuditHtml(request = {}) {
+    if (isSsCancelledLeaveRequestAudit(request)) {
+      return `
+        <!-- EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+             HR/Manager self-service must show HR cancellation clearly,
+             including HR's reason and the restored balance. -->
+        <div class="row g-2 mt-2">
+          <div class="col-12 col-md-4">
+            <div class="bg-light border rounded-3 p-2 h-100">
+              <div class="small text-secondary mb-1">Cancellation Date</div>
+              <div class="fw-semibold small">${ssEscapeHtml(getSsCancelledLeaveActionDate(request))}</div>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <div class="bg-light border rounded-3 p-2 h-100">
+              <div class="small text-secondary mb-1">Cancelled By</div>
+              ${buildSsCancelledLeaveActionByHtml(request, { compact: true })}
+            </div>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <div class="bg-light border rounded-3 p-2 h-100">
+              <div class="small text-secondary mb-1">Balance Restored</div>
+              <div class="fw-semibold small">${ssEscapeHtml(getSsCancelledLeaveBalanceRestoredLabel(request))}</div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="bg-light border rounded-3 p-2 h-100">
+              <div class="small text-secondary mb-1">Cancellation Reason</div>
+              <div class="fw-semibold small">${ssEscapeHtml(getSsCancelledLeaveReason(request))}</div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="small text-secondary">
+              Original manager decision: ${ssEscapeHtml(getSsOriginalManagerDecisionLabel(request))}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    if (!request.decision_comment) return "";
+
+    return `
+      <div class="small mt-2 text-secondary fst-italic">
+        "${ssEscapeHtml(request.decision_comment)}"
+      </div>
+    `;
   }
 
   function renderSsLeaveRequests(requests) {
@@ -1157,7 +1412,9 @@
           ${ssEscapeHtml(startDate)} to ${ssEscapeHtml(endDate)} • ${totalDays} day(s)
         </div>
         <div class="small text-secondary">Submitted: ${ssEscapeHtml(submittedAt)}</div>
-        ${request.decision_comment ? `<div class="small mt-2 text-secondary fst-italic">"${ssEscapeHtml(request.decision_comment)}"</div>` : ""}
+
+        ${buildSsLeaveHistoryAuditHtml(request)}
+
         ${isReturned ? `
           <div class="mt-2">
             <button type="button" class="btn btn-sm btn-outline-primary ss-amend-leave-btn"
@@ -1184,16 +1441,25 @@
 
     if (!decisionEmptyState || !decisionCard) return;
 
-    const decided = (requests || []).filter((r) => {
-      const status = ssNormalizeText(r.status || "");
-      return (
-        status === "approved" ||
-        status === "rejected" ||
-        status === "declined" ||
-        status === "returned" ||
-        status === "returned for clarification"
-      );
-    });
+    const decided = (requests || [])
+      .filter((request) => {
+        const status = ssNormalizeText(request.status || "");
+
+        return (
+          isSsCancelledLeaveRequestAudit(request) ||
+          status === "approved" ||
+          status === "rejected" ||
+          status === "declined" ||
+          status === "returned" ||
+          status === "returned for clarification"
+        );
+      })
+      .sort((left, right) => {
+        const leftDate = new Date(left.cancelled_at || left.decision_at || left.submitted_at || 0).getTime();
+        const rightDate = new Date(right.cancelled_at || right.decision_at || right.submitted_at || 0).getTime();
+
+        return rightDate - leftDate;
+      });
 
     if (!decided.length) {
       decisionEmptyState.classList.remove("d-none");
@@ -1203,32 +1469,107 @@
 
     const latest = decided[0];
     const leaveTypeName = latest.leave_types?.name || "Leave";
-    const decisionDate = latest.decision_at;
-    const decisionBy = latest.decision_by_name || latest.decision_by || "--";
-    const comment = latest.decision_comment || "No comment provided.";
+    const status = latest.status || "--";
+    const isCancelledAudit = isSsCancelledLeaveRequestAudit(latest);
+
+    const actionDate = isCancelledAudit
+      ? getSsCancelledLeaveActionDate(latest)
+      : ssFormatDateTime(latest.decision_at);
+
+    const actionBy = isCancelledAudit
+      ? getSsCancelledLeaveActionBy(latest)
+      : latest.decision_by_name || latest.decision_by || "--";
+
+    const noteLabel = isCancelledAudit ? "Cancellation Reason" : "Manager Comment";
+    const noteText = isCancelledAudit
+      ? getSsCancelledLeaveReason(latest)
+      : latest.decision_comment || "No comment provided.";
+
+    const actionByLabel = isCancelledAudit ? "Cancelled By" : "Decision By";
+    const actionDateLabel = isCancelledAudit ? "Cancellation Date & Time" : "Decision Date & Time";
+
+    const cancellationAuditHtml = isCancelledAudit
+      ? `
+        <!-- EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+             HR/Manager self-service latest update needs restored-balance and
+             original-manager-decision context for HR-safe clarity. -->
+        <div class="row g-3 mt-3">
+          <div class="col-12 col-md-6">
+            <div class="border rounded-3 bg-light-subtle p-3 h-100">
+              <div class="info-tile-label">Balance Restored</div>
+              <div class="fw-semibold">${ssEscapeHtml(getSsCancelledLeaveBalanceRestoredLabel(latest))}</div>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <div class="border rounded-3 bg-light-subtle p-3 h-100">
+              <div class="info-tile-label">Original Manager Decision</div>
+              <div class="fw-semibold">${ssEscapeHtml(getSsOriginalManagerDecisionLabel(latest))}</div>
+            </div>
+          </div>
+        </div>
+      `
+      : "";
 
     decisionEmptyState.classList.add("d-none");
     decisionCard.classList.remove("d-none");
 
-    if (ssState.dom.ssLatestDecisionStatus) {
-      ssState.dom.ssLatestDecisionStatus.textContent = latest.status || "--";
-    }
-    if (ssState.dom.ssLatestDecisionLeaveType) {
-      ssState.dom.ssLatestDecisionLeaveType.textContent = leaveTypeName;
-    }
-    if (ssState.dom.ssLatestDecisionDateTime) {
-      ssState.dom.ssLatestDecisionDateTime.textContent = ssFormatDateTime(decisionDate);
-    }
-    if (ssState.dom.ssLatestDecisionPeriod) {
-      ssState.dom.ssLatestDecisionPeriod.textContent =
-        `${ssFormatDate(latest.start_date)} to ${ssFormatDate(latest.end_date)}`;
-    }
-    if (ssState.dom.ssLatestDecisionBy) {
-      ssState.dom.ssLatestDecisionBy.textContent = decisionBy;
-    }
-    if (ssState.dom.ssLatestDecisionComment) {
-      ssState.dom.ssLatestDecisionComment.textContent = comment;
-    }
+    decisionCard.innerHTML = `
+      <!-- EMPLOYEE-FACING CANCELLED LEAVE AUDIT DISPLAY - STEP 1A
+           Render Latest Leave Decision dynamically so static labels such as
+           "Decision By" and "Comment" do not mislabel HR cancellation rows. -->
+      <div class="info-tile border-start border-4 ${isCancelledAudit ? "border-secondary" : "border-primary"}">
+        <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+          <div>
+            <div class="info-tile-label">${isCancelledAudit ? "Latest Leave Update" : "Latest Decision"}</div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <span class="badge ${getSsLeaveStatusBadgeClass(status)}">${ssEscapeHtml(status)}</span>
+              <span class="fw-semibold">${ssEscapeHtml(leaveTypeName)}</span>
+            </div>
+          </div>
+
+          <div class="text-lg-end">
+            <div class="info-tile-label">${ssEscapeHtml(actionDateLabel)}</div>
+            <div class="fw-semibold">${ssEscapeHtml(actionDate)}</div>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-12 col-md-4">
+            <div class="border rounded-3 bg-light-subtle p-3 h-100">
+              <div class="info-tile-label">Requested Period</div>
+              <div class="fw-semibold">
+                ${ssEscapeHtml(ssFormatDate(latest.start_date))} to ${ssEscapeHtml(ssFormatDate(latest.end_date))}
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <div class="border rounded-3 bg-light-subtle p-3 h-100">
+              <div class="info-tile-label">Total Days</div>
+              <div class="fw-semibold">${ssEscapeHtml(latest.total_days || "--")} day(s)</div>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <div class="border rounded-3 bg-light-subtle p-3 h-100">
+<div class="info-tile-label">${ssEscapeHtml(actionByLabel)}</div>
+${isCancelledAudit
+        ? buildSsCancelledLeaveActionByHtml(latest)
+        : `<div class="fw-semibold">${ssEscapeHtml(actionBy)}</div>`
+      }
+            </div>
+          </div>
+        </div>
+
+        ${cancellationAuditHtml}
+
+        <div class="border rounded-3 bg-light-subtle p-3 mt-3">
+          <div class="info-tile-label">${ssEscapeHtml(noteLabel)}</div>
+          <div class="fw-semibold">${ssEscapeHtml(noteText)}</div>
+        </div>
+      </div>
+    `;
   }
 
   // -----------------------------------------------------------------------

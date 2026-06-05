@@ -508,6 +508,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       startOrganizationJobTitleEdit(jobTitleId);
     };
 
+        // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+    // Expose only the HR-side approved leave cancellation modal opener.
+    // The backend RPC still enforces HR-only cancellation and balance restoration.
+    window.hrOpenApprovedLeaveCancellation = (leaveRequestId) => {
+      openHrApprovedLeaveCancellationModal(leaveRequestId);
+    };
+
     // BANK DIRECTORY - STEP 8
     // Expose Bank Directory edit action for the table button.
     window.hrEditBankDirectoryRecord = (bankId) => {
@@ -1746,6 +1753,11 @@ const state = {
   // This does not create a separate manual reporting process; it surfaces the
   // existing leave_requests decision audit fields to HR.
   recentManagerLeaveDecisionRecords: [],
+
+  // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+  // Holds the approved leave row HR is currently reviewing for cancellation.
+  // This is in-memory only; the database RPC remains the source of truth.
+  currentHrApprovedLeaveCancellationTarget: null,
 
   // HR PROFILE CORRECTION REQUESTS UX - STEP 1I
   // Temporary workflow return context.
@@ -3843,6 +3855,18 @@ function cacheDomElements() {
     managerLeaveDecisionsEmptyState: document.getElementById("managerLeaveDecisionsEmptyState"),
     managerLeaveDecisionsTableWrapper: document.getElementById("managerLeaveDecisionsTableWrapper"),
     managerLeaveDecisionsTableBody: document.getElementById("managerLeaveDecisionsTableBody"),
+
+    // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+    // Controlled HR-only cancellation modal.
+    hrCancelApprovedLeaveModal: document.getElementById("hrCancelApprovedLeaveModal"),
+    hrCancelApprovedLeaveTitle: document.getElementById("hrCancelApprovedLeaveTitle"),
+    hrCancelApprovedLeaveSummary: document.getElementById("hrCancelApprovedLeaveSummary"),
+    hrCancelApprovedLeaveReason: document.getElementById("hrCancelApprovedLeaveReason"),
+    hrCancelApprovedLeaveReasonFeedback: document.getElementById("hrCancelApprovedLeaveReasonFeedback"),
+    closeHrCancelApprovedLeaveModalBtn: document.getElementById("closeHrCancelApprovedLeaveModalBtn"),
+    cancelHrCancelApprovedLeaveModalBtn: document.getElementById("cancelHrCancelApprovedLeaveModalBtn"),
+    confirmHrCancelApprovedLeaveBtn: document.getElementById("confirmHrCancelApprovedLeaveBtn"),
+    confirmHrCancelApprovedLeaveBtnText: document.getElementById("confirmHrCancelApprovedLeaveBtnText"),
 
     // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1B
     // Cache the Batch Employee Import UI elements added to the Employees workspace.
@@ -8285,6 +8309,30 @@ function bindEvents() {
     hideDashboardToast();
   });
 
+    // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+  // HR cancellation modal controls. This does not expose cancellation to managers.
+  state.dom.closeHrCancelApprovedLeaveModalBtn?.addEventListener("click", () => {
+    closeHrApprovedLeaveCancellationModal();
+  });
+
+  state.dom.cancelHrCancelApprovedLeaveModalBtn?.addEventListener("click", () => {
+    closeHrApprovedLeaveCancellationModal();
+  });
+
+  state.dom.hrCancelApprovedLeaveModal?.addEventListener("click", (event) => {
+    if (event.target === state.dom.hrCancelApprovedLeaveModal) {
+      closeHrApprovedLeaveCancellationModal();
+    }
+  });
+
+  state.dom.hrCancelApprovedLeaveReason?.addEventListener("input", () => {
+    syncHrApprovedLeaveCancellationConfirmState();
+  });
+
+  state.dom.confirmHrCancelApprovedLeaveBtn?.addEventListener("click", async () => {
+    await submitHrApprovedLeaveCancellation();
+  });
+
   // HRP-85 - STEP 1E
   // Bind Email / Communication Setup controls.
   // This is a setup feature and remains separate from Send Payslips.
@@ -8568,8 +8616,11 @@ function bindEvents() {
     downloadBatchEmployeeCsvImportTemplate();
   });
 
-  state.dom.clearBatchEmployeesCsvBtn?.addEventListener("click", () => {
-    clearBatchEmployeeCsvImportUi();
+  // REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1B
+  // Batch Employee Import clear is fast, but HR still needs visual feedback
+  // so the button does not look unresponsive.
+  state.dom.clearBatchEmployeesCsvBtn?.addEventListener("click", async () => {
+    await handleBatchEmployeeCsvImportClear();
   });
   // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1D
   // Enable Import CSV only after HR selects a CSV file.
@@ -10561,6 +10612,27 @@ function clearBatchEmployeeCsvImportUi() {
 
   showPageAlert("info", "Employee CSV import area was cleared.");
 }
+
+// REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1B
+// Clear Batch Employee Import with spinner feedback.
+// This resets only the staged CSV/import review area. It does not delete saved
+// employees and does not touch the manual Create Employee Profile form.
+async function handleBatchEmployeeCsvImportClear() {
+  const button = state.dom.clearBatchEmployeesCsvBtn;
+  const startedAt = Date.now();
+
+  try {
+    setWorkspaceRefreshLoading(button, true, "Clearing...");
+    await waitForNextPaint();
+
+    clearBatchEmployeeCsvImportUi();
+
+    await waitForMinimumLoadingFeedback(startedAt, 350);
+  } finally {
+    setWorkspaceRefreshLoading(button, false);
+  }
+}
+
 function setWorkspaceRefreshLoading(button, isLoading, loadingText = "Refreshing...") {
   if (!button) return;
 
@@ -14237,6 +14309,10 @@ function isHrManagerLeaveDecisionStatus(status = "") {
     "rejected",
     "returned",
     "returned for clarification",
+
+    // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+    // Keep cancelled leave visible in the HR audit panel after HR reverses it.
+    "cancelled",
   ].includes(normalizeText(status));
 }
 
@@ -14260,10 +14336,41 @@ function getHrLeaveIdentityCandidatesForEmployee(employee = {}) {
 // HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
 // One lookup lets HR resolve leave_requests rows back to the tenant-filtered
 // employees already loaded in the People workspace.
-function buildHrEmployeeByLeaveIdentityMap() {
+// LEAVE DECISION DOWNSTREAM VISIBILITY - STEP 1C
+// Load a fresh tenant-filtered employee identity set for the HR leave-decision
+// audit panel. This prevents Recent Manager Leave Decisions from missing
+// valid decisions when state.employees is stale after user/profile backfills.
+async function loadHrEmployeesForLeaveDecisionIdentityMap() {
+  const supabase = getSupabaseClient();
+
+  try {
+    const { data, error } = await applyCurrentTenantFilter(
+      supabase
+        .from("employees")
+        .select("*"),
+    ).order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.warn(
+      "HR leave decision employee identity refresh failed; falling back to state.employees.",
+      error,
+    );
+
+    return Array.isArray(state.employees) ? state.employees : [];
+  }
+}
+
+// HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
+// One lookup lets HR resolve leave_requests rows back to tenant-filtered
+// employees. A caller can pass a freshly loaded employee set so the audit
+// panel does not depend on stale state.employees.
+function buildHrEmployeeByLeaveIdentityMap(employees = state.employees) {
   const map = new Map();
 
-  (Array.isArray(state.employees) ? state.employees : []).forEach((employee) => {
+  (Array.isArray(employees) ? employees : []).forEach((employee) => {
     getHrLeaveIdentityCandidatesForEmployee(employee).forEach((candidate) => {
       if (!map.has(candidate)) {
         map.set(candidate, employee);
@@ -14295,6 +14402,12 @@ function getHrLeaveDecisionStatusBadgeClass(status = "") {
   const normalizedStatus = normalizeText(status);
 
   if (normalizedStatus === "approved") return "text-bg-success";
+
+  // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+  // Cancelled is an HR reversal state, not a manager rejection.
+  if (normalizedStatus === "cancelled") return "text-bg-secondary";
+
+  if (normalizedStatus === "rejected") return "text-bg-danger";
   if (normalizedStatus === "rejected") return "text-bg-danger";
   if (
     normalizedStatus === "returned" ||
@@ -14313,6 +14426,10 @@ function getHrLeaveDecisionStatusLabel(status = "") {
 
   if (normalizedStatus === "returned for clarification") return "Returned";
   if (normalizedStatus === "returned") return "Returned";
+
+  // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+  // Display the controlled HR reversal state clearly.
+  if (normalizedStatus === "cancelled") return "Cancelled";
 
   return status || "--";
 }
@@ -14344,7 +14461,9 @@ function renderRecentManagerLeaveDecisionsLoadingState() {
 
   tbody.innerHTML = `
     <tr>
-      <td colspan="6" class="text-center text-secondary py-4">
+       <!-- HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+           Recent Manager Leave Decisions now has an Action column. -->
+      <td colspan="7" class="text-center text-secondary py-4">
         Loading recent manager leave decisions...
       </td>
     </tr>
@@ -14384,6 +14503,48 @@ function updateRecentManagerLeaveDecisionSummary(records = []) {
       ? formatDate(latestDecision.decision_at || latestDecision.submitted_at)
       : "--";
   }
+}
+
+// HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+// Only Approved rows that have not already been cancelled get the red outline
+// Cancel Leave action. Rejected, returned, and cancelled rows are audit-only.
+function isHrApprovedLeaveCancelable(decision = {}) {
+  return (
+    normalizeText(decision.status) === "approved" &&
+    !decision.cancelled_at
+  );
+}
+
+// HR APPROVED LEAVE CANCELLATION UI - STEP 1A-FIX 5
+// Match the Manager Dashboard reject action style for consistency:
+// - full red danger button;
+// - same x-circle icon;
+// - compact icon-only action;
+// - title and aria-label retained for accessibility.
+// This button must only open the HR cancellation reason modal.
+// The actual cancellation still requires modal confirmation and the backend RPC.
+function getHrApprovedLeaveCancellationActionHtml(decision = {}) {
+  if (!isHrApprovedLeaveCancelable(decision)) {
+    return `
+      <span class="badge bg-light text-secondary border">
+        No action
+      </span>
+    `;
+  }
+
+  const leaveRequestId = String(decision.id || "").replaceAll("'", "\\'");
+
+  return `
+    <button
+      type="button"
+      class="btn btn-sm btn-danger dashboard-action-btn px-2"
+      title="Cancel approved leave"
+      aria-label="Cancel approved leave"
+      onclick="window.hrOpenApprovedLeaveCancellation('${leaveRequestId}')"
+    >
+      <i class="bi bi-x-circle" aria-hidden="true"></i>
+    </button>
+  `;
 }
 
 // HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
@@ -14433,7 +14594,18 @@ function renderRecentManagerLeaveDecisions(records = []) {
         : "";
 
     const managerName = decision.decision_by_name || "Manager";
-    const comment = String(decision.decision_comment || "").trim();
+    const isCancelledDecision = normalizeText(decision.status) === "cancelled";
+
+    // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+    // For cancelled rows, show HR's cancellation reason in the audit note area.
+    // For normal manager decisions, keep showing the manager's decision note.
+    const comment = isCancelledDecision
+      ? String(decision.cancellation_reason || "").trim()
+      : String(decision.decision_comment || "").trim();
+
+    const commentLabel = isCancelledDecision
+      ? "Cancellation reason"
+      : "Manager note";
 
     row.innerHTML = `
       <td class="px-3 py-3 align-top">
@@ -14478,11 +14650,12 @@ function renderRecentManagerLeaveDecisions(records = []) {
       </td>
 
       <td class="px-3 py-3 align-top">
-        <!-- HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O-FIX 5
-             Professional HR audit display:
-             - show the manager's note as plain audit text;
-             - avoid boxed styling that looks like an editable input;
-             - keep empty notes clear without making them look like an error. -->
+        <!-- HR APPROVED LEAVE CANCELLATION UI - STEP 1A-FIX 2
+             Restore Manager Note as its own table cell.
+             The previous patch left this content outside a <td>, which made
+             the browser repair the row incorrectly and broke column alignment. -->
+        <div class="small text-secondary mb-1">${escapeHtml(commentLabel)}</div>
+
         ${comment
         ? `
               <div class="small lh-sm text-break" title="${escapeHtml(comment)}">
@@ -14491,7 +14664,7 @@ function renderRecentManagerLeaveDecisions(records = []) {
             `
         : `
               <span class="text-secondary small fst-italic">
-                No manager note recorded
+                ${isCancelledDecision ? "No cancellation reason recorded" : "No manager note recorded"}
               </span>
             `
       }
@@ -14499,10 +14672,18 @@ function renderRecentManagerLeaveDecisions(records = []) {
 
       <td class="px-3 py-3 align-top">
         <div class="fw-semibold small lh-sm">${escapeHtml(decisionDateLabel)}</div>
-        ${decisionTimeLabel
-        ? `<div class="text-secondary small lh-sm mt-1">${escapeHtml(decisionTimeLabel)}</div>`
-        : ""
-      }
+        ${
+          decisionTimeLabel
+            ? `<div class="text-secondary small lh-sm mt-1">${escapeHtml(decisionTimeLabel)}</div>`
+            : ""
+        }
+      </td>
+
+      <!-- HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+           HR-only controlled cancellation action.
+           Approved rows get a red outline button. Other rows remain audit-only. -->
+      <td class="px-3 py-3 align-top text-center">
+        ${getHrApprovedLeaveCancellationActionHtml(decision)}
       </td>
     `;
 
@@ -14510,12 +14691,242 @@ function renderRecentManagerLeaveDecisions(records = []) {
   });
 }
 
+// HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+// Reset the HR cancellation modal state.
+function resetHrApprovedLeaveCancellationModal() {
+  state.currentHrApprovedLeaveCancellationTarget = null;
+
+  if (state.dom.hrCancelApprovedLeaveReason) {
+    state.dom.hrCancelApprovedLeaveReason.value = "";
+    state.dom.hrCancelApprovedLeaveReason.classList.remove("is-invalid");
+  }
+
+  if (state.dom.hrCancelApprovedLeaveSummary) {
+    state.dom.hrCancelApprovedLeaveSummary.innerHTML =
+      "Select an approved leave decision to cancel.";
+  }
+
+  syncHrApprovedLeaveCancellationConfirmState();
+}
+
+// HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+// Keep the destructive confirm disabled until HR gives a reason.
+function syncHrApprovedLeaveCancellationConfirmState() {
+  const reason = String(state.dom.hrCancelApprovedLeaveReason?.value || "").trim();
+  const hasTarget = Boolean(state.currentHrApprovedLeaveCancellationTarget?.id);
+
+  if (state.dom.confirmHrCancelApprovedLeaveBtn) {
+    state.dom.confirmHrCancelApprovedLeaveBtn.disabled = !(hasTarget && reason);
+  }
+
+  if (reason && state.dom.hrCancelApprovedLeaveReason) {
+    state.dom.hrCancelApprovedLeaveReason.classList.remove("is-invalid");
+  }
+}
+
+// HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+// Open the controlled HR cancellation modal for an Approved leave row only.
+function openHrApprovedLeaveCancellationModal(leaveRequestId) {
+  const decision = (state.recentManagerLeaveDecisionRecords || []).find(
+    (record) => String(record.id || "") === String(leaveRequestId || ""),
+  );
+
+  if (!decision) {
+    showPageAlert(
+      "warning",
+      "The selected leave decision could not be found. Refresh HR Review and try again.",
+    );
+
+    showDashboardToast(
+      "warning",
+      "Leave cancellation unavailable",
+      "Refresh the HR Review leave decisions and try again.",
+    );
+
+    return;
+  }
+
+  if (!isHrApprovedLeaveCancelable(decision)) {
+    showPageAlert(
+      "warning",
+      "Only approved leave that has not already been cancelled can be reversed.",
+    );
+
+    showDashboardToast(
+      "warning",
+      "Cancellation blocked",
+      "This leave decision is no longer available for cancellation.",
+    );
+
+    return;
+  }
+
+  state.currentHrApprovedLeaveCancellationTarget = decision;
+
+  const employeeName = decision.employeeName || "Unknown Employee";
+  const leaveTypeName = decision.leaveTypeName || "Leave";
+  const leavePeriod = `${formatDate(decision.start_date)} to ${formatDate(decision.end_date)}`;
+
+  if (state.dom.hrCancelApprovedLeaveTitle) {
+    state.dom.hrCancelApprovedLeaveTitle.textContent =
+      `Cancel ${employeeName}'s Approved Leave`;
+  }
+
+  if (state.dom.hrCancelApprovedLeaveSummary) {
+    state.dom.hrCancelApprovedLeaveSummary.innerHTML = `
+      <div class="fw-semibold mb-2">${escapeHtml(employeeName)}</div>
+      <div class="small text-secondary mb-1">
+        <span class="fw-semibold text-dark">Leave:</span>
+        ${escapeHtml(leaveTypeName)}
+      </div>
+      <div class="small text-secondary mb-1">
+        <span class="fw-semibold text-dark">Period:</span>
+        ${escapeHtml(leavePeriod)}
+      </div>
+      <div class="small text-secondary">
+        <span class="fw-semibold text-dark">Days to restore:</span>
+        ${escapeHtml(decision.total_days || "--")}
+      </div>
+    `;
+  }
+
+  if (state.dom.hrCancelApprovedLeaveReason) {
+    state.dom.hrCancelApprovedLeaveReason.value = "";
+    state.dom.hrCancelApprovedLeaveReason.classList.remove("is-invalid");
+  }
+
+  syncHrApprovedLeaveCancellationConfirmState();
+
+  state.dom.hrCancelApprovedLeaveModal?.classList.remove("d-none");
+  state.dom.hrCancelApprovedLeaveModal?.setAttribute("aria-hidden", "false");
+
+  window.setTimeout(() => {
+    state.dom.hrCancelApprovedLeaveReason?.focus();
+  }, 0);
+}
+
+// HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+// Close the modal without changing leave data.
+function closeHrApprovedLeaveCancellationModal() {
+  state.dom.hrCancelApprovedLeaveModal?.classList.add("d-none");
+  state.dom.hrCancelApprovedLeaveModal?.setAttribute("aria-hidden", "true");
+  resetHrApprovedLeaveCancellationModal();
+}
+
+// HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+// Loading state for the destructive HR cancellation confirmation.
+function setHrApprovedLeaveCancellationLoading(isLoading) {
+  if (state.dom.confirmHrCancelApprovedLeaveBtn) {
+    state.dom.confirmHrCancelApprovedLeaveBtn.disabled = isLoading;
+  }
+
+  if (state.dom.confirmHrCancelApprovedLeaveBtnText) {
+    state.dom.confirmHrCancelApprovedLeaveBtnText.textContent = isLoading
+      ? "Cancelling..."
+      : "Cancel Approved Leave";
+  }
+}
+
+// HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+// Call the HR-only cancellation RPC. The RPC restores balance once only and
+// writes cancellation audit fields. Frontend does not update balances directly.
+async function submitHrApprovedLeaveCancellation() {
+  const target = state.currentHrApprovedLeaveCancellationTarget;
+  const reason = String(state.dom.hrCancelApprovedLeaveReason?.value || "").trim();
+
+  if (!target?.id) {
+    showPageAlert("warning", "Select an approved leave decision before cancelling.");
+    return;
+  }
+
+  if (!reason) {
+    state.dom.hrCancelApprovedLeaveReason?.classList.add("is-invalid");
+    state.dom.hrCancelApprovedLeaveReason?.focus();
+    return;
+  }
+
+  const employeeName = target.employeeName || "the employee";
+
+  try {
+    setHrApprovedLeaveCancellationLoading(true);
+
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.rpc(
+      "hrp_cancel_approved_leave_once",
+      {
+        p_leave_request_id: target.id,
+        p_cancellation_reason: reason,
+      },
+    );
+
+    if (error) throw error;
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if (!result || normalizeText(result.status) !== "cancelled") {
+      throw new Error(
+        "Approved leave cancellation did not return a confirmed Cancelled status.",
+      );
+    }
+
+    closeHrApprovedLeaveCancellationModal();
+
+    const successMessage =
+      `${escapeHtml(employeeName)}'s approved leave was cancelled and ${escapeHtml(result.balance_restored_days || target.total_days || "--")} day(s) were restored.`;
+
+    showPageAlert("success", successMessage);
+
+    // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+    // Floating toast confirms the reversal even when HR is lower on the page.
+    showDashboardToast(
+      "success",
+      "Approved leave cancelled",
+      successMessage,
+    );
+
+    setManagerLeaveDecisionsStatus(
+      "success",
+      `${employeeName}'s approved leave was cancelled. Balance restoration was processed by the database.`,
+    );
+
+    await refreshRecentManagerLeaveDecisionsWorkspace();
+  } catch (error) {
+    console.error("Error cancelling approved leave:", error);
+
+    const message =
+      error.message || "Approved leave could not be cancelled.";
+
+    showPageAlert("danger", message);
+
+    showDashboardToast(
+      "danger",
+      "Leave cancellation failed",
+      message,
+    );
+
+    setManagerLeaveDecisionsStatus("danger", message);
+  } finally {
+    setHrApprovedLeaveCancellationLoading(false);
+  }
+}
+
 // HR LEAVE DECISION NOTIFICATION / AUDIT VISIBILITY - STEP 1O
 // Load recent manager decisions for the current tenant only.
 // Tenant safety comes from state.employees, which is already tenant-filtered.
 async function loadRecentManagerLeaveDecisions() {
   const supabase = getSupabaseClient();
-  const employeeByLeaveIdentity = buildHrEmployeeByLeaveIdentityMap();
+
+  // LEAVE DECISION DOWNSTREAM VISIBILITY - STEP 1C
+  // Refresh the employee identity source before loading leave decisions.
+  // This keeps HR audit visibility correct for leave_requests.employee_id
+  // values stored as employees.id, employees.user_id, or profile/auth ids.
+  const leaveDecisionEmployeeRows =
+    await loadHrEmployeesForLeaveDecisionIdentityMap();
+
+  const employeeByLeaveIdentity =
+    buildHrEmployeeByLeaveIdentityMap(leaveDecisionEmployeeRows);
+
   const leaveIdentityCandidates = [...employeeByLeaveIdentity.keys()];
 
   if (!leaveIdentityCandidates.length) {
@@ -14526,6 +14937,10 @@ async function loadRecentManagerLeaveDecisions() {
 
   const { data, error } = await supabase
     .from("leave_requests")
+    // HR APPROVED LEAVE CANCELLATION UI - STEP 1A-FIX 1
+    // Keep comments outside the Supabase select projection string.
+    // PostgREST parses the text inside .select(`...`) as a database column
+    // projection, so JavaScript-style comments inside that string break the API call.
     .select(`
       id,
       employee_id,
@@ -14540,6 +14955,13 @@ async function loadRecentManagerLeaveDecisions() {
       decision_by,
       decision_by_name,
       decision_comment,
+      cancelled_at,
+      cancelled_by,
+      cancelled_by_name,
+      cancellation_reason,
+      cancelled_from_status,
+      balance_restored_at,
+      balance_restored_days,
       leave_types (
         id,
         code,
