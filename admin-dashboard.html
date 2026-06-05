@@ -1233,6 +1233,68 @@
     </div>
   </div>
 
+  <!-- HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
+       Admin-controlled HR MFA reset modal.
+       This does not reset MFA in browser code. It calls the secure
+       reset-user-mfa Edge Function, which performs Admin validation and
+       Supabase MFA factor deletion server-side. -->
+  <div class="modal fade" id="resetMfaModal" tabindex="-1" aria-labelledby="resetMfaModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+
+        <div class="modal-header border-0 pb-0 px-4 pt-4">
+          <div>
+            <h5 class="modal-title fw-bold mb-1" id="resetMfaModalLabel">
+              <i class="bi bi-shield-lock me-2 text-danger"></i>Reset HR Two-Factor Authentication
+            </h5>
+            <p class="text-secondary small mb-0">
+              Remove the selected HR user's authenticator setup so they can enrol again on next HR sign-in.
+            </p>
+          </div>
+          <button type="button" class="btn-close ms-3" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body px-4 py-3">
+          <div class="border rounded-3 p-3 bg-light-subtle mb-4">
+            <div class="fw-semibold text-truncate" id="resetMfaTargetName">--</div>
+            <div class="text-secondary small text-break" id="resetMfaTargetEmail">--</div>
+            <div class="mt-2">
+              <span class="badge rounded-pill text-bg-primary" id="resetMfaTargetRole">HR</span>
+            </div>
+          </div>
+
+          <div class="alert alert-warning border mb-3">
+            <div class="fw-semibold mb-1">Security impact</div>
+            <div class="small">
+              This removes the HR user's current authenticator factor. The user will be forced to set up HR two-factor
+              authentication again before opening the HR Dashboard.
+            </div>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="resetMfaConfirmCheckbox" />
+            <label class="form-check-label" for="resetMfaConfirmCheckbox">
+              I confirm this HR user's two-factor setup should be reset.
+            </label>
+          </div>
+
+          <div id="resetMfaAlert" class="alert d-none mt-3 mb-0" role="alert"></div>
+        </div>
+
+        <div class="modal-footer border-0 px-4 pb-4 pt-0 gap-2">
+          <button type="button" class="btn btn-outline-secondary dashboard-action-btn" data-bs-dismiss="modal">
+            Cancel
+          </button>
+          <button type="button" id="resetMfaSubmitBtn" class="btn btn-danger dashboard-action-btn" disabled>
+            <i class="bi bi-shield-lock me-2"></i>Reset HR 2FA
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
      First-paint restore for Admin workspace.
      This prevents a visible Profile flash when refreshing from Overview or Companies.

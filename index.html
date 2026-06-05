@@ -156,6 +156,76 @@
               </button>
             </form>
 
+            <!-- HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
+     HR users must complete Supabase-backed TOTP verification before
+     the HR Dashboard is opened. This is not a frontend-only OTP.
+     Supabase verifies the authenticator code and promotes the session to AAL2. -->
+            <div id="hrMfaPanel" class="border rounded-4 p-3 mt-3 d-none">
+              <div class="d-flex align-items-start gap-3 mb-3">
+                <div
+                  class="rounded-circle bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
+                  style="width: 40px; height: 40px;">
+                  <i class="bi bi-shield-check text-primary"></i>
+                </div>
+
+                <div>
+                  <div class="fw-bold" id="hrMfaTitle">HR two-factor verification</div>
+                  <div class="small text-secondary" id="hrMfaDescription">
+                    Enter the 6-digit code from your authenticator app to continue to the HR Dashboard.
+                  </div>
+                </div>
+              </div>
+
+              <div id="hrMfaEnrollmentBox" class="alert alert-light border d-none mb-3">
+                <div class="fw-semibold mb-2">Set up your authenticator app</div>
+                <div class="small text-secondary mb-3">
+                  Scan the QR code below using Microsoft Authenticator, Google Authenticator, or another TOTP
+                  authenticator app.
+                </div>
+
+                <div class="text-center mb-3">
+                  <img id="hrMfaQrCodeImage" src="" alt="HR MFA QR code"
+                    class="img-fluid border rounded-3 p-2 bg-white d-none" style="max-width: 220px;" />
+                </div>
+
+                <div class="small text-secondary">
+                  Manual setup secret:
+                  <code id="hrMfaSecretValue">--</code>
+                </div>
+              </div>
+
+              <label for="hrMfaCodeInput" class="form-label fw-semibold">
+                Authenticator Code <span class="text-danger">*</span>
+              </label>
+              <input type="text" id="hrMfaCodeInput" class="form-control" inputmode="numeric" maxlength="6"
+                autocomplete="one-time-code" placeholder="Enter 6-digit code" />
+
+              <div id="hrMfaStatus" class="alert d-none mt-3 mb-0" role="status"></div>
+
+              <!-- HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2B
+     HR support note for lost authenticator devices.
+     This keeps the process operationally supportable without creating
+     insecure frontend recovery codes. -->
+              <div id="hrMfaRecoveryNote" class="alert alert-light border mt-3 mb-0 small">
+                <div class="fw-semibold mb-1">Lost access to your authenticator?</div>
+                <div class="text-secondary">
+                  Contact your system administrator to reset your HR two-factor setup. For security, this page cannot
+                  bypass MFA or generate recovery codes.
+                </div>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 mt-3">
+                <button type="button" id="verifyHrMfaBtn" class="btn btn-primary dashboard-action-btn" disabled>
+                  <i class="bi bi-shield-check me-2"></i>
+                  Verify and Continue
+                </button>
+
+                <button type="button" id="cancelHrMfaBtn" class="btn btn-outline-secondary dashboard-action-btn">
+                  Cancel
+                </button>
+              </div>
+            </div>
+
             <div class="hr-dev-note p-3 mt-2 small text-secondary">
               <strong>Access note:</strong> Your dashboard is determined by
               your authenticated profile and assigned role. Contact your

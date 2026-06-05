@@ -12,7 +12,23 @@ document.addEventListener("DOMContentLoaded", function () {
   const togglePasswordBtn = document.getElementById("togglePasswordBtn");
   const togglePasswordIcon = document.getElementById("togglePasswordIcon");
   const forgotPasswordLink = document.getElementById("forgotPasswordLink");
+  // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
+  // Supabase-backed TOTP MFA controls for HR dashboard access.
+  const hrMfaPanel = document.getElementById("hrMfaPanel");
+  const hrMfaTitle = document.getElementById("hrMfaTitle");
+  const hrMfaDescription = document.getElementById("hrMfaDescription");
+  const hrMfaEnrollmentBox = document.getElementById("hrMfaEnrollmentBox");
+  const hrMfaQrCodeImage = document.getElementById("hrMfaQrCodeImage");
+  const hrMfaSecretValue = document.getElementById("hrMfaSecretValue");
+  const hrMfaCodeInput = document.getElementById("hrMfaCodeInput");
+  const hrMfaStatus = document.getElementById("hrMfaStatus");
+  const hrMfaRecoveryNote = document.getElementById("hrMfaRecoveryNote");
+  const verifyHrMfaBtn = document.getElementById("verifyHrMfaBtn");
+  const cancelHrMfaBtn = document.getElementById("cancelHrMfaBtn");
 
+  let pendingHrMfaLoginContext = null;
+  let pendingHrMfaFactorId = "";
+  let pendingHrMfaMode = "";
   const SUPABASE_URL = "https://zoeglonuxkiwnaabzjqo.supabase.co";
   const SUPABASE_PUBLISHABLE_KEY =
     "sb_publishable_zNz3vsLoaw9ul1UmwEDAMg_YX-MxMG_";
@@ -108,6 +124,497 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     return "";
+  }
+
+  // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
+  // HR Dashboard is the sensitive workspace. Only profile.role = hr is forced
+  // through MFA here. Admin, Manager, and Employee routes are not changed in
+  // this step.
+  function isHrDashboardMfaRequiredRole(role = "") {
+    return String(role || "").trim().toLowerCase() === "hr";
+  }
+
+  function setHrMfaStatus(type = "info", message = "") {
+    if (!hrMfaStatus) return;
+
+    hrMfaStatus.className = `alert alert-${type} mt-3 mb-0`;
+    hrMfaStatus.textContent = message;
+    hrMfaStatus.classList.toggle("d-none", !message);
+  }
+
+  // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2B
+  // Convert Supabase/Auth MFA errors into HR-friendly operational guidance.
+  function getFriendlyHrMfaErrorMessage(error = {}, mode = "") {
+    const rawMessage = String(error?.message || error || "").trim();
+    const normalisedMessage = rawMessage.toLowerCase();
+
+    if (
+      normalisedMessage.includes("invalid") ||
+      normalisedMessage.includes("not accepted") ||
+      normalisedMessage.includes("code")
+    ) {
+      return "The authenticator code was not accepted. Enter the current 6-digit code from your authenticator app. If it is about to expire, wait for the next code and try again.";
+    }
+
+    if (
+      normalisedMessage.includes("expired") ||
+      normalisedMessage.includes("challenge")
+    ) {
+      return "This verification attempt expired. Enter the current code from your authenticator app and try again.";
+    }
+
+    if (
+      normalisedMessage.includes("factor") &&
+      normalisedMessage.includes("not found")
+    ) {
+      return "The MFA factor could not be found. Please sign in again. If this continues, ask your administrator to reset your HR two-factor setup.";
+    }
+
+    if (
+      normalisedMessage.includes("too many") ||
+      normalisedMessage.includes("maximum") ||
+      normalisedMessage.includes("upper limit")
+    ) {
+      return "This account has too many MFA factors. Ask your administrator to remove old or incomplete authenticator factors before trying again.";
+    }
+
+    if (mode === "enroll") {
+      return rawMessage || "Authenticator setup could not be completed. Please try again or ask your administrator to reset your HR two-factor setup.";
+    }
+
+    return rawMessage || "Two-factor verification failed. Check the current authenticator code and try again.";
+  }
+
+  function getHrMfaFactorType(factor = {}) {
+    return String(factor.factor_type || factor.type || "").trim().toLowerCase();
+  }
+
+  function getHrMfaFactorStatus(factor = {}) {
+    return String(factor.status || "").trim().toLowerCase();
+  }
+
+  function isHrTotpFactor(factor = {}) {
+    return getHrMfaFactorType(factor) === "totp";
+  }
+
+  function getUniqueHrMfaFactors(data = {}) {
+    const factors = [
+      ...(Array.isArray(data?.totp) ? data.totp : []),
+      ...(Array.isArray(data?.all) ? data.all : []),
+    ];
+
+    const uniqueFactors = new Map();
+
+    factors.forEach((factor) => {
+      if (!factor?.id) return;
+      uniqueFactors.set(factor.id, factor);
+    });
+
+    return Array.from(uniqueFactors.values());
+  }
+
+  async function listHrMfaFactors() {
+    const { data, error } = await supabaseClient.auth.mfa.listFactors();
+
+    if (error) {
+      throw error;
+    }
+
+    return getUniqueHrMfaFactors(data);
+  }
+
+  function sortHrMfaFactorsNewestFirst(factors = []) {
+    return [...factors].sort((firstFactor, secondFactor) => {
+      const firstDate = new Date(
+        firstFactor.updated_at ||
+        firstFactor.created_at ||
+        0,
+      ).getTime();
+
+      const secondDate = new Date(
+        secondFactor.updated_at ||
+        secondFactor.created_at ||
+        0,
+      ).getTime();
+
+      return secondDate - firstDate;
+    });
+  }
+
+  // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2B
+  // If a previous QR setup was abandoned, Supabase may still have an
+  // unverified TOTP factor. Clean those up before creating another QR setup.
+  // This prevents a pile-up of incomplete HR MFA factors.
+  async function cleanupUnverifiedHrTotpFactors() {
+    if (!supabaseClient.auth?.mfa?.unenroll) {
+      return 0;
+    }
+
+    const factors = await listHrMfaFactors();
+    const unverifiedTotpFactors = factors.filter((factor) => {
+      return isHrTotpFactor(factor) && getHrMfaFactorStatus(factor) === "unverified";
+    });
+
+    let removedCount = 0;
+
+    for (const factor of unverifiedTotpFactors) {
+      try {
+        const { error } = await supabaseClient.auth.mfa.unenroll({
+          factorId: factor.id,
+        });
+
+        if (error) {
+          console.warn("Incomplete HR MFA factor could not be removed.", error);
+          continue;
+        }
+
+        removedCount += 1;
+      } catch (error) {
+        console.warn("Incomplete HR MFA factor cleanup failed.", error);
+      }
+    }
+
+    return removedCount;
+  }
+
+  function normaliseHrMfaCode(value = "") {
+    return String(value || "").replace(/\D/g, "").slice(0, 6);
+  }
+
+  function setHrMfaLoading(isLoading = false, label = "Verify and Continue") {
+    if (!verifyHrMfaBtn) return;
+
+    verifyHrMfaBtn.disabled = isLoading || normaliseHrMfaCode(hrMfaCodeInput?.value).length !== 6;
+
+    verifyHrMfaBtn.innerHTML = isLoading
+      ? `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Verifying...`
+      : `<i class="bi bi-shield-check me-2"></i>${label}`;
+  }
+
+  function getHrMfaQrCodeImageSource(qrCode = "") {
+    const value = String(qrCode || "").trim();
+
+    if (!value) return "";
+
+    if (value.startsWith("data:") || value.startsWith("http")) {
+      return value;
+    }
+
+    if (value.startsWith("<svg")) {
+      return `data:image/svg+xml;utf8,${encodeURIComponent(value)}`;
+    }
+
+    return value;
+  }
+
+  function showHrMfaPanel({
+    mode = "challenge",
+    factorId = "",
+    qrCode = "",
+    secret = "",
+  } = {}) {
+    pendingHrMfaMode = mode;
+    pendingHrMfaFactorId = factorId;
+
+    loginForm?.classList.add("d-none");
+    hrMfaPanel?.classList.remove("d-none");
+
+    if (hrMfaCodeInput) {
+      hrMfaCodeInput.value = "";
+      hrMfaCodeInput.focus();
+    }
+
+    setHrMfaStatus(
+      "info",
+      mode === "enroll"
+        ? "Scan the QR code, then enter the 6-digit code from your authenticator app."
+        : "Enter the current 6-digit code from your authenticator app. The code changes regularly.",
+    );
+
+    if (hrMfaTitle) {
+      hrMfaTitle.textContent =
+        mode === "enroll"
+          ? "Set up HR two-factor authentication"
+          : "HR two-factor verification";
+    }
+
+    if (hrMfaDescription) {
+      hrMfaDescription.textContent =
+        mode === "enroll"
+          ? "This HR account must set up an authenticator app before the HR Dashboard can open."
+          : "Enter the current 6-digit code from your authenticator app. The code refreshes regularly, so always use the latest code shown.";
+    }
+
+    if (hrMfaRecoveryNote) {
+      hrMfaRecoveryNote.classList.remove("d-none");
+    }
+
+    hrMfaEnrollmentBox?.classList.toggle("d-none", mode !== "enroll");
+
+    if (hrMfaQrCodeImage) {
+      const imageSource = getHrMfaQrCodeImageSource(qrCode);
+      hrMfaQrCodeImage.src = imageSource;
+      hrMfaQrCodeImage.classList.toggle("d-none", !imageSource);
+    }
+
+    if (hrMfaSecretValue) {
+      hrMfaSecretValue.textContent = secret || "--";
+    }
+
+    setHrMfaLoading(false);
+  }
+
+  function hideHrMfaPanel() {
+    pendingHrMfaLoginContext = null;
+    pendingHrMfaFactorId = "";
+    pendingHrMfaMode = "";
+
+    hrMfaPanel?.classList.add("d-none");
+    hrMfaEnrollmentBox?.classList.add("d-none");
+    loginForm?.classList.remove("d-none");
+
+    if (hrMfaCodeInput) {
+      hrMfaCodeInput.value = "";
+    }
+
+    setHrMfaStatus("", "");
+  }
+
+  function buildApplicationSessionPayload({
+    authData,
+    profile,
+    cachedTenantContext,
+  } = {}) {
+    return {
+      userId: authData.user.id,
+      email: profile.email || authData.user.email,
+      fullName: profile.full_name || "",
+      role: profile.role,
+      department: profile.department || "",
+
+      tenantId: cachedTenantContext?.tenantId || null,
+      tenantCode: cachedTenantContext?.tenantCode || "",
+      companyName: cachedTenantContext?.companyName || "Platform Admin",
+
+      loginTime: new Date().toISOString(),
+    };
+  }
+
+  function finishSuccessfulLoginRedirect(loginContext = {}) {
+    const { authData, profile, tenantValidation, cachedTenantContext } = loginContext;
+
+    localStorage.setItem(
+      "hrPayrollSession",
+      JSON.stringify(
+        buildApplicationSessionPayload({
+          authData,
+          profile,
+          cachedTenantContext,
+        }),
+      ),
+    );
+
+    const redirectTarget =
+      getSafePostLoginRedirectForRole(profile.role) ||
+      getDashboardByRole(profile.role);
+
+    showAlert(
+      `Sign-in successful. Welcome <strong>${profile.full_name || authData.user.email}</strong>. Company: <strong>${tenantValidation.companyName || tenantValidation.tenantCode}</strong>. Redirecting...`,
+      "success",
+    );
+
+    console.log("Supabase sign-in success:", {
+      userId: authData.user.id,
+      email: profile.email || authData.user.email,
+      role: profile.role,
+      redirectTarget,
+      source: "profiles.role",
+      mfa: isHrDashboardMfaRequiredRole(profile.role) ? "aal2-required" : "not-required",
+    });
+
+    setTimeout(function () {
+      window.location.href = redirectTarget;
+    }, 1200);
+  }
+
+  async function getVerifiedHrTotpFactor() {
+    // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2B
+    // Prefer an existing verified TOTP factor instead of enrolling again.
+    // This keeps future HR sign-ins as code-only verification, not QR setup.
+    const factors = await listHrMfaFactors();
+
+    const verifiedTotpFactors = factors.filter((factor) => {
+      const status = getHrMfaFactorStatus(factor);
+
+      return isHrTotpFactor(factor) && (!status || status === "verified");
+    });
+
+    return sortHrMfaFactorsNewestFirst(verifiedTotpFactors)[0] || null;
+  }
+
+  async function verifySupabaseMfaFactor(factorId = "", code = "") {
+    if (!factorId) {
+      throw new Error("MFA factor was not found. Please sign in again.");
+    }
+
+    if (typeof supabaseClient.auth.mfa.challengeAndVerify === "function") {
+      const { error } = await supabaseClient.auth.mfa.challengeAndVerify({
+        factorId,
+        code,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      return;
+    }
+
+    const { data: challengeData, error: challengeError } =
+      await supabaseClient.auth.mfa.challenge({
+        factorId,
+      });
+
+    if (challengeError) {
+      throw challengeError;
+    }
+
+    const { error: verifyError } = await supabaseClient.auth.mfa.verify({
+      factorId,
+      challengeId: challengeData.id,
+      code,
+    });
+
+    if (verifyError) {
+      throw verifyError;
+    }
+  }
+
+  async function startHrDashboardMfaFlow(loginContext = {}) {
+    if (!supabaseClient.auth?.mfa?.getAuthenticatorAssuranceLevel) {
+      throw new Error("Supabase MFA is not available in this environment.");
+    }
+
+    pendingHrMfaLoginContext = loginContext;
+
+    const { data: assuranceData, error: assuranceError } =
+      await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+
+    if (assuranceError) {
+      throw assuranceError;
+    }
+
+    if (assuranceData?.currentLevel === "aal2") {
+      finishSuccessfulLoginRedirect(loginContext);
+      return true;
+    }
+
+    const existingTotpFactor = await getVerifiedHrTotpFactor();
+
+    if (existingTotpFactor?.id) {
+      showHrMfaPanel({
+        mode: "challenge",
+        factorId: existingTotpFactor.id,
+      });
+
+      return true;
+    }
+
+    // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2B
+    // Clean up abandoned unverified TOTP setup attempts before creating a new
+    // QR setup. This avoids creating a new incomplete factor every time HR
+    // cancels or refreshes during first-time MFA enrollment.
+    const removedIncompleteFactors = await cleanupUnverifiedHrTotpFactors();
+
+    if (removedIncompleteFactors > 0) {
+      console.info(
+        `Removed ${removedIncompleteFactors} incomplete HR MFA setup factor(s).`,
+      );
+    }
+
+    const { data: enrollData, error: enrollError } =
+      await supabaseClient.auth.mfa.enroll({
+        factorType: "totp",
+        friendlyName: "BexHR HR Dashboard",
+      });
+
+    if (enrollError) {
+      throw enrollError;
+    }
+
+    showHrMfaPanel({
+      mode: "enroll",
+      factorId: enrollData.id,
+      qrCode: enrollData.totp?.qr_code || "",
+      secret: enrollData.totp?.secret || "",
+    });
+
+    return true;
+  }
+
+  async function handleHrMfaVerification() {
+    const code = normaliseHrMfaCode(hrMfaCodeInput?.value);
+
+    if (hrMfaCodeInput) {
+      hrMfaCodeInput.value = code;
+    }
+
+    if (code.length !== 6) {
+      setHrMfaStatus("warning", "Enter the 6-digit code from your authenticator app.");
+      setHrMfaLoading(false);
+      return;
+    }
+
+    try {
+      setHrMfaLoading(true);
+      setHrMfaStatus("info", "Verifying HR two-factor code...");
+
+      await verifySupabaseMfaFactor(pendingHrMfaFactorId, code);
+
+      const { data: assuranceData, error: assuranceError } =
+        await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+
+      if (assuranceError) {
+        throw assuranceError;
+      }
+
+      if (assuranceData?.currentLevel !== "aal2") {
+        throw new Error("Two-factor verification did not promote the session to AAL2.");
+      }
+
+      const loginContext = pendingHrMfaLoginContext;
+
+      hideHrMfaPanel();
+
+      finishSuccessfulLoginRedirect(loginContext);
+    } catch (error) {
+      console.error("HR MFA verification failed:", error);
+
+      setHrMfaStatus(
+        "danger",
+        getFriendlyHrMfaErrorMessage(error, pendingHrMfaMode),
+      );
+
+      setHrMfaLoading(false);
+    }
+  }
+
+  async function cancelHrMfaVerification() {
+    try {
+      await supabaseClient.auth.signOut();
+    } catch (error) {
+      console.warn("HR MFA cancel sign-out failed:", error);
+    }
+
+    localStorage.removeItem("hrPayrollSession");
+    localStorage.removeItem("hrPayrollTenantContext");
+
+    hideHrMfaPanel();
+
+    showAlert(
+      "HR two-factor verification was cancelled. Please sign in again to access the HR Dashboard.",
+      "warning",
+    );
   }
 
   // PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 4C
@@ -291,6 +798,12 @@ document.addEventListener("DOMContentLoaded", function () {
       case "unauthorized":
         showAlert("You are not authorized to access that page.", "danger");
         break;
+      case "hr-mfa-required":
+        showAlert(
+          "HR Dashboard access requires two-factor verification. Please sign in and complete the authenticator code step.",
+          "warning",
+        );
+        break;
       case "password-reset-success":
         showAlert(
           "Your password has been reset successfully. You can now sign in.",
@@ -326,6 +839,30 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (forgotPasswordLink) {
     forgotPasswordLink.addEventListener("click", handleForgotPassword);
+  }
+
+  // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
+  // Verification is deliberately separate from the password submit button.
+  if (hrMfaCodeInput) {
+    hrMfaCodeInput.addEventListener("input", function () {
+      hrMfaCodeInput.value = normaliseHrMfaCode(hrMfaCodeInput.value);
+      setHrMfaLoading(false);
+    });
+
+    hrMfaCodeInput.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        handleHrMfaVerification();
+      }
+    });
+  }
+
+  if (verifyHrMfaBtn) {
+    verifyHrMfaBtn.addEventListener("click", handleHrMfaVerification);
+  }
+
+  if (cancelHrMfaBtn) {
+    cancelHrMfaBtn.addEventListener("click", cancelHrMfaVerification);
   }
 
   if (loginForm) {
@@ -531,24 +1068,12 @@ document.addEventListener("DOMContentLoaded", function () {
           });
         }
 
-        localStorage.setItem(
-          "hrPayrollSession",
-          JSON.stringify({
-            userId: authData.user.id,
-            email: profile.email || authData.user.email,
-            fullName: profile.full_name || "",
-            role: profile.role,
-            department: profile.department || "",
-
-            // HRP-80 - ADMIN TENANT LOGIN EXEMPTION - STEP 4B
-            // Admin is platform-level. Other roles retain tenant context.
-            tenantId: cachedTenantContext?.tenantId || null,
-            tenantCode: cachedTenantContext?.tenantCode || "",
-            companyName: cachedTenantContext?.companyName || "Platform Admin",
-
-            loginTime: new Date().toISOString(),
-          }),
-        );
+        const loginContext = {
+          authData,
+          profile,
+          tenantValidation,
+          cachedTenantContext,
+        };
 
         if (profile.must_change_password === true) {
           showAlert(
@@ -563,26 +1088,30 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
-        const redirectTarget =
-          getSafePostLoginRedirectForRole(profile.role) ||
-          getDashboardByRole(profile.role);
+        // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
+        // Do not create the local application session or redirect HR until Supabase
+        // confirms the session has reached AAL2 through TOTP MFA.
+if (isHrDashboardMfaRequiredRole(profile.role)) {
+  try {
+    await startHrDashboardMfaFlow(loginContext);
+  } catch (mfaStartError) {
+    console.error("HR MFA start failed:", mfaStartError);
 
-        showAlert(
-          `Sign-in successful. Welcome <strong>${profile.full_name || authData.user.email}</strong>. Company: <strong>${tenantValidation.companyName || tenantValidation.tenantCode}</strong>. Redirecting...`,
-          "success",
-        );
+    await supabaseClient.auth.signOut();
 
-        console.log("Supabase sign-in success:", {
-          userId: authData.user.id,
-          email: profile.email || authData.user.email,
-          role: profile.role,
-          redirectTarget,
-          source: "profiles.role",
-        });
+    localStorage.removeItem("hrPayrollSession");
+    localStorage.removeItem("hrPayrollTenantContext");
 
-        setTimeout(function () {
-          window.location.href = redirectTarget;
-        }, 1200);
+    showAlert(
+      getFriendlyHrMfaErrorMessage(mfaStartError, "enroll"),
+      "danger",
+    );
+  }
+
+  return;
+}
+
+        finishSuccessfulLoginRedirect(loginContext);
       } catch (unexpectedError) {
         console.error("Unexpected sign-in error:", unexpectedError);
         showAlert("An unexpected error occurred while signing in.", "danger");

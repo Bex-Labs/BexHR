@@ -71,6 +71,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.adminResetUserPassword = (profileId) => {
       openResetPasswordModal(profileId);
     };
+        // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
+    // Expose HR MFA reset action for the user access records table.
+    // This only opens the Admin confirmation modal; privileged reset happens
+    // server-side through the reset-user-mfa Edge Function.
+    window.adminResetUserMfa = (profileId) => {
+      openResetMfaModal(profileId);
+    };
   } catch (error) {
     console.error("Error initialising admin dashboard:", error);
     showPageAlert(
@@ -137,6 +144,11 @@ const state = {
   // ADMIN PASSWORD RESET
   // Holds the profile currently targeted for a password reset.
   currentResetTarget: null,
+
+  // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
+  // Holds the HR profile currently targeted for MFA reset.
+  // The actual MFA factor deletion happens in the reset-user-mfa Edge Function.
+  currentMfaResetTarget: null,
 
   dom: {},
 };
@@ -414,6 +426,16 @@ function cacheDomElements() {
     resetPasswordToggleIcon: document.getElementById("resetPasswordToggleIcon"),
     resetPasswordSubmitBtn: document.getElementById("resetPasswordSubmitBtn"),
     resetPasswordAlert: document.getElementById("resetPasswordAlert"),
+
+    // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
+    // Admin HR MFA reset modal controls.
+    resetMfaModal: document.getElementById("resetMfaModal"),
+    resetMfaTargetName: document.getElementById("resetMfaTargetName"),
+    resetMfaTargetEmail: document.getElementById("resetMfaTargetEmail"),
+    resetMfaTargetRole: document.getElementById("resetMfaTargetRole"),
+    resetMfaConfirmCheckbox: document.getElementById("resetMfaConfirmCheckbox"),
+    resetMfaSubmitBtn: document.getElementById("resetMfaSubmitBtn"),
+    resetMfaAlert: document.getElementById("resetMfaAlert"),
   };
 }
 
@@ -1034,6 +1056,21 @@ function bindEvents() {
   // Clear temp password when modal closes so it does not linger.
   state.dom.resetPasswordModal?.addEventListener("hidden.bs.modal", () => {
     clearResetPasswordModal();
+  });
+
+  // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
+  // Admin must explicitly confirm before resetting HR MFA.
+  state.dom.resetMfaConfirmCheckbox?.addEventListener("change", () => {
+    updateResetMfaSubmitButtonState();
+    clearResetMfaAlert();
+  });
+
+  state.dom.resetMfaSubmitBtn?.addEventListener("click", async () => {
+    await submitMfaReset();
+  });
+
+  state.dom.resetMfaModal?.addEventListener("hidden.bs.modal", () => {
+    clearResetMfaModal();
   });
 }
 
@@ -3059,6 +3096,24 @@ function renderProfileTenantLinks(records = []) {
                 >
                   <i class="bi bi-key"></i>
                 </button>
+
+                ${String(profile.role || "").trim().toLowerCase() === "hr"
+                  ? `
+                    <!-- HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
+                         HR users are MFA-protected, so Admin gets a controlled
+                         reset action beside the existing password reset action.
+                         The browser does not delete factors directly. -->
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-danger"
+                      title="Reset HR 2FA"
+                      onclick="window.adminResetUserMfa('${escapeHtml(profile.id)}')"
+                    >
+                      <i class="bi bi-shield-lock"></i>
+                    </button>
+                  `
+                  : ""
+                }
               </div>
             </td>
           </tr>
@@ -3938,3 +3993,218 @@ async function submitPasswordReset() {
   }
 }
 
+/* =========================================================
+   HR MFA RESET
+   ========================================================= */
+
+function isHrMfaResetEligibleProfile(profile = {}) {
+  // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
+  // Only HR users are eligible because HR Dashboard is the MFA-protected workspace.
+  return String(profile.role || "").trim().toLowerCase() === "hr";
+}
+
+function updateResetMfaSubmitButtonState() {
+  const btn = state.dom.resetMfaSubmitBtn;
+  if (!btn) return;
+
+  const isConfirmed = Boolean(state.dom.resetMfaConfirmCheckbox?.checked);
+  const hasTarget = Boolean(state.currentMfaResetTarget?.id);
+  const ready = isConfirmed && hasTarget;
+
+  btn.disabled = !ready;
+  btn.className = ready
+    ? "btn btn-danger dashboard-action-btn"
+    : "btn btn-secondary dashboard-action-btn";
+}
+
+function clearResetMfaAlert() {
+  const el = state.dom.resetMfaAlert;
+  if (!el) return;
+
+  el.className = "alert d-none mt-3 mb-0";
+  el.textContent = "";
+}
+
+function showResetMfaAlert(type, message) {
+  const el = state.dom.resetMfaAlert;
+
+  if (!el) {
+    showPageAlert(type, message);
+    return;
+  }
+
+  el.className = `alert alert-${type} mt-3 mb-0`;
+  el.textContent = message;
+}
+
+function clearResetMfaModal() {
+  state.currentMfaResetTarget = null;
+
+  if (state.dom.resetMfaConfirmCheckbox) {
+    state.dom.resetMfaConfirmCheckbox.checked = false;
+  }
+
+  clearResetMfaAlert();
+  updateResetMfaSubmitButtonState();
+}
+
+function openResetMfaModal(profileId) {
+  const profile = getProfileForTenantLinkById(profileId);
+
+  if (!profile) {
+    showPageAlert(
+      "warning",
+      "User profile not found. Please refresh the page and try again.",
+    );
+    return;
+  }
+
+  if (!isHrMfaResetEligibleProfile(profile)) {
+    showPageAlert(
+      "warning",
+      "Only HR users can have HR Dashboard two-factor authentication reset from this action.",
+    );
+    return;
+  }
+
+  state.currentMfaResetTarget = profile;
+
+  if (state.dom.resetMfaTargetName) {
+    state.dom.resetMfaTargetName.textContent = getProfileDisplayName(profile);
+  }
+
+  if (state.dom.resetMfaTargetEmail) {
+    state.dom.resetMfaTargetEmail.textContent =
+      profile.email || "No email on record";
+  }
+
+  if (state.dom.resetMfaTargetRole) {
+    state.dom.resetMfaTargetRole.textContent =
+      String(profile.role || "HR").trim().toUpperCase();
+  }
+
+  if (state.dom.resetMfaConfirmCheckbox) {
+    state.dom.resetMfaConfirmCheckbox.checked = false;
+  }
+
+  clearResetMfaAlert();
+  updateResetMfaSubmitButtonState();
+
+  const modalEl = state.dom.resetMfaModal;
+  if (!modalEl) return;
+
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+}
+
+function setResetMfaLoading(isLoading) {
+  const btn = state.dom.resetMfaSubmitBtn;
+  if (!btn) return;
+
+  btn.dataset.isLoading = isLoading ? "true" : "false";
+
+  if (isLoading) {
+    if (!btn.dataset.originalHtml) {
+      btn.dataset.originalHtml = btn.innerHTML;
+    }
+
+    btn.disabled = true;
+    btn.className = "btn btn-secondary dashboard-action-btn";
+    btn.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Resetting HR 2FA...
+    `;
+    return;
+  }
+
+  if (btn.dataset.originalHtml) {
+    btn.innerHTML = btn.dataset.originalHtml;
+    delete btn.dataset.originalHtml;
+  }
+
+  delete btn.dataset.isLoading;
+  updateResetMfaSubmitButtonState();
+}
+
+async function submitMfaReset() {
+  const profile = state.currentMfaResetTarget;
+
+  if (!profile?.id) {
+    showResetMfaAlert("warning", "Select an HR user before resetting MFA.");
+    return;
+  }
+
+  if (!isHrMfaResetEligibleProfile(profile)) {
+    showResetMfaAlert("warning", "Only HR users can be reset from this workflow.");
+    return;
+  }
+
+  if (!state.dom.resetMfaConfirmCheckbox?.checked) {
+    showResetMfaAlert(
+      "warning",
+      "Confirm the HR MFA reset before continuing.",
+    );
+    return;
+  }
+
+  try {
+    setResetMfaLoading(true);
+    clearResetMfaAlert();
+
+    const supabase = getSupabaseClient();
+
+    // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
+    // Privileged MFA reset is server-side only. The Edge Function validates
+    // the caller is an active Admin and deletes the target HR user's TOTP factors.
+    const { data, error } = await supabase.functions.invoke(
+      "reset-user-mfa",
+      {
+        body: {
+          targetUserId: String(profile.id || "").trim(),
+          targetEmail: String(profile.email || "").trim().toLowerCase(),
+        },
+      },
+    );
+
+    if (error) throw error;
+
+    if (data && data.success === false) {
+      throw new Error(data.message || "HR MFA reset was not completed.");
+    }
+
+    const modalEl = state.dom.resetMfaModal;
+    if (modalEl) {
+      bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+    }
+
+    const message =
+      data?.message ||
+      `HR two-factor authentication was reset for ${getProfileDisplayName(profile)}.`;
+
+    showPageAlert("success", message);
+
+    showDashboardToast(
+      "success",
+      "HR 2FA reset",
+      message,
+    );
+
+    await refreshProfileTenantLinkingWorkspace();
+  } catch (error) {
+    console.error("HR MFA reset error:", error);
+
+    const message =
+      String(error?.message || "").trim() ||
+      "HR MFA reset could not be completed. Please try again.";
+
+    showResetMfaAlert("danger", message);
+
+    showDashboardToast(
+      "danger",
+      "HR 2FA reset failed",
+      message,
+    );
+  } finally {
+    setResetMfaLoading(false);
+  }
+}

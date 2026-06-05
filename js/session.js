@@ -161,6 +161,11 @@
       return;
     }
 
+    if (reason === "hr-mfa-required") {
+  window.location.href = "index.html?message=hr-mfa-required";
+  return;
+}
+
     window.location.href = "index.html";
   }
 
@@ -274,6 +279,35 @@
     return session;
   }
 
+  // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
+// HR Dashboard requires Supabase Auth AAL2. This prevents a user from
+// bypassing the login MFA screen by manually opening hr-dashboard.html
+// after only password authentication.
+async function hasRequiredHrMfaAssurance(profile = {}) {
+  const role = String(profile.role || "").trim().toLowerCase();
+
+  if (role !== "hr") {
+    return true;
+  }
+
+  const supabase = getSupabaseClient();
+
+  if (!supabase?.auth?.mfa?.getAuthenticatorAssuranceLevel) {
+    console.error("Supabase MFA assurance check is not available.");
+    return false;
+  }
+
+  const { data, error } =
+    await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+  if (error) {
+    console.error("Error checking HR MFA assurance level:", error.message);
+    return false;
+  }
+
+  return data?.currentLevel === "aal2";
+}
+
   /* =========================================================
      Flexible role matching
      ---------------------------------------------------------
@@ -308,12 +342,21 @@
       }
     }
 
-    if (!roleMatches(expectedRole, profile.role)) {
-      redirectToRoleDashboard(profile.role);
-      return null;
-    }
+if (!roleMatches(expectedRole, profile.role)) {
+  redirectToRoleDashboard(profile.role);
+  return null;
+}
 
-    return { session, profile };
+// HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
+// Role match alone is not enough for HR. HR must have an AAL2 session.
+// If the user only has password-level authentication, sign them out and
+// return them to login so the MFA flow can run properly.
+if (!(await hasRequiredHrMfaAssurance(profile))) {
+  await logoutUser("hr-mfa-required");
+  return null;
+}
+
+return { session, profile };
   }
 
   async function protectPage(expectedRole = null) {
