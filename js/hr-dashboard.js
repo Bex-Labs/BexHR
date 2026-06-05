@@ -9671,19 +9671,73 @@ function escapeBatchEmployeeCsvCell(value) {
 // Employee Number is intentionally excluded because the system already
 // generates employee numbers safely when employee profiles are created.
 function downloadBatchEmployeeCsvImportTemplate() {
+  // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A
+  // Keep the batch employee CSV aligned with the direct employee biodata
+  // fields saved by the manual Create Employee Profile form.
+  // Employee Number remains excluded because the system generates it safely.
+  // Repeatable sub-records such as address, next of kin, education, and
+  // dependants are handled separately in Step 1B because they require the
+  // saved employee_id after insert.
   const headers = [
     "First Name",
     "Middle Name",
     "Last Name",
     "Work Email",
+    "Personal Email",
     "Phone Number",
+    "Alternative Phone Number",
+    "Date Of Birth",
+    "Gender",
+    "Marital Status",
+    "Nationality",
+    "State Of Origin",
+    "Local Government Area",
+    "Town",
+    "Means Of Identification",
+    "Identification Document Number",
+    "Identification Issue State",
+    "NIN",
     "Department",
     "Job Title",
     "Line Manager",
     "Approver Email",
     "Employment Date",
+    "Exit Date",
+    "HMO Provider",
+    "HMO Plan",
+    "HMO Number",
     "Status",
     "System Role",
+
+    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
+    // Child biodata fields. These are saved after the employee row exists,
+    // because child tables require the created employee_id.
+    "Current Address Line 1",
+    "Current City",
+    "Current State Region",
+    "Current Country",
+    "Current Postal Code",
+    "Permanent Address Line 1",
+    "Permanent City",
+    "Permanent State Region",
+    "Permanent Country",
+    "Permanent Postal Code",
+    "Next Of Kin Full Name",
+    "Next Of Kin Relationship",
+    "Next Of Kin Phone Number",
+    "Next Of Kin Email",
+    "Next Of Kin Address",
+    "Education Institution",
+    "Education Qualification",
+    "Education Field Of Study",
+    "Education Graduation Year",
+    "Education Status",
+    "Highest Qualification",
+    "Dependant Full Name",
+    "Dependant Relationship",
+    "Dependant Date Of Birth",
+    "Dependant Phone Number",
+    "Dependant Coverage Type",
   ];
 
   const csvContent = headers
@@ -9779,23 +9833,340 @@ async function findExistingBatchEmployeeEmails(workEmails = []) {
 // HRP-EMPNUM - tenant_id is now required so batch imports are scoped to the
 // correct company, matching the behaviour of the single-employee create form.
 function buildBatchEmployeeInsertPayload(employee = {}, employeeNumber = "", tenantId = "") {
+  // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A
+  // Save the same direct employees-table biodata fields used by the manual
+  // Create Employee Profile form. This keeps batch-created records from
+  // becoming incomplete compared with manually-created employee records.
   return {
     first_name: String(employee.first_name || "").trim(),
     middle_name: String(employee.middle_name || "").trim() || null,
     last_name: String(employee.last_name || "").trim(),
+
     work_email: String(employee.work_email || "").trim().toLowerCase(),
+    personal_email: String(employee.personal_email || "").trim().toLowerCase() || null,
+
     phone_number: String(employee.phone_number || "").trim() || null,
+    alternative_phone_number:
+      String(employee.alternative_phone_number || "").trim() || null,
+
+    date_of_birth: employee.date_of_birth || null,
+    gender: String(employee.gender || "").trim() || null,
+    marital_status: String(employee.marital_status || "").trim() || null,
+    nationality: String(employee.nationality || "").trim() || null,
+
+    state_of_origin: String(employee.state_of_origin || "").trim() || null,
+    local_government_area:
+      String(employee.local_government_area || "").trim() || null,
+    town: String(employee.town || "").trim() || null,
+
+    means_of_identification:
+      String(employee.means_of_identification || "").trim() || null,
+    identification_document_number:
+      String(employee.identification_document_number || "").trim() || null,
+    identification_issue_state:
+      String(employee.identification_issue_state || "").trim() || null,
+    nin: String(employee.nin || "").trim() || null,
+
     department: String(employee.department || "").trim(),
     job_title: String(employee.job_title || "").trim(),
     line_manager: String(employee.line_manager || "").trim() || null,
     employment_date: employee.employment_date || null,
-    approver_email: String(employee.approver_email || "").trim().toLowerCase() || null,
+    exit_date: employee.exit_date || null,
+
+    hmo_provider: String(employee.hmo_provider || "").trim() || null,
+    hmo_plan: String(employee.hmo_plan || "").trim() || null,
+    hmo_number: String(employee.hmo_number || "").trim() || null,
+
+    approver_email:
+      String(employee.approver_email || "").trim().toLowerCase() || null,
+
     employee_number: String(employeeNumber || "").trim(),
     status: normalizeText(employee.status || "active") || "active",
-    system_role: String(employee.system_role || "").trim() || null,
-    // HRP-EMPNUM - Tenant-scope the batch row so RLS and data segmentation
-    // treat it identically to an employee created via the single-create form.
+
+    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A-FIX 1
+    // Save standard dashboard roles in the same lowercase format used by
+    // the manual employee form. Existing mixed-case records are still handled
+    // by the edit-mode normalisation above.
+    system_role:
+      normaliseEmployeeSystemRoleForForm(employee.system_role) || null,
+
+    // HRP-EMPNUM / HRP-80
+    // Tenant-scope the batch row so RLS and data segmentation treat it
+    // identically to an employee created via the single-create form.
     tenant_id: String(tenantId || "").trim() || null,
+  };
+}
+
+// SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
+// After the batch employee insert succeeds, load the created employee IDs by
+// work email, then insert optional child biodata rows into the correct tables.
+// This avoids using Supabase insert().select("*"), which older RLS setups may block.
+async function loadCreatedBatchEmployeeRowsByEmail(workEmails = [], tenantId = "") {
+  const emails = Array.from(
+    new Set(
+      workEmails
+        .map((email) => String(email || "").trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+
+  if (!emails.length) return [];
+
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from("employees")
+    .select("id, work_email")
+    .eq("tenant_id", tenantId)
+    .in("work_email", emails);
+
+  if (error) {
+    throw new Error(error.message || "Created employees could not be reloaded for child biodata save.");
+  }
+
+  return Array.isArray(data) ? data : [];
+}
+
+function buildBatchEmployeeChildBiodataRows(employee = {}, employeeId = "", tenantId = "") {
+  const employeeKey = String(employeeId || "").trim();
+  const tenantKey = String(tenantId || "").trim();
+  const auditUserId = state.currentUser?.id || null;
+
+  const addressRows = [];
+  const nextOfKinRows = [];
+  const educationRows = [];
+  const dependantRows = [];
+
+  if (!employeeKey || !tenantKey) {
+    return {
+      addressRows,
+      nextOfKinRows,
+      educationRows,
+      dependantRows,
+    };
+  }
+
+  if (
+    hasBatchEmployeeCsvAnyValue([
+      employee.current_address_line_1,
+      employee.current_city,
+      employee.current_state_region,
+      employee.current_country,
+      employee.current_postal_code,
+    ])
+  ) {
+    addressRows.push({
+      employee_id: employeeKey,
+      tenant_id: tenantKey,
+      address_type: "Current",
+      address_line_1: String(employee.current_address_line_1 || "").trim(),
+      address_line_2: null,
+      city: String(employee.current_city || "").trim() || null,
+      state_region: String(employee.current_state_region || "").trim() || null,
+      country: String(employee.current_country || "").trim() || "Nigeria",
+      postal_code: String(employee.current_postal_code || "").trim() || null,
+      is_primary: true,
+      status: "Active",
+      created_by: auditUserId,
+      updated_by: auditUserId,
+    });
+  }
+
+  if (
+    hasBatchEmployeeCsvAnyValue([
+      employee.permanent_address_line_1,
+      employee.permanent_city,
+      employee.permanent_state_region,
+      employee.permanent_country,
+      employee.permanent_postal_code,
+    ])
+  ) {
+    addressRows.push({
+      employee_id: employeeKey,
+      tenant_id: tenantKey,
+      address_type: "Permanent",
+      address_line_1: String(employee.permanent_address_line_1 || "").trim(),
+      address_line_2: null,
+      city: String(employee.permanent_city || "").trim() || null,
+      state_region: String(employee.permanent_state_region || "").trim() || null,
+      country: String(employee.permanent_country || "").trim() || "Nigeria",
+      postal_code: String(employee.permanent_postal_code || "").trim() || null,
+      is_primary: false,
+      status: "Active",
+      created_by: auditUserId,
+      updated_by: auditUserId,
+    });
+  }
+
+  if (
+    hasBatchEmployeeCsvAnyValue([
+      employee.next_of_kin_full_name,
+      employee.next_of_kin_relationship,
+      employee.next_of_kin_phone_number,
+      employee.next_of_kin_email,
+      employee.next_of_kin_address,
+    ])
+  ) {
+    nextOfKinRows.push({
+      employee_id: employeeKey,
+      tenant_id: tenantKey,
+      full_name: String(employee.next_of_kin_full_name || "").trim(),
+      relationship: String(employee.next_of_kin_relationship || "").trim(),
+      phone_number: String(employee.next_of_kin_phone_number || "").trim(),
+      email: String(employee.next_of_kin_email || "").trim().toLowerCase() || null,
+      address: String(employee.next_of_kin_address || "").trim() || null,
+      is_primary: true,
+      status: "Active",
+      created_by: auditUserId,
+      updated_by: auditUserId,
+    });
+  }
+
+  if (
+    hasBatchEmployeeCsvAnyValue([
+      employee.education_institution,
+      employee.education_qualification,
+      employee.education_field_of_study,
+      employee.education_graduation_year,
+      employee.education_status,
+    ])
+  ) {
+    educationRows.push({
+      employee_id: employeeKey,
+      tenant_id: tenantKey,
+      institution_name: String(employee.education_institution || "").trim(),
+      qualification: String(employee.education_qualification || "").trim(),
+      field_of_study: String(employee.education_field_of_study || "").trim() || null,
+      graduation_year: employee.education_graduation_year || null,
+      education_status: String(employee.education_status || "").trim() || "Completed",
+      is_highest_qualification: Boolean(employee.is_highest_qualification),
+      created_by: auditUserId,
+      updated_by: auditUserId,
+    });
+  }
+
+  if (
+    hasBatchEmployeeCsvAnyValue([
+      employee.dependant_full_name,
+      employee.dependant_relationship,
+      employee.dependant_date_of_birth,
+      employee.dependant_phone_number,
+      employee.dependant_coverage_type,
+    ])
+  ) {
+    dependantRows.push({
+      employee_id: employeeKey,
+      tenant_id: tenantKey,
+      full_name: String(employee.dependant_full_name || "").trim(),
+      relationship: String(employee.dependant_relationship || "").trim(),
+      date_of_birth: employee.dependant_date_of_birth || null,
+      phone_number: String(employee.dependant_phone_number || "").trim() || null,
+      coverage_type: String(employee.dependant_coverage_type || "").trim(),
+      status: "Active",
+      created_by: auditUserId,
+      updated_by: auditUserId,
+    });
+  }
+
+  return {
+    addressRows,
+    nextOfKinRows,
+    educationRows,
+    dependantRows,
+  };
+}
+
+async function insertBatchEmployeeChildRows(tableName, rows = []) {
+  if (!rows.length) return 0;
+
+  const supabase = getSupabaseClient();
+
+  const { error } = await supabase
+    .from(tableName)
+    .insert(rows);
+
+  if (error) {
+    throw new Error(error.message || `${tableName} rows could not be saved.`);
+  }
+
+  return rows.length;
+}
+
+async function saveBatchEmployeeChildBiodataForCreatedEmployees(preparedRows = [], tenantId = "") {
+  const createdEmployees = await loadCreatedBatchEmployeeRowsByEmail(
+    preparedRows.map((employee) => employee.work_email),
+    tenantId,
+  );
+
+  const createdEmployeeByEmail = new Map(
+    createdEmployees.map((employee) => [
+      String(employee.work_email || "").trim().toLowerCase(),
+      String(employee.id || "").trim(),
+    ]),
+  );
+
+  const missingCreatedEmployees = preparedRows.filter((employee) => {
+    const email = String(employee.work_email || "").trim().toLowerCase();
+    return !createdEmployeeByEmail.has(email);
+  });
+
+  if (missingCreatedEmployees.length) {
+    throw new Error(
+      `Child biodata could not be saved because ${missingCreatedEmployees.length} created employee record(s) could not be reloaded.`,
+    );
+  }
+
+  const allAddressRows = [];
+  const allNextOfKinRows = [];
+  const allEducationRows = [];
+  const allDependantRows = [];
+
+  preparedRows.forEach((employee) => {
+    const email = String(employee.work_email || "").trim().toLowerCase();
+    const employeeId = createdEmployeeByEmail.get(email);
+
+    const childRows = buildBatchEmployeeChildBiodataRows(
+      employee,
+      employeeId,
+      tenantId,
+    );
+
+    allAddressRows.push(...childRows.addressRows);
+    allNextOfKinRows.push(...childRows.nextOfKinRows);
+    allEducationRows.push(...childRows.educationRows);
+    allDependantRows.push(...childRows.dependantRows);
+  });
+
+  const savedAddressRows = await insertBatchEmployeeChildRows(
+    "employee_addresses",
+    allAddressRows,
+  );
+
+  const savedNextOfKinRows = await insertBatchEmployeeChildRows(
+    "employee_next_of_kin",
+    allNextOfKinRows,
+  );
+
+  const savedEducationRows = await insertBatchEmployeeChildRows(
+    "employee_education_records",
+    allEducationRows,
+  );
+
+  const savedDependantRows = await insertBatchEmployeeChildRows(
+    "employee_dependants",
+    allDependantRows,
+  );
+
+  return {
+    addressRows: savedAddressRows,
+    nextOfKinRows: savedNextOfKinRows,
+    educationRows: savedEducationRows,
+    dependantRows: savedDependantRows,
+    totalRows:
+      savedAddressRows +
+      savedNextOfKinRows +
+      savedEducationRows +
+      savedDependantRows,
   };
 }
 
@@ -9878,6 +10249,29 @@ async function handleBatchEmployeeSubmit() {
 
     const createdCount = rowsToInsert.length;
 
+    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
+    // Child biodata cannot be inserted until the employees exist.
+    // Save it after employee creation and before clearing the reviewed batch.
+    let childBiodataSummary = {
+      addressRows: 0,
+      nextOfKinRows: 0,
+      educationRows: 0,
+      dependantRows: 0,
+      totalRows: 0,
+    };
+
+    let childBiodataWarning = "";
+
+    try {
+      childBiodataSummary = await saveBatchEmployeeChildBiodataForCreatedEmployees(
+        preparedRows,
+        batchTenantId,
+      );
+    } catch (childError) {
+      console.error("Batch employee child biodata save failed:", childError);
+      childBiodataWarning = String(childError?.message || "").trim();
+    }
+
     // Clear prepared rows after successful save so HR cannot accidentally
     // click Create Employees again for the same CSV batch.
     state.batchEmployeePreparedRows = [];
@@ -9912,6 +10306,17 @@ async function handleBatchEmployeeSubmit() {
         <div class="small">
           ${createdCount} employee profile(s) were created successfully.
         </div>
+        <div class="small text-secondary mt-1">
+          Child biodata saved:
+          ${childBiodataSummary.addressRows} address row(s),
+          ${childBiodataSummary.nextOfKinRows} next of kin row(s),
+          ${childBiodataSummary.educationRows} education row(s),
+          ${childBiodataSummary.dependantRows} dependant row(s).
+        </div>
+        ${childBiodataWarning
+          ? `<div class="small text-warning mt-1">Some child biodata could not be saved: ${escapeHtml(childBiodataWarning)}</div>`
+          : ""
+        }
       `;
     }
 
@@ -9920,8 +10325,10 @@ async function handleBatchEmployeeSubmit() {
     await refreshEmployeeWorkspace();
 
     showPageAlert(
-      "success",
-      `${createdCount} employee profile(s) were created successfully from the CSV import.`,
+      childBiodataWarning ? "warning" : "success",
+      childBiodataWarning
+        ? `${createdCount} employee profile(s) were created, but some child biodata could not be saved: ${escapeHtml(childBiodataWarning)}`
+        : `${createdCount} employee profile(s) and ${childBiodataSummary.totalRows} child biodata row(s) were created successfully from the CSV import.`,
     );
 
     showDashboardToast(
@@ -10178,6 +10585,34 @@ function normalizeBatchEmployeeCsvDate(value = "") {
   return "";
 }
 
+// SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
+// CSV child sections are optional. Once HR starts a child section,
+// the same minimum required fields as the manual biodata form must be present.
+function hasBatchEmployeeCsvAnyValue(values = []) {
+  return values.some((value) => Boolean(String(value || "").trim()));
+}
+
+function normalizeBatchEmployeeCsvBoolean(value = "") {
+  const normalizedValue = normalizeText(value);
+
+  return ["yes", "y", "true", "1", "highest"].includes(normalizedValue);
+}
+
+function normalizeBatchEmployeeCsvGraduationYear(value = "") {
+  const rawValue = String(value || "").trim();
+
+  if (!rawValue) return null;
+
+  if (!/^\d{4}$/.test(rawValue)) {
+    return null;
+  }
+
+  const year = Number(rawValue);
+  const currentYear = new Date().getFullYear() + 1;
+
+  return year >= 1900 && year <= currentYear ? year : null;
+}
+
 // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1F-4
 // Build a stable employee name key for duplicate checks.
 // HR standard for this create-only batch import:
@@ -10197,21 +10632,102 @@ function buildBatchEmployeeNameDuplicateKey(employee = {}) {
 // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1F-4
 // seenNames is used to stop duplicate employees inside the same CSV file.
 function buildBatchEmployeePreparedRowFromCsv(row = [], headerMap, rowNumber, seenEmails, seenNames) {
+  // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A
+  // Parse the same direct employee biodata fields that the manual employee
+  // form saves to the employees table.
   const firstName = getBatchEmployeeCsvCell(row, headerMap, "First Name");
   const middleName = getBatchEmployeeCsvCell(row, headerMap, "Middle Name");
   const lastName = getBatchEmployeeCsvCell(row, headerMap, "Last Name");
+
   const workEmail = getBatchEmployeeCsvCell(row, headerMap, "Work Email").toLowerCase();
+  const personalEmail = getBatchEmployeeCsvCell(row, headerMap, "Personal Email").toLowerCase();
+
   const phoneNumber = getBatchEmployeeCsvCell(row, headerMap, "Phone Number");
+  const alternativePhoneNumber = getBatchEmployeeCsvCell(row, headerMap, "Alternative Phone Number");
+
+  const rawDateOfBirth = getBatchEmployeeCsvCell(row, headerMap, "Date Of Birth");
+  const dateOfBirth = normalizeBatchEmployeeCsvDate(rawDateOfBirth);
+
+  const gender = getBatchEmployeeCsvCell(row, headerMap, "Gender");
+  const maritalStatus = getBatchEmployeeCsvCell(row, headerMap, "Marital Status");
+  const nationality = getBatchEmployeeCsvCell(row, headerMap, "Nationality");
+
+  const stateOfOrigin = getBatchEmployeeCsvCell(row, headerMap, "State Of Origin");
+  const localGovernmentArea = getBatchEmployeeCsvCell(row, headerMap, "Local Government Area");
+  const town = getBatchEmployeeCsvCell(row, headerMap, "Town");
+
+  const meansOfIdentification = getBatchEmployeeCsvCell(row, headerMap, "Means Of Identification");
+
+  // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A
+  // Match manual form behaviour:
+  // - National ID / NIN Slip uses NIN as the main identifier.
+  // - Passport, Driver's Licence, Voter's Card/PVC, Birth Certificate, and
+  //   Other can use Identification Document Number.
+  const identificationDocumentNumber =
+    isIdentificationDocumentNumberRequiredForMeansOfIdentification(meansOfIdentification)
+      ? getBatchEmployeeCsvCell(row, headerMap, "Identification Document Number")
+      : "";
+
+  const identificationIssueState = getBatchEmployeeCsvCell(row, headerMap, "Identification Issue State");
+  const nin = meansOfIdentification
+    ? getBatchEmployeeCsvCell(row, headerMap, "NIN")
+    : "";
+
   const department = getBatchEmployeeCsvCell(row, headerMap, "Department");
   const jobTitle = getBatchEmployeeCsvCell(row, headerMap, "Job Title");
   const lineManager = getBatchEmployeeCsvCell(row, headerMap, "Line Manager");
   const approverEmail = getBatchEmployeeCsvCell(row, headerMap, "Approver Email").toLowerCase();
-  // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1F-1
-  // Normalise spreadsheet-style dates before validation and save.
+
   const rawEmploymentDate = getBatchEmployeeCsvCell(row, headerMap, "Employment Date");
   const employmentDate = normalizeBatchEmployeeCsvDate(rawEmploymentDate);
+
+  const rawExitDate = getBatchEmployeeCsvCell(row, headerMap, "Exit Date");
+  const exitDate = normalizeBatchEmployeeCsvDate(rawExitDate);
+
+  const hmoProvider = getBatchEmployeeCsvCell(row, headerMap, "HMO Provider");
+  const hmoPlan = getBatchEmployeeCsvCell(row, headerMap, "HMO Plan");
+  const hmoNumber = getBatchEmployeeCsvCell(row, headerMap, "HMO Number");
+
   const status = getBatchEmployeeCsvCell(row, headerMap, "Status") || "Active";
   const systemRole = getBatchEmployeeCsvCell(row, headerMap, "System Role");
+
+  // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
+  // Optional child biodata sections. These are not saved to employees directly.
+  // They are saved into their own child tables after the employee row is created.
+  const currentAddressLine1 = getBatchEmployeeCsvCell(row, headerMap, "Current Address Line 1");
+  const currentCity = getBatchEmployeeCsvCell(row, headerMap, "Current City");
+  const currentStateRegion = getBatchEmployeeCsvCell(row, headerMap, "Current State Region");
+  const currentCountry = getBatchEmployeeCsvCell(row, headerMap, "Current Country");
+  const currentPostalCode = getBatchEmployeeCsvCell(row, headerMap, "Current Postal Code");
+
+  const permanentAddressLine1 = getBatchEmployeeCsvCell(row, headerMap, "Permanent Address Line 1");
+  const permanentCity = getBatchEmployeeCsvCell(row, headerMap, "Permanent City");
+  const permanentStateRegion = getBatchEmployeeCsvCell(row, headerMap, "Permanent State Region");
+  const permanentCountry = getBatchEmployeeCsvCell(row, headerMap, "Permanent Country");
+  const permanentPostalCode = getBatchEmployeeCsvCell(row, headerMap, "Permanent Postal Code");
+
+  const nextOfKinFullName = getBatchEmployeeCsvCell(row, headerMap, "Next Of Kin Full Name");
+  const nextOfKinRelationship = getBatchEmployeeCsvCell(row, headerMap, "Next Of Kin Relationship");
+  const nextOfKinPhoneNumber = getBatchEmployeeCsvCell(row, headerMap, "Next Of Kin Phone Number");
+  const nextOfKinEmail = getBatchEmployeeCsvCell(row, headerMap, "Next Of Kin Email").toLowerCase();
+  const nextOfKinAddress = getBatchEmployeeCsvCell(row, headerMap, "Next Of Kin Address");
+
+  const educationInstitution = getBatchEmployeeCsvCell(row, headerMap, "Education Institution");
+  const educationQualification = getBatchEmployeeCsvCell(row, headerMap, "Education Qualification");
+  const educationFieldOfStudy = getBatchEmployeeCsvCell(row, headerMap, "Education Field Of Study");
+  const rawEducationGraduationYear = getBatchEmployeeCsvCell(row, headerMap, "Education Graduation Year");
+  const educationGraduationYear = normalizeBatchEmployeeCsvGraduationYear(rawEducationGraduationYear);
+  const educationStatus = getBatchEmployeeCsvCell(row, headerMap, "Education Status") || "Completed";
+  const isHighestQualification = normalizeBatchEmployeeCsvBoolean(
+    getBatchEmployeeCsvCell(row, headerMap, "Highest Qualification"),
+  );
+
+  const dependantFullName = getBatchEmployeeCsvCell(row, headerMap, "Dependant Full Name");
+  const dependantRelationship = getBatchEmployeeCsvCell(row, headerMap, "Dependant Relationship");
+  const rawDependantDateOfBirth = getBatchEmployeeCsvCell(row, headerMap, "Dependant Date Of Birth");
+  const dependantDateOfBirth = normalizeBatchEmployeeCsvDate(rawDependantDateOfBirth);
+  const dependantPhoneNumber = getBatchEmployeeCsvCell(row, headerMap, "Dependant Phone Number");
+  const dependantCoverageType = getBatchEmployeeCsvCell(row, headerMap, "Dependant Coverage Type");
 
   const missingFields = [];
 
@@ -10222,10 +10738,22 @@ function buildBatchEmployeePreparedRowFromCsv(row = [], headerMap, rowNumber, se
   if (!jobTitle) missingFields.push("Job Title");
   if (!employmentDate) missingFields.push("Valid Employment Date");
 
+  if (rawDateOfBirth && !dateOfBirth) {
+    missingFields.push("Valid Date Of Birth");
+  }
+
+  if (rawExitDate && !exitDate) {
+    missingFields.push("Valid Exit Date");
+  }
+
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   if (workEmail && !emailPattern.test(workEmail)) {
     missingFields.push("Valid Work Email");
+  }
+
+  if (personalEmail && !emailPattern.test(personalEmail)) {
+    missingFields.push("Valid Personal Email");
   }
 
   if (approverEmail && !emailPattern.test(approverEmail)) {
@@ -10247,11 +10775,7 @@ function buildBatchEmployeePreparedRowFromCsv(row = [], headerMap, rowNumber, se
   if (workEmail) {
     seenEmails.add(normalizeText(workEmail));
   }
-  // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1F-4
-  // Also block likely duplicate employees by exact full name.
-  // This keeps the system HR-standard: one employee profile per person.
-  // If an existing employee needs updating, that should be handled by a
-  // separate Batch Update flow, not by creating another profile.
+
   const incomingNameKey = buildBatchEmployeeNameDuplicateKey({
     first_name: firstName,
     middle_name: middleName,
@@ -10273,6 +10797,83 @@ function buildBatchEmployeePreparedRowFromCsv(row = [], headerMap, rowNumber, se
   if (incomingNameKey) {
     seenNames.add(incomingNameKey);
   }
+
+  // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
+  // Validate optional child sections only when HR started them in the CSV.
+  const currentAddressStarted = hasBatchEmployeeCsvAnyValue([
+    currentAddressLine1,
+    currentCity,
+    currentStateRegion,
+    currentCountry,
+    currentPostalCode,
+  ]);
+
+  const permanentAddressStarted = hasBatchEmployeeCsvAnyValue([
+    permanentAddressLine1,
+    permanentCity,
+    permanentStateRegion,
+    permanentCountry,
+    permanentPostalCode,
+  ]);
+
+  const nextOfKinStarted = hasBatchEmployeeCsvAnyValue([
+    nextOfKinFullName,
+    nextOfKinRelationship,
+    nextOfKinPhoneNumber,
+    nextOfKinEmail,
+    nextOfKinAddress,
+  ]);
+
+  const educationStarted = hasBatchEmployeeCsvAnyValue([
+    educationInstitution,
+    educationQualification,
+    educationFieldOfStudy,
+    rawEducationGraduationYear,
+    educationStatus,
+  ]);
+
+  const dependantStarted = hasBatchEmployeeCsvAnyValue([
+    dependantFullName,
+    dependantRelationship,
+    rawDependantDateOfBirth,
+    dependantPhoneNumber,
+    dependantCoverageType,
+  ]);
+
+  if (currentAddressStarted && !currentAddressLine1) {
+    missingFields.push("Current Address Line 1");
+  }
+
+  if (permanentAddressStarted && !permanentAddressLine1) {
+    missingFields.push("Permanent Address Line 1");
+  }
+
+  if (nextOfKinStarted) {
+    if (!nextOfKinFullName) missingFields.push("Next Of Kin Full Name");
+    if (!nextOfKinRelationship) missingFields.push("Next Of Kin Relationship");
+    if (!nextOfKinPhoneNumber) missingFields.push("Next Of Kin Phone Number");
+    if (nextOfKinEmail && !emailPattern.test(nextOfKinEmail)) {
+      missingFields.push("Valid Next Of Kin Email");
+    }
+  }
+
+  if (educationStarted) {
+    if (!educationInstitution) missingFields.push("Education Institution");
+    if (!educationQualification) missingFields.push("Education Qualification");
+    if (rawEducationGraduationYear && !educationGraduationYear) {
+      missingFields.push("Valid Education Graduation Year");
+    }
+  }
+
+  if (dependantStarted) {
+    if (!dependantFullName) missingFields.push("Dependant Full Name");
+    if (!dependantRelationship) missingFields.push("Dependant Relationship");
+    if (!dependantCoverageType) missingFields.push("Dependant Coverage Type");
+    if (rawDependantDateOfBirth && !dependantDateOfBirth) {
+      missingFields.push("Valid Dependant Date Of Birth");
+    }
+  }
+
   if (missingFields.length) {
     return {
       skipped: true,
@@ -10286,18 +10887,77 @@ function buildBatchEmployeePreparedRowFromCsv(row = [], headerMap, rowNumber, se
   return {
     skipped: false,
     rowNumber,
+
     first_name: firstName,
     middle_name: middleName || null,
     last_name: lastName,
+
     work_email: workEmail,
+    personal_email: personalEmail || null,
     phone_number: phoneNumber || null,
+    alternative_phone_number: alternativePhoneNumber || null,
+
+    date_of_birth: dateOfBirth || null,
+    gender: gender || null,
+    marital_status: maritalStatus || null,
+    nationality: nationality || null,
+
+    state_of_origin: stateOfOrigin || null,
+    local_government_area: localGovernmentArea || null,
+    town: town || null,
+
+    means_of_identification: meansOfIdentification || null,
+    identification_document_number: identificationDocumentNumber || null,
+    identification_issue_state: identificationIssueState || null,
+    nin: nin || null,
+
     department,
     job_title: jobTitle,
     line_manager: lineManager || null,
     approver_email: approverEmail || null,
+
     employment_date: employmentDate,
+    exit_date: exitDate || null,
+
+    hmo_provider: hmoProvider || null,
+    hmo_plan: hmoPlan || null,
+    hmo_number: hmoNumber || null,
+
     status,
     system_role: systemRole || null,
+
+    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
+    // Keep child biodata on the prepared row until the employee_id exists.
+    current_address_line_1: currentAddressLine1 || null,
+    current_city: currentCity || null,
+    current_state_region: currentStateRegion || null,
+    current_country: currentCountry || null,
+    current_postal_code: currentPostalCode || null,
+
+    permanent_address_line_1: permanentAddressLine1 || null,
+    permanent_city: permanentCity || null,
+    permanent_state_region: permanentStateRegion || null,
+    permanent_country: permanentCountry || null,
+    permanent_postal_code: permanentPostalCode || null,
+
+    next_of_kin_full_name: nextOfKinFullName || null,
+    next_of_kin_relationship: nextOfKinRelationship || null,
+    next_of_kin_phone_number: nextOfKinPhoneNumber || null,
+    next_of_kin_email: nextOfKinEmail || null,
+    next_of_kin_address: nextOfKinAddress || null,
+
+    education_institution: educationInstitution || null,
+    education_qualification: educationQualification || null,
+    education_field_of_study: educationFieldOfStudy || null,
+    education_graduation_year: educationGraduationYear || null,
+    education_status: educationStatus || "Completed",
+    is_highest_qualification: isHighestQualification,
+
+    dependant_full_name: dependantFullName || null,
+    dependant_relationship: dependantRelationship || null,
+    dependant_date_of_birth: dependantDateOfBirth || null,
+    dependant_phone_number: dependantPhoneNumber || null,
+    dependant_coverage_type: dependantCoverageType || null,
   };
 }
 
@@ -10329,19 +10989,75 @@ function renderImportedBatchEmployeeCsvRows(preparedRows = [], skippedRows = [])
       .filter(Boolean)
       .join(" ");
 
+    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A
+    // Keep the review table compact but show enough biodata so HR can spot
+    // obvious CSV issues before creating employee records.
+    const biodataSummary = [
+      employee.gender,
+      employee.date_of_birth ? `DOB: ${formatDate(employee.date_of_birth)}` : "",
+      employee.nationality,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" • ");
+
+    const originSummary = [
+      employee.state_of_origin,
+      employee.local_government_area,
+      employee.town,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" / ");
+
+    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
+    // Show which child biodata sections will be created after the employee row.
+    const childBiodataSummary = [
+      employee.current_address_line_1 ? "Current address" : "",
+      employee.permanent_address_line_1 ? "Permanent address" : "",
+      employee.next_of_kin_full_name ? "Next of kin" : "",
+      employee.education_institution ? "Education" : "",
+      employee.dependant_full_name ? "Dependant" : "",
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" • ");
+
     const rowElement = document.createElement("tr");
 
     rowElement.innerHTML = `
       <td>
         <div class="fw-semibold">${escapeHtml(fullName)}</div>
         <div class="text-secondary small">CSV row ${escapeHtml(employee.rowNumber)}</div>
+        ${biodataSummary
+          ? `<div class="text-secondary small mt-1">${escapeHtml(biodataSummary)}</div>`
+          : ""
+        }
       </td>
 
-      <td class="text-break">${escapeHtml(employee.work_email)}</td>
+      <td class="text-break">
+        <div>${escapeHtml(employee.work_email)}</div>
+        ${employee.personal_email
+          ? `<div class="text-secondary small">${escapeHtml(employee.personal_email)}</div>`
+          : ""
+        }
+      </td>
 
-      <td>${escapeHtml(employee.department || "--")}</td>
+      <td>
+        <div>${escapeHtml(employee.department || "--")}</div>
+        ${originSummary
+          ? `<div class="text-secondary small">${escapeHtml(originSummary)}</div>`
+          : ""
+        }
+      </td>
 
-      <td>${escapeHtml(employee.job_title || "--")}</td>
+      <td>
+        <div>${escapeHtml(employee.job_title || "--")}</div>
+        ${employee.phone_number
+          ? `<div class="text-secondary small">${escapeHtml(employee.phone_number)}</div>`
+          : ""
+        }
+      </td>
 
 <!-- HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1F-2
      Show the same friendly date style used by the employee list.
@@ -10357,6 +11073,10 @@ function renderImportedBatchEmployeeCsvRows(preparedRows = [], skippedRows = [])
       <td>
         <span class="badge text-bg-success">Ready</span>
         <div class="text-secondary small mt-1">Ready to create</div>
+        ${childBiodataSummary
+          ? `<div class="text-secondary small mt-1">${escapeHtml(childBiodataSummary)}</div>`
+          : ""
+        }
       </td>
     `;
 
@@ -13384,7 +14104,12 @@ function showHrRoleAssignmentConfirmationWarning() {
 // Standard roles select the dropdown option.
 // Unknown/custom saved roles show in the custom role input.
 function setEmployeeSystemRoleFieldValue(roleValue = "") {
-  const role = String(roleValue || "").trim();
+  // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A-FIX 1
+  // System Role is stored as a dashboard-access value. Batch imports may
+  // provide "Employee", "Manager", or "HR", while the form option values are
+  // lowercase. Normalise before matching so edit mode reflects saved data.
+  const rawRole = String(roleValue || "").trim();
+  const role = normaliseEmployeeSystemRoleForForm(rawRole);
 
   if (!state.dom.systemRole) return;
 
@@ -13403,7 +14128,7 @@ function setEmployeeSystemRoleFieldValue(roleValue = "") {
     if (state.dom.customSystemRole) state.dom.customSystemRole.value = "";
   } else {
     state.dom.systemRole.value = "custom";
-    if (state.dom.customSystemRole) state.dom.customSystemRole.value = role;
+    if (state.dom.customSystemRole) state.dom.customSystemRole.value = rawRole || role;
   }
 
   syncCustomSystemRoleVisibility();
@@ -20651,6 +21376,40 @@ function setSelectValueIfPresent(field, preferredValue, fallbacks = []) {
   field.value = actualOption;
 }
 
+// SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A-FIX 1
+// Batch CSV values can come in as "male", "Male", "EMPLOYEE", "Employee",
+// etc. Manual form dropdowns need the exact option value. These helpers
+// keep edit mode resilient without changing saved audit/data history.
+function setEmployeeFormSelectValueByNormalisedOption(field, preferredValue, fallbacks = []) {
+  setSelectValueIfPresent(field, preferredValue, fallbacks);
+}
+
+function normaliseEmployeeSystemRoleForForm(roleValue = "") {
+  const role = normaliseHrBusinessRole(roleValue);
+
+  if (role === "employee") return "employee";
+  if (role === "manager") return "manager";
+  if (role === "hr" || role === "hr_manager") return "hr";
+
+  return String(roleValue || "").trim();
+}
+
+function normaliseEmployeeGenderForForm(genderValue = "") {
+  const gender = normalizeText(genderValue);
+
+  if (gender === "male") return "Male";
+  if (gender === "female") return "Female";
+  if (gender === "other") return "Other";
+  if (
+    gender === "prefer not to say" ||
+    gender === "prefer_not_to_say"
+  ) {
+    return "Prefer not to say";
+  }
+
+  return String(genderValue || "").trim();
+}
+
 // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1F
 // Department-specific job title list.
 // Every department currently available in the employee form has at least
@@ -25767,8 +26526,22 @@ function enterEmployeeEditMode(employee) {
   // Load saved single-value biodata fields when HR edits an employee profile.
   if (state.dom.personalEmail) state.dom.personalEmail.value = employee.personal_email || "";
   if (state.dom.dateOfBirth) state.dom.dateOfBirth.value = employee.date_of_birth || "";
-  if (state.dom.gender) state.dom.gender.value = employee.gender || "";
-  if (state.dom.maritalStatus) state.dom.maritalStatus.value = employee.marital_status || "";
+
+  // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A-FIX 1
+  // Batch-created employees may store dropdown values with different casing.
+  // Edit mode must select the matching form option instead of leaving the
+  // field blank just because the saved value is "male" or "Employee".
+  setEmployeeFormSelectValueByNormalisedOption(
+    state.dom.gender,
+    normaliseEmployeeGenderForForm(employee.gender),
+    [employee.gender],
+  );
+
+  setEmployeeFormSelectValueByNormalisedOption(
+    state.dom.maritalStatus,
+    employee.marital_status,
+  );
+
   if (state.dom.nationality) state.dom.nationality.value = employee.nationality || "";
 
   // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 4A
