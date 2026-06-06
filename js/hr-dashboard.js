@@ -25801,18 +25801,20 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
     typeof isCurrentTenantAlpatechWorkspace === "function" &&
     isCurrentTenantAlpatechWorkspace();
 
+  // EMPLOYEE FILLED FORM SLIP CLEANUP - STEP 1A
+  // Keep the branded document header as document identity only.
+  // Employee name and employee number appear once in Core Details below,
+  // so the read-only slip does not repeat the same employee information.
   const employeeFilledFormHeaderHtml = isAlpatechEmployeeFilledForm
     ? buildAlpatechDocumentBrandHeaderHtml({
       documentLabel: "Read-only HR Employee Record",
       rightTitle: "Employee Record",
-      rightLine1: fullName,
-      rightLine2: employee.employee_number ? `Employee No: ${employee.employee_number}` : "",
     })
     : "";
 
-  const employeeFilledFormOrganizationLabel = isAlpatechEmployeeFilledForm
-    ? "Employer Details"
-    : "Employee Filled Form";
+  // EMPLOYEE FILLED FORM SLIP CLEANUP - STEP 1A
+  // This section is company/workspace context, not a second employee summary.
+  const employeeFilledFormOrganizationLabel = "Company Details";
 
   const employeeFilledFormOrganizationNameHtml = isAlpatechEmployeeFilledForm
     ? ""
@@ -25835,44 +25837,31 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
   return `
     ${employeeFilledFormHeaderHtml}
 
-    <!-- HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1C
-         Company identity header mirrors the payslip design source of truth.
-         The company name comes from Admin-controlled company identity, while
-         contact/address/registration details come from saved organization setup. -->
+    <!-- EMPLOYEE FILLED FORM SLIP CLEANUP - STEP 1A
+         Company context is shown once as company details only.
+         Employee identity is kept in Core Details to avoid duplicate cards. -->
     <section class="border rounded-4 p-3 p-lg-4 bg-white mb-4">
-      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
-        <div>
-          <!-- ALPATECH DOCUMENT BRANDING - STEP 2C
-               Non-Alpatech tenants keep the normal company heading.
-               Alpatech uses the branded header above, so this body area
-               becomes employer details instead of repeating the brand name. -->
-          <div class="small text-secondary text-uppercase fw-semibold mb-1">
-            ${escapeHtml(employeeFilledFormOrganizationLabel)}
-          </div>
-          ${employeeFilledFormOrganizationNameHtml}
-          ${employeeFilledFormEmployerFallbackHtml}
-          <div class="text-secondary small">
-            ${organizationAddress ? escapeHtml(organizationAddress) : "Company address not set"}
-          </div>
-          ${organizationContactLines.length
+      <div>
+        <div class="small text-secondary text-uppercase fw-semibold mb-1">
+          ${escapeHtml(employeeFilledFormOrganizationLabel)}
+        </div>
+
+        ${employeeFilledFormOrganizationNameHtml}
+        ${employeeFilledFormEmployerFallbackHtml}
+
+        <div class="text-secondary small">
+          ${organizationAddress ? escapeHtml(organizationAddress) : "Company address not set"}
+        </div>
+
+        ${organizationContactLines.length
       ? `<div class="text-secondary small mt-1">${escapeHtml(organizationContactLines.join(" • "))}</div>`
       : ""
     }
-          ${organizationRegistrationLines.length
+
+        ${organizationRegistrationLines.length
       ? `<div class="text-secondary small mt-1">${escapeHtml(organizationRegistrationLines.join(" • "))}</div>`
       : ""
     }
-        </div>
-
-        <div class="text-lg-end">
-          <div class="fw-semibold">${escapeHtml(fullName)}</div>
-          <div class="text-secondary small">
-            Employee No: ${escapeHtml(employee.employee_number || "--")}
-          </div>
-          <span class="badge rounded-pill text-bg-light border mt-2">
-            Read-only HR record
-          </span>
-        </div>
       </div>
     </section>
 
@@ -32213,12 +32202,10 @@ function renderPayslipPreview(payrollRecord) {
     })
     : "";
 
-  // ALPATECH PAYSLIP BRANDING - STEP 2B
-  // Avoid repeating "Alpatech" twice on the payslip.
-  // For Alpatech, the company identity is already shown in the branded
-  // letterhead, so the body card should show employer details only.
+  // EMPLOYEE FILLED FORM SLIP CLEANUP - STEP 1A
+  // Keep document wording consistent: use Company Details, not Employer Details.
   const payslipOrganizationLabel = isAlpatechPayslip
-    ? "Employer Details"
+    ? "Company Details"
     : "Organization";
 
   const payslipOrganizationNameHtml = isAlpatechPayslip
