@@ -413,6 +413,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       toggleEmployeeManagerRole(employeeId);
     };
 
+    // HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 3A
+// Expose the HR-only recovery invite action used by the People table.
+// The button is rendered only for employee records that are not Linked.
+window.hrSendEmployeeLoginInvite = async (employeeId) => {
+  await sendEmployeeLoginInviteForExistingRecord(employeeId);
+};
+
     // EMPLOYEE BIODATA COMPLETION - STEP 6C-4C
     // Expose staged education remove action for the Saved Education Records list.
     window.hrRemoveEmployeeEducationRecord = (recordIndex) => {
@@ -23926,6 +23933,177 @@ function getEmployeeAccountLinkage(employee) {
   };
 }
 
+// HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 3A
+// Build a safe display name for resend/recovery invite messaging.
+// This is kept separate from employee form logic so the table recovery action
+// does not depend on the edit form being open.
+function getEmployeeLoginInviteDisplayName(employee = {}) {
+  return [
+    employee.first_name,
+    employee.middle_name,
+    employee.last_name,
+  ]
+    .map((namePart) => String(namePart || "").trim())
+    .filter(Boolean)
+    .join(" ") ||
+    String(employee.work_email || "").trim() ||
+    "this employee";
+}
+
+// HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 3A
+// Recovery path for existing employee records showing No User Account / Profile Found.
+//
+// HR/product behaviour:
+// - Uses the existing employee record.
+// - Preserves the employee number, payroll records, documents, bank details,
+//   leave data, and biodata.
+// - Calls the secure invite-employee-login Edge Function.
+// - Reloads profiles and employees immediately so the Account badge changes
+//   to Linked without HR manually refreshing the page.
+async function sendEmployeeLoginInviteForExistingRecord(employeeId) {
+  const employeeKey = String(employeeId || "").trim();
+
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const employee = (state.employees || []).find(
+    (record) => String(record.id || "").trim() === employeeKey,
+  );
+
+  if (!employee) {
+    showPageAlert(
+      "warning",
+      "The selected employee record could not be found. Please refresh People records and try again.",
+    );
+
+    showDashboardToast(
+      "warning",
+      "Employee not found",
+      "Refresh People records, then try sending the login invite again.",
+    );
+
+    return;
+  }
+
+  const accountLinkage = getEmployeeAccountLinkage(employee);
+
+  if (accountLinkage.code === "linked") {
+    showPageAlert(
+      "info",
+      `${escapeHtml(getEmployeeLoginInviteDisplayName(employee))} is already linked to a login account.`,
+    );
+
+    showDashboardToast(
+      "info",
+      "Account already linked",
+      "No login invite recovery is required for this employee.",
+    );
+
+    return;
+  }
+
+  const workEmail = String(employee.work_email || "").trim().toLowerCase();
+
+  if (!workEmail) {
+    showPageAlert(
+      "warning",
+      "This employee does not have a work email. Add a valid work email before sending a login invite.",
+    );
+
+    showDashboardToast(
+      "warning",
+      "Work email required",
+      "A login invite cannot be sent without an employee work email.",
+    );
+
+    return;
+  }
+
+  const inviteButton = document.querySelector(
+    `[data-hr-login-invite-btn="${employeeKey}"]`,
+  );
+
+  const originalButtonHtml = inviteButton?.innerHTML || "";
+
+  try {
+    if (inviteButton) {
+      inviteButton.disabled = true;
+      inviteButton.innerHTML = `
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      `;
+    }
+
+    const displayName = getEmployeeLoginInviteDisplayName(employee);
+
+    showPageAlert(
+      "info",
+      `Sending login invite for <strong>${escapeHtml(displayName)}</strong>...`,
+    );
+
+    const loginResult = await provisionEmployeeLogin({
+      workEmail,
+      fullName: displayName,
+      companyName:
+        getCurrentTenantContext()?.companyName ||
+        getAdminControlledOrganizationName?.() ||
+        "",
+    });
+
+    if (!loginResult.success) {
+      const message =
+        loginResult.error ||
+        "Login invite could not be sent or linked. Please try again.";
+
+      showPageAlert("warning", escapeHtml(message));
+
+      showDashboardToast(
+        "warning",
+        "Login invite not completed",
+        message,
+      );
+
+      return;
+    }
+
+    await loadAuthProfilesForLinkage();
+    await loadEmployees();
+
+    const successMessage = loginResult.existingLogin
+      ? `Existing login account found for <strong>${escapeHtml(workEmail)}</strong>. Employee account is now linked.`
+      : `Login invite sent to <strong>${escapeHtml(workEmail)}</strong>. Employee account is now linked.`;
+
+    showPageAlert("success", successMessage);
+
+    showDashboardToast(
+      "success",
+      loginResult.existingLogin
+        ? "Existing account linked"
+        : "Login invite sent",
+      "Employee account is now linked.",
+    );
+  } catch (error) {
+    console.error("Error sending employee login invite recovery:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "Login invite recovery failed unexpectedly.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Login invite failed",
+      error.message || "The login invite could not be completed.",
+    );
+  } finally {
+    if (inviteButton?.isConnected && originalButtonHtml) {
+      inviteButton.disabled = false;
+      inviteButton.innerHTML = originalButtonHtml;
+    }
+  }
+}
+
 // MANAGER ROLE ASSIGNMENT
 // Look up the current profile role for an employee from the cached auth profiles.
 // Matches first by auth_user_id (direct link), then by work email as fallback.
@@ -26159,10 +26337,20 @@ function renderEmployeeRecords(employees) {
     // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
     // Read-only People roles can view employee rows but cannot edit employees
     // or change dashboard role assignment from the quick action.
-    const canMaintainPeople = canCurrentUserMaintainPeopleData();
-    const quickRoleAction = getManagerQuickActionState(employee);
-    const canToggleRole = canMaintainPeople && quickRoleAction.canUseQuickAction;
-    const isManager = quickRoleAction.isQuickManager;
+const canMaintainPeople = canCurrentUserMaintainPeopleData();
+const quickRoleAction = getManagerQuickActionState(employee);
+const canToggleRole = canMaintainPeople && quickRoleAction.canUseQuickAction;
+const isManager = quickRoleAction.isQuickManager;
+
+// HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 3A
+// Show the recovery invite action only when HR can maintain People records
+// and the employee is not already linked to a real login account.
+// This covers both:
+// - No User Account
+// - Profile Found but employee.user_id not linked
+// It never shows for Account = Linked.
+const shouldShowLoginInviteRecovery =
+  canMaintainPeople && accountLinkage.code !== "linked";
 
     const row = document.createElement("tr");
 
@@ -26282,6 +26470,24 @@ function renderEmployeeRecords(employees) {
 >
             <i class="bi bi-pencil-square"></i>
           </button>
+
+          ${shouldShowLoginInviteRecovery
+  ? `
+<!-- HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 3A
+     HR-only recovery action for employee records that saved successfully
+     but did not get a linked login/profile account. -->
+<button
+  type="button"
+  class="btn btn-sm btn-outline-warning"
+  title="Send or resend employee login invite"
+  aria-label="Send or resend employee login invite"
+  data-hr-login-invite-btn="${safeEmployeeId}"
+  onclick="window.hrSendEmployeeLoginInvite('${safeEmployeeId}')"
+>
+  <i class="bi bi-envelope-plus"></i>
+</button>
+`
+  : ""}
 
 <!-- MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1F
      Quick action is only for Employee <-> Manager.
