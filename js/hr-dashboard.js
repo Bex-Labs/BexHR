@@ -508,7 +508,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       startOrganizationJobTitleEdit(jobTitleId);
     };
 
-        // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+    // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
     // Expose only the HR-side approved leave cancellation modal opener.
     // The backend RPC still enforces HR-only cancellation and balance restoration.
     window.hrOpenApprovedLeaveCancellation = (leaveRequestId) => {
@@ -8309,7 +8309,7 @@ function bindEvents() {
     hideDashboardToast();
   });
 
-    // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
+  // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
   // HR cancellation modal controls. This does not expose cancellation to managers.
   state.dom.closeHrCancelApprovedLeaveModalBtn?.addEventListener("click", () => {
     closeHrApprovedLeaveCancellationModal();
@@ -11030,33 +11030,33 @@ function renderImportedBatchEmployeeCsvRows(preparedRows = [], skippedRows = [])
         <div class="fw-semibold">${escapeHtml(fullName)}</div>
         <div class="text-secondary small">CSV row ${escapeHtml(employee.rowNumber)}</div>
         ${biodataSummary
-          ? `<div class="text-secondary small mt-1">${escapeHtml(biodataSummary)}</div>`
-          : ""
-        }
+        ? `<div class="text-secondary small mt-1">${escapeHtml(biodataSummary)}</div>`
+        : ""
+      }
       </td>
 
       <td class="text-break">
         <div>${escapeHtml(employee.work_email)}</div>
         ${employee.personal_email
-          ? `<div class="text-secondary small">${escapeHtml(employee.personal_email)}</div>`
-          : ""
-        }
+        ? `<div class="text-secondary small">${escapeHtml(employee.personal_email)}</div>`
+        : ""
+      }
       </td>
 
       <td>
         <div>${escapeHtml(employee.department || "--")}</div>
         ${originSummary
-          ? `<div class="text-secondary small">${escapeHtml(originSummary)}</div>`
-          : ""
-        }
+        ? `<div class="text-secondary small">${escapeHtml(originSummary)}</div>`
+        : ""
+      }
       </td>
 
       <td>
         <div>${escapeHtml(employee.job_title || "--")}</div>
         ${employee.phone_number
-          ? `<div class="text-secondary small">${escapeHtml(employee.phone_number)}</div>`
-          : ""
-        }
+        ? `<div class="text-secondary small">${escapeHtml(employee.phone_number)}</div>`
+        : ""
+      }
       </td>
 
 <!-- HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1F-2
@@ -11074,9 +11074,9 @@ function renderImportedBatchEmployeeCsvRows(preparedRows = [], skippedRows = [])
         <span class="badge text-bg-success">Ready</span>
         <div class="text-secondary small mt-1">Ready to create</div>
         ${childBiodataSummary
-          ? `<div class="text-secondary small mt-1">${escapeHtml(childBiodataSummary)}</div>`
-          : ""
-        }
+        ? `<div class="text-secondary small mt-1">${escapeHtml(childBiodataSummary)}</div>`
+        : ""
+      }
       </td>
     `;
 
@@ -15397,11 +15397,10 @@ function renderRecentManagerLeaveDecisions(records = []) {
 
       <td class="px-3 py-3 align-top">
         <div class="fw-semibold small lh-sm">${escapeHtml(decisionDateLabel)}</div>
-        ${
-          decisionTimeLabel
-            ? `<div class="text-secondary small lh-sm mt-1">${escapeHtml(decisionTimeLabel)}</div>`
-            : ""
-        }
+        ${decisionTimeLabel
+        ? `<div class="text-secondary small lh-sm mt-1">${escapeHtml(decisionTimeLabel)}</div>`
+        : ""
+      }
       </td>
 
       <!-- HR APPROVED LEAVE CANCELLATION UI - STEP 1A
@@ -28036,13 +28035,14 @@ function getExistingEmployeeLoginMessage(workEmail = "") {
     : "Existing login account found. Employee record was saved and linked. Ask the employee to sign in or use password reset if they cannot access the account.";
 }
 
-// EMPLOYEE LOGIN PROVISIONING
-// Send a login invite to the new employee's work email via the
-// invite-employee-login Supabase edge function.
+// HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 2C
+// Send or repair employee login access through the secure Edge Function.
 //
-// Returns { success: boolean, existingLogin: boolean, error: string } regardless
-// of outcome so the caller can surface a soft warning without aborting the
-// employee save.
+// HR/product behaviour:
+// - A successful new invite is treated as linked account access.
+// - A successfully repaired existing login is also treated as linked account access.
+// - A failed backend response is not falsely shown as Linked.
+// - The employee record itself is still preserved if the login invite fails.
 async function provisionEmployeeLogin({ workEmail, fullName, companyName }) {
   try {
     const supabase = getSupabaseClient();
@@ -28056,7 +28056,13 @@ async function provisionEmployeeLogin({ workEmail, fullName, companyName }) {
     };
 
     if (!payload.workEmail) {
-      return { success: false, error: "No work email address to send an invite to." };
+      return {
+        success: false,
+        existingLogin: false,
+        inviteSent: false,
+        linkedEmployeeCount: 0,
+        error: "No work email address to send an invite to.",
+      };
     }
 
     const { data, error } = await supabase.functions.invoke(
@@ -28067,72 +28073,62 @@ async function provisionEmployeeLogin({ workEmail, fullName, companyName }) {
     if (error) {
       const detail = await getEmployeeLoginProvisionErrorDetail(error);
 
-      if (isExistingEmployeeLoginConflict(detail)) {
-        console.info("Employee login already exists; treating as linked existing account.", detail);
-
-        return {
-          success: false,
-          existingLogin: true,
-          error: getExistingEmployeeLoginMessage(payload.workEmail),
-        };
-      }
-
       const message =
         String(detail.message || "").trim() ||
-        "Login invite could not be sent.";
+        "Login invite could not be sent or linked.";
 
       console.error("provisionEmployeeLogin edge function error:", error);
 
       return {
         success: false,
         existingLogin: false,
+        inviteSent: false,
+        linkedEmployeeCount: 0,
         error: message,
       };
     }
 
     if (data?.success === false || data?.error) {
-      const detail = {
-        status: Number(data?.status || data?.statusCode || 0),
-        message: String(
-          data?.message ||
-          data?.error ||
-          "Login invite could not be sent.",
-        ).trim(),
-      };
-
-      if (isExistingEmployeeLoginConflict(detail)) {
-        return {
-          success: false,
-          existingLogin: true,
-          error: getExistingEmployeeLoginMessage(payload.workEmail),
-        };
-      }
+      const message = String(
+        data?.message ||
+        data?.error ||
+        "Login invite could not be sent or linked.",
+      ).trim();
 
       return {
         success: false,
         existingLogin: false,
-        error: detail.message,
+        inviteSent: false,
+        linkedEmployeeCount: 0,
+        error: message,
+      };
+    }
+
+    const linkedEmployeeCount = Number(data?.linkedEmployeeCount);
+    const hasLinkedEmployeeCount = Number.isFinite(linkedEmployeeCount);
+
+    if (hasLinkedEmployeeCount && linkedEmployeeCount < 1) {
+      return {
+        success: false,
+        existingLogin: Boolean(data?.existingAccount),
+        inviteSent: Boolean(data?.inviteSent),
+        linkedEmployeeCount,
+        error:
+          "Login invite succeeded, but no matching employee record was linked. Use Send / Resend Login Invite after reviewing the employee work email.",
       };
     }
 
     return {
       success: true,
-      existingLogin: false,
+      existingLogin: Boolean(data?.existingAccount),
+      inviteSent: data?.inviteSent !== false,
+      linkedEmployeeCount: hasLinkedEmployeeCount ? linkedEmployeeCount : 0,
+      profileId: String(data?.profileId || data?.userId || "").trim(),
+      profileEmail: String(data?.profileEmail || payload.workEmail || "").trim(),
       error: "",
     };
   } catch (err) {
-    // EMPLOYEE LOGIN INVITE WORDING - STEP 2A FINAL
-    // Keep existing-login conflicts out of the failed-invite wording even when
-    // the Supabase client throws before returning a normal Edge Function result.
     const detail = await getEmployeeLoginProvisionErrorDetail(err);
-
-    if (isExistingEmployeeLoginConflict(detail)) {
-      return {
-        success: false,
-        existingLogin: true,
-        error: getExistingEmployeeLoginMessage(workEmail),
-      };
-    }
 
     const message =
       String(detail.message || err?.message || "").trim() ||
@@ -28143,6 +28139,8 @@ async function provisionEmployeeLogin({ workEmail, fullName, companyName }) {
     return {
       success: false,
       existingLogin: false,
+      inviteSent: false,
+      linkedEmployeeCount: 0,
       error: message,
     };
   }
@@ -28566,13 +28564,13 @@ async function handleEmployeeSave() {
       ).trim();
     }
 
-    // EMPLOYEE LOGIN PROVISIONING
-    // Send a login invite to the new employee's work email immediately after
-    // the employee record is created. Edit mode does not re-send an invite.
-    // If the invite fails the employee record is already saved — HR sees a
-    // warning in the success message rather than a hard error.
+    // HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 2C
+    // Track invite delivery separately from account linkage.
+    // This lets the UI say "Linked" immediately for both new invites and
+    // repaired existing-login accounts.
     let loginInviteSent = false;
     let loginInviteExistingAccount = false;
+    let loginInviteLinked = false;
     let loginInviteError = "";
 
     if (!isEditMode) {
@@ -28582,8 +28580,19 @@ async function handleEmployeeSave() {
         companyName: getCurrentTenantContext()?.companyName || "",
       });
 
-      loginInviteSent = loginResult.success;
-      loginInviteExistingAccount = Boolean(loginResult.existingLogin);
+      // HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 2C
+      // A successful Edge Function response means the employee login account
+      // was either invited and linked, or an existing account was found and linked.
+      loginInviteLinked = Boolean(loginResult.success);
+      loginInviteSent = Boolean(
+        loginResult.success &&
+        loginResult.inviteSent !== false &&
+        !loginResult.existingLogin,
+      );
+      loginInviteExistingAccount = Boolean(
+        loginResult.success &&
+        loginResult.existingLogin,
+      );
       loginInviteError = loginResult.error || "";
     }
 
@@ -28679,7 +28688,7 @@ async function handleEmployeeSave() {
       // has a Supabase Auth login, so HR should ask the employee to sign in or
       // use password reset instead of seeing "invite failed".
       const inviteNote = loginInviteSent
-        ? ` A login invite has been sent to <strong>${escapeHtml(employeePayload.work_email)}</strong>.`
+        ? ` A login invite has been sent to <strong>${escapeHtml(employeePayload.work_email)}</strong> and the employee account is now linked.`
         : loginInviteExistingAccount
           ? ` <span class="text-success">Existing login account found for <strong>${escapeHtml(employeePayload.work_email)}</strong>. Employee record was saved and linked. Ask the employee to sign in or use password reset if needed.</span>`
           : ` <span class="text-warning">⚠ Login invite could not be sent${loginInviteError ? ` — ${escapeHtml(loginInviteError)}` : ""}. You can resend it from the employee's profile.</span>`;
@@ -28702,8 +28711,7 @@ async function handleEmployeeSave() {
       roleSyncResult?.profile_found === false
         ? "warning"
         : (
-          loginInviteSent ||
-            loginInviteExistingAccount ||
+          loginInviteLinked ||
             isEditMode
             ? "success"
             : "warning"
@@ -28737,17 +28745,17 @@ async function handleEmployeeSave() {
           ? `Employee updated for ${savedEmployeeName}. Login dashboard routing will apply after a login profile exists.`
           : `Employee updated for ${savedEmployeeName}. Dashboard routing has been synced.`,
       );
-    } else if (loginInviteSent) {
-      showDashboardToast(
-        "success",
-        "Employee created",
-        `Login invite sent to ${employeePayload.work_email}.`,
-      );
-    } else if (loginInviteExistingAccount) {
+} else if (loginInviteSent) {
+  showDashboardToast(
+    "success",
+    "Employee created and linked",
+    `Login invite sent to ${employeePayload.work_email}. Account is linked.`,
+  );
+} else if (loginInviteExistingAccount) {
       showDashboardToast(
         "success",
         "Employee linked to existing login",
-        `Employee saved. Existing login found for ${employeePayload.work_email}; ask the employee to sign in or use password reset if needed.`,
+        `Employee saved and linked to the existing login for ${employeePayload.work_email}. Ask the employee to sign in or use password reset if needed.`,
       );
     } else {
       showDashboardToast(

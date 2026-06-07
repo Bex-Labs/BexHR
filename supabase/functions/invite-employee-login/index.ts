@@ -53,6 +53,136 @@ function jsonResponse(status: number, body: Record<string, unknown>) {
 function cleanText(value: unknown): string {
   return String(value ?? "").trim();
 }
+// HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 2A
+// Finds an existing Supabase Auth user by email when inviteUserByEmail reports
+// that the account already exists. Supabase Admin does not provide a direct
+// getUserByEmail method here, so this uses bounded pagination instead of
+// exposing service-role access to the browser.
+async function findAuthUserByEmail(supabaseAdmin: any, workEmail: string) {
+  const targetEmail = cleanText(workEmail).toLowerCase();
+
+  if (!targetEmail) return null;
+
+  for (let page = 1; page <= 20; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage: 1000,
+    });
+
+    if (error) {
+      console.error("Auth user lookup by email failed:", error);
+      return null;
+    }
+
+    const users = Array.isArray(data?.users) ? data.users : [];
+    const matchedUser = users.find(
+      (user: any) => cleanText(user?.email).toLowerCase() === targetEmail,
+    );
+
+    if (matchedUser) return matchedUser;
+    if (users.length < 1000) break;
+  }
+
+  return null;
+}
+
+// HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 2A
+// One safe backend path for both new invites and recovery repairs.
+// It creates/repairs the profile row and links the existing employee record
+// to the Auth user. This prevents "employee saved but No User Account" states.
+async function upsertProfileAndLinkEmployeeAccount({
+  supabaseAdmin,
+  userId,
+  workEmail,
+  fullName,
+  tenantId,
+}: {
+  supabaseAdmin: any;
+  userId: string;
+  workEmail: string;
+  fullName: string;
+  tenantId: string | null;
+}) {
+  const cleanUserId = cleanText(userId);
+  const cleanEmail = cleanText(workEmail).toLowerCase();
+  const cleanFullName = cleanText(fullName);
+
+  if (!cleanUserId || !cleanEmail) {
+    return {
+      success: false,
+      linkedEmployeeCount: 0,
+      error: "User account or work email was missing during employee login linkage.",
+    };
+  }
+
+  const { data: existingProfile, error: existingProfileError } =
+    await supabaseAdmin
+      .from("profiles")
+      .select("id, email, full_name, role, tenant_id")
+      .eq("id", cleanUserId)
+      .maybeSingle();
+
+  if (existingProfileError) {
+    console.warn("Existing profile lookup failed before profile repair:", existingProfileError);
+  }
+
+  const profilePayload: Record<string, unknown> = {
+    id: cleanUserId,
+    email: cleanEmail,
+    full_name: cleanText(existingProfile?.full_name) || cleanFullName,
+    role: cleanText(existingProfile?.role) || "employee",
+    is_active: true,
+    must_change_password: false,
+  };
+
+  if (tenantId) {
+    profilePayload.tenant_id = tenantId;
+  } else if (existingProfile?.tenant_id) {
+    profilePayload.tenant_id = existingProfile.tenant_id;
+  }
+
+  const { error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .upsert(profilePayload, { onConflict: "id" });
+
+  if (profileError) {
+    console.error("Profile upsert/repair error after invite:", profileError);
+
+    return {
+      success: false,
+      linkedEmployeeCount: 0,
+      error: "Login account exists, but the profile row could not be created or repaired.",
+    };
+  }
+
+  let employeeLinkQuery = supabaseAdmin
+    .from("employees")
+    .update({ user_id: cleanUserId })
+    .eq("work_email", cleanEmail);
+
+  if (tenantId) {
+    employeeLinkQuery = employeeLinkQuery.eq("tenant_id", tenantId);
+  }
+
+  const { data: linkedEmployees, error: employeeLinkError } =
+    await employeeLinkQuery.select("id, work_email, user_id");
+
+  if (employeeLinkError) {
+    console.error("Employee account linkage error after invite:", employeeLinkError);
+
+    return {
+      success: false,
+      linkedEmployeeCount: 0,
+      error: "Login account exists, but the employee record could not be linked to it.",
+    };
+  }
+
+  return {
+    success: true,
+    linkedEmployeeCount: Array.isArray(linkedEmployees) ? linkedEmployees.length : 0,
+    error: "",
+  };
+}
 
 serve(async (req: Request) => {
   // Handle CORS preflight
@@ -144,8 +274,9 @@ serve(async (req: Request) => {
       ? `${appOrigin}/reset-password.html?mode=first-time`
       : "/reset-password.html?mode=first-time";
 
-    // Send the invite. The Supabase admin API creates the auth.users row
-    // immediately and dispatches the invite email with a secure magic link.
+    // HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 2A
+    // Send the invite. If the Auth account already exists, repair/link the
+    // existing account instead of returning a dead-end 409 to the HR dashboard.
     const { data: inviteData, error: inviteError } =
       await supabaseAdmin.auth.admin.inviteUserByEmail(workEmail, {
         data: {
@@ -157,93 +288,95 @@ serve(async (req: Request) => {
       });
 
     if (inviteError) {
-      // Surface a clear message if the email is already registered.
       const message = cleanText(inviteError.message).toLowerCase();
-      if (
+      const isExistingAccount =
         message.includes("already registered") ||
         message.includes("already been registered") ||
-        message.includes("user already exists")
-      ) {
+        message.includes("user already exists");
+
+      if (!isExistingAccount) {
+        console.error("inviteUserByEmail error:", inviteError);
+        throw new Error(inviteError.message || "Invite could not be sent.");
+      }
+
+      const existingAuthUser = await findAuthUserByEmail(
+        supabaseAdmin,
+        workEmail,
+      );
+
+      if (!existingAuthUser?.id) {
         return jsonResponse(409, {
-          error: `A login account already exists for ${workEmail}. No new invite was sent.`,
+          success: false,
+          existingAccount: true,
+          inviteSent: false,
+          error:
+            `A login account already exists for ${workEmail}, but it could not be found for employee linkage. Please review the Auth user manually.`,
         });
       }
 
-      console.error("inviteUserByEmail error:", inviteError);
-      throw new Error(inviteError.message || "Invite could not be sent.");
+      const linkResult = await upsertProfileAndLinkEmployeeAccount({
+        supabaseAdmin,
+        userId: existingAuthUser.id,
+        workEmail,
+        fullName,
+        tenantId,
+      });
+
+      if (!linkResult.success || linkResult.linkedEmployeeCount < 1) {
+        return jsonResponse(500, {
+          success: false,
+          existingAccount: true,
+          inviteSent: false,
+          error:
+            linkResult.error ||
+            "Existing login account was found, but no matching employee record was linked.",
+        });
+      }
+
+      return jsonResponse(200, {
+        success: true,
+        existingAccount: true,
+        inviteSent: false,
+        linkedEmployeeCount: linkResult.linkedEmployeeCount,
+        message:
+          `Existing login account found for ${workEmail}. Employee record has been linked. Ask the employee to sign in or use password reset if needed.`,
+      });
     }
 
-    // The auth user now exists. Create the profiles row immediately so
-    // role-based access is ready when the employee completes their setup.
-    const newUserId = inviteData?.user?.id;
+    const newUserId = cleanText(inviteData?.user?.id);
 
-    if (newUserId) {
-      const { error: profileError } = await supabaseAdmin
-        .from("profiles")
-        .upsert(
-          {
-            id: newUserId,
-            email: workEmail,
-            full_name: fullName,
-            role: "employee",
-            ...(tenantId ? { tenant_id: tenantId } : {}),
-            is_active: true,
-            must_change_password: false,
-          },
-          { onConflict: "id" },
-        );
+    if (!newUserId) {
+      return jsonResponse(500, {
+        success: false,
+        inviteSent: true,
+        error:
+          "Login invite was created, but Supabase did not return the Auth user ID needed to link the employee record.",
+      });
+    }
 
-      if (profileError) {
-        // The invite was sent successfully. Log the profile error but do not
-        // fail the request — HR will see the account appear once the employee
-        // completes setup and the auth trigger fires.
-        console.error("Profile upsert error after invite:", profileError);
-      }
+    const linkResult = await upsertProfileAndLinkEmployeeAccount({
+      supabaseAdmin,
+      userId: newUserId,
+      workEmail,
+      fullName,
+      tenantId,
+    });
 
-      // EMPLOYEE LOGIN PROVISIONING HARDENING - STEP 2A
-      // Description:
-      // Link the HR employee master record to the Supabase Auth user created by
-      // the invite. This is required because the Employee Dashboard resolves the
-      // signed-in employee through employees.user_id, and HR shows account linkage
-      // from the employee record.
-      let employeeLinkQuery = supabaseAdmin
-        .from("employees")
-        .update({
-          user_id: newUserId,
-        })
-        .eq("work_email", workEmail);
-
-      // Description:
-      // If a tenant/company was provided by the HR dashboard, restrict the link
-      // update to that company workspace so the same email cannot accidentally
-      // link across another tenant.
-      if (tenantId) {
-        employeeLinkQuery = employeeLinkQuery.eq("tenant_id", tenantId);
-      }
-
-      const { data: linkedEmployees, error: employeeLinkError } =
-        await employeeLinkQuery.select("id, work_email, user_id");
-
-      if (employeeLinkError) {
-        console.error("Employee account linkage error after invite:", employeeLinkError);
-
-        return jsonResponse(500, {
-          error:
-            "Login invite was created, but the employee record could not be linked to the user account.",
-        });
-      }
-
-      if (!linkedEmployees || linkedEmployees.length === 0) {
-        console.warn("No matching employee record was linked after invite.", {
-          workEmail,
-          tenantId,
-          newUserId,
-        });
-      }
+    if (!linkResult.success || linkResult.linkedEmployeeCount < 1) {
+      return jsonResponse(500, {
+        success: false,
+        inviteSent: true,
+        error:
+          linkResult.error ||
+          "Login invite was created, but no matching employee record was linked.",
+      });
     }
 
     return jsonResponse(200, {
       success: true,
+      existingAccount: false,
+      inviteSent: true,
+      linkedEmployeeCount: linkResult.linkedEmployeeCount,
       message: `Login invite sent to ${workEmail}.`,
     });
   } catch (error) {
