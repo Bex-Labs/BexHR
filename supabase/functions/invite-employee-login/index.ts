@@ -333,13 +333,38 @@ serve(async (req: Request) => {
         });
       }
 
+      // HR EMPLOYEE LOGIN RESEND - STEP 15B
+      // Existing Auth users cannot receive a new invite via inviteUserByEmail.
+      // Send a secure password setup/recovery email instead, after HR permission
+      // and employee linkage have already been validated server-side.
+      const { error: recoveryEmailError } =
+        await supabaseAdmin.auth.resetPasswordForEmail(workEmail, {
+          redirectTo,
+        });
+
+      if (recoveryEmailError) {
+        console.error("Existing employee login recovery email error:", recoveryEmailError);
+
+        return jsonResponse(500, {
+          success: false,
+          existingAccount: true,
+          inviteSent: false,
+          recoveryEmailSent: false,
+          linkedEmployeeCount: linkResult.linkedEmployeeCount,
+          error:
+            recoveryEmailError.message ||
+            `Existing login account was linked, but a new setup link could not be sent to ${workEmail}.`,
+        });
+      }
+
       return jsonResponse(200, {
         success: true,
         existingAccount: true,
         inviteSent: false,
+        recoveryEmailSent: true,
         linkedEmployeeCount: linkResult.linkedEmployeeCount,
         message:
-          `Existing login account found for ${workEmail}. Employee record has been linked. Ask the employee to sign in or use password reset if needed.`,
+          `Existing login account found for ${workEmail}. A fresh setup link has been sent.`,
       });
     }
 
