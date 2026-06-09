@@ -1,4 +1,4 @@
-document.addEventListener("DOMContentLoaded", function () {
+﻿document.addEventListener("DOMContentLoaded", function () {
   const loginForm = document.getElementById("loginForm");
 
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1F-2
@@ -29,17 +29,27 @@ document.addEventListener("DOMContentLoaded", function () {
   let pendingHrMfaLoginContext = null;
   let pendingHrMfaFactorId = "";
   let pendingHrMfaMode = "";
-  const SUPABASE_URL = "https://zoeglonuxkiwnaabzjqo.supabase.co";
+  const runtimeSupabaseConfig = window.BEXHR_RUNTIME_CONFIG || {};
+  // HRP-ENV - Require Vercel/runtime Supabase config so non-production deployments fail closed.
+  const SUPABASE_URL =
+    runtimeSupabaseConfig.SUPABASE_URL ||
+    "";
   const SUPABASE_PUBLISHABLE_KEY =
-    "sb_publishable_zNz3vsLoaw9ul1UmwEDAMg_YX-MxMG_";
+    runtimeSupabaseConfig.SUPABASE_PUBLISHABLE_KEY ||
+    "";
+  // HRP-ENV - Stop immediately if the deployment has not supplied browser-safe Supabase config.
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    throw new Error("Missing Supabase runtime config. Set BEXHR_SUPABASE_URL and BEXHR_SUPABASE_PUBLISHABLE_KEY for this deployment.");
+  }
 
   window.supabaseClient = window.supabase.createClient(
     SUPABASE_URL,
     SUPABASE_PUBLISHABLE_KEY,
   );
 
-  window.SUPABASE_URL = "https://zoeglonuxkiwnaabzjqo.supabase.co";
-  window.SUPABASE_ANON_KEY = "sb_publishable_zNz3vsLoaw9ul1UmwEDAMg_YX-MxMG_";
+  // HRP-ENV - Keep downstream scripts aligned with the active runtime Supabase config.
+  window.SUPABASE_URL = SUPABASE_URL;
+  window.SUPABASE_ANON_KEY = SUPABASE_PUBLISHABLE_KEY;
 
   const supabaseClient = window.supabaseClient;
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1F-4
@@ -1133,3 +1143,6 @@ if (isHrDashboardMfaRequiredRole(profile.role)) {
 
   showMessageFromQueryString();
 });
+
+
+
