@@ -223,14 +223,49 @@ serve(async (req: Request) => {
       return jsonResponse(401, { error: "Unauthorized." });
     }
 
+    // HR EMPLOYEE LOGIN RESEND - STEP 15K
     // Verify the caller has an active HR or Admin profile.
-    const { data: callerProfile, error: callerProfileError } = await supabaseAdmin
-      .from("profiles")
-      .select("role, is_active")
-      .eq("id", callerUser.id)
-      .single();
+    // Primary lookup is by verified Auth user id. Email fallback is used only from
+    // the verified JWT user object, so the browser cannot spoof caller identity.
+    const { data: callerProfileById, error: callerProfileByIdError } =
+      await supabaseAdmin
+        .from("profiles")
+        .select("id, email, role, is_active")
+        .eq("id", callerUser.id)
+        .maybeSingle();
 
-    if (callerProfileError || !callerProfile) {
+    if (callerProfileByIdError) {
+      console.error("Caller profile lookup by id failed:", callerProfileByIdError);
+
+      return jsonResponse(403, {
+        error: "Caller profile could not be validated.",
+      });
+    }
+
+    let callerProfile = callerProfileById;
+
+    const callerEmail = cleanText(callerUser.email).toLowerCase();
+
+    if (!callerProfile && callerEmail) {
+      const { data: callerProfileByEmail, error: callerProfileByEmailError } =
+        await supabaseAdmin
+          .from("profiles")
+          .select("id, email, role, is_active")
+          .eq("email", callerEmail)
+          .maybeSingle();
+
+      if (callerProfileByEmailError) {
+        console.error("Caller profile lookup by email failed:", callerProfileByEmailError);
+
+        return jsonResponse(403, {
+          error: "Caller profile could not be validated.",
+        });
+      }
+
+      callerProfile = callerProfileByEmail;
+    }
+
+    if (!callerProfile) {
       return jsonResponse(403, { error: "Caller profile not found." });
     }
 
@@ -333,13 +368,38 @@ serve(async (req: Request) => {
         });
       }
 
+      // HR EMPLOYEE LOGIN RESEND - STEP 15B
+      // Existing Auth users cannot receive a new invite via inviteUserByEmail.
+      // Send a secure password setup/recovery email instead, after HR permission
+      // and employee linkage have already been validated server-side.
+      const { error: recoveryEmailError } =
+        await supabaseAdmin.auth.resetPasswordForEmail(workEmail, {
+          redirectTo,
+        });
+
+      if (recoveryEmailError) {
+        console.error("Existing employee login recovery email error:", recoveryEmailError);
+
+        return jsonResponse(500, {
+          success: false,
+          existingAccount: true,
+          inviteSent: false,
+          recoveryEmailSent: false,
+          linkedEmployeeCount: linkResult.linkedEmployeeCount,
+          error:
+            recoveryEmailError.message ||
+            `Existing login account was linked, but a new setup link could not be sent to ${workEmail}.`,
+        });
+      }
+
       return jsonResponse(200, {
         success: true,
         existingAccount: true,
         inviteSent: false,
+        recoveryEmailSent: true,
         linkedEmployeeCount: linkResult.linkedEmployeeCount,
         message:
-          `Existing login account found for ${workEmail}. Employee record has been linked. Ask the employee to sign in or use password reset if needed.`,
+          `Existing login account found for ${workEmail}. A fresh setup link has been sent.`,
       });
     }
 

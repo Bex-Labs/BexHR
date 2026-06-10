@@ -413,12 +413,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       toggleEmployeeManagerRole(employeeId);
     };
 
-    // HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 3A
-// Expose the HR-only recovery invite action used by the People table.
-// The button is rendered only for employee records that are not Linked.
-window.hrSendEmployeeLoginInvite = async (employeeId) => {
-  await sendEmployeeLoginInviteForExistingRecord(employeeId);
-};
+    // HR EMPLOYEE LOGIN RESEND - STEP 15C
+    // Expose the HR-only secure login-link action used by the People table.
+    // The backend decides whether to send an initial invite or resend a setup/recovery link.
+    window.hrSendEmployeeLoginInvite = async (employeeId) => {
+      await sendEmployeeLoginInviteForExistingRecord(employeeId);
+    };
 
     // EMPLOYEE BIODATA COMPLETION - STEP 6C-4C
     // Expose staged education remove action for the Saved Education Records list.
@@ -23987,23 +23987,9 @@ async function sendEmployeeLoginInviteForExistingRecord(employeeId) {
     return;
   }
 
-  const accountLinkage = getEmployeeAccountLinkage(employee);
-
-  if (accountLinkage.code === "linked") {
-    showPageAlert(
-      "info",
-      `${escapeHtml(getEmployeeLoginInviteDisplayName(employee))} is already linked to a login account.`,
-    );
-
-    showDashboardToast(
-      "info",
-      "Account already linked",
-      "No login invite recovery is required for this employee.",
-    );
-
-    return;
-  }
-
+  // HR EMPLOYEE LOGIN RESEND - STEP 15C
+  // Linked employees are allowed through so HR can resend a fresh setup/recovery link.
+  // The secure backend still validates HR permission and sends the actual email.
   const workEmail = String(employee.work_email || "").trim().toLowerCase();
 
   if (!workEmail) {
@@ -24103,6 +24089,14 @@ async function sendEmployeeLoginInviteForExistingRecord(employeeId) {
     }
   }
 }
+
+// HR EMPLOYEE LOGIN RESEND - STEP 15I
+// Fallback global binding for the People table inline action.
+// This guarantees the resend/setup-link button can call the secure invite flow
+// even if the dashboard initialisation binding is interrupted by non-critical Dev data errors.
+window.hrSendEmployeeLoginInvite = async function (employeeId) {
+  await sendEmployeeLoginInviteForExistingRecord(employeeId);
+};
 
 // MANAGER ROLE ASSIGNMENT
 // Look up the current profile role for an employee from the cached auth profiles.
@@ -26337,20 +26331,17 @@ function renderEmployeeRecords(employees) {
     // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
     // Read-only People roles can view employee rows but cannot edit employees
     // or change dashboard role assignment from the quick action.
-const canMaintainPeople = canCurrentUserMaintainPeopleData();
-const quickRoleAction = getManagerQuickActionState(employee);
-const canToggleRole = canMaintainPeople && quickRoleAction.canUseQuickAction;
-const isManager = quickRoleAction.isQuickManager;
+    const canMaintainPeople = canCurrentUserMaintainPeopleData();
+    const quickRoleAction = getManagerQuickActionState(employee);
+    const canToggleRole = canMaintainPeople && quickRoleAction.canUseQuickAction;
+    const isManager = quickRoleAction.isQuickManager;
 
-// HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 3A
-// Show the recovery invite action only when HR can maintain People records
-// and the employee is not already linked to a real login account.
-// This covers both:
-// - No User Account
-// - Profile Found but employee.user_id not linked
-// It never shows for Account = Linked.
-const shouldShowLoginInviteRecovery =
-  canMaintainPeople && accountLinkage.code !== "linked";
+    // HR EMPLOYEE LOGIN RESEND - STEP 15C
+    // Show the secure login-link action to HR users whenever the employee has a work email.
+    // For unlinked records, it sends/repairs the initial invite.
+    // For linked records, it resends a fresh setup/recovery link via the backend.
+    const shouldShowLoginInviteRecovery =
+      canMaintainPeople && Boolean(String(employee.work_email || "").trim());
 
     const row = document.createElement("tr");
 
@@ -26472,10 +26463,10 @@ const shouldShowLoginInviteRecovery =
           </button>
 
           ${shouldShowLoginInviteRecovery
-  ? `
-<!-- HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 3A
-     HR-only recovery action for employee records that saved successfully
-     but did not get a linked login/profile account. -->
+            ? `
+<!-- HR EMPLOYEE LOGIN RESEND - STEP 15C
+     HR-only secure login-link action for sending an initial invite
+     or resending a fresh setup/recovery link. -->
 <button
   type="button"
   class="btn btn-sm btn-outline-warning"
@@ -26487,7 +26478,7 @@ const shouldShowLoginInviteRecovery =
   <i class="bi bi-envelope-plus"></i>
 </button>
 `
-  : ""}
+            : ""}
 
 <!-- MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1F
      Quick action is only for Employee <-> Manager.
@@ -28279,9 +28270,17 @@ async function provisionEmployeeLogin({ workEmail, fullName, companyName }) {
     if (error) {
       const detail = await getEmployeeLoginProvisionErrorDetail(error);
 
-      const message =
+      let message =
         String(detail.message || "").trim() ||
         "Login invite could not be sent or linked.";
+
+      // HR EMPLOYEE LOGIN LINK EXPIRY - STEP 3A
+      // Supabase built-in Auth email can rate-limit repeated invite/recovery emails.
+      // Show HR a clear operational message instead of the raw Edge Function error.
+      if (/rate limit/i.test(message)) {
+        message =
+          "Email sending limit reached. Please wait before resending another setup link, then try again later.";
+      }
 
       console.error("provisionEmployeeLogin edge function error:", error);
 
