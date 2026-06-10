@@ -24090,6 +24090,14 @@ async function sendEmployeeLoginInviteForExistingRecord(employeeId) {
   }
 }
 
+// HR EMPLOYEE LOGIN RESEND - STEP 15I
+// Fallback global binding for the People table inline action.
+// This guarantees the resend/setup-link button can call the secure invite flow
+// even if the dashboard initialisation binding is interrupted by non-critical Dev data errors.
+window.hrSendEmployeeLoginInvite = async function (employeeId) {
+  await sendEmployeeLoginInviteForExistingRecord(employeeId);
+};
+
 // MANAGER ROLE ASSIGNMENT
 // Look up the current profile role for an employee from the cached auth profiles.
 // Matches first by auth_user_id (direct link), then by work email as fallback.
