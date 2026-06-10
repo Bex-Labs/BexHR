@@ -28270,9 +28270,17 @@ async function provisionEmployeeLogin({ workEmail, fullName, companyName }) {
     if (error) {
       const detail = await getEmployeeLoginProvisionErrorDetail(error);
 
-      const message =
+      let message =
         String(detail.message || "").trim() ||
         "Login invite could not be sent or linked.";
+
+      // HR EMPLOYEE LOGIN LINK EXPIRY - STEP 3A
+      // Supabase built-in Auth email can rate-limit repeated invite/recovery emails.
+      // Show HR a clear operational message instead of the raw Edge Function error.
+      if (/rate limit/i.test(message)) {
+        message =
+          "Email sending limit reached. Please wait before resending another setup link, then try again later.";
+      }
 
       console.error("provisionEmployeeLogin edge function error:", error);
 
