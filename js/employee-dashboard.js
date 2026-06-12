@@ -3034,7 +3034,7 @@ function renderLeaveBalances(balances) {
     // - Progress bar showing used entitlement
     // This changes presentation only; leave balance data is not mutated.
     card.innerHTML = `
-      <div class="info-tile h-100">
+      <div class="info-tile leave-entitlement-tile h-100">
         <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
           <div>
             <div class="info-tile-label mb-1">Leave Type</div>
