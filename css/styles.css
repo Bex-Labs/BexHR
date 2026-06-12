@@ -585,6 +585,46 @@ body.alpatech-workspace .btn-outline-primary:hover {
   border-color: #0b5f95;
 }
 
+/* ALPATECH ANNUAL LEAVE BRANDING - STEP 1A
+   Tenant-scoped styling for employee leave entitlement cards only.
+   Non-Alpatech tenants keep the default BexHR info-tile styling. */
+body.alpatech-workspace .leave-entitlement-tile {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(11, 95, 149, 0.18);
+  background:
+    radial-gradient(circle at top right, rgba(11, 95, 149, 0.12), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #f7fbfd 100%);
+  box-shadow:
+    0 14px 34px rgba(11, 95, 149, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+body.alpatech-workspace .leave-entitlement-tile::before {
+  content: "";
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  top: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0b5f95 0%, #1d9bd7 100%);
+  opacity: 0.95;
+}
+
+body.alpatech-workspace .leave-entitlement-tile .info-tile-label {
+  color: #667085;
+  font-weight: 700;
+}
+
+body.alpatech-workspace .leave-entitlement-tile .info-tile-value {
+  color: #0b3558;
+}
+
+body.alpatech-workspace .leave-entitlement-tile .progress {
+  background-color: rgba(11, 95, 149, 0.12);
+}
+
 @media (min-width: 992px) {
   body.alpatech-workspace .bexhr-sidebar {
     background:
