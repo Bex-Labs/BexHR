@@ -2930,11 +2930,12 @@ async function loadEmployeeLeaveBalances() {
       entitled_days,
       used_days,
       remaining_days,
-      leave_types (
-        id,
-        code,
-        name
-      )
+leave_types (
+  id,
+  code,
+  name,
+  eligibility_rule
+)
     `);
 
   if (employeeIdentityCandidates.length === 1) {
