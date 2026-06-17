@@ -54,24 +54,39 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.adminEditTenantRecord = (tenantId) => {
       startTenantEdit(tenantId);
     };
+    // ADMIN DELETE ACTIONS - STEP 1
+    // Company delete is guarded by a Supabase RPC so Admin cannot accidentally
+    // remove a company that already has operational HR/payroll data.
+    window.adminDeleteTenantRecord = async (tenantId) => {
+      await deleteTenantRecord(tenantId);
+    };
     // ADMIN EMAIL SETUP - STEP 1D
     // Expose approved validation recipient edit action for the records table.
     window.adminEditEmailRecipientRecord = (recipientId) => {
       startAdminEmailRecipientEdit(recipientId);
     };
 
+    // ADMIN DELETE ACTIONS - STEP 1
+    // Approved validation recipients are Admin-created setup records and can be deleted.
+    window.adminDeleteEmailRecipientRecord = async (recipientId) => {
+      await deleteAdminEmailRecipientRecord(recipientId);
+    };
     // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
     // Expose user access setup edit action for the records table.
     window.adminEditProfileTenantLink = (profileId) => {
       startProfileTenantLinkEdit(profileId);
     };
-
+    // ADMIN DELETE ACTIONS - STEP 1
+    // This removes company access. It does not delete the Supabase Auth user.
+    window.adminRemoveProfileTenantAccess = async (profileId) => {
+      await removeProfileTenantAccess(profileId);
+    };
     // ADMIN PASSWORD RESET
     // Expose reset password action for the user access records table.
     window.adminResetUserPassword = (profileId) => {
       openResetPasswordModal(profileId);
     };
-        // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
+    // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
     // Expose HR MFA reset action for the user access records table.
     // This only opens the Admin confirmation modal; privileged reset happens
     // server-side through the reset-user-mfa Edge Function.
@@ -378,6 +393,7 @@ function cacheDomElements() {
     saveAdminEmailRecipientBtnText: document.getElementById("saveAdminEmailRecipientBtnText"),
     cancelAdminEmailRecipientEditBtn: document.getElementById("cancelAdminEmailRecipientEditBtn"),
     refreshAdminEmailSetupBtn: document.getElementById("refreshAdminEmailSetupBtn"),
+    clearAdminEmailHistoryBtn: document.getElementById("clearAdminEmailHistoryBtn"),
     adminEmailRecipientsHeader: document.getElementById("adminEmailRecipientsHeader"),
     adminEmailRecipientsEmptyState: document.getElementById("adminEmailRecipientsEmptyState"),
     adminEmailRecipientsTableWrapper: document.getElementById("adminEmailRecipientsTableWrapper"),
@@ -932,6 +948,13 @@ function bindEvents() {
     });
   });
 
+  // ADMIN DELETE ACTIONS - CLEAR VALIDATION HISTORY
+  // Clears only the selected company's email validation logs.
+  // Approved recipients remain untouched.
+  state.dom.clearAdminEmailHistoryBtn?.addEventListener("click", async () => {
+    await clearAdminEmailValidationHistory();
+  });
+
   window.requestAnimationFrame(() => {
     updateAdminEmailRecipientSaveButtonState();
   });
@@ -1442,16 +1465,27 @@ function renderTenantRecords(records = []) {
       <td class="text-nowrap">${formatDate(record.updated_at || record.created_at)}</td>
 
       <td class="text-center">
-        <!-- HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
-             Edit existing tenant/company setup without creating duplicates. -->
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-primary"
-          title="Edit company"
-          onclick="window.adminEditTenantRecord('${escapeHtml(record.id)}')"
-        >
-          <i class="bi bi-pencil-square"></i>
-        </button>
+        <div class="d-flex gap-1 justify-content-center">
+          <!-- ADMIN DELETE ACTIONS - STEP 1
+               Existing edit action remains unchanged. -->
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary"
+            title="Edit company"
+            onclick="window.adminEditTenantRecord('${escapeHtml(record.id)}')"
+          >
+            <i class="bi bi-pencil-square"></i>
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-danger"
+            title="Delete company"
+            onclick="window.adminDeleteTenantRecord('${escapeHtml(record.id)}')"
+          >
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
       </td>
     `;
 
@@ -1566,6 +1600,83 @@ function startTenantEdit(tenantId) {
     state.dom.adminCompanyIdentityCollapse,
     150,
   );
+}
+
+// ADMIN DELETE ACTIONS - STEP 1
+// Delete a company only through the guarded Supabase RPC.
+// This prevents accidental deletion of companies that already have linked HR/payroll data.
+async function deleteTenantRecord(tenantId = "") {
+  const tenant = getTenantById(tenantId);
+
+  if (!tenant) {
+    showPageAlert(
+      "warning",
+      "The selected company record could not be found. Please refresh and try again.",
+    );
+    return;
+  }
+
+  const companyName = String(tenant.company_name || "this company").trim();
+  const companyCode = String(tenant.tenant_code || "--").trim();
+
+  const confirmed = window.confirm(
+    `Delete company "${companyName}" (${companyCode})?\n\n` +
+    "This will only succeed if Supabase confirms the company has no linked operational records.\n\n" +
+    "If the company has employees, users, payroll, leave, email logs, or setup records, deletion will be blocked. Use Inactive status instead."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.rpc(
+      "admin_delete_tenant_if_safe",
+      {
+        target_tenant_id: String(tenant.id || "").trim(),
+      },
+    );
+
+    if (error) throw error;
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if (result && result.success === false) {
+      throw new Error(
+        result.message ||
+        "Company could not be deleted because linked records still exist.",
+      );
+    }
+
+    await refreshTenantWorkspace();
+    await refreshAdminEmailSetupWorkspace({ preserveCompany: false });
+    await refreshProfileTenantLinkingWorkspace();
+
+    resetTenantForm();
+
+    showPageAlert("success", `Company "${companyName}" was deleted successfully.`);
+
+    showDashboardToast(
+      "success",
+      "Company deleted",
+      `Company "${companyName}" was removed from Supabase.`,
+    );
+  } catch (error) {
+    console.error("Error deleting company:", error);
+
+    showPageAlert(
+      "danger",
+      error.message ||
+      "Company could not be deleted. If it has linked data, set it to Inactive instead.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Company delete blocked",
+      error.message ||
+      "Company could not be deleted because linked records may still exist.",
+    );
+  }
 }
 
 async function saveTenantRecord() {
@@ -1934,6 +2045,24 @@ function getAdminEmailSetupDisplayStatus(status = "") {
   return String(status || "--").trim() || "--";
 }
 
+// ADMIN DELETE ACTIONS - CLEAR VALIDATION HISTORY
+// Enable Clear Validation History only when a company is selected and logs exist.
+function updateAdminEmailHistoryClearButtonState() {
+  const button = state.dom.clearAdminEmailHistoryBtn;
+  if (!button || button.dataset.isLoading === "true") return;
+
+  const tenantId = String(state.dom.adminEmailSetupCompanyId?.value || "").trim();
+  const hasLogs = Array.isArray(state.adminEmailSetupLogs) &&
+    state.adminEmailSetupLogs.length > 0;
+
+  const canClear = Boolean(tenantId && hasLogs);
+
+  button.disabled = !canClear;
+  button.className = canClear
+    ? "btn btn-sm btn-outline-danger dashboard-action-btn"
+    : "btn btn-sm btn-secondary dashboard-action-btn";
+}
+
 function updateAdminEmailSetupSummary() {
   const recipients = Array.isArray(state.adminEmailSetupRecipients)
     ? state.adminEmailSetupRecipients
@@ -1975,6 +2104,8 @@ function updateAdminEmailSetupSummary() {
       }`
       : "summary-tile-value h6 mb-0";
   }
+
+  updateAdminEmailHistoryClearButtonState();
 }
 
 function renderAdminEmailRecipients(records = []) {
@@ -2019,14 +2150,25 @@ function renderAdminEmailRecipients(records = []) {
       <td class="text-nowrap">${formatDate(recipient.updated_at || recipient.created_at)}</td>
 
       <td class="text-center">
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-primary"
-          title="Edit approved recipient"
-          onclick="window.adminEditEmailRecipientRecord('${escapeHtml(recipient.id)}')"
-        >
-          <i class="bi bi-pencil-square"></i>
-        </button>
+        <div class="d-flex gap-1 justify-content-center">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary"
+            title="Edit approved recipient"
+            onclick="window.adminEditEmailRecipientRecord('${escapeHtml(recipient.id)}')"
+          >
+            <i class="bi bi-pencil-square"></i>
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-danger"
+            title="Delete approved recipient"
+            onclick="window.adminDeleteEmailRecipientRecord('${escapeHtml(recipient.id)}')"
+          >
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
       </td>
     `;
 
@@ -2034,6 +2176,103 @@ function renderAdminEmailRecipients(records = []) {
   });
 
   updateAdminEmailSetupSummary();
+}
+
+// ADMIN DELETE ACTIONS - CLEAR VALIDATION HISTORY
+// Clears validation email logs for the selected company only.
+// This does not delete approved recipients or external provider records.
+async function clearAdminEmailValidationHistory() {
+  const tenant = getSelectedAdminEmailSetupTenant();
+
+  if (!tenant) {
+    showPageAlert(
+      "warning",
+      "Select a company before clearing validation history.",
+    );
+    return;
+  }
+
+  const logCount = Array.isArray(state.adminEmailSetupLogs)
+    ? state.adminEmailSetupLogs.length
+    : 0;
+
+  if (!logCount) {
+    showPageAlert(
+      "info",
+      "There is no validation history to clear for the selected company.",
+    );
+    updateAdminEmailHistoryClearButtonState();
+    return;
+  }
+
+  const companyName = String(tenant.company_name || "this company").trim();
+  const companyCode = String(tenant.tenant_code || "--").trim();
+
+  const confirmed = window.confirm(
+    `Clear validation history for "${companyName}" (${companyCode})?\n\n` +
+    `This will delete ${logCount} validation history record(s) from Supabase for this company only.\n\n` +
+    "Approved validation recipients will not be deleted."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setAdminActionButtonLoading(
+      state.dom.clearAdminEmailHistoryBtn,
+      true,
+      "Clearing History...",
+    );
+
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.rpc(
+      "admin_clear_email_validation_history",
+      {
+        target_tenant_id: String(tenant.id || "").trim(),
+      },
+    );
+
+    if (error) throw error;
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if (result && result.success === false) {
+      throw new Error(
+        result.message || "Validation history could not be cleared.",
+      );
+    }
+
+    await refreshAdminEmailSetupWorkspace({ preserveCompany: true });
+
+    const deletedCount = Number(result?.deleted_count || logCount || 0);
+
+    showPageAlert(
+      "success",
+      `${deletedCount} validation history record(s) were cleared for ${companyName}.`,
+    );
+
+    showDashboardToast(
+      "success",
+      "Validation history cleared",
+      `${deletedCount} validation history record(s) were removed for ${companyName}.`,
+    );
+  } catch (error) {
+    console.error("Error clearing validation history:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "Validation history could not be cleared.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Clear history failed",
+      error.message || "Validation history could not be cleared.",
+    );
+  } finally {
+    setAdminActionButtonLoading(state.dom.clearAdminEmailHistoryBtn, false);
+    updateAdminEmailHistoryClearButtonState();
+  }
 }
 
 function renderAdminEmailDeliveryLogs(records = []) {
@@ -2409,6 +2648,72 @@ function openAdminEmailSetupPanel() {
     state.dom.adminEmailSetupCollapse,
     true,
   );
+}
+
+// ADMIN DELETE ACTIONS - STEP 1
+// Approved validation recipients are Admin-created setup records.
+// Deleting removes the row from Supabase and from HR Email Integration options.
+async function deleteAdminEmailRecipientRecord(recipientId = "") {
+  const recipient = getAdminEmailRecipientById(recipientId);
+
+  if (!recipient) {
+    showPageAlert(
+      "warning",
+      "The selected approved validation recipient could not be found. Please refresh and try again.",
+    );
+    return;
+  }
+
+  const displayName = String(recipient.display_name || "this recipient").trim();
+  const email = String(recipient.recipient_email || "--").trim();
+
+  const confirmed = window.confirm(
+    `Delete approved validation recipient "${displayName}"?\n\n` +
+    `${email}\n\n` +
+    "This will remove the recipient from Supabase and from the HR Email Integration dropdown for this company."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const supabase = getSupabaseClient();
+
+    const { error } = await supabase
+      .from("email_integration_test_recipients")
+      .delete()
+      .eq("id", String(recipient.id || "").trim());
+
+    if (error) throw error;
+
+    await refreshAdminEmailSetupWorkspace({ preserveCompany: true });
+
+    resetAdminEmailRecipientForm({ preserveCompany: true });
+    openAdminEmailSetupPanel();
+
+    showPageAlert(
+      "success",
+      `Approved validation recipient "${displayName}" was deleted successfully.`,
+    );
+
+    showDashboardToast(
+      "success",
+      "Recipient deleted",
+      `${displayName} was removed from approved validation recipients.`,
+    );
+  } catch (error) {
+    console.error("Error deleting approved validation recipient:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "Approved validation recipient could not be deleted.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Recipient delete failed",
+      error.message || "Approved validation recipient could not be deleted.",
+    );
+  }
 }
 
 async function saveAdminEmailRecipient() {
@@ -3097,6 +3402,16 @@ function renderProfileTenantLinks(records = []) {
                   <i class="bi bi-key"></i>
                 </button>
 
+
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-danger"
+                  title="Remove company access"
+                  onclick="window.adminRemoveProfileTenantAccess('${escapeHtml(profile.id)}')"
+                >
+                  <i class="bi bi-trash"></i>
+                </button>
+
                 ${String(profile.role || "").trim().toLowerCase() === "hr"
                   ? `
                     <!-- HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
@@ -3248,6 +3563,92 @@ function startProfileTenantLinkEdit(profileId) {
     state.dom.adminUserCompanyAssignmentCollapse,
     150,
   );
+}
+
+// ADMIN DELETE ACTIONS - STEP 1
+// Remove company access from a user profile.
+// This does not delete the Supabase Auth user. It removes the company link safely through RPC.
+async function removeProfileTenantAccess(profileId = "") {
+  const profile = getProfileForTenantLinkById(profileId);
+
+  if (!profile) {
+    showPageAlert(
+      "warning",
+      "The selected user profile could not be found. Please refresh and try again.",
+    );
+    return;
+  }
+
+  const profileName = getProfileDisplayName(profile);
+  const profileEmail = String(profile.email || "--").trim();
+  const tenant = getTenantByTenantId(profile.tenant_id);
+  const companyName = String(tenant?.company_name || "the assigned company").trim();
+
+  if (!String(profile.tenant_id || "").trim()) {
+    showPageAlert(
+      "info",
+      `${profileName} is not currently linked to a company workspace.`,
+    );
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Remove company access for "${profileName}"?\n\n` +
+    `${profileEmail}\n\n` +
+    `This will remove access to ${companyName}. The user account itself will not be deleted.`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.rpc(
+      "admin_remove_profile_tenant_access",
+      {
+        target_profile_id: String(profile.id || "").trim(),
+      },
+    );
+
+    if (error) throw error;
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if (result && result.success === false) {
+      throw new Error(
+        result.message || "User company access could not be removed.",
+      );
+    }
+
+    await refreshProfileTenantLinkingWorkspace();
+
+    resetProfileTenantLinkForm();
+    openAdminUserCompanyAssignmentPanel();
+
+    showPageAlert(
+      "success",
+      `Company access was removed for ${profileName}.`,
+    );
+
+    showDashboardToast(
+      "success",
+      "Company access removed",
+      `${profileName} can no longer access ${companyName}.`,
+    );
+  } catch (error) {
+    console.error("Error removing user company access:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "User company access could not be removed.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Access removal failed",
+      error.message || "User company access could not be removed.",
+    );
+  }
 }
 
 async function saveProfileTenantLink() {
