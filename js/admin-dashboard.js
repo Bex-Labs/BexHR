@@ -65,7 +65,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.adminEditEmailRecipientRecord = (recipientId) => {
       startAdminEmailRecipientEdit(recipientId);
     };
-// ADMIN DELETE ACTIONS - STEP 1
+
+    // ADMIN DELETE ACTIONS - STEP 1
     // Approved validation recipients are Admin-created setup records and can be deleted.
     window.adminDeleteEmailRecipientRecord = async (recipientId) => {
       await deleteAdminEmailRecipientRecord(recipientId);
@@ -85,7 +86,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.adminResetUserPassword = (profileId) => {
       openResetPasswordModal(profileId);
     };
-        // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
+    // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
     // Expose HR MFA reset action for the user access records table.
     // This only opens the Admin confirmation modal; privileged reset happens
     // server-side through the reset-user-mfa Edge Function.
@@ -392,6 +393,7 @@ function cacheDomElements() {
     saveAdminEmailRecipientBtnText: document.getElementById("saveAdminEmailRecipientBtnText"),
     cancelAdminEmailRecipientEditBtn: document.getElementById("cancelAdminEmailRecipientEditBtn"),
     refreshAdminEmailSetupBtn: document.getElementById("refreshAdminEmailSetupBtn"),
+    clearAdminEmailHistoryBtn: document.getElementById("clearAdminEmailHistoryBtn"),
     adminEmailRecipientsHeader: document.getElementById("adminEmailRecipientsHeader"),
     adminEmailRecipientsEmptyState: document.getElementById("adminEmailRecipientsEmptyState"),
     adminEmailRecipientsTableWrapper: document.getElementById("adminEmailRecipientsTableWrapper"),
@@ -944,6 +946,13 @@ function bindEvents() {
       showAlert: true,
       preserveCompany: true,
     });
+  });
+
+  // ADMIN DELETE ACTIONS - CLEAR VALIDATION HISTORY
+  // Clears only the selected company's email validation logs.
+  // Approved recipients remain untouched.
+  state.dom.clearAdminEmailHistoryBtn?.addEventListener("click", async () => {
+    await clearAdminEmailValidationHistory();
   });
 
   window.requestAnimationFrame(() => {
@@ -2036,6 +2045,24 @@ function getAdminEmailSetupDisplayStatus(status = "") {
   return String(status || "--").trim() || "--";
 }
 
+// ADMIN DELETE ACTIONS - CLEAR VALIDATION HISTORY
+// Enable Clear Validation History only when a company is selected and logs exist.
+function updateAdminEmailHistoryClearButtonState() {
+  const button = state.dom.clearAdminEmailHistoryBtn;
+  if (!button || button.dataset.isLoading === "true") return;
+
+  const tenantId = String(state.dom.adminEmailSetupCompanyId?.value || "").trim();
+  const hasLogs = Array.isArray(state.adminEmailSetupLogs) &&
+    state.adminEmailSetupLogs.length > 0;
+
+  const canClear = Boolean(tenantId && hasLogs);
+
+  button.disabled = !canClear;
+  button.className = canClear
+    ? "btn btn-sm btn-outline-danger dashboard-action-btn"
+    : "btn btn-sm btn-secondary dashboard-action-btn";
+}
+
 function updateAdminEmailSetupSummary() {
   const recipients = Array.isArray(state.adminEmailSetupRecipients)
     ? state.adminEmailSetupRecipients
@@ -2077,6 +2104,8 @@ function updateAdminEmailSetupSummary() {
       }`
       : "summary-tile-value h6 mb-0";
   }
+
+  updateAdminEmailHistoryClearButtonState();
 }
 
 function renderAdminEmailRecipients(records = []) {
@@ -2147,6 +2176,103 @@ function renderAdminEmailRecipients(records = []) {
   });
 
   updateAdminEmailSetupSummary();
+}
+
+// ADMIN DELETE ACTIONS - CLEAR VALIDATION HISTORY
+// Clears validation email logs for the selected company only.
+// This does not delete approved recipients or external provider records.
+async function clearAdminEmailValidationHistory() {
+  const tenant = getSelectedAdminEmailSetupTenant();
+
+  if (!tenant) {
+    showPageAlert(
+      "warning",
+      "Select a company before clearing validation history.",
+    );
+    return;
+  }
+
+  const logCount = Array.isArray(state.adminEmailSetupLogs)
+    ? state.adminEmailSetupLogs.length
+    : 0;
+
+  if (!logCount) {
+    showPageAlert(
+      "info",
+      "There is no validation history to clear for the selected company.",
+    );
+    updateAdminEmailHistoryClearButtonState();
+    return;
+  }
+
+  const companyName = String(tenant.company_name || "this company").trim();
+  const companyCode = String(tenant.tenant_code || "--").trim();
+
+  const confirmed = window.confirm(
+    `Clear validation history for "${companyName}" (${companyCode})?\n\n` +
+    `This will delete ${logCount} validation history record(s) from Supabase for this company only.\n\n` +
+    "Approved validation recipients will not be deleted."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setAdminActionButtonLoading(
+      state.dom.clearAdminEmailHistoryBtn,
+      true,
+      "Clearing History...",
+    );
+
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.rpc(
+      "admin_clear_email_validation_history",
+      {
+        target_tenant_id: String(tenant.id || "").trim(),
+      },
+    );
+
+    if (error) throw error;
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if (result && result.success === false) {
+      throw new Error(
+        result.message || "Validation history could not be cleared.",
+      );
+    }
+
+    await refreshAdminEmailSetupWorkspace({ preserveCompany: true });
+
+    const deletedCount = Number(result?.deleted_count || logCount || 0);
+
+    showPageAlert(
+      "success",
+      `${deletedCount} validation history record(s) were cleared for ${companyName}.`,
+    );
+
+    showDashboardToast(
+      "success",
+      "Validation history cleared",
+      `${deletedCount} validation history record(s) were removed for ${companyName}.`,
+    );
+  } catch (error) {
+    console.error("Error clearing validation history:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "Validation history could not be cleared.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Clear history failed",
+      error.message || "Validation history could not be cleared.",
+    );
+  } finally {
+    setAdminActionButtonLoading(state.dom.clearAdminEmailHistoryBtn, false);
+    updateAdminEmailHistoryClearButtonState();
+  }
 }
 
 function renderAdminEmailDeliveryLogs(records = []) {

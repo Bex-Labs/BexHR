@@ -729,13 +729,21 @@
 
               <hr class="my-5" />
 
-              <div>
-                <div class="mb-3">
-                  <h4 class="h6 fw-semibold mb-1">Validation History</h4>
-                  <p class="text-secondary small mb-0">
-                    Recent controlled validation email outcomes for the selected company.
-                  </p>
-                </div>
+<div>
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
+    <div>
+      <h4 class="h6 fw-semibold mb-1">Validation History</h4>
+      <p class="text-secondary small mb-0">
+        Recent controlled validation email outcomes for the selected company.
+      </p>
+    </div>
+
+    <button type="button" id="clearAdminEmailHistoryBtn"
+      class="btn btn-sm btn-secondary dashboard-action-btn" disabled>
+      <i class="bi bi-trash me-2"></i>
+      Clear Validation History
+    </button>
+  </div>
 
                 <div id="adminEmailDeliveryLogsEmptyState" class="alert alert-light border mb-0">
                   No validation email history is available for this company yet.
