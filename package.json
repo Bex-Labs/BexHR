@@ -8,7 +8,8 @@
     "test:e2e": "playwright test",
     "test:e2e:chromium": "playwright test --project=chromium",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:auth": "playwright test e2e/bexhr-authenticated-smoke.spec.js --project=chromium"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
