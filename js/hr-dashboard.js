@@ -1750,6 +1750,12 @@ const state = {
   employees: [],
   filteredEmployees: [],
 
+  // EMPLOYEE LIST STABLE ORDER - STEP 1
+  // Keep the employee list serially ordered by Employee Number.
+  // The latest saved employee is highlighted instead of being moved to the top.
+  lastSavedEmployeeRecordId: "",
+  lastSavedEmployeeRecordAction: "",
+
   // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
   // Holds employee-submitted correction requests for HR review.
   // This is read-only in this step; decision actions come after the queue is confirmed.
@@ -5637,15 +5643,43 @@ function redirectToFullEmployeeListAfterEmployeeSave() {
   });
 }
 
-// REMOVE GRADE LEVEL FIELD FROM EMPLOYEE DATA - STEP 3
-// Latest created/updated employee records should be shown first.
-// This is display-only and does not alter saved database values.
-function sortEmployeeRecordsByLatestActivity(records = []) {
-  return [...records].sort((a, b) => {
-    const aTime = new Date(a.updated_at || a.created_at || 0).getTime() || 0;
-    const bTime = new Date(b.updated_at || b.created_at || 0).getTime() || 0;
+// EMPLOYEE LIST STABLE ORDER - STEP 1
+// Full Employee List should remain stable and serial by Employee Number / Staff No.
+// Edited employees are highlighted in place instead of being moved to the top.
+function sortEmployeeRecordsByEmployeeNumber(records = []) {
+  const collator = new Intl.Collator(undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
 
-    return bTime - aTime;
+  return [...records].sort((a, b) => {
+    const aEmployeeNumber = String(a.employee_number || "").trim();
+    const bEmployeeNumber = String(b.employee_number || "").trim();
+
+    if (aEmployeeNumber && !bEmployeeNumber) return -1;
+    if (!aEmployeeNumber && bEmployeeNumber) return 1;
+
+    if (aEmployeeNumber && bEmployeeNumber) {
+      const employeeNumberComparison = collator.compare(
+        aEmployeeNumber,
+        bEmployeeNumber,
+      );
+
+      if (employeeNumberComparison !== 0) {
+        return employeeNumberComparison;
+      }
+    }
+
+    const nameComparison = collator.compare(
+      getEmployeeListExportFullName(a),
+      getEmployeeListExportFullName(b),
+    );
+
+    if (nameComparison !== 0) {
+      return nameComparison;
+    }
+
+    return collator.compare(String(a.id || ""), String(b.id || ""));
   });
 }
 
@@ -20876,7 +20910,7 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
   // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1E
   // Show all employees in the review table after Select All is clicked,
   // but only active checked employees are prepared for payroll.
-  const employeesToRender = sortEmployeeRecordsByLatestActivity(state.employees || []);
+  const employeesToRender = sortEmployeeRecordsByEmployeeNumber(state.employees || []);
 
   const selectedEmployees = employeesToRender.filter((employee) => {
     const employeeId = String(employee.id || "").trim();
@@ -23686,7 +23720,9 @@ async function loadEmployees() {
 
     if (error) throw error;
 
-    state.employees = Array.isArray(data) ? data : [];
+    state.employees = sortEmployeeRecordsByEmployeeNumber(
+      Array.isArray(data) ? data : [],
+    );
     applyEmployeeSearch();
   } catch (error) {
     console.error("Error loading employee records:", error);
@@ -23771,7 +23807,7 @@ function downloadEmployeeListCsv() {
     "Document Count",
   ];
 
-  const rows = sortEmployeeRecordsByLatestActivity(records).map((employee) => {
+  const rows = sortEmployeeRecordsByEmployeeNumber(records).map((employee) => {
     const employeeId = String(employee.id || "").trim();
     const documentCount = documentCountMap.get(employeeId) || 0;
     const accountLinkage = getEmployeeAccountLinkage(employee);
@@ -26306,8 +26342,8 @@ function renderEmployeeRecords(employees) {
   const documentCountMap = buildEmployeeDocumentCountMap();
 
   // EMPLOYEE LIST ROW ALIGNMENT CLEANUP - STEP 4
-  // Keep the existing newest-first behaviour.
-  const employeesToRender = sortEmployeeRecordsByLatestActivity(employees);
+  // Keep the employee list in stable Employee Number order.
+  const employeesToRender = sortEmployeeRecordsByEmployeeNumber(employees);
   // EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1
   // Row-level Pay checkboxes should only show during the Run Payroll flow.
   const isPayrollSelectionMode = Boolean(state.isRunPayrollSelectionMode);
@@ -26326,7 +26362,26 @@ function renderEmployeeRecords(employees) {
 
     const documentCount = documentCountMap.get(String(employee.id)) || 0;
     const accountLinkage = getEmployeeAccountLinkage(employee);
-    const safeEmployeeId = String(employee.id || "").replaceAll("'", "\\'");
+    const rawEmployeeId = String(employee.id || "").trim();
+    const safeEmployeeId = rawEmployeeId.replaceAll("'", "\\'");
+    const isRecentlySavedEmployee =
+      rawEmployeeId &&
+      rawEmployeeId === String(state.lastSavedEmployeeRecordId || "").trim();
+
+    const recentlySavedEmployeeLabel =
+      state.lastSavedEmployeeRecordAction === "created"
+        ? "Newly created"
+        : "Recently updated";
+
+    const recentlySavedEmployeeBadgeHtml = isRecentlySavedEmployee
+      ? `
+        <div class="mt-1">
+          <span class="badge text-bg-warning border text-dark">
+            <i class="bi bi-pencil-square me-1"></i>${escapeHtml(recentlySavedEmployeeLabel)}
+          </span>
+        </div>
+      `
+      : "";
 
     // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
     // Read-only People roles can view employee rows but cannot edit employees
@@ -26344,6 +26399,10 @@ function renderEmployeeRecords(employees) {
       canMaintainPeople && Boolean(String(employee.work_email || "").trim());
 
     const row = document.createElement("tr");
+
+    if (isRecentlySavedEmployee) {
+      row.classList.add("table-warning");
+    }
 
     row.innerHTML = `
       <td class="text-center align-middle py-3 ${isPayrollSelectionMode ? "" : "d-none"}">
@@ -26377,6 +26436,7 @@ function renderEmployeeRecords(employees) {
   <div class="text-secondary small text-nowrap">
     ${escapeHtml(employee.employee_number || "--")}
   </div>
+  ${recentlySavedEmployeeBadgeHtml}
 </td>
 
       <td class="align-middle py-3">
@@ -28850,6 +28910,13 @@ async function handleEmployeeSave() {
 
     await loadAllEmployeeDocuments();
     await loadAuthProfilesForLinkage();
+
+    // EMPLOYEE LIST STABLE ORDER - STEP 1
+    // Keep the saved employee in its serial Employee Number position,
+    // but show a visible badge so HR knows which record was just changed.
+    state.lastSavedEmployeeRecordId = String(savedEmployeeId || "").trim();
+    state.lastSavedEmployeeRecordAction = isEditMode ? "updated" : "created";
+
     await loadEmployees();
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
