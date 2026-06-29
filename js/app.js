@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const togglePasswordBtn = document.getElementById("togglePasswordBtn");
   const togglePasswordIcon = document.getElementById("togglePasswordIcon");
   const forgotPasswordLink = document.getElementById("forgotPasswordLink");
+  const rememberMeInput = document.getElementById("rememberMe");
+  const REMEMBERED_LOGIN_STORAGE_KEY = "hrPayrollRememberedLogin";
   // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
   // Supabase-backed TOTP MFA controls for HR dashboard access.
   const hrMfaPanel = document.getElementById("hrMfaPanel");
@@ -720,6 +722,66 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  // REMEMBER ME - LOGIN PREFILL
+  // Stores only non-sensitive login hints. Never store passwords.
+  function getRememberedLoginDetails() {
+    try {
+      const rawValue = localStorage.getItem(REMEMBERED_LOGIN_STORAGE_KEY);
+      if (!rawValue) return null;
+
+      const parsedValue = JSON.parse(rawValue);
+
+      return {
+        tenantCode: String(parsedValue?.tenantCode || "").trim().toUpperCase(),
+        email: String(parsedValue?.email || "").trim().toLowerCase(),
+      };
+    } catch (error) {
+      localStorage.removeItem(REMEMBERED_LOGIN_STORAGE_KEY);
+      return null;
+    }
+  }
+
+  // REMEMBER ME - LOGIN PREFILL
+  // Prefills Company/Tenant ID and email when the user previously selected Remember me.
+  function prefillRememberedLoginDetails() {
+    const rememberedLogin = getRememberedLoginDetails();
+
+    if (!rememberedLogin) return;
+
+    if (loginTenantCodeInput && rememberedLogin.tenantCode) {
+      loginTenantCodeInput.value = rememberedLogin.tenantCode;
+    }
+
+    if (emailInput && rememberedLogin.email) {
+      emailInput.value = rememberedLogin.email;
+    }
+
+    if (rememberMeInput) {
+      rememberMeInput.checked = true;
+    }
+  }
+
+  // REMEMBER ME - LOGIN PREFILL
+  // Saves or clears remembered login details after a successful login.
+  function cacheRememberedLoginDetails({
+    tenantCode = "",
+    email = "",
+  } = {}) {
+    if (!rememberMeInput?.checked) {
+      localStorage.removeItem(REMEMBERED_LOGIN_STORAGE_KEY);
+      return;
+    }
+
+    localStorage.setItem(
+      REMEMBERED_LOGIN_STORAGE_KEY,
+      JSON.stringify({
+        tenantCode: String(tenantCode || "").trim().toUpperCase(),
+        email: String(email || "").trim().toLowerCase(),
+        rememberedAt: new Date().toISOString(),
+      }),
+    );
+  }
+
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1F-4
   // If a tenant was validated earlier and the cache still exists, prefill the
   // Company/Tenant ID field so the user does not need to retype it.
@@ -1068,6 +1130,13 @@ document.addEventListener("DOMContentLoaded", function () {
           });
         }
 
+        cacheRememberedLoginDetails({
+          tenantCode: isPlatformAdmin
+            ? ""
+            : tenantValidation.tenantCode || loginTenantCode,
+          email,
+        });
+
         const loginContext = {
           authData,
           profile,
@@ -1091,25 +1160,25 @@ document.addEventListener("DOMContentLoaded", function () {
         // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
         // Do not create the local application session or redirect HR until Supabase
         // confirms the session has reached AAL2 through TOTP MFA.
-if (isHrDashboardMfaRequiredRole(profile.role)) {
-  try {
-    await startHrDashboardMfaFlow(loginContext);
-  } catch (mfaStartError) {
-    console.error("HR MFA start failed:", mfaStartError);
+        if (isHrDashboardMfaRequiredRole(profile.role)) {
+          try {
+            await startHrDashboardMfaFlow(loginContext);
+          } catch (mfaStartError) {
+            console.error("HR MFA start failed:", mfaStartError);
 
-    await supabaseClient.auth.signOut();
+            await supabaseClient.auth.signOut();
 
-    localStorage.removeItem("hrPayrollSession");
-    localStorage.removeItem("hrPayrollTenantContext");
+            localStorage.removeItem("hrPayrollSession");
+            localStorage.removeItem("hrPayrollTenantContext");
 
-    showAlert(
-      getFriendlyHrMfaErrorMessage(mfaStartError, "enroll"),
-      "danger",
-    );
-  }
+            showAlert(
+              getFriendlyHrMfaErrorMessage(mfaStartError, "enroll"),
+              "danger",
+            );
+          }
 
-  return;
-}
+          return;
+        }
 
         finishSuccessfulLoginRedirect(loginContext);
       } catch (unexpectedError) {
@@ -1125,11 +1194,10 @@ if (isHrDashboardMfaRequiredRole(profile.role)) {
   // PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 4C
   // Cache safe payroll intent once before sign-in so the user lands on Payroll
   // after authentication without first touching a protected dashboard URL.
-  cachePayslipEmailLandingIntentFromUrl();
+cachePayslipEmailLandingIntentFromUrl();
 
-  // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1F-4
-  // Prefill Company/Tenant ID if a valid tenant context is already cached.
-  prefillTenantCodeFromCache();
+prefillRememberedLoginDetails();
+prefillTenantCodeFromCache();
 
-  showMessageFromQueryString();
+showMessageFromQueryString();
 });
