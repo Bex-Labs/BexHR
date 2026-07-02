@@ -1,7 +1,9 @@
 // js/session.js
 
 (function () {
-  const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+  const IDLE_WARNING_MS = 25 * 60 * 1000; // 25 minutes
+  const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+  const IDLE_WARNING_REMAINING_MINUTES = 5;
 
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1F-5
   // Central storage keys used by login and dashboard session handling.
@@ -14,9 +16,11 @@
   // payroll notification link while signed out.
   const POST_LOGIN_REDIRECT_STORAGE_KEY = "hrPayrollPostLoginRedirect";
 
-  let idleTimer = null;
-  let activityListenersAttached = false;
-  let authListenerAttached = false;
+    let idleWarningTimer = null;
+    let idleLogoutTimer = null;
+    let idleWarningElement = null;
+    let activityListenersAttached = false;
+    let authListenerAttached = false;
 
   function getSupabaseClient() {
     // Single agreed global client name for the whole app
@@ -162,25 +166,107 @@
     }
 
     if (reason === "hr-mfa-required") {
-  window.location.href = "index.html?message=hr-mfa-required";
-  return;
-}
+      window.location.href = "index.html?message=hr-mfa-required";
+      return;
+    }
 
     window.location.href = "index.html";
   }
 
-  function clearIdleTimer() {
-    if (idleTimer) {
-      clearTimeout(idleTimer);
-      idleTimer = null;
+
+    function removeIdleWarning() {
+    if (idleWarningElement && idleWarningElement.parentNode) {
+      idleWarningElement.parentNode.removeChild(idleWarningElement);
+    }
+
+    idleWarningElement = null;
+  }
+
+
+    function showIdleWarning() {
+    removeIdleWarning();
+
+    idleWarningElement = document.createElement("div");
+    idleWarningElement.setAttribute("role", "alert");
+    idleWarningElement.setAttribute("aria-live", "assertive");
+
+    idleWarningElement.style.position = "fixed";
+    idleWarningElement.style.right = "24px";
+    idleWarningElement.style.bottom = "24px";
+    idleWarningElement.style.zIndex = "99999";
+    idleWarningElement.style.maxWidth = "420px";
+    idleWarningElement.style.padding = "18px";
+    idleWarningElement.style.borderRadius = "12px";
+    idleWarningElement.style.background = "#ffffff";
+    idleWarningElement.style.boxShadow = "0 18px 45px rgba(15, 23, 42, 0.22)";
+    idleWarningElement.style.border = "1px solid rgba(15, 23, 42, 0.12)";
+    idleWarningElement.style.fontFamily = "Arial, sans-serif";
+    idleWarningElement.style.color = "#172033";
+
+    idleWarningElement.innerHTML = `
+    <div style="font-weight:700;font-size:16px;margin-bottom:8px;">
+      Session timeout warning
+    </div>
+    <div style="font-size:14px;line-height:1.5;margin-bottom:14px;">
+      You have been inactive for a while. You will be signed out in
+      ${IDLE_WARNING_REMAINING_MINUTES} minutes unless you continue working.
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button type="button" data-session-action="logout" style="border:1px solid #cbd5e1;background:#ffffff;color:#334155;border-radius:8px;padding:8px 12px;cursor:pointer;">
+        Sign out now
+      </button>
+      <button type="button" data-session-action="continue" style="border:0;background:#0f766e;color:#ffffff;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;">
+        Stay signed in
+      </button>
+    </div>
+  `;
+
+    document.body.appendChild(idleWarningElement);
+
+    const continueButton = idleWarningElement.querySelector(
+      '[data-session-action="continue"]',
+    );
+
+    const logoutButton = idleWarningElement.querySelector(
+      '[data-session-action="logout"]',
+    );
+
+    if (continueButton) {
+      continueButton.addEventListener("click", () => {
+        resetIdleTimer();
+      });
+    }
+
+    if (logoutButton) {
+      logoutButton.addEventListener("click", async () => {
+        await logoutUser("timeout");
+      });
     }
   }
 
-  function resetIdleTimer() {
+    function clearIdleTimer() {
+    if (idleWarningTimer) {
+      clearTimeout(idleWarningTimer);
+      idleWarningTimer = null;
+    }
+
+    if (idleLogoutTimer) {
+      clearTimeout(idleLogoutTimer);
+      idleLogoutTimer = null;
+    }
+
+    removeIdleWarning();
+  }
+
+    function resetIdleTimer() {
     clearIdleTimer();
 
-    idleTimer = setTimeout(async () => {
-      alert("You have been logged out due to inactivity.");
+    idleWarningTimer = setTimeout(() => {
+      showIdleWarning();
+    }, IDLE_WARNING_MS);
+
+    idleLogoutTimer = setTimeout(async () => {
+      removeIdleWarning();
       await logoutUser("timeout");
     }, IDLE_TIMEOUT_MS);
   }
@@ -280,33 +366,33 @@
   }
 
   // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
-// HR Dashboard requires Supabase Auth AAL2. This prevents a user from
-// bypassing the login MFA screen by manually opening hr-dashboard.html
-// after only password authentication.
-async function hasRequiredHrMfaAssurance(profile = {}) {
-  const role = String(profile.role || "").trim().toLowerCase();
+  // HR Dashboard requires Supabase Auth AAL2. This prevents a user from
+  // bypassing the login MFA screen by manually opening hr-dashboard.html
+  // after only password authentication.
+  async function hasRequiredHrMfaAssurance(profile = {}) {
+    const role = String(profile.role || "").trim().toLowerCase();
 
-  if (role !== "hr") {
-    return true;
+    if (role !== "hr") {
+      return true;
+    }
+
+    const supabase = getSupabaseClient();
+
+    if (!supabase?.auth?.mfa?.getAuthenticatorAssuranceLevel) {
+      console.error("Supabase MFA assurance check is not available.");
+      return false;
+    }
+
+    const { data, error } =
+      await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+    if (error) {
+      console.error("Error checking HR MFA assurance level:", error.message);
+      return false;
+    }
+
+    return data?.currentLevel === "aal2";
   }
-
-  const supabase = getSupabaseClient();
-
-  if (!supabase?.auth?.mfa?.getAuthenticatorAssuranceLevel) {
-    console.error("Supabase MFA assurance check is not available.");
-    return false;
-  }
-
-  const { data, error } =
-    await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-
-  if (error) {
-    console.error("Error checking HR MFA assurance level:", error.message);
-    return false;
-  }
-
-  return data?.currentLevel === "aal2";
-}
 
   /* =========================================================
      Flexible role matching
@@ -342,21 +428,21 @@ async function hasRequiredHrMfaAssurance(profile = {}) {
       }
     }
 
-if (!roleMatches(expectedRole, profile.role)) {
-  redirectToRoleDashboard(profile.role);
-  return null;
-}
+    if (!roleMatches(expectedRole, profile.role)) {
+      redirectToRoleDashboard(profile.role);
+      return null;
+    }
 
-// HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
-// Role match alone is not enough for HR. HR must have an AAL2 session.
-// If the user only has password-level authentication, sign them out and
-// return them to login so the MFA flow can run properly.
-if (!(await hasRequiredHrMfaAssurance(profile))) {
-  await logoutUser("hr-mfa-required");
-  return null;
-}
+    // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
+    // Role match alone is not enough for HR. HR must have an AAL2 session.
+    // If the user only has password-level authentication, sign them out and
+    // return them to login so the MFA flow can run properly.
+    if (!(await hasRequiredHrMfaAssurance(profile))) {
+      await logoutUser("hr-mfa-required");
+      return null;
+    }
 
-return { session, profile };
+    return { session, profile };
   }
 
   async function protectPage(expectedRole = null) {
