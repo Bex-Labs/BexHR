@@ -170,16 +170,16 @@ function isValidEmail(value: string) {
 // Default email identity for non-Alpatech tenants.
 const DEFAULT_PAYSLIP_EMAIL_BRANDING: PayslipEmailBrandingContext = {
   isAlpatech: false,
-  brandName: "HR & Payroll System",
-  fromName: "",
-  headerTitle: "HR & Payroll System",
+  brandName: "BexHR",
+  fromName: emailJsFromName,
+  headerTitle: "BexHR",
   headerSubtitle: "Confidential payslip notification",
-  primaryColor: "#904d00",
+  primaryColor: "#2bb8c7",
   logoUrl: "",
-  payslipAccessLabel: "View payslip securely",
-  fallbackAccessLabel: "Open HR & Payroll System",
+  payslipAccessLabel: "View Payslip",
+  fallbackAccessLabel: "Open BexHR",
   payrollContactLabel: "HR/Payroll",
-  footerName: "the HR & Payroll System",
+  footerName: "BexHR",
 };
 
 function isAlpatechBrandValue(value: unknown) {
@@ -457,7 +457,7 @@ function buildPayslipEmailMessage(
     ? "Please use the secure button below to access your payslip."
     : branding.isAlpatech
       ? "Please sign in to Alpatech HR & Payroll and open Payroll to access your payslip."
-      : "Please sign in to the HR & Payroll System and open Payroll to access your payslip.";
+      : : "Please sign in to BexHR and open Payroll to access your payslip.";;
 
   // ALPATECH EMAIL BRANDING - STEP 2K
   // The EmailJS visual header already carries the Alpatech brand.
@@ -538,7 +538,7 @@ serve(async (request) => {
       privateKey: getRequiredEnv("EMAILJS_PRIVATE_KEY"),
       fromName:
         Deno.env.get("EMAILJS_FROM_NAME")?.trim() ||
-        "HR & Payroll System",
+        "BexHR",
     };
 
     // PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 1
