@@ -18152,11 +18152,58 @@ function findPayrollAllowanceEffectiveDateConflict({
   }) || null;
 }
 
-// BASIC ALLOWANCE CALCULATION
-// Basic is 50% of the selected employee salary setup.
-// The amount is system-calculated to avoid HR typing errors.
+// STRUCTURED ALLOWANCE AUTO CALCULATION
+// Basic, Housing, Transport, Utility, and Other are calculated from the
+// selected employee salary setup so HR cannot accidentally enter a wrong split.
+// The existing function name is kept because current event bindings already
+// call syncBasicPayrollAllowanceAmount().
+const STRUCTURED_PAYROLL_ALLOWANCE_PERCENTAGES = Object.freeze({
+  basic: {
+    percent: 50,
+    label: "Basic",
+  },
+  housing: {
+    percent: 10,
+    label: "Housing",
+  },
+  "housing allowance": {
+    percent: 10,
+    label: "Housing",
+  },
+  transport: {
+    percent: 10,
+    label: "Transport",
+  },
+  "transport allowance": {
+    percent: 10,
+    label: "Transport",
+  },
+  utility: {
+    percent: 10,
+    label: "Utility",
+  },
+  "utility allowance": {
+    percent: 10,
+    label: "Utility",
+  },
+  other: {
+    percent: 20,
+    label: "Other",
+  },
+  "other allowance": {
+    percent: 20,
+    label: "Other",
+  },
+});
+
+function getStructuredPayrollAllowanceConfig(value = "") {
+  const normalisedType = String(value || "").trim().toLowerCase();
+
+  return STRUCTURED_PAYROLL_ALLOWANCE_PERCENTAGES[normalisedType] || null;
+}
+
 function isBasicPayrollAllowanceType(value = "") {
-  return String(value || "").trim().toLowerCase() === "basic";
+  return Boolean(getStructuredPayrollAllowanceConfig(value));
 }
 
 function getSelectedPayrollAllowanceBasicSalary() {
@@ -18164,7 +18211,6 @@ function getSelectedPayrollAllowanceBasicSalary() {
     state.dom.payrollAllowanceMasterRecordId?.selectedOptions?.[0] || null;
 
   const optionBasicSalary = Number(selectedOption?.dataset?.basicSalary || 0);
-
   if (Number.isFinite(optionBasicSalary) && optionBasicSalary > 0) {
     return optionBasicSalary;
   }
@@ -18183,24 +18229,36 @@ function syncBasicPayrollAllowanceAmount() {
   if (!amountInput) return;
 
   const allowanceType = state.dom.payrollAllowanceType?.value || "";
-  const isBasic = isBasicPayrollAllowanceType(allowanceType);
+  const structuredConfig = getStructuredPayrollAllowanceConfig(allowanceType);
+  const isStructuredAllowance = Boolean(structuredConfig);
 
-  amountInput.readOnly = isBasic;
-  amountInput.classList.toggle("bg-light", isBasic);
+  // If HR moves from an auto-calculated structured allowance to a manual
+  // allowance type, clear the old system value so it is not saved accidentally.
+  const wasAutoCalculated =
+    amountInput.readOnly && amountInput.classList.contains("bg-light");
 
-  if (!isBasic) {
+  amountInput.readOnly = isStructuredAllowance;
+  amountInput.classList.toggle("bg-light", isStructuredAllowance);
+
+  if (!isStructuredAllowance) {
     amountInput.placeholder = "Enter allowance amount";
+
+    if (wasAutoCalculated) {
+      amountInput.value = "";
+    }
+
     return;
   }
 
-  amountInput.placeholder = "Basic is automatically calculated as 50% of salary";
+  amountInput.placeholder =
+    `${structuredConfig.label} is automatically calculated as ${structuredConfig.percent}% of salary`;
 
   const basicSalary = getSelectedPayrollAllowanceBasicSalary();
-  const calculatedBasicAllowance = basicSalary * 0.5;
+  const calculatedAllowance = basicSalary * (structuredConfig.percent / 100);
 
   amountInput.value =
-    Number.isFinite(calculatedBasicAllowance) && calculatedBasicAllowance > 0
-      ? calculatedBasicAllowance.toFixed(2)
+    Number.isFinite(calculatedAllowance) && calculatedAllowance > 0
+      ? calculatedAllowance.toFixed(2)
       : "";
 }
 
