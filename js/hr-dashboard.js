@@ -19854,17 +19854,16 @@ function getActiveBatchPayrollExtraComponentsForMaster(payrollMasterRecordId = "
   return extras;
 }
 
-// PAYROLL WORKFLOW UX REPAIR - STEP 6
-// Pull all active Allowance Components into Single Employee Finalisation.
-// This keeps allowance values inside HR-controlled Setup before payroll is
-// calculated/finalised.
+// Pull active Allowance Components into Single Employee Finalisation.
 //
 // HR/business behaviour:
 // - HR creates allowance components in Setup.
 // - Single Employee Finalisation consumes those active setup records.
 // - Allowance records are effective-dated.
-// - Regular structured salary split remains intact.
-// - Matching structured allowance types act as top-ups, not replacements.
+// - Regular structured salary split remains intact when no matching setup component exists.
+// - Matching structured allowance types replace the generated Regular split.
+// - Basic is allowed as a setup component, but it replaces Basic Pay only;
+//   it is never added again as an extra earning.
 // - Employee-specific Overrides can still apply after this setup pull.
 function getActiveManualPayrollAllowanceComponentsForMaster(
   payrollMasterRecordId = "",
@@ -19876,10 +19875,11 @@ function getActiveManualPayrollAllowanceComponentsForMaster(
   );
 
   const totals = {
-    housingAllowanceTopUp: 0,
-    transportAllowanceTopUp: 0,
-    utilityAllowanceTopUp: 0,
-    otherAllowanceTopUp: 0,
+    basicPay: null,
+    housingAllowance: null,
+    transportAllowance: null,
+    utilityAllowance: null,
+    otherAllowance: null,
     medicalAllowance: 0,
     bonus: 0,
     overtime: 0,
@@ -19890,6 +19890,8 @@ function getActiveManualPayrollAllowanceComponentsForMaster(
   if (!masterId || !Number.isFinite(payrollDateTime)) {
     return totals;
   }
+
+  const latestStructuredComponents = new Map();
 
   (state.payrollAllowanceComponents || []).forEach((component) => {
     const componentMasterId = String(
@@ -19910,32 +19912,39 @@ function getActiveManualPayrollAllowanceComponentsForMaster(
       !isActive ||
       !isEffective ||
       !Number.isFinite(amount) ||
-      amount <= 0
+      amount < 0
     ) {
       return;
     }
 
     const type = normalizeText(component.allowance_type || "");
 
-    // BASIC ALLOWANCE CALCULATION
-    // Basic is already calculated from salary during payroll finalisation.
-    // Do not add Basic setup records again as manual payroll top-ups.
-    if (type === "basic" || type === "basic pay") {
-      return;
-    }
+    const structuredTypeMap = {
+      basic: "basicPay",
+      "basic pay": "basicPay",
+      housing: "housingAllowance",
+      "housing allowance": "housingAllowance",
+      transport: "transportAllowance",
+      "transport allowance": "transportAllowance",
+      utility: "utilityAllowance",
+      "utility allowance": "utilityAllowance",
+      other: "otherAllowance",
+      "other allowance": "otherAllowance",
+    };
 
-    if (type === "housing" || type === "housing allowance") {
-      totals.housingAllowanceTopUp += amount;
-      return;
-    }
+    const structuredFieldName = structuredTypeMap[type];
 
-    if (type === "transport" || type === "transport allowance") {
-      totals.transportAllowanceTopUp += amount;
-      return;
-    }
+    if (structuredFieldName) {
+      const existingComponent = latestStructuredComponents.get(structuredFieldName);
+      const existingEffectiveTime = existingComponent?.effectiveTime ?? -Infinity;
 
-    if (type === "utility" || type === "utility allowance") {
-      totals.utilityAllowanceTopUp += amount;
+      if (effectiveTime >= existingEffectiveTime) {
+        latestStructuredComponents.set(structuredFieldName, {
+          amount,
+          effectiveTime,
+        });
+      }
+
       return;
     }
 
@@ -19975,12 +19984,15 @@ function getActiveManualPayrollAllowanceComponentsForMaster(
       type === "meal" ||
       type === "meal allowance" ||
       type === "hazard" ||
-      type === "hazard allowance" ||
-      type === "other" ||
-      type === "other allowance"
+      type === "hazard allowance"
     ) {
-      totals.otherAllowanceTopUp += amount;
+      totals.otherAllowance =
+        Number(totals.otherAllowance || 0) + amount;
     }
+  });
+
+  latestStructuredComponents.forEach((component, fieldName) => {
+    totals[fieldName] = component.amount;
   });
 
   return totals;
@@ -19988,8 +20000,12 @@ function getActiveManualPayrollAllowanceComponentsForMaster(
 
 // PAYROLL WORKFLOW UX REPAIR - STEP 6
 // Apply active setup allowances to the visible Single Employee Finalisation form.
-// This runs after the Regular payroll structure has calculated Basic/Housing/
-// Transport/Utility/Other split, so Setup allowances become controlled top-ups.
+//
+// Structured Regular components replace the generated split when configured:
+// Basic, Housing, Transport, Utility, and Other.
+//
+// Extra earnings remain additive:
+// Medical, Bonus, Overtime, Logistics, and Data/Airtime.
 function applyActivePayrollAllowanceComponentsToPayrollForm() {
   if (!isAlpatechRegularSelected()) {
     return;
@@ -20007,46 +20023,185 @@ function applyActivePayrollAllowanceComponentsToPayrollForm() {
     payrollDate,
   );
 
-  const addTopUpToField = (field, amount = 0) => {
+  const replaceFieldWhenConfigured = (field, amount) => {
     if (!field) return;
 
-    const topUp = Number(amount || 0);
+    const configuredAmount = Number(amount);
 
-    if (!Number.isFinite(topUp) || topUp <= 0) {
+    if (!Number.isFinite(configuredAmount)) {
+      return;
+    }
+
+    setNumericFieldValue(field, configuredAmount);
+  };
+
+  const addExtraEarningToField = (field, amount = 0) => {
+    if (!field) return;
+
+    const extraAmount = Number(amount || 0);
+
+    if (!Number.isFinite(extraAmount) || extraAmount <= 0) {
       return;
     }
 
     setNumericFieldValue(
       field,
-      toNullableNumber(field.value) + topUp,
+      toNullableNumber(field.value) + extraAmount,
     );
   };
 
-  addTopUpToField(
+  replaceFieldWhenConfigured(
+    state.dom.payrollBasicPay,
+    allowances.basicPay,
+  );
+
+  replaceFieldWhenConfigured(
     state.dom.payrollHousingAllowance,
-    allowances.housingAllowanceTopUp,
+    allowances.housingAllowance,
   );
 
-  addTopUpToField(
+  replaceFieldWhenConfigured(
     state.dom.payrollTransportAllowance,
-    allowances.transportAllowanceTopUp,
+    allowances.transportAllowance,
   );
 
-  addTopUpToField(
+  replaceFieldWhenConfigured(
     state.dom.payrollUtilityAllowance,
-    allowances.utilityAllowanceTopUp,
+    allowances.utilityAllowance,
   );
 
-  addTopUpToField(
+  replaceFieldWhenConfigured(
     state.dom.payrollOtherAllowance,
-    allowances.otherAllowanceTopUp,
+    allowances.otherAllowance,
   );
 
-  setNumericFieldValue(state.dom.payrollMedicalAllowance, allowances.medicalAllowance);
-  setNumericFieldValue(state.dom.payrollBonus, allowances.bonus);
-  setNumericFieldValue(state.dom.payrollOvertime, allowances.overtime);
-  setNumericFieldValue(state.dom.payrollLogisticsAllowance, allowances.logisticsAllowance);
-  setNumericFieldValue(state.dom.payrollDataAirtimeAllowance, allowances.dataAirtimeAllowance);
+  addExtraEarningToField(
+    state.dom.payrollMedicalAllowance,
+    allowances.medicalAllowance,
+  );
+
+  addExtraEarningToField(
+    state.dom.payrollBonus,
+    allowances.bonus,
+  );
+
+  addExtraEarningToField(
+    state.dom.payrollOvertime,
+    allowances.overtime,
+  );
+
+  addExtraEarningToField(
+    state.dom.payrollLogisticsAllowance,
+    allowances.logisticsAllowance,
+  );
+
+  addExtraEarningToField(
+    state.dom.payrollDataAirtimeAllowance,
+    allowances.dataAirtimeAllowance,
+  );
+}
+
+// PAYROLL WORKFLOW UX REPAIR - STEP 6
+// Apply active setup allowances to the visible Single Employee Finalisation form.
+//
+// Structured Regular components replace the generated split when configured:
+// Basic, Housing, Transport, Utility, and Other.
+//
+// Extra earnings remain additive:
+// Medical, Bonus, Overtime, Logistics, and Data/Airtime.
+function applyActivePayrollAllowanceComponentsToPayrollForm() {
+  if (!isAlpatechRegularSelected()) {
+    return;
+  }
+
+  const activePayrollMaster = getCurrentManualPayrollMasterForOverride();
+  const payrollDate = getCurrentPayrollCalculationDate();
+
+  if (!activePayrollMaster?.id || !payrollDate) {
+    return;
+  }
+
+  const allowances = getActiveManualPayrollAllowanceComponentsForMaster(
+    activePayrollMaster.id,
+    payrollDate,
+  );
+
+  const replaceFieldWhenConfigured = (field, amount) => {
+    if (!field) return;
+
+    const configuredAmount = Number(amount);
+
+    if (!Number.isFinite(configuredAmount)) {
+      return;
+    }
+
+    setNumericFieldValue(field, configuredAmount);
+  };
+
+  const addExtraEarningToField = (field, amount = 0) => {
+    if (!field) return;
+
+    const extraAmount = Number(amount || 0);
+
+    if (!Number.isFinite(extraAmount) || extraAmount <= 0) {
+      return;
+    }
+
+    setNumericFieldValue(
+      field,
+      toNullableNumber(field.value) + extraAmount,
+    );
+  };
+
+  replaceFieldWhenConfigured(
+    state.dom.payrollBasicPay,
+    allowances.basicPay,
+  );
+
+  replaceFieldWhenConfigured(
+    state.dom.payrollHousingAllowance,
+    allowances.housingAllowance,
+  );
+
+  replaceFieldWhenConfigured(
+    state.dom.payrollTransportAllowance,
+    allowances.transportAllowance,
+  );
+
+  replaceFieldWhenConfigured(
+    state.dom.payrollUtilityAllowance,
+    allowances.utilityAllowance,
+  );
+
+  replaceFieldWhenConfigured(
+    state.dom.payrollOtherAllowance,
+    allowances.otherAllowance,
+  );
+
+  addExtraEarningToField(
+    state.dom.payrollMedicalAllowance,
+    allowances.medicalAllowance,
+  );
+
+  addExtraEarningToField(
+    state.dom.payrollBonus,
+    allowances.bonus,
+  );
+
+  addExtraEarningToField(
+    state.dom.payrollOvertime,
+    allowances.overtime,
+  );
+
+  addExtraEarningToField(
+    state.dom.payrollLogisticsAllowance,
+    allowances.logisticsAllowance,
+  );
+
+  addExtraEarningToField(
+    state.dom.payrollDataAirtimeAllowance,
+    allowances.dataAirtimeAllowance,
+  );
 }
 
 // BATCH PAYROLL CSV IMPORT - STEP 4
