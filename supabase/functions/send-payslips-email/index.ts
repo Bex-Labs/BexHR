@@ -171,7 +171,7 @@ function isValidEmail(value: string) {
 const DEFAULT_PAYSLIP_EMAIL_BRANDING: PayslipEmailBrandingContext = {
   isAlpatech: false,
   brandName: "BexHR",
-  fromName: emailJsFromName,
+  fromName: "BexHR",
   headerTitle: "BexHR",
   headerSubtitle: "Confidential payslip notification",
   primaryColor: "#2bb8c7",
