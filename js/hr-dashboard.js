@@ -9228,11 +9228,25 @@ function bindEvents() {
   // =========================================================
   state.dom.payrollAllowanceCreateForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
+
+    // BASIC ALLOWANCE CALCULATION
+    // Recalculate immediately before save so the stored amount is always 50%.
+    syncBasicPayrollAllowanceAmount();
+
     await handlePayrollAllowanceSave();
+  });
+
+  state.dom.payrollAllowanceMasterRecordId?.addEventListener("change", () => {
+    syncBasicPayrollAllowanceAmount();
+  });
+
+  state.dom.payrollAllowanceType?.addEventListener("change", () => {
+    syncBasicPayrollAllowanceAmount();
   });
 
   state.dom.resetPayrollAllowanceFormBtn?.addEventListener("click", async () => {
     await handlePayrollAllowanceFormClear();
+    syncBasicPayrollAllowanceAmount();
   });
 
   state.dom.cancelPayrollAllowanceEditBtn?.addEventListener("click", () => {
@@ -16747,6 +16761,10 @@ function populatePayrollAllowanceMasterOptions() {
 
     option.value = record.id;
 
+    // BASIC ALLOWANCE CALCULATION
+    // Store the selected employee salary on the option so Basic can auto-calculate as 50%.
+    option.dataset.basicSalary = String(Number(record.basic_salary || 0));
+
     // DESCRIPTION ITEM 3 - STEP 2A-4A
     // Only show Grade / Level in the Allowance dropdown when a real grade exists.
     // This prevents awkward labels like "Employee — -- — ₦300,000.00".
@@ -18132,6 +18150,58 @@ function findPayrollAllowanceEffectiveDateConflict({
       String(record.effective_date || "").trim() === dateKey
     );
   }) || null;
+}
+
+// BASIC ALLOWANCE CALCULATION
+// Basic is 50% of the selected employee salary setup.
+// The amount is system-calculated to avoid HR typing errors.
+function isBasicPayrollAllowanceType(value = "") {
+  return String(value || "").trim().toLowerCase() === "basic";
+}
+
+function getSelectedPayrollAllowanceBasicSalary() {
+  const selectedOption =
+    state.dom.payrollAllowanceMasterRecordId?.selectedOptions?.[0] || null;
+
+  const optionBasicSalary = Number(selectedOption?.dataset?.basicSalary || 0);
+
+  if (Number.isFinite(optionBasicSalary) && optionBasicSalary > 0) {
+    return optionBasicSalary;
+  }
+
+  const selectedRecord = getPayrollMasterRecordById(
+    state.dom.payrollAllowanceMasterRecordId?.value,
+  );
+
+  const recordBasicSalary = Number(selectedRecord?.basic_salary || 0);
+
+  return Number.isFinite(recordBasicSalary) ? recordBasicSalary : 0;
+}
+
+function syncBasicPayrollAllowanceAmount() {
+  const amountInput = state.dom.payrollAllowanceAmount;
+  if (!amountInput) return;
+
+  const allowanceType = state.dom.payrollAllowanceType?.value || "";
+  const isBasic = isBasicPayrollAllowanceType(allowanceType);
+
+  amountInput.readOnly = isBasic;
+  amountInput.classList.toggle("bg-light", isBasic);
+
+  if (!isBasic) {
+    amountInput.placeholder = "Enter allowance amount";
+    return;
+  }
+
+  amountInput.placeholder = "Basic is automatically calculated as 50% of salary";
+
+  const basicSalary = getSelectedPayrollAllowanceBasicSalary();
+  const calculatedBasicAllowance = basicSalary * 0.5;
+
+  amountInput.value =
+    Number.isFinite(calculatedBasicAllowance) && calculatedBasicAllowance > 0
+      ? calculatedBasicAllowance.toFixed(2)
+      : "";
 }
 
 function showPayrollAllowanceValidationIssues(issues = []) {
@@ -19744,6 +19814,13 @@ function getActiveBatchPayrollExtraComponentsForMaster(payrollMasterRecordId = "
 
     const type = normalizeText(component.allowance_type || "");
 
+    // BASIC ALLOWANCE CALCULATION
+    // Basic is already calculated from salary during payroll finalisation.
+    // Do not treat a saved Basic allowance component as an extra earning.
+    if (type === "basic" || type === "basic pay") {
+      return;
+    }
+
     if (type === "bonus") {
       extras.bonus += amount;
       return;
@@ -19839,6 +19916,13 @@ function getActiveManualPayrollAllowanceComponentsForMaster(
     }
 
     const type = normalizeText(component.allowance_type || "");
+
+    // BASIC ALLOWANCE CALCULATION
+    // Basic is already calculated from salary during payroll finalisation.
+    // Do not add Basic setup records again as manual payroll top-ups.
+    if (type === "basic" || type === "basic pay") {
+      return;
+    }
 
     if (type === "housing" || type === "housing allowance") {
       totals.housingAllowanceTopUp += amount;
@@ -26523,7 +26607,7 @@ function renderEmployeeRecords(employees) {
           </button>
 
           ${shouldShowLoginInviteRecovery
-            ? `
+        ? `
 <!-- HR EMPLOYEE LOGIN RESEND - STEP 15C
      HR-only secure login-link action for sending an initial invite
      or resending a fresh setup/recovery link. -->
@@ -26538,7 +26622,7 @@ function renderEmployeeRecords(employees) {
   <i class="bi bi-envelope-plus"></i>
 </button>
 `
-            : ""}
+        : ""}
 
 <!-- MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1F
      Quick action is only for Employee <-> Manager.
@@ -29017,13 +29101,13 @@ async function handleEmployeeSave() {
           ? `Employee updated for ${savedEmployeeName}. Login dashboard routing will apply after a login profile exists.`
           : `Employee updated for ${savedEmployeeName}. Dashboard routing has been synced.`,
       );
-} else if (loginInviteSent) {
-  showDashboardToast(
-    "success",
-    "Employee created and linked",
-    `Login invite sent to ${employeePayload.work_email}. Account is linked.`,
-  );
-} else if (loginInviteExistingAccount) {
+    } else if (loginInviteSent) {
+      showDashboardToast(
+        "success",
+        "Employee created and linked",
+        `Login invite sent to ${employeePayload.work_email}. Account is linked.`,
+      );
+    } else if (loginInviteExistingAccount) {
       showDashboardToast(
         "success",
         "Employee linked to existing login",
