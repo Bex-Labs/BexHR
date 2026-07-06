@@ -457,7 +457,7 @@ function buildPayslipEmailMessage(
     ? "Please use the secure button below to access your payslip."
     : branding.isAlpatech
       ? "Please sign in to Alpatech HR & Payroll and open Payroll to access your payslip."
-      : : "Please sign in to BexHR and open Payroll to access your payslip.";;
+      : "Please sign in to BexHR and open Payroll to access your payslip.";
 
   // ALPATECH EMAIL BRANDING - STEP 2K
   // The EmailJS visual header already carries the Alpatech brand.
