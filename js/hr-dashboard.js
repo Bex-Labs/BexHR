@@ -9637,37 +9637,37 @@ function bindEvents() {
 
   // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - STEP 5
   // When HR selects a pay cycle, default the pay date to that month end.
-state.dom.payrollPayCycle?.addEventListener("change", () => {
-  updatePayDateFromPayCycle();
+  state.dom.payrollPayCycle?.addEventListener("change", () => {
+    updatePayDateFromPayCycle();
 
-  // PAYROLL FINALISED CORRECTION - PAY CYCLE FIX
-  // In correction mode, Pay Cycle may need to change the saved Pay Date,
-  // but it must not reload Payroll Master or recalculate the saved payroll snapshot.
-  if (isFinalisedPayrollRecord(state.currentEditingPayroll || {})) {
-    updatePayrollSubmitButtonState();
-    return;
-  }
+    // PAYROLL FINALISED CORRECTION - PAY CYCLE FIX
+    // In correction mode, Pay Cycle may need to change the saved Pay Date,
+    // but it must not reload Payroll Master or recalculate the saved payroll snapshot.
+    if (isFinalisedPayrollRecord(state.currentEditingPayroll || {})) {
+      updatePayrollSubmitButtonState();
+      return;
+    }
 
-  // DESCRIPTION ITEM 6 - STEP 6B
-  // For normal new payroll creation, Pay Period changes the Pay Date,
-  // so reload the Payroll Master version effective for that new Pay Date.
-  populatePayrollFormFromEmployeeMaster(state.dom.payrollEmployeeId?.value || "");
-});
+    // DESCRIPTION ITEM 6 - STEP 6B
+    // For normal new payroll creation, Pay Period changes the Pay Date,
+    // so reload the Payroll Master version effective for that new Pay Date.
+    populatePayrollFormFromEmployeeMaster(state.dom.payrollEmployeeId?.value || "");
+  });
 
-state.dom.payrollPayDate?.addEventListener("change", () => {
-  // PAYROLL FINALISED CORRECTION - DATE FIX
-  // When correcting an already-finalised payroll record, changing Pay Date
-  // must not rebuild salary, allowance, deduction, or net-pay values from setup.
-  if (isFinalisedPayrollRecord(state.currentEditingPayroll || {})) {
-    updatePayrollSubmitButtonState();
-    return;
-  }
+  state.dom.payrollPayDate?.addEventListener("change", () => {
+    // PAYROLL FINALISED CORRECTION - DATE FIX
+    // When correcting an already-finalised payroll record, changing Pay Date
+    // must not rebuild salary, allowance, deduction, or net-pay values from setup.
+    if (isFinalisedPayrollRecord(state.currentEditingPayroll || {})) {
+      updatePayrollSubmitButtonState();
+      return;
+    }
 
-  // DESCRIPTION ITEM 6 - STEP 6B
-  // If HR manually changes Pay Date during normal payroll creation,
-  // the salary source must switch to the Payroll Master version active on that date.
-  populatePayrollFormFromEmployeeMaster(state.dom.payrollEmployeeId?.value || "");
-});
+    // DESCRIPTION ITEM 6 - STEP 6B
+    // If HR manually changes Pay Date during normal payroll creation,
+    // the salary source must switch to the Payroll Master version active on that date.
+    populatePayrollFormFromEmployeeMaster(state.dom.payrollEmployeeId?.value || "");
+  });
 
   // BATCH PAYROLL CSV IMPORT - STEP 1
   // Enable Import CSV only after a CSV file has been selected.
@@ -16095,17 +16095,27 @@ function markPayrollMasterFieldInvalid(field) {
   field.classList.add("is-invalid");
 }
 
-function findPayrollMasterEffectiveDateConflict(employeeId = "", effectiveDate = "") {
+function findPayrollMasterEffectiveDateConflict(
+  employeeId = "",
+  effectiveDate = "",
+  excludedPayrollMasterId = "",
+) {
   const employeeKey = String(employeeId || "").trim();
   const dateKey = String(effectiveDate || "").trim();
+  const excludedId = String(excludedPayrollMasterId || "").trim();
 
   if (!employeeKey || !dateKey) return null;
 
-  // DESCRIPTION ITEM 8 - STEP 8A
-  // Payroll Master is versioned by employee + effective date.
-  // A second row for the same employee and same effective date would make
-  // historical payroll resolution ambiguous, so block it before save.
+  // PAYROLL MASTER CORRECTION VS VERSIONING - STEP 1
+  // Block duplicate Employee Salary Setup rows for the same employee/effective date,
+  // but allow the currently edited row to keep its own effective date.
   return (state.payrollMasterRecords || []).find((record) => {
+    const recordId = String(record.id || "").trim();
+
+    if (excludedId && recordId === excludedId) {
+      return false;
+    }
+
     return (
       String(record.employee_id || "").trim() === employeeKey &&
       String(record.salary_effective_date || "").trim() === dateKey
@@ -16193,7 +16203,13 @@ function validatePayrollMasterForm() {
     firstInvalidField ||= state.dom.payrollMasterStatus;
   }
 
-  const conflict = findPayrollMasterEffectiveDateConflict(employeeId, effectiveDate);
+  const editingId = String(state.dom.editingPayrollMasterId?.value || "").trim();
+
+  const conflict = findPayrollMasterEffectiveDateConflict(
+    employeeId,
+    effectiveDate,
+    editingId,
+  );
 
   if (conflict) {
     issues.push(
@@ -16259,43 +16275,6 @@ function buildPayrollMasterPayload(isEditMode = false) {
   return payload;
 }
 
-function stripPayrollMasterVersionSystemNotes(notes = "") {
-  // DESCRIPTION ITEM 6 - STEP 6A FIX
-  // Keep system-generated version notes out of the editable Notes box.
-  // HR should only see/edit their own notes when creating a new version.
-  return String(notes || "")
-    .split(/\r?\n/)
-    .filter(
-      (line) =>
-        !String(line || "")
-          .trim()
-          .startsWith("Payroll master version created from previous record"),
-    )
-    .join("\n")
-    .trim();
-}
-
-function buildPayrollMasterVersionNotes(previousRecord = {}, newNotes = "") {
-  const previousEffectiveDate = formatDate(previousRecord.salary_effective_date);
-  const previousSalary = formatCurrency(previousRecord.basic_salary || 0, "NGN");
-
-  const versionNote = [
-    "Payroll master version created from previous record",
-    previousEffectiveDate ? `Previous effective date: ${previousEffectiveDate}` : "",
-    previousSalary ? `Previous salary: ${previousSalary}` : "",
-  ]
-    .filter(Boolean)
-    .join(" | ");
-
-  // DESCRIPTION ITEM 6 - STEP 6A
-  // Payroll Master changes are versioned, not overwritten.
-  // This note keeps the new version traceable while the old effective-dated
-  // record remains available for historical payroll reproduction.
-  return [stripPayrollMasterVersionSystemNotes(newNotes), versionNote]
-    .filter(Boolean)
-    .join("\n");
-}
-
 function setPayrollMasterSaveLoading(isLoading, isEditMode = false) {
   const button = state.dom.savePayrollMasterBtn;
   if (!button) return;
@@ -16337,23 +16316,11 @@ async function handlePayrollMasterSave() {
   const editingId = String(state.dom.editingPayrollMasterId?.value || "").trim();
   const isEditMode = Boolean(editingId);
 
-  // DESCRIPTION ITEM 6 - STEP 6A
-  // Editing Payroll Master Data now creates a new effective-dated version.
-  // This prevents historical salary setup from being overwritten.
-  const payload = buildPayrollMasterPayload(false);
-
-  if (isEditMode) {
-    const previousRecord =
-      state.currentEditingPayrollMaster ||
-      state.payrollMasterRecords.find((item) => String(item.id) === editingId) ||
-      {};
-
-    // DESCRIPTION ITEM 6 - STEP 6A FIX
-    // Do not use native browser confirmation popups.
-    // Payroll Master versioning should follow the same page alert/success
-    // notification behaviour used across the HR & Payroll System.
-    payload.notes = buildPayrollMasterVersionNotes(previousRecord, payload.notes);
-  }
+  // PAYROLL MASTER CORRECTION VS VERSIONING - STEP 2
+  // The normal Edit action corrects the existing Employee Salary Setup row.
+  // It must not create a duplicate payroll master version.
+  // A deliberate "Create New Version" workflow can be added separately later.
+  const payload = buildPayrollMasterPayload(isEditMode);
 
   try {
     setPayrollMasterSaveLoading(true, isEditMode);
@@ -16361,15 +16328,20 @@ async function handlePayrollMasterSave() {
     const supabase = getSupabaseClient();
     let response;
 
-    // DESCRIPTION ITEM 6 - STEP 6A
-    // Always insert Payroll Master saves as effective-dated records.
-    // In edit/version mode, the selected row is only used as a template;
-    // it is not overwritten. Existing historical records remain reproducible.
-    response = await supabase
-      .from("payroll_master_records")
-      .insert([payload])
-      .select("*")
-      .maybeSingle();
+    if (isEditMode) {
+      response = await supabase
+        .from("payroll_master_records")
+        .update(payload)
+        .eq("id", editingId)
+        .select("*")
+        .maybeSingle();
+    } else {
+      response = await supabase
+        .from("payroll_master_records")
+        .insert([payload])
+        .select("*")
+        .maybeSingle();
+    }
 
     if (response.error) {
       throw response.error;
@@ -16380,7 +16352,7 @@ async function handlePayrollMasterSave() {
     showPageAlert(
       "success",
       isEditMode
-        ? `New Employee Salary Setup version was created successfully for effective date <strong>${escapeHtml(
+        ? `Employee Salary Setup was corrected successfully for effective date <strong>${escapeHtml(
           payload.salary_effective_date,
         )}</strong>.`
         : `Employee Salary Setup was created successfully for effective date <strong>${escapeHtml(
@@ -16388,14 +16360,11 @@ async function handlePayrollMasterSave() {
         )}</strong>.`,
     );
 
-    // DESCRIPTION ITEM 6 - STEP 6A
-    // Payroll Master save now uses the same floating success notification
-    // pattern already used by other HR/payroll setup cards.
     showDashboardToast(
       "success",
-      isEditMode ? "Employee Salary Setup version created" : "Employee Salary Setup created",
+      isEditMode ? "Employee Salary Setup corrected" : "Employee Salary Setup created",
       isEditMode
-        ? "A new effective-dated Employee Salary Setup version has been created. The old version remains for historical payroll."
+        ? "The existing employee salary setup was updated. No duplicate salary setup row was created."
         : "The employee salary setup has been saved successfully.",
     );
 
@@ -16658,7 +16627,7 @@ ${escapeHtml(getPayrollMasterGradeDisplay(record))}
 function startPayrollMasterEdit(payrollMasterId) {
   if (!canCurrentUserMaintainPayrollMasterData()) {
     // DESCRIPTION ITEM 7 - STEP 7A
-    // Prevent unauthorised users from opening Payroll Master version mode.
+    // Prevent unauthorised users from opening Employee Salary Setup edit mode.
     showPayrollMasterAccessDeniedMessage();
     return;
   }
@@ -16709,16 +16678,17 @@ function startPayrollMasterEdit(payrollMasterId) {
 
   if (state.dom.payrollMasterNotes) {
     // DESCRIPTION ITEM 6 - STEP 6A FIX
-    // Do not show old system-generated version audit notes in the editable form.
-    // The new version audit will be rebuilt cleanly when HR saves.
-    state.dom.payrollMasterNotes.value = stripPayrollMasterVersionSystemNotes(record.notes || "");
+    // PAYROLL MASTER CORRECTION VS VERSIONING - STEP 3
+    // Edit mode now corrects the existing Employee Salary Setup row.
+    // Keep HR notes exactly as saved; do not strip version notes here.
+    state.dom.payrollMasterNotes.value = record.notes || "";
   }
 
   if (state.dom.payrollMasterFormModeBadge) {
-    // DESCRIPTION ITEM 6 - STEP 6A
-    // Existing payroll master rows are used as templates for new versions.
-    // They are not directly overwritten.
-    state.dom.payrollMasterFormModeBadge.textContent = "New Version Mode";
+    // PAYROLL MASTER CORRECTION VS VERSIONING - STEP 4
+    // The normal edit action now corrects the existing Employee Salary Setup row.
+    // It no longer creates a duplicate salary setup version.
+    state.dom.payrollMasterFormModeBadge.textContent = "Edit Mode";
     state.dom.payrollMasterFormModeBadge.className =
       "badge rounded-pill text-bg-primary px-3 py-2";
   }
@@ -16730,7 +16700,7 @@ function startPayrollMasterEdit(payrollMasterId) {
   if (state.dom.savePayrollMasterBtn) {
     state.dom.savePayrollMasterBtn.innerHTML = `
       <i class="bi bi-save me-2"></i>
-<span id="savePayrollMasterBtnText">Save Salary Setup Version</span>
+      <span id="savePayrollMasterBtnText">Update Salary Setup</span>
     `;
     state.dom.savePayrollMasterBtnText = document.getElementById("savePayrollMasterBtnText");
   }
@@ -17118,6 +17088,20 @@ function validatePayrollStatutoryForm() {
     issues.push("Select the statutory deduction status.");
     markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryStatus);
     firstInvalidField ||= state.dom.payrollStatutoryStatus;
+  }
+
+   const payrollMasterEffectiveDateIssue =
+    getPayrollMasterRecordEffectiveDateValidationIssue(
+      payrollMasterRecordId,
+      effectiveDate,
+      "statutory deduction",
+    );
+
+  if (payrollMasterEffectiveDateIssue) {
+    issues.push(payrollMasterEffectiveDateIssue);
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryMasterRecordId);
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryEffectiveDate);
+    firstInvalidField ||= state.dom.payrollStatutoryMasterRecordId;
   }
 
   const conflict = findPayrollStatutoryEffectiveDateConflict({
@@ -18180,6 +18164,47 @@ function markPayrollAllowanceFieldInvalid(field) {
   field.classList.add("is-invalid");
 }
 
+// PAYROLL CHILD SETUP VERSION GUARD - STEP 1
+// Child setup rows must not start before the selected Employee Salary Setup version starts.
+// Example invalid setup:
+// - Selected Employee Salary Setup: Jul 1, 2026
+// - Allowance/Deduction Effective Date: Jun 1, 2026
+function getPayrollMasterRecordEffectiveDateValidationIssue(
+  payrollMasterRecordId = "",
+  childEffectiveDate = "",
+  childSetupLabel = "setup",
+) {
+  const masterId = String(payrollMasterRecordId || "").trim();
+  const effectiveDate = String(childEffectiveDate || "").trim();
+
+  if (!masterId || !effectiveDate) return "";
+
+  const payrollMaster = getPayrollMasterRecordById(masterId);
+
+  if (!payrollMaster) {
+    return "The selected Employee Salary Setup record could not be found. Refresh the page and try again.";
+  }
+
+  const masterEffectiveTime = new Date(
+    payrollMaster.salary_effective_date || "",
+  ).getTime();
+
+  const childEffectiveTime = new Date(effectiveDate).getTime();
+
+  if (
+    !Number.isFinite(masterEffectiveTime) ||
+    !Number.isFinite(childEffectiveTime)
+  ) {
+    return "";
+  }
+
+  if (childEffectiveTime < masterEffectiveTime) {
+    return `This ${childSetupLabel} starts before the selected Employee Salary Setup. Select the matching salary setup record for ${formatDate(effectiveDate)}.`;
+  }
+
+  return "";
+}
+
 function findPayrollAllowanceEffectiveDateConflict({
   payrollMasterRecordId = "",
   allowanceType = "",
@@ -18402,6 +18427,20 @@ function validatePayrollAllowanceForm() {
     issues.push("Select the allowance status.");
     markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceStatus);
     firstInvalidField ||= state.dom.payrollAllowanceStatus;
+  }
+
+ const payrollMasterEffectiveDateIssue =
+    getPayrollMasterRecordEffectiveDateValidationIssue(
+      payrollMasterRecordId,
+      effectiveDate,
+      "allowance component",
+    );
+
+  if (payrollMasterEffectiveDateIssue) {
+    issues.push(payrollMasterEffectiveDateIssue);
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceMasterRecordId);
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceEffectiveDate);
+    firstInvalidField ||= state.dom.payrollAllowanceMasterRecordId;
   }
 
   const conflict = findPayrollAllowanceEffectiveDateConflict({
@@ -20144,6 +20183,14 @@ function applyActivePayrollAllowanceComponentsToPayrollForm() {
 
   const replaceFieldWhenConfigured = (field, amount) => {
     if (!field) return;
+
+    // PAYROLL STRUCTURED SPLIT NULL GUARD - STEP 1
+    // No configured Basic/Housing/Transport/Utility/Other allowance row should
+    // not overwrite the Regular salary split with 0.00.
+    // Number(null) is 0, so explicitly ignore blank setup values first.
+    if (amount === null || amount === undefined || amount === "") {
+      return;
+    }
 
     const configuredAmount = Number(amount);
 
