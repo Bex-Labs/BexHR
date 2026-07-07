@@ -13,6 +13,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     cacheDomElements();
 
+    hideUnsupportedPayrollAllowanceTypeOptions();
+
     bindEvents();
 
     // PAYROLL WORKSPACE LAYOUT - HR/PAYROLL STANDARD STEP 2A
@@ -1842,6 +1844,11 @@ const state = {
   // Tracks payroll records just submitted/updated in the current browser session
   // so they can be shown first after refresh.
   lastSavedPayrollRecordIds: new Set(),
+
+  // PAYROLL FINALISED CORRECTION UX - STEP 3A
+  // Tracks payroll records edited in this browser session so the Payroll Records
+  // table can show "Recently edited" without changing saved payroll data.
+  recentlyEditedPayrollRecordIds: new Set(),
 
   // DESCRIPTION ITEM 4 - STEP 6
   // Holds payslip email audit/status logs loaded from Supabase.
@@ -9630,21 +9637,37 @@ function bindEvents() {
 
   // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - STEP 5
   // When HR selects a pay cycle, default the pay date to that month end.
-  state.dom.payrollPayCycle?.addEventListener("change", () => {
-    updatePayDateFromPayCycle();
+state.dom.payrollPayCycle?.addEventListener("change", () => {
+  updatePayDateFromPayCycle();
 
-    // DESCRIPTION ITEM 6 - STEP 6B
-    // Pay Period changes the Pay Date, so reload the Payroll Master version
-    // that is effective for that new Pay Date before recalculating payroll.
-    populatePayrollFormFromEmployeeMaster(state.dom.payrollEmployeeId?.value || "");
-  });
+  // PAYROLL FINALISED CORRECTION - PAY CYCLE FIX
+  // In correction mode, Pay Cycle may need to change the saved Pay Date,
+  // but it must not reload Payroll Master or recalculate the saved payroll snapshot.
+  if (isFinalisedPayrollRecord(state.currentEditingPayroll || {})) {
+    updatePayrollSubmitButtonState();
+    return;
+  }
 
-  state.dom.payrollPayDate?.addEventListener("change", () => {
-    // DESCRIPTION ITEM 6 - STEP 6B
-    // If HR manually changes Pay Date, the salary source must switch to the
-    // Payroll Master version active on that date.
-    populatePayrollFormFromEmployeeMaster(state.dom.payrollEmployeeId?.value || "");
-  });
+  // DESCRIPTION ITEM 6 - STEP 6B
+  // For normal new payroll creation, Pay Period changes the Pay Date,
+  // so reload the Payroll Master version effective for that new Pay Date.
+  populatePayrollFormFromEmployeeMaster(state.dom.payrollEmployeeId?.value || "");
+});
+
+state.dom.payrollPayDate?.addEventListener("change", () => {
+  // PAYROLL FINALISED CORRECTION - DATE FIX
+  // When correcting an already-finalised payroll record, changing Pay Date
+  // must not rebuild salary, allowance, deduction, or net-pay values from setup.
+  if (isFinalisedPayrollRecord(state.currentEditingPayroll || {})) {
+    updatePayrollSubmitButtonState();
+    return;
+  }
+
+  // DESCRIPTION ITEM 6 - STEP 6B
+  // If HR manually changes Pay Date during normal payroll creation,
+  // the salary source must switch to the Payroll Master version active on that date.
+  populatePayrollFormFromEmployeeMaster(state.dom.payrollEmployeeId?.value || "");
+});
 
   // BATCH PAYROLL CSV IMPORT - STEP 1
   // Enable Import CSV only after a CSV file has been selected.
@@ -11477,7 +11500,6 @@ function setFinalisedPayrollRecordReadOnlyMode(isReadOnly = false) {
   const fieldsToLock = [
     state.dom.payrollEmployeeId,
     state.dom.payrollPayCycle,
-    state.dom.payrollPayDate,
     state.dom.payrollEmployeeGroup,
     state.dom.payrollModel,
     state.dom.regularIncrementPercent,
@@ -18107,6 +18129,38 @@ async function refreshPayrollAllowanceWorkspace() {
   await loadPayrollAllowanceComponents();
 }
 
+// PAYROLL ALLOWANCE TYPE SAFETY - STEP 1
+// Meal and Hazard are valid real-world allowance concepts, but this payroll
+// finalisation screen does not yet have dedicated Meal/Hazard fields.
+// Hide them from new setup and block stale saves until full payroll support
+// is added across Finalise Payroll, Payslip, Records, and Export.
+const UNSUPPORTED_PAYROLL_ALLOWANCE_TYPES = new Set([
+  "meal",
+  "meal allowance",
+  "hazard",
+  "hazard allowance",
+]);
+
+function isUnsupportedPayrollAllowanceType(value = "") {
+  return UNSUPPORTED_PAYROLL_ALLOWANCE_TYPES.has(normalizeText(value));
+}
+
+function hideUnsupportedPayrollAllowanceTypeOptions() {
+  const select = state.dom.payrollAllowanceType;
+  if (!select) return;
+
+  Array.from(select.options).forEach((option) => {
+    const optionText = option.textContent || option.value || "";
+
+    if (
+      isUnsupportedPayrollAllowanceType(option.value) ||
+      isUnsupportedPayrollAllowanceType(optionText)
+    ) {
+      option.remove();
+    }
+  });
+}
+
 function clearPayrollAllowanceValidationState() {
   // DESCRIPTION ITEM 8 - STEP 8B
   // Reset Allowance Component validation styling before each fresh validation pass.
@@ -18312,6 +18366,12 @@ function validatePayrollAllowanceForm() {
 
   if (!allowanceType) {
     issues.push("Select the allowance type.");
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceType);
+    firstInvalidField ||= state.dom.payrollAllowanceType;
+  } else if (isUnsupportedPayrollAllowanceType(allowanceType)) {
+    issues.push(
+      "Meal and Hazard allowances are temporarily unavailable until dedicated payroll fields are added.",
+    );
     markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceType);
     firstInvalidField ||= state.dom.payrollAllowanceType;
   }
@@ -20036,16 +20096,16 @@ function getActiveManualPayrollAllowanceComponentsForMaster(
       return;
     }
 
-    // Setup-only allowance types without a dedicated payroll field are grouped
-    // into Other Allowance so they still affect Gross Pay and PAYE calculation.
+    // Meal and Hazard do not currently have dedicated payroll finalisation fields.
+    // Do not silently group them into Other Allowance because Other Allowance is
+    // already part of the structured 20% salary split.
     if (
       type === "meal" ||
       type === "meal allowance" ||
       type === "hazard" ||
       type === "hazard allowance"
     ) {
-      totals.otherAllowance =
-        Number(totals.otherAllowance || 0) + amount;
+      return;
     }
   });
 
@@ -20062,8 +20122,9 @@ function getActiveManualPayrollAllowanceComponentsForMaster(
 // Structured Regular components replace the generated split when configured:
 // Basic, Housing, Transport, Utility, and Other.
 //
-// Extra earnings remain additive:
-// Medical, Bonus, Overtime, Logistics, and Data/Airtime.
+// Extra earnings from Allowance Components are also set once, not added on top
+// of the current field value. This keeps the function idempotent when payroll
+// recalculation runs more than once.
 function applyActivePayrollAllowanceComponentsToPayrollForm() {
   if (!isAlpatechRegularSelected()) {
     return;
@@ -20093,124 +20154,18 @@ function applyActivePayrollAllowanceComponentsToPayrollForm() {
     setNumericFieldValue(field, configuredAmount);
   };
 
-  const addExtraEarningToField = (field, amount = 0) => {
+  const setExtraEarningWhenConfigured = (field, amount = 0) => {
     if (!field) return;
 
-    const extraAmount = Number(amount || 0);
+    const configuredAmount = Number(amount || 0);
 
-    if (!Number.isFinite(extraAmount) || extraAmount <= 0) {
-      return;
-    }
-
-    setNumericFieldValue(
-      field,
-      toNullableNumber(field.value) + extraAmount,
-    );
-  };
-
-  replaceFieldWhenConfigured(
-    state.dom.payrollBasicPay,
-    allowances.basicPay,
-  );
-
-  replaceFieldWhenConfigured(
-    state.dom.payrollHousingAllowance,
-    allowances.housingAllowance,
-  );
-
-  replaceFieldWhenConfigured(
-    state.dom.payrollTransportAllowance,
-    allowances.transportAllowance,
-  );
-
-  replaceFieldWhenConfigured(
-    state.dom.payrollUtilityAllowance,
-    allowances.utilityAllowance,
-  );
-
-  replaceFieldWhenConfigured(
-    state.dom.payrollOtherAllowance,
-    allowances.otherAllowance,
-  );
-
-  addExtraEarningToField(
-    state.dom.payrollMedicalAllowance,
-    allowances.medicalAllowance,
-  );
-
-  addExtraEarningToField(
-    state.dom.payrollBonus,
-    allowances.bonus,
-  );
-
-  addExtraEarningToField(
-    state.dom.payrollOvertime,
-    allowances.overtime,
-  );
-
-  addExtraEarningToField(
-    state.dom.payrollLogisticsAllowance,
-    allowances.logisticsAllowance,
-  );
-
-  addExtraEarningToField(
-    state.dom.payrollDataAirtimeAllowance,
-    allowances.dataAirtimeAllowance,
-  );
-}
-
-// PAYROLL WORKFLOW UX REPAIR - STEP 6
-// Apply active setup allowances to the visible Single Employee Finalisation form.
-//
-// Structured Regular components replace the generated split when configured:
-// Basic, Housing, Transport, Utility, and Other.
-//
-// Extra earnings remain additive:
-// Medical, Bonus, Overtime, Logistics, and Data/Airtime.
-function applyActivePayrollAllowanceComponentsToPayrollForm() {
-  if (!isAlpatechRegularSelected()) {
-    return;
-  }
-
-  const activePayrollMaster = getCurrentManualPayrollMasterForOverride();
-  const payrollDate = getCurrentPayrollCalculationDate();
-
-  if (!activePayrollMaster?.id || !payrollDate) {
-    return;
-  }
-
-  const allowances = getActiveManualPayrollAllowanceComponentsForMaster(
-    activePayrollMaster.id,
-    payrollDate,
-  );
-
-  const replaceFieldWhenConfigured = (field, amount) => {
-    if (!field) return;
-
-    const configuredAmount = Number(amount);
-
-    if (!Number.isFinite(configuredAmount)) {
+    if (!Number.isFinite(configuredAmount) || configuredAmount <= 0) {
       return;
     }
 
     setNumericFieldValue(field, configuredAmount);
   };
 
-  const addExtraEarningToField = (field, amount = 0) => {
-    if (!field) return;
-
-    const extraAmount = Number(amount || 0);
-
-    if (!Number.isFinite(extraAmount) || extraAmount <= 0) {
-      return;
-    }
-
-    setNumericFieldValue(
-      field,
-      toNullableNumber(field.value) + extraAmount,
-    );
-  };
-
   replaceFieldWhenConfigured(
     state.dom.payrollBasicPay,
     allowances.basicPay,
@@ -20236,27 +20191,27 @@ function applyActivePayrollAllowanceComponentsToPayrollForm() {
     allowances.otherAllowance,
   );
 
-  addExtraEarningToField(
+  setExtraEarningWhenConfigured(
     state.dom.payrollMedicalAllowance,
     allowances.medicalAllowance,
   );
 
-  addExtraEarningToField(
+  setExtraEarningWhenConfigured(
     state.dom.payrollBonus,
     allowances.bonus,
   );
 
-  addExtraEarningToField(
+  setExtraEarningWhenConfigured(
     state.dom.payrollOvertime,
     allowances.overtime,
   );
 
-  addExtraEarningToField(
+  setExtraEarningWhenConfigured(
     state.dom.payrollLogisticsAllowance,
     allowances.logisticsAllowance,
   );
 
-  addExtraEarningToField(
+  setExtraEarningWhenConfigured(
     state.dom.payrollDataAirtimeAllowance,
     allowances.dataAirtimeAllowance,
   );
@@ -32024,6 +31979,21 @@ function renderPayrollRecords(records) {
     // Prepare a safe payroll record id for inline table actions.
     const safePayrollRecordId = String(record.id || "").replaceAll("'", "\\'");
 
+    // PAYROLL FINALISED CORRECTION UX - STEP 3C
+    // Show a session-only badge after HR edits an existing payroll record.
+    const isRecentlyEditedPayrollRecord =
+      state.recentlyEditedPayrollRecordIds?.has(String(record.id || "").trim());
+
+    const recentlyEditedPayrollBadgeHtml = isRecentlyEditedPayrollRecord
+      ? `
+<div class="small mt-1">
+  <span class="badge rounded-pill text-bg-info">
+    Recently edited
+  </span>
+</div>
+`
+      : "";
+
     // DESCRIPTION ITEM 4 - STEP 7
     // Payslip preview should only be available for finalised payroll records.
     const canPreviewPayslip = Boolean(record.is_finalised);
@@ -32086,9 +32056,10 @@ function renderPayrollRecords(records) {
     Payroll ID: ${escapeHtml(payrollReference)}
   </span>
 </div>
-        <div class="text-secondary small">
-          ${escapeHtml(record.department || "--")} • ${escapeHtml(record.job_title || "--")}
-        </div>
+${recentlyEditedPayrollBadgeHtml}
+<div class="text-secondary small">
+  ${escapeHtml(record.department || "--")} • ${escapeHtml(record.job_title || "--")}
+</div>
       </td>
 
       <td>
@@ -33596,32 +33567,32 @@ async function startPayrollEdit(payrollId) {
   if (state.dom.payrollIsFinalised) state.dom.payrollIsFinalised.checked = Boolean(payrollRecord.is_finalised);
   if (state.dom.payrollNotes) state.dom.payrollNotes.value = payrollRecord.notes || "";
 
-  // PAYROLL RECORD LOCKING - STEP 5D
-  // If this payroll record is already finalised/authorised, show it as a
-  // read-only snapshot. Changes to salary or allowances must be made before
-  // a new payroll run is prepared.
-  const shouldLockFinalisedRecord = isFinalisedPayrollRecord(payrollRecord);
-  setFinalisedPayrollRecordReadOnlyMode(shouldLockFinalisedRecord);
+  // PAYROLL FINALISATION CORRECTION - STEP 1
+  // Finalised records can be corrected by authorised HR/Payroll users.
+  // This keeps the same payroll record ID and updates the existing row instead
+  // of creating a duplicate payroll record.
+  const isFinalisedCorrection = isFinalisedPayrollRecord(payrollRecord);
+  setFinalisedPayrollRecordReadOnlyMode(false);
 
-  if (shouldLockFinalisedRecord) {
+  if (isFinalisedCorrection) {
     showPageAlert(
-      "info",
-      "This payroll record is finalised and is shown as read-only. Update Payroll Master or Allowance Components before preparing a new payroll run if salary or allowance figures need to change.",
+      "warning",
+      "You are editing a finalised payroll record. Saving will update the existing payroll record and mark the notes as corrected after finalisation.",
     );
 
     showDashboardToast(
-      "info",
-      "Payroll Record Locked",
-      "Finalised payroll records are snapshots and cannot be edited directly.",
+      "warning",
+      "Editing Finalised Payroll",
+      "Changes will update this existing payroll record. No duplicate payroll record will be created.",
     );
 
     if (state.dom.payrollFormSubtext) {
       state.dom.payrollFormSubtext.textContent =
-        "This finalised payroll record is read-only. Use Payroll Master or Allowance Components before the next payroll run for new changes.";
+        "Correct this finalised payroll record carefully. The existing payroll record will be updated in place and marked as corrected.";
     }
   } else if (state.dom.payrollFormSubtext) {
     state.dom.payrollFormSubtext.textContent =
-      "Edit this draft payroll record. Finalised payroll records are locked after submission.";
+      "Edit this draft payroll record. Saving updates the existing payroll record.";
   }
 
   if (state.dom.payrollFormTitle) {
@@ -35786,23 +35757,11 @@ async function handlePayrollSave() {
   const editingId = String(state.dom.editingPayrollId?.value || "").trim();
   const isEditMode = Boolean(editingId);
 
-  // PAYROLL RECORD LOCKING - STEP 5D
-  // Safety guard: even if a disabled button is triggered by shortcut or browser
-  // behaviour, do not update a finalised payroll snapshot.
-  if (isEditMode && isFinalisedPayrollRecord(state.currentEditingPayroll || {})) {
-    showPageAlert(
-      "warning",
-      "This payroll record is finalised and cannot be edited directly. Make salary or allowance changes before preparing a new payroll run.",
-    );
-
-    showDashboardToast(
-      "warning",
-      "Payroll Record Locked",
-      "Finalised payroll records are read-only snapshots.",
-    );
-
-    return;
-  }
+  // PAYROLL FINALISATION CORRECTION - STEP 2A
+  // Finalised payroll records may be corrected by authorised HR/Payroll users.
+  // This flag is used after payrollPayload is built.
+  const isFinalisedCorrection =
+    isEditMode && isFinalisedPayrollRecord(state.currentEditingPayroll || {});
 
   // PAYROLL BANK READINESS - STEP 11D
   // Work out which employee records are included in this payroll save.
@@ -35839,6 +35798,20 @@ async function handlePayrollSave() {
 
     payrollPayload = buildPayrollPayload();
 
+    // PAYROLL FINALISATION CORRECTION - STEP 2B
+    // Mark corrected finalised payroll records without creating a duplicate row.
+    if (isFinalisedCorrection) {
+      const existingNotes = String(payrollPayload.notes || "").trim();
+      const correctionStamp = new Date().toISOString();
+
+      payrollPayload.notes = [
+        existingNotes,
+        `Corrected after finalisation on ${correctionStamp}.`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    }
+
     const supabase = getSupabaseClient();
     let response;
 
@@ -35867,13 +35840,24 @@ async function handlePayrollSave() {
       // HR SAVE/EDIT BEHAVIOUR - PAYROLL RECORDS STEP 5
       // Remember the batch records just created so they appear first.
       state.lastSavedPayrollRecordIds = new Set(
-        (response.data || [])
-          .map((record) => String(record.id || "").trim())
+        [response.data?.id || editingId]
+          .map((id) => String(id || "").trim())
           .filter(Boolean),
       );
 
+      // PAYROLL FINALISED CORRECTION UX - STEP 3B
+      // Only edited payroll records get the "Recently edited" badge.
+      // New payroll records are brought to the top but are not labelled edited.
+      state.recentlyEditedPayrollRecordIds = isEditMode
+        ? new Set(
+          [response.data?.id || editingId]
+            .map((id) => String(id || "").trim())
+            .filter(Boolean),
+        )
+        : new Set();
+
       // HR SAVE/EDIT BEHAVIOUR - PAYROLL RECORDS STEP 5
-      // Clear filters before refresh so the batch records are visible.
+      // Clear filters before refresh so the saved/updated record is visible.
       clearPayrollRecordsFiltersBeforeRedirect();
 
       await refreshPayrollWorkspace();
@@ -35932,11 +35916,18 @@ async function handlePayrollSave() {
 
     await refreshPayrollWorkspace();
 
-    showPageAlert(
+    const payrollSaveSuccessMessage = isEditMode
+      ? `Payroll record for <strong>${escapeHtml(payrollPayload.pay_cycle)}</strong> was updated successfully.`
+      : `Payroll record for <strong>${escapeHtml(payrollPayload.pay_cycle)}</strong> was created successfully.`;
+
+    showPageAlert("success", payrollSaveSuccessMessage);
+
+    showDashboardToast(
       "success",
+      isEditMode ? "Payroll record updated" : "Payroll record created",
       isEditMode
-        ? `Payroll record for <strong>${escapeHtml(payrollPayload.pay_cycle)}</strong> was updated successfully.`
-        : `Payroll record for <strong>${escapeHtml(payrollPayload.pay_cycle)}</strong> was created successfully.`,
+        ? "The existing payroll record was updated successfully. No duplicate payroll record was created."
+        : "The payroll record was created successfully.",
     );
 
     resetPayrollForm();
