@@ -4409,9 +4409,10 @@ Disable browser address autofill popup on HR employee address fields. -->
           <div class="mb-4">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
               <div>
-                <h2 class="section-heading h4 mb-1">Employee Payroll Overrides</h2>
+                <h2 class="section-heading h4 mb-1">Advanced Employee Payroll Exceptions</h2>
                 <p class="section-subtext mb-0">
-                  Store employee-specific exceptions to standard grade or rule-based payroll elements.
+                  Controlled employee-specific payroll exceptions used only when a documented HR/payroll approval
+                  exists.
                 </p>
               </div>
 
@@ -4425,6 +4426,17 @@ Disable browser address autofill popup on HR employee address fields. -->
           </div>
 
           <div id="payrollEmployeeOverrideCardCollapse">
+            <div class="alert alert-warning border d-flex align-items-start gap-3 mx-3 mx-lg-4 mt-3 mb-4" role="alert">
+              <i class="bi bi-shield-exclamation fs-5"></i>
+              <div>
+                <div class="fw-semibold">Advanced exception control</div>
+                <div class="small">
+                  Use this only for approved employee-specific payroll exceptions such as temporary exemptions,
+                  approved corrections, or documented one-off payroll adjustments. Standard salary, allowance,
+                  statutory deduction, and other deduction setup should be maintained in their normal setup sections.
+                </div>
+              </div>
+            </div>
             <form id="payrollEmployeeOverrideCreateForm" novalidate>
               <!-- DESCRIPTION ITEM 5 - STEP 2
                    Hidden id reserved for edit mode in a later step. -->
@@ -4548,10 +4560,10 @@ Disable browser address autofill popup on HR employee address fields. -->
 
                 <div class="col-md-6">
                   <label for="payrollEmployeeOverrideApprovalReference" class="form-label fw-semibold">
-                    Approval Reference
+                    Approval Reference <span class="text-danger">*</span>
                   </label>
                   <input type="text" id="payrollEmployeeOverrideApprovalReference" class="form-control"
-                    placeholder="Optional HR/payroll approval reference" />
+                    placeholder="Enter HR/payroll approval reference" required />
                 </div>
 
                 <div class="col-md-6">
