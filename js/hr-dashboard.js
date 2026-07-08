@@ -7048,6 +7048,8 @@ function validatePayrollEmployeeOverrideForm() {
     String(state.dom.payrollEmployeeOverrideStatus?.value || "").trim();
   const ruleSnapshot =
     String(state.dom.payrollEmployeeOverrideRuleSnapshot?.value || "").trim();
+  const approvalReference =
+    String(state.dom.payrollEmployeeOverrideApprovalReference?.value || "").trim();
   const reason =
     String(state.dom.payrollEmployeeOverrideReason?.value || "").trim();
 
@@ -7137,6 +7139,14 @@ function validatePayrollEmployeeOverrideForm() {
     issues.push("Override end date cannot be before the effective date.");
     markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEndDate);
     firstInvalidField ||= state.dom.payrollEmployeeOverrideEndDate;
+  }
+
+  if (!approvalReference) {
+    issues.push("Enter the HR/payroll approval reference for this employee override.");
+    markPayrollEmployeeOverrideFieldInvalid(
+      state.dom.payrollEmployeeOverrideApprovalReference,
+    );
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideApprovalReference;
   }
 
   if (!status) {
