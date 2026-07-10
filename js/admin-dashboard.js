@@ -3035,6 +3035,48 @@ async function syncCompanyUserEmployeeRecord(payload = {}) {
   };
 }
 
+// ADMIN EDGE FUNCTION ERROR MESSAGE FIX
+// Read the structured message returned by a failed Supabase Edge Function.
+// FunctionsHttpError exposes the backend Response through error.context,
+// while error.message usually contains only the generic non-2xx wording.
+async function getAdminEdgeFunctionErrorMessage(
+  error,
+  fallbackMessage = "The requested admin action could not be completed.",
+) {
+  const fallback =
+    String(error?.message || "").trim() ||
+    String(fallbackMessage || "").trim();
+
+  const response = error?.context || null;
+
+  if (response && typeof response.clone === "function") {
+    try {
+      const responseText = await response.clone().text();
+
+      if (responseText) {
+        try {
+          const parsed = JSON.parse(responseText);
+
+          return (
+            String(parsed?.message || parsed?.error || "").trim() ||
+            responseText.trim() ||
+            fallback
+          );
+        } catch {
+          return responseText.trim() || fallback;
+        }
+      }
+    } catch (responseReadError) {
+      console.warn(
+        "Admin Edge Function error response could not be read:",
+        responseReadError,
+      );
+    }
+  }
+
+  return fallback;
+}
+
 async function inviteCompanyUser() {
   if (!validateCompanyUserInviteForm()) {
     updateCompanyUserInviteButtonState();
@@ -3116,9 +3158,10 @@ async function inviteCompanyUser() {
   } catch (error) {
     console.error("Company user invite error:", error);
 
-    const message =
-      String(error?.message || "").trim() ||
-      "Company user invite could not be sent.";
+    const message = await getAdminEdgeFunctionErrorMessage(
+      error,
+      "Company user invite could not be sent.",
+    );
 
     showCompanyUserInviteAlert("danger", message);
     showPageAlert("danger", message);
