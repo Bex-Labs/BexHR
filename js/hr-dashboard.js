@@ -33952,7 +33952,15 @@ function getActiveStatutoryDeductionsForCurrentPayroll() {
       String(activePayrollMaster.id || "").trim();
 
     const isActive = normalizeText(record.status) === "active";
-    const effectiveTime = new Date(record.effective_date || 0).getTime();
+
+    // PAYROLL STATUTORY EFFECTIVE-DATE BOUNDARY FIX
+    // Parse both statutory and payroll dates through the same date-only helper.
+    // Raw new Date("YYYY-MM-DD") uses UTC and can reject a valid same-day
+    // deduction when the user's local timezone is ahead of UTC.
+    const effectiveTime = parsePayrollEffectiveDateToTime(
+      record.effective_date,
+    );
+
     const isEffective =
       Number.isFinite(effectiveTime) &&
       Number.isFinite(payrollDate) &&
@@ -33968,8 +33976,10 @@ function getActiveStatutoryDeductionsForCurrentPayroll() {
     if (!type) return;
 
     const existing = latestByType.get(type);
-    const recordTime = new Date(record.effective_date || 0).getTime() || 0;
-    const existingTime = new Date(existing?.effective_date || 0).getTime() || 0;
+    const recordTime =
+      parsePayrollEffectiveDateToTime(record.effective_date) || 0;
+    const existingTime =
+      parsePayrollEffectiveDateToTime(existing?.effective_date) || 0;
 
     if (!existing || recordTime >= existingTime) {
       latestByType.set(type, record);
