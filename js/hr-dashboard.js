@@ -5880,7 +5880,10 @@ function populatePayrollOtherDeductionMasterOptions() {
 
     option.value = record.id;
     option.textContent =
-      `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+  `${fullName}${gradeSegment} — ` +
+  `${formatCurrency(record.basic_salary, "NGN")} — ` +
+  `${record.salary_effective_date || "--"} — ` +
+  `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
   });
@@ -6835,27 +6838,114 @@ function getPayrollEmployeeOverrideMasterContext(record = {}) {
   };
 }
 
+// EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 2A
+// Show only payroll elements that belong to the selected operational category.
+// This prevents HR users from choosing contradictory or irrelevant combinations.
+const PAYROLL_EMPLOYEE_OVERRIDE_ELEMENTS_BY_CATEGORY = Object.freeze({
+  EARNING: [
+    { value: "BASIC_SALARY", label: "Basic Salary" },
+    { value: "HOUSING_ALLOWANCE", label: "Housing Allowance" },
+    { value: "TRANSPORT_ALLOWANCE", label: "Transport Allowance" },
+    { value: "UTILITY_ALLOWANCE", label: "Utility Allowance" },
+    { value: "MEDICAL_ALLOWANCE", label: "Medical Allowance" },
+    { value: "OTHER_ALLOWANCE", label: "Other Allowance" },
+    { value: "BONUS", label: "Bonus" },
+    { value: "OVERTIME", label: "Overtime" },
+  ],
+
+  STATUTORY_DEDUCTION: [
+    { value: "PAYE", label: "PAYE Tax" },
+    { value: "WHT", label: "WHT Tax" },
+    { value: "EMPLOYEE_PENSION", label: "Employee Pension" },
+    { value: "EMPLOYER_PENSION", label: "Employer Pension" },
+  ],
+
+  OTHER_DEDUCTION: [
+    { value: "OTHER_DEDUCTION", label: "Other Approved Deduction" },
+  ],
+});
+
+function populatePayrollEmployeeOverrideElementOptions(
+  preferredValue = "",
+  { preserveLegacyValue = false } = {},
+) {
+  const select = state.dom.payrollEmployeeOverrideElement;
+  if (!select) return;
+
+  const category = String(
+    state.dom.payrollEmployeeOverrideCategory?.value || "",
+  ).trim();
+
+  const options =
+    PAYROLL_EMPLOYEE_OVERRIDE_ELEMENTS_BY_CATEGORY[category] || [];
+
+  select.innerHTML = "";
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = category
+    ? "Select payroll element"
+    : "Select a category first";
+
+  select.appendChild(placeholder);
+
+  options.forEach(({ value, label }) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+  });
+
+  const savedValue = String(preferredValue || "").trim();
+
+  if (
+    preserveLegacyValue &&
+    savedValue &&
+    !options.some((option) => option.value === savedValue)
+  ) {
+    const legacyOption = document.createElement("option");
+    legacyOption.value = savedValue;
+    legacyOption.textContent = `${formatPayrollEmployeeOverrideElement(savedValue)} (historical)`;
+    select.appendChild(legacyOption);
+  }
+
+  select.value = savedValue;
+  select.disabled = !category;
+
+  updatePayrollEmployeeOverrideSaveButtonState();
+}
+
+// EMPLOYEE OVERRIDE PAYROLL MASTER VERSION CLARITY
+// Keep every effective-dated Payroll Master version available for audit and
+// historical maintenance, while using the shared version-status calculation.
 function populatePayrollEmployeeOverrideMasterOptions() {
   const select = state.dom.payrollEmployeeOverrideMasterRecordId;
   if (!select) return;
 
   const currentValue = String(select.value || "").trim();
+
   const records = Array.isArray(state.payrollMasterRecords)
     ? [...state.payrollMasterRecords]
     : [];
 
-  select.innerHTML = `<option value="">Select payroll master record</option>`;
+  select.innerHTML =
+    `<option value="">Select payroll master record</option>`;
 
   if (!records.length) {
-    select.innerHTML = `<option value="">Create payroll master record first</option>`;
+    select.innerHTML =
+      `<option value="">Create payroll master record first</option>`;
+
     updatePayrollEmployeeOverrideSaveButtonState();
     return;
   }
 
-  const recordsToRender = sortPayrollMasterRecordsByLatestActivity(records);
+  const recordsToRender =
+    sortPayrollMasterRecordsByLatestActivity(records);
 
   recordsToRender.forEach((record) => {
     const option = document.createElement("option");
+
+    const employeeId = String(record.employee_id || "").trim();
 
     const fullName =
       `${record.first_name || ""} ${record.last_name || ""}`.trim() ||
@@ -6863,15 +6953,28 @@ function populatePayrollEmployeeOverrideMasterOptions() {
       "Unknown Employee";
 
     const gradeLabel = getPayrollMasterGradeDisplay(record);
-    const gradeSegment = gradeLabel && gradeLabel !== "--"
-      ? ` — ${gradeLabel}`
-      : "";
+
+    const gradeSegment =
+      gradeLabel && gradeLabel !== "--"
+        ? ` — ${gradeLabel}`
+        : "";
+
+    const effectiveDate = String(
+      record.salary_effective_date || "",
+    ).trim();
+
+    const versionLabel =
+      getPayrollMasterVersionLabel(record);
 
     option.value = record.id;
-    option.dataset.employeeId = record.employee_id || "";
+    option.dataset.employeeId = employeeId;
+    option.dataset.versionType =
+      versionLabel.toLowerCase();
 
     option.textContent =
-      `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+      `${fullName}${gradeSegment} — ` +
+      `${formatCurrency(record.basic_salary, "NGN")} — ` +
+      `${effectiveDate || "--"} — ${versionLabel}`;
 
     select.appendChild(option);
   });
@@ -7278,6 +7381,37 @@ function setPayrollEmployeeOverrideSaveLoading(isLoading) {
   updatePayrollEmployeeOverrideSaveButtonState();
 }
 
+// EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 4B
+// Rule Snapshot belongs only to historical Rule Replacement overrides.
+// Normal Fixed Amount, Percentage, and Exemption records must not show it.
+function syncPayrollEmployeeOverrideRuleSnapshotVisibility({
+  clearWhenHidden = false,
+} = {}) {
+  const field = state.dom.payrollEmployeeOverrideRuleSnapshot;
+  const wrapper = document.getElementById(
+    "payrollEmployeeOverrideRuleSnapshotField",
+  );
+
+  if (!field || !wrapper) return;
+
+  const method = String(
+    state.dom.payrollEmployeeOverrideMethod?.value || "",
+  ).trim();
+
+  const shouldShow = method === "RULE_REPLACEMENT";
+
+  wrapper.classList.toggle("d-none", !shouldShow);
+  field.required = shouldShow;
+
+  if (!shouldShow) {
+    field.classList.remove("is-invalid");
+
+    if (clearWhenHidden) {
+      field.value = "";
+    }
+  }
+}
+
 function resetPayrollEmployeeOverrideForm() {
   state.currentEditingPayrollEmployeeOverride = null;
 
@@ -7302,6 +7436,15 @@ function resetPayrollEmployeeOverrideForm() {
       field.value = "";
       field.classList.remove("is-invalid");
     }
+  });
+
+    // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3A
+  // Reset the Payroll Element dropdown to its safe create-mode state.
+  // No category means no element may be selected yet.
+  populatePayrollEmployeeOverrideElementOptions();
+
+    syncPayrollEmployeeOverrideRuleSnapshotVisibility({
+    clearWhenHidden: true,
   });
 
   if (state.dom.payrollEmployeeOverrideStatus) {
@@ -7561,15 +7704,41 @@ function startPayrollEmployeeOverrideEdit(overrideId) {
       record.override_category || "";
   }
 
-  if (state.dom.payrollEmployeeOverrideElement) {
-    state.dom.payrollEmployeeOverrideElement.value =
-      record.override_element || "";
-  }
+  // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3B
+  // Rebuild the element choices from the saved category before selecting
+  // the saved element. Legacy values remain visible for historical records.
+  populatePayrollEmployeeOverrideElementOptions(
+    record.override_element || "",
+    { preserveLegacyValue: true },
+  );
 
   if (state.dom.payrollEmployeeOverrideMethod) {
-    state.dom.payrollEmployeeOverrideMethod.value =
-      record.override_method || "";
+    const savedMethod = String(record.override_method || "").trim();
+
+    // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3C
+    // Rule Replacement is no longer offered for new records, but an older
+    // saved record must remain visible and maintainable in edit mode.
+    const hasSavedMethodOption = Array.from(
+      state.dom.payrollEmployeeOverrideMethod.options,
+    ).some((option) => option.value === savedMethod);
+
+    if (savedMethod && !hasSavedMethodOption) {
+      const historicalMethodOption = document.createElement("option");
+      historicalMethodOption.value = savedMethod;
+      historicalMethodOption.textContent =
+        `${formatPayrollEmployeeOverrideMethod(savedMethod)} (historical)`;
+
+      state.dom.payrollEmployeeOverrideMethod.appendChild(
+        historicalMethodOption,
+      );
+    }
+
+    state.dom.payrollEmployeeOverrideMethod.value = savedMethod;
   }
+
+    // Reveal Rule Snapshot only when this saved historical record
+  // uses the retired Rule Replacement method.
+  syncPayrollEmployeeOverrideRuleSnapshotVisibility();
 
   if (state.dom.payrollEmployeeOverrideOriginalValue) {
     state.dom.payrollEmployeeOverrideOriginalValue.value =
@@ -9430,6 +9599,26 @@ function bindEvents() {
     field?.addEventListener("input", updatePayrollEmployeeOverrideSaveButtonState);
     field?.addEventListener("change", updatePayrollEmployeeOverrideSaveButtonState);
   });
+
+// EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 2B
+// Changing category clears the old element and shows only relevant choices.
+state.dom.payrollEmployeeOverrideCategory?.addEventListener("change", () => {
+  populatePayrollEmployeeOverrideElementOptions();
+
+  state.dom.payrollEmployeeOverrideElement?.classList.remove("is-invalid");
+
+  updatePayrollEmployeeOverrideSaveButtonState();
+});
+
+// EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 4C
+// Show Rule Snapshot only when an older Rule Replacement method is selected.
+state.dom.payrollEmployeeOverrideMethod?.addEventListener("change", () => {
+  syncPayrollEmployeeOverrideRuleSnapshotVisibility({
+    clearWhenHidden: true,
+  });
+
+  updatePayrollEmployeeOverrideSaveButtonState();
+});
 
   updatePayrollEmployeeOverrideSaveButtonState();
 
@@ -16593,11 +16782,17 @@ ${escapeHtml(getPayrollMasterGradeDisplay(record))}
 
   <td>${escapeHtml(record.pay_cycle || "--")}</td>
 
-  <td>
+<td>
+  <div class="d-flex flex-wrap gap-1">
     <span class="badge ${getStatusBadgeClass(record.payroll_status)}">
       ${escapeHtml(formatStatusLabel(record.payroll_status))}
     </span>
-  </td>
+
+    <span class="badge bg-light text-dark border">
+      ${escapeHtml(getPayrollMasterVersionLabel(record))}
+    </span>
+  </div>
+</td>
 
   <td class="text-nowrap">
   <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 6A
@@ -16726,6 +16921,71 @@ function startPayrollMasterEdit(payrollMasterId) {
     16,
   );
 }
+
+// PAYROLL MASTER VERSION CLARITY - SHARED VERSION LABEL
+// Version meaning:
+// - Current: latest active version effective today or earlier.
+// - Scheduled: active version with a future effective date.
+// - Historical: older active version.
+// - Inactive: record is not active.
+function getPayrollMasterVersionLabel(record = {}) {
+  const employeeId = String(record.employee_id || "").trim();
+  const effectiveDate = String(
+    record.salary_effective_date || "",
+  ).trim();
+
+  const status = String(record.payroll_status || "")
+    .trim()
+    .toLowerCase();
+
+  if (status !== "active") {
+    return "Inactive";
+  }
+
+  if (!employeeId || !effectiveDate) {
+    return "Historical";
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (effectiveDate > today) {
+    return "Scheduled";
+  }
+
+  const latestEffectiveActiveDate = (state.payrollMasterRecords || [])
+    .filter((item) => {
+      const itemEmployeeId = String(
+        item.employee_id || "",
+      ).trim();
+
+      const itemStatus = String(
+        item.payroll_status || "",
+      )
+        .trim()
+        .toLowerCase();
+
+      const itemEffectiveDate = String(
+        item.salary_effective_date || "",
+      ).trim();
+
+      return (
+        itemEmployeeId === employeeId &&
+        itemStatus === "active" &&
+        itemEffectiveDate &&
+        itemEffectiveDate <= today
+      );
+    })
+    .map((item) =>
+      String(item.salary_effective_date || "").trim(),
+    )
+    .sort()
+    .at(-1) || "";
+
+  return effectiveDate === latestEffectiveActiveDate
+    ? "Current"
+    : "Historical";
+}
+
 // =========================================================
 // DESCRIPTION ITEM 2
 // Populate Payroll Master Record options for the Allowance
@@ -16775,7 +17035,11 @@ function populatePayrollAllowanceMasterOptions() {
       ? ` — ${gradeLabel}`
       : "";
 
-    option.textContent = `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+option.textContent =
+  `${fullName}${gradeSegment} — ` +
+  `${formatCurrency(record.basic_salary, "NGN")} — ` +
+  `${record.salary_effective_date || "--"} — ` +
+  `${getPayrollMasterVersionLabel(record)}`;
     select.appendChild(option);
   });
 
@@ -16848,8 +17112,11 @@ function populatePayrollStatutoryMasterOptions() {
     // DESCRIPTION ITEM 3 - STEP 2A-5
     // Show employee, grade context, salary, and effective date so HR selects
     // the correct payroll profile before configuring statutory deductions.
-    option.textContent =
-      `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+option.textContent =
+  `${fullName}${gradeSegment} — ` +
+  `${formatCurrency(record.basic_salary, "NGN")} — ` +
+  `${record.salary_effective_date || "--"} — ` +
+  `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
   });
@@ -17100,7 +17367,7 @@ function validatePayrollStatutoryForm() {
     firstInvalidField ||= state.dom.payrollStatutoryStatus;
   }
 
-   const payrollMasterEffectiveDateIssue =
+  const payrollMasterEffectiveDateIssue =
     getPayrollMasterRecordEffectiveDateValidationIssue(
       payrollMasterRecordId,
       effectiveDate,
@@ -18439,7 +18706,7 @@ function validatePayrollAllowanceForm() {
     firstInvalidField ||= state.dom.payrollAllowanceStatus;
   }
 
- const payrollMasterEffectiveDateIssue =
+  const payrollMasterEffectiveDateIssue =
     getPayrollMasterRecordEffectiveDateValidationIssue(
       payrollMasterRecordId,
       effectiveDate,
@@ -34697,17 +34964,47 @@ function getRegularCalculatedPayrollFields() {
   ].filter(Boolean);
 }
 
+// PAYROLL FINALISED CORRECTION - CONTROLLED FIELD EDITING
+// A finalised payroll correction must preserve the saved historical snapshot.
+// Only specifically approved correction fields should become editable.
+function isCurrentPayrollFinalisedCorrectionMode() {
+  const editingId = String(
+    state.dom.editingPayrollId?.value ||
+    state.currentEditingPayroll?.id ||
+    "",
+  ).trim();
+
+  return (
+    Boolean(editingId) &&
+    isFinalisedPayrollRecord(state.currentEditingPayroll || {})
+  );
+}
+
 // PAYROLL CALCULATION REPAIR - STEP 12A.2
 // Lock calculated fields whenever the resolved payroll model is Regular.
-// Gross Pay, Total Deductions, and Net Pay are always locked totals.
+// During an authorised finalised correction, only Monthly Gross Salary
+// becomes editable. All structured earnings and calculated totals remain locked.
 function syncPayrollCalculatedFieldLockState() {
   const isRegular = getSelectedPayrollModel() === "REGULAR";
+  const isFinalisedCorrection =
+    isCurrentPayrollFinalisedCorrectionMode();
 
   getRegularCalculatedPayrollFields().forEach((field) => {
-    field.readOnly = isRegular;
-    field.classList.toggle("bg-light", isRegular);
+    if (!field) return;
 
-    if (isRegular) {
+    const isApprovedCorrectionField =
+      isFinalisedCorrection &&
+      field === state.dom.payrollBaseSalary;
+
+    const shouldLock = isRegular && !isApprovedCorrectionField;
+
+    field.readOnly = shouldLock;
+    field.classList.toggle("bg-light", shouldLock);
+
+    if (isApprovedCorrectionField) {
+      field.title =
+        "Authorised correction field. Updating Monthly Gross Salary will recalculate the payroll structure and totals.";
+    } else if (shouldLock) {
       field.title =
         "Locked for Regular payroll. Update Payroll Master or Allowance Components before preparing payroll.";
     } else {
@@ -34732,10 +35029,13 @@ function syncPayrollCalculatedFieldLockState() {
 // Keep excessive deductions and negative/zero Net Pay visibly invalid.
 function syncPayrollCalculationValidity() {
   const grossPayValue = Number(state.dom.payrollGrossPay?.value || 0);
-  const totalDeductionsValue = Number(state.dom.payrollTotalDeductions?.value || 0);
+  const totalDeductionsValue = Number(
+    state.dom.payrollTotalDeductions?.value || 0,
+  );
   const netPayValue = Number(state.dom.payrollNetPay?.value || 0);
 
-  const hasGrossPay = Number.isFinite(grossPayValue) && grossPayValue > 0;
+  const hasGrossPay =
+    Number.isFinite(grossPayValue) && grossPayValue > 0;
 
   const deductionsExceedGross =
     hasGrossPay &&
@@ -34757,47 +35057,48 @@ function syncPayrollCalculationValidity() {
   );
 }
 
-
 function updatePayrollModelUi(source = "group") {
   const normalizedGroup = normalizePayrollGroupForPayload(
     state.dom.payrollEmployeeGroup?.value || "",
   );
+
   const explicitModel = String(state.dom.payrollModel?.value || "")
     .trim()
     .toUpperCase();
 
   if (source === "model") {
-    if (explicitModel === "REGULAR" && state.dom.payrollEmployeeGroup) {
+    if (
+      explicitModel === "REGULAR" &&
+      state.dom.payrollEmployeeGroup
+    ) {
       state.dom.payrollEmployeeGroup.value = "REGULAR";
-    } else if (explicitModel === "CONTRACTOR" && state.dom.payrollEmployeeGroup) {
+    } else if (
+      explicitModel === "CONTRACTOR" &&
+      state.dom.payrollEmployeeGroup
+    ) {
       state.dom.payrollEmployeeGroup.value = "CONTRACT";
     }
-  } else {
-    if (state.dom.payrollModel) {
-      if (normalizedGroup === "REGULAR") {
-        state.dom.payrollModel.value = "REGULAR";
-      } else if (normalizedGroup === "CONTRACT") {
-        state.dom.payrollModel.value = "CONTRACTOR";
-      } else if (!normalizedGroup) {
-        state.dom.payrollModel.value = "";
-      } else {
-        state.dom.payrollModel.value = "GENERIC";
-      }
+  } else if (state.dom.payrollModel) {
+    if (normalizedGroup === "REGULAR") {
+      state.dom.payrollModel.value = "REGULAR";
+    } else if (normalizedGroup === "CONTRACT") {
+      state.dom.payrollModel.value = "CONTRACTOR";
+    } else if (!normalizedGroup) {
+      state.dom.payrollModel.value = "";
+    } else {
+      state.dom.payrollModel.value = "GENERIC";
     }
   }
 
   const isRegular = getSelectedPayrollModel() === "REGULAR";
 
-  state.dom.alpatechRegularRev2Section?.classList.toggle("d-none", !isRegular);
+  state.dom.alpatechRegularRev2Section?.classList.toggle(
+    "d-none",
+    !isRegular,
+  );
 
-  // PAYROLL CALCULATION REPAIR - STEP 12A.1
-  // Apply field locking immediately when Regular/Contract/Generic changes.
   syncPayrollCalculatedFieldLockState();
-
-  // PAYROLL STRUCTURE PREVIEW - STEP 12D
-  // Keep the compact preview aligned with Employee Group / Payroll Model.
   renderPayrollStructurePreview();
-
   recalculatePayrollFormTotals();
 }
 
@@ -35059,7 +35360,15 @@ function recalculatePayrollFormTotals() {
   // and avoids one-off fixes for PAYE, pension, gross, or net separately.
   syncPayrollCalculatedFieldLockState();
 
-  applyActivePayrollEmployeeBaseSalaryOverrideToPayrollForm();
+  const isFinalisedCorrection =
+    isCurrentPayrollFinalisedCorrectionMode();
+
+  // Normal payroll creation uses the current Payroll Master salary.
+  // A finalised correction must retain the saved historical value entered
+  // by the authorised HR/Payroll user.
+  if (!isFinalisedCorrection) {
+    applyActivePayrollEmployeeBaseSalaryOverrideToPayrollForm();
+  }
 
   if (isAlpatechRegularSelected()) {
     applyAlpatechRegularRev2DerivedFields();
@@ -35067,7 +35376,10 @@ function recalculatePayrollFormTotals() {
     // PAYROLL WORKFLOW UX REPAIR - STEP 6
     // Pull active earning setup rows into the form before final statutory
     // and net pay calculations are performed.
-    applyActivePayrollAllowanceComponentsToPayrollForm();
+    // Do not replace a finalised historical snapshot with current allowance setup.
+    if (!isFinalisedCorrection) {
+      applyActivePayrollAllowanceComponentsToPayrollForm();
+    }
 
     // PAYROLL WORKFLOW UX REPAIR - STEP 7
     // Recalculate baseline PAYE and pensions after setup allowances are present.
