@@ -17100,7 +17100,7 @@ function validatePayrollStatutoryForm() {
     firstInvalidField ||= state.dom.payrollStatutoryStatus;
   }
 
-   const payrollMasterEffectiveDateIssue =
+  const payrollMasterEffectiveDateIssue =
     getPayrollMasterRecordEffectiveDateValidationIssue(
       payrollMasterRecordId,
       effectiveDate,
@@ -18439,7 +18439,7 @@ function validatePayrollAllowanceForm() {
     firstInvalidField ||= state.dom.payrollAllowanceStatus;
   }
 
- const payrollMasterEffectiveDateIssue =
+  const payrollMasterEffectiveDateIssue =
     getPayrollMasterRecordEffectiveDateValidationIssue(
       payrollMasterRecordId,
       effectiveDate,
@@ -34697,17 +34697,47 @@ function getRegularCalculatedPayrollFields() {
   ].filter(Boolean);
 }
 
+// PAYROLL FINALISED CORRECTION - CONTROLLED FIELD EDITING
+// A finalised payroll correction must preserve the saved historical snapshot.
+// Only specifically approved correction fields should become editable.
+function isCurrentPayrollFinalisedCorrectionMode() {
+  const editingId = String(
+    state.dom.editingPayrollId?.value ||
+    state.currentEditingPayroll?.id ||
+    "",
+  ).trim();
+
+  return (
+    Boolean(editingId) &&
+    isFinalisedPayrollRecord(state.currentEditingPayroll || {})
+  );
+}
+
 // PAYROLL CALCULATION REPAIR - STEP 12A.2
 // Lock calculated fields whenever the resolved payroll model is Regular.
-// Gross Pay, Total Deductions, and Net Pay are always locked totals.
+// During an authorised finalised correction, only Monthly Gross Salary
+// becomes editable. All structured earnings and calculated totals remain locked.
 function syncPayrollCalculatedFieldLockState() {
   const isRegular = getSelectedPayrollModel() === "REGULAR";
+  const isFinalisedCorrection =
+    isCurrentPayrollFinalisedCorrectionMode();
 
   getRegularCalculatedPayrollFields().forEach((field) => {
-    field.readOnly = isRegular;
-    field.classList.toggle("bg-light", isRegular);
+    if (!field) return;
 
-    if (isRegular) {
+    const isApprovedCorrectionField =
+      isFinalisedCorrection &&
+      field === state.dom.payrollBaseSalary;
+
+    const shouldLock = isRegular && !isApprovedCorrectionField;
+
+    field.readOnly = shouldLock;
+    field.classList.toggle("bg-light", shouldLock);
+
+    if (isApprovedCorrectionField) {
+      field.title =
+        "Authorised correction field. Updating Monthly Gross Salary will recalculate the payroll structure and totals.";
+    } else if (shouldLock) {
       field.title =
         "Locked for Regular payroll. Update Payroll Master or Allowance Components before preparing payroll.";
     } else {
@@ -34732,10 +34762,13 @@ function syncPayrollCalculatedFieldLockState() {
 // Keep excessive deductions and negative/zero Net Pay visibly invalid.
 function syncPayrollCalculationValidity() {
   const grossPayValue = Number(state.dom.payrollGrossPay?.value || 0);
-  const totalDeductionsValue = Number(state.dom.payrollTotalDeductions?.value || 0);
+  const totalDeductionsValue = Number(
+    state.dom.payrollTotalDeductions?.value || 0,
+  );
   const netPayValue = Number(state.dom.payrollNetPay?.value || 0);
 
-  const hasGrossPay = Number.isFinite(grossPayValue) && grossPayValue > 0;
+  const hasGrossPay =
+    Number.isFinite(grossPayValue) && grossPayValue > 0;
 
   const deductionsExceedGross =
     hasGrossPay &&
@@ -34757,47 +34790,48 @@ function syncPayrollCalculationValidity() {
   );
 }
 
-
 function updatePayrollModelUi(source = "group") {
   const normalizedGroup = normalizePayrollGroupForPayload(
     state.dom.payrollEmployeeGroup?.value || "",
   );
+
   const explicitModel = String(state.dom.payrollModel?.value || "")
     .trim()
     .toUpperCase();
 
   if (source === "model") {
-    if (explicitModel === "REGULAR" && state.dom.payrollEmployeeGroup) {
+    if (
+      explicitModel === "REGULAR" &&
+      state.dom.payrollEmployeeGroup
+    ) {
       state.dom.payrollEmployeeGroup.value = "REGULAR";
-    } else if (explicitModel === "CONTRACTOR" && state.dom.payrollEmployeeGroup) {
+    } else if (
+      explicitModel === "CONTRACTOR" &&
+      state.dom.payrollEmployeeGroup
+    ) {
       state.dom.payrollEmployeeGroup.value = "CONTRACT";
     }
-  } else {
-    if (state.dom.payrollModel) {
-      if (normalizedGroup === "REGULAR") {
-        state.dom.payrollModel.value = "REGULAR";
-      } else if (normalizedGroup === "CONTRACT") {
-        state.dom.payrollModel.value = "CONTRACTOR";
-      } else if (!normalizedGroup) {
-        state.dom.payrollModel.value = "";
-      } else {
-        state.dom.payrollModel.value = "GENERIC";
-      }
+  } else if (state.dom.payrollModel) {
+    if (normalizedGroup === "REGULAR") {
+      state.dom.payrollModel.value = "REGULAR";
+    } else if (normalizedGroup === "CONTRACT") {
+      state.dom.payrollModel.value = "CONTRACTOR";
+    } else if (!normalizedGroup) {
+      state.dom.payrollModel.value = "";
+    } else {
+      state.dom.payrollModel.value = "GENERIC";
     }
   }
 
   const isRegular = getSelectedPayrollModel() === "REGULAR";
 
-  state.dom.alpatechRegularRev2Section?.classList.toggle("d-none", !isRegular);
+  state.dom.alpatechRegularRev2Section?.classList.toggle(
+    "d-none",
+    !isRegular,
+  );
 
-  // PAYROLL CALCULATION REPAIR - STEP 12A.1
-  // Apply field locking immediately when Regular/Contract/Generic changes.
   syncPayrollCalculatedFieldLockState();
-
-  // PAYROLL STRUCTURE PREVIEW - STEP 12D
-  // Keep the compact preview aligned with Employee Group / Payroll Model.
   renderPayrollStructurePreview();
-
   recalculatePayrollFormTotals();
 }
 
@@ -35059,7 +35093,15 @@ function recalculatePayrollFormTotals() {
   // and avoids one-off fixes for PAYE, pension, gross, or net separately.
   syncPayrollCalculatedFieldLockState();
 
-  applyActivePayrollEmployeeBaseSalaryOverrideToPayrollForm();
+  const isFinalisedCorrection =
+    isCurrentPayrollFinalisedCorrectionMode();
+
+  // Normal payroll creation uses the current Payroll Master salary.
+  // A finalised correction must retain the saved historical value entered
+  // by the authorised HR/Payroll user.
+  if (!isFinalisedCorrection) {
+    applyActivePayrollEmployeeBaseSalaryOverrideToPayrollForm();
+  }
 
   if (isAlpatechRegularSelected()) {
     applyAlpatechRegularRev2DerivedFields();
@@ -35067,7 +35109,10 @@ function recalculatePayrollFormTotals() {
     // PAYROLL WORKFLOW UX REPAIR - STEP 6
     // Pull active earning setup rows into the form before final statutory
     // and net pay calculations are performed.
-    applyActivePayrollAllowanceComponentsToPayrollForm();
+    // Do not replace a finalised historical snapshot with current allowance setup.
+    if (!isFinalisedCorrection) {
+      applyActivePayrollAllowanceComponentsToPayrollForm();
+    }
 
     // PAYROLL WORKFLOW UX REPAIR - STEP 7
     // Recalculate baseline PAYE and pensions after setup allowances are present.
