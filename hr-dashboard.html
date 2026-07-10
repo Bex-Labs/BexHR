@@ -4459,54 +4459,55 @@ Disable browser address autofill popup on HR employee address fields. -->
                   <label for="payrollEmployeeOverrideCategory" class="form-label fw-semibold">
                     Override Category <span class="text-danger">*</span>
                   </label>
+                  <!-- EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 1A
+     Keep only operational categories supported by the payroll form.
+     Payroll rules and payroll structure belong in their normal setup areas. -->
                   <select id="payrollEmployeeOverrideCategory" class="form-select" required>
-                    <option value="">Select override category</option>
+                    <option value="">Select what is changing</option>
                     <option value="EARNING">Earning</option>
                     <option value="STATUTORY_DEDUCTION">Statutory Deduction</option>
                     <option value="OTHER_DEDUCTION">Other Deduction</option>
-                    <option value="PAYROLL_RULE">Payroll Rule</option>
-                    <option value="PAYROLL_STRUCTURE">Payroll Structure</option>
                   </select>
+
+                  <div class="form-text">
+                    Earning adds or changes pay. Statutory Deduction changes tax or pension.
+                    Other Deduction covers approved items such as tardiness or salary recovery.
+                  </div>
                 </div>
 
                 <div class="col-md-6 col-xl-4">
                   <label for="payrollEmployeeOverrideElement" class="form-label fw-semibold">
                     Payroll Element <span class="text-danger">*</span>
                   </label>
-                  <select id="payrollEmployeeOverrideElement" class="form-select" required>
-                    <option value="">Select payroll element</option>
-                    <option value="BASIC_SALARY">Basic Salary</option>
-                    <option value="HOUSING_ALLOWANCE">Housing Allowance</option>
-                    <option value="TRANSPORT_ALLOWANCE">Transport Allowance</option>
-                    <option value="UTILITY_ALLOWANCE">Utility Allowance</option>
-                    <option value="MEDICAL_ALLOWANCE">Medical Allowance</option>
-                    <option value="OTHER_ALLOWANCE">Other Allowance</option>
-                    <option value="BONUS">Bonus</option>
-                    <option value="OVERTIME">Overtime</option>
-                    <option value="PAYE">PAYE</option>
-                    <option value="WHT">WHT</option>
-                    <option value="EMPLOYEE_PENSION">Employee Pension</option>
-                    <option value="EMPLOYER_PENSION">Employer Pension</option>
-                    <option value="NHF">NHF</option>
-                    <option value="UNION_DUES">Union Dues</option>
-                    <option value="COOPERATIVE">Cooperative</option>
-                    <option value="SALARY_ADVANCE">Salary Advance</option>
-                    <option value="GRADE_LEVEL_RULE">Grade / Level Rule</option>
-                    <option value="OTHER">Other</option>
+                  <!-- EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 1B
+     JavaScript now shows only elements relevant to the selected category. -->
+                  <select id="payrollEmployeeOverrideElement" class="form-select" required disabled>
+                    <option value="">Select a category first</option>
                   </select>
+
+                  <div class="form-text">
+                    Select the exact salary, earning, tax, pension, or deduction being changed.
+                  </div>
                 </div>
 
                 <div class="col-md-6 col-xl-4">
                   <label for="payrollEmployeeOverrideMethod" class="form-label fw-semibold">
                     Override Method <span class="text-danger">*</span>
                   </label>
+                  <!-- EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 1C
+     Rule Replacement is removed from new-entry UI because payroll rules
+     should be maintained in their controlled setup sections. -->
                   <select id="payrollEmployeeOverrideMethod" class="form-select" required>
-                    <option value="">Select override method</option>
+                    <option value="">Select how it should change</option>
                     <option value="FIXED_AMOUNT">Fixed Amount</option>
                     <option value="PERCENTAGE">Percentage</option>
-                    <option value="RULE_REPLACEMENT">Rule Replacement</option>
                     <option value="EXEMPTION">Exemption</option>
                   </select>
+
+                  <div class="form-text">
+                    Fixed Amount uses an exact value. Percentage adjusts the current value.
+                    Exemption temporarily stops the selected item from applying.
+                  </div>
                 </div>
 
                 <div class="col-md-6 col-xl-4">
@@ -4566,12 +4567,20 @@ Disable browser address autofill popup on HR employee address fields. -->
                     placeholder="Enter HR/payroll approval reference" required />
                 </div>
 
-                <div class="col-md-6">
+                <!-- EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 4A
+     Hidden for normal overrides.
+     JavaScript reveals this field only for a historical Rule Replacement record. -->
+                <div id="payrollEmployeeOverrideRuleSnapshotField" class="col-md-6 d-none">
                   <label for="payrollEmployeeOverrideRuleSnapshot" class="form-label fw-semibold">
-                    Rule Snapshot
+                    Rule Snapshot <span class="text-danger">*</span>
                   </label>
+
                   <input type="text" id="payrollEmployeeOverrideRuleSnapshot" class="form-control"
-                    placeholder="Optional rule being replaced or exempted" />
+                    placeholder="Describe the rule being replaced" />
+
+                  <div class="form-text">
+                    Required only for an older Rule Replacement override.
+                  </div>
                 </div>
 
                 <div class="col-12">

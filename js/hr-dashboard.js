@@ -5880,7 +5880,10 @@ function populatePayrollOtherDeductionMasterOptions() {
 
     option.value = record.id;
     option.textContent =
-      `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+  `${fullName}${gradeSegment} — ` +
+  `${formatCurrency(record.basic_salary, "NGN")} — ` +
+  `${record.salary_effective_date || "--"} — ` +
+  `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
   });
@@ -6835,27 +6838,114 @@ function getPayrollEmployeeOverrideMasterContext(record = {}) {
   };
 }
 
+// EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 2A
+// Show only payroll elements that belong to the selected operational category.
+// This prevents HR users from choosing contradictory or irrelevant combinations.
+const PAYROLL_EMPLOYEE_OVERRIDE_ELEMENTS_BY_CATEGORY = Object.freeze({
+  EARNING: [
+    { value: "BASIC_SALARY", label: "Basic Salary" },
+    { value: "HOUSING_ALLOWANCE", label: "Housing Allowance" },
+    { value: "TRANSPORT_ALLOWANCE", label: "Transport Allowance" },
+    { value: "UTILITY_ALLOWANCE", label: "Utility Allowance" },
+    { value: "MEDICAL_ALLOWANCE", label: "Medical Allowance" },
+    { value: "OTHER_ALLOWANCE", label: "Other Allowance" },
+    { value: "BONUS", label: "Bonus" },
+    { value: "OVERTIME", label: "Overtime" },
+  ],
+
+  STATUTORY_DEDUCTION: [
+    { value: "PAYE", label: "PAYE Tax" },
+    { value: "WHT", label: "WHT Tax" },
+    { value: "EMPLOYEE_PENSION", label: "Employee Pension" },
+    { value: "EMPLOYER_PENSION", label: "Employer Pension" },
+  ],
+
+  OTHER_DEDUCTION: [
+    { value: "OTHER_DEDUCTION", label: "Other Approved Deduction" },
+  ],
+});
+
+function populatePayrollEmployeeOverrideElementOptions(
+  preferredValue = "",
+  { preserveLegacyValue = false } = {},
+) {
+  const select = state.dom.payrollEmployeeOverrideElement;
+  if (!select) return;
+
+  const category = String(
+    state.dom.payrollEmployeeOverrideCategory?.value || "",
+  ).trim();
+
+  const options =
+    PAYROLL_EMPLOYEE_OVERRIDE_ELEMENTS_BY_CATEGORY[category] || [];
+
+  select.innerHTML = "";
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = category
+    ? "Select payroll element"
+    : "Select a category first";
+
+  select.appendChild(placeholder);
+
+  options.forEach(({ value, label }) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+  });
+
+  const savedValue = String(preferredValue || "").trim();
+
+  if (
+    preserveLegacyValue &&
+    savedValue &&
+    !options.some((option) => option.value === savedValue)
+  ) {
+    const legacyOption = document.createElement("option");
+    legacyOption.value = savedValue;
+    legacyOption.textContent = `${formatPayrollEmployeeOverrideElement(savedValue)} (historical)`;
+    select.appendChild(legacyOption);
+  }
+
+  select.value = savedValue;
+  select.disabled = !category;
+
+  updatePayrollEmployeeOverrideSaveButtonState();
+}
+
+// EMPLOYEE OVERRIDE PAYROLL MASTER VERSION CLARITY
+// Keep every effective-dated Payroll Master version available for audit and
+// historical maintenance, while using the shared version-status calculation.
 function populatePayrollEmployeeOverrideMasterOptions() {
   const select = state.dom.payrollEmployeeOverrideMasterRecordId;
   if (!select) return;
 
   const currentValue = String(select.value || "").trim();
+
   const records = Array.isArray(state.payrollMasterRecords)
     ? [...state.payrollMasterRecords]
     : [];
 
-  select.innerHTML = `<option value="">Select payroll master record</option>`;
+  select.innerHTML =
+    `<option value="">Select payroll master record</option>`;
 
   if (!records.length) {
-    select.innerHTML = `<option value="">Create payroll master record first</option>`;
+    select.innerHTML =
+      `<option value="">Create payroll master record first</option>`;
+
     updatePayrollEmployeeOverrideSaveButtonState();
     return;
   }
 
-  const recordsToRender = sortPayrollMasterRecordsByLatestActivity(records);
+  const recordsToRender =
+    sortPayrollMasterRecordsByLatestActivity(records);
 
   recordsToRender.forEach((record) => {
     const option = document.createElement("option");
+
+    const employeeId = String(record.employee_id || "").trim();
 
     const fullName =
       `${record.first_name || ""} ${record.last_name || ""}`.trim() ||
@@ -6863,15 +6953,28 @@ function populatePayrollEmployeeOverrideMasterOptions() {
       "Unknown Employee";
 
     const gradeLabel = getPayrollMasterGradeDisplay(record);
-    const gradeSegment = gradeLabel && gradeLabel !== "--"
-      ? ` — ${gradeLabel}`
-      : "";
+
+    const gradeSegment =
+      gradeLabel && gradeLabel !== "--"
+        ? ` — ${gradeLabel}`
+        : "";
+
+    const effectiveDate = String(
+      record.salary_effective_date || "",
+    ).trim();
+
+    const versionLabel =
+      getPayrollMasterVersionLabel(record);
 
     option.value = record.id;
-    option.dataset.employeeId = record.employee_id || "";
+    option.dataset.employeeId = employeeId;
+    option.dataset.versionType =
+      versionLabel.toLowerCase();
 
     option.textContent =
-      `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+      `${fullName}${gradeSegment} — ` +
+      `${formatCurrency(record.basic_salary, "NGN")} — ` +
+      `${effectiveDate || "--"} — ${versionLabel}`;
 
     select.appendChild(option);
   });
@@ -7278,6 +7381,37 @@ function setPayrollEmployeeOverrideSaveLoading(isLoading) {
   updatePayrollEmployeeOverrideSaveButtonState();
 }
 
+// EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 4B
+// Rule Snapshot belongs only to historical Rule Replacement overrides.
+// Normal Fixed Amount, Percentage, and Exemption records must not show it.
+function syncPayrollEmployeeOverrideRuleSnapshotVisibility({
+  clearWhenHidden = false,
+} = {}) {
+  const field = state.dom.payrollEmployeeOverrideRuleSnapshot;
+  const wrapper = document.getElementById(
+    "payrollEmployeeOverrideRuleSnapshotField",
+  );
+
+  if (!field || !wrapper) return;
+
+  const method = String(
+    state.dom.payrollEmployeeOverrideMethod?.value || "",
+  ).trim();
+
+  const shouldShow = method === "RULE_REPLACEMENT";
+
+  wrapper.classList.toggle("d-none", !shouldShow);
+  field.required = shouldShow;
+
+  if (!shouldShow) {
+    field.classList.remove("is-invalid");
+
+    if (clearWhenHidden) {
+      field.value = "";
+    }
+  }
+}
+
 function resetPayrollEmployeeOverrideForm() {
   state.currentEditingPayrollEmployeeOverride = null;
 
@@ -7302,6 +7436,15 @@ function resetPayrollEmployeeOverrideForm() {
       field.value = "";
       field.classList.remove("is-invalid");
     }
+  });
+
+    // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3A
+  // Reset the Payroll Element dropdown to its safe create-mode state.
+  // No category means no element may be selected yet.
+  populatePayrollEmployeeOverrideElementOptions();
+
+    syncPayrollEmployeeOverrideRuleSnapshotVisibility({
+    clearWhenHidden: true,
   });
 
   if (state.dom.payrollEmployeeOverrideStatus) {
@@ -7561,15 +7704,41 @@ function startPayrollEmployeeOverrideEdit(overrideId) {
       record.override_category || "";
   }
 
-  if (state.dom.payrollEmployeeOverrideElement) {
-    state.dom.payrollEmployeeOverrideElement.value =
-      record.override_element || "";
-  }
+  // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3B
+  // Rebuild the element choices from the saved category before selecting
+  // the saved element. Legacy values remain visible for historical records.
+  populatePayrollEmployeeOverrideElementOptions(
+    record.override_element || "",
+    { preserveLegacyValue: true },
+  );
 
   if (state.dom.payrollEmployeeOverrideMethod) {
-    state.dom.payrollEmployeeOverrideMethod.value =
-      record.override_method || "";
+    const savedMethod = String(record.override_method || "").trim();
+
+    // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3C
+    // Rule Replacement is no longer offered for new records, but an older
+    // saved record must remain visible and maintainable in edit mode.
+    const hasSavedMethodOption = Array.from(
+      state.dom.payrollEmployeeOverrideMethod.options,
+    ).some((option) => option.value === savedMethod);
+
+    if (savedMethod && !hasSavedMethodOption) {
+      const historicalMethodOption = document.createElement("option");
+      historicalMethodOption.value = savedMethod;
+      historicalMethodOption.textContent =
+        `${formatPayrollEmployeeOverrideMethod(savedMethod)} (historical)`;
+
+      state.dom.payrollEmployeeOverrideMethod.appendChild(
+        historicalMethodOption,
+      );
+    }
+
+    state.dom.payrollEmployeeOverrideMethod.value = savedMethod;
   }
+
+    // Reveal Rule Snapshot only when this saved historical record
+  // uses the retired Rule Replacement method.
+  syncPayrollEmployeeOverrideRuleSnapshotVisibility();
 
   if (state.dom.payrollEmployeeOverrideOriginalValue) {
     state.dom.payrollEmployeeOverrideOriginalValue.value =
@@ -9430,6 +9599,26 @@ function bindEvents() {
     field?.addEventListener("input", updatePayrollEmployeeOverrideSaveButtonState);
     field?.addEventListener("change", updatePayrollEmployeeOverrideSaveButtonState);
   });
+
+// EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 2B
+// Changing category clears the old element and shows only relevant choices.
+state.dom.payrollEmployeeOverrideCategory?.addEventListener("change", () => {
+  populatePayrollEmployeeOverrideElementOptions();
+
+  state.dom.payrollEmployeeOverrideElement?.classList.remove("is-invalid");
+
+  updatePayrollEmployeeOverrideSaveButtonState();
+});
+
+// EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 4C
+// Show Rule Snapshot only when an older Rule Replacement method is selected.
+state.dom.payrollEmployeeOverrideMethod?.addEventListener("change", () => {
+  syncPayrollEmployeeOverrideRuleSnapshotVisibility({
+    clearWhenHidden: true,
+  });
+
+  updatePayrollEmployeeOverrideSaveButtonState();
+});
 
   updatePayrollEmployeeOverrideSaveButtonState();
 
@@ -16593,11 +16782,17 @@ ${escapeHtml(getPayrollMasterGradeDisplay(record))}
 
   <td>${escapeHtml(record.pay_cycle || "--")}</td>
 
-  <td>
+<td>
+  <div class="d-flex flex-wrap gap-1">
     <span class="badge ${getStatusBadgeClass(record.payroll_status)}">
       ${escapeHtml(formatStatusLabel(record.payroll_status))}
     </span>
-  </td>
+
+    <span class="badge bg-light text-dark border">
+      ${escapeHtml(getPayrollMasterVersionLabel(record))}
+    </span>
+  </div>
+</td>
 
   <td class="text-nowrap">
   <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 6A
@@ -16726,6 +16921,71 @@ function startPayrollMasterEdit(payrollMasterId) {
     16,
   );
 }
+
+// PAYROLL MASTER VERSION CLARITY - SHARED VERSION LABEL
+// Version meaning:
+// - Current: latest active version effective today or earlier.
+// - Scheduled: active version with a future effective date.
+// - Historical: older active version.
+// - Inactive: record is not active.
+function getPayrollMasterVersionLabel(record = {}) {
+  const employeeId = String(record.employee_id || "").trim();
+  const effectiveDate = String(
+    record.salary_effective_date || "",
+  ).trim();
+
+  const status = String(record.payroll_status || "")
+    .trim()
+    .toLowerCase();
+
+  if (status !== "active") {
+    return "Inactive";
+  }
+
+  if (!employeeId || !effectiveDate) {
+    return "Historical";
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (effectiveDate > today) {
+    return "Scheduled";
+  }
+
+  const latestEffectiveActiveDate = (state.payrollMasterRecords || [])
+    .filter((item) => {
+      const itemEmployeeId = String(
+        item.employee_id || "",
+      ).trim();
+
+      const itemStatus = String(
+        item.payroll_status || "",
+      )
+        .trim()
+        .toLowerCase();
+
+      const itemEffectiveDate = String(
+        item.salary_effective_date || "",
+      ).trim();
+
+      return (
+        itemEmployeeId === employeeId &&
+        itemStatus === "active" &&
+        itemEffectiveDate &&
+        itemEffectiveDate <= today
+      );
+    })
+    .map((item) =>
+      String(item.salary_effective_date || "").trim(),
+    )
+    .sort()
+    .at(-1) || "";
+
+  return effectiveDate === latestEffectiveActiveDate
+    ? "Current"
+    : "Historical";
+}
+
 // =========================================================
 // DESCRIPTION ITEM 2
 // Populate Payroll Master Record options for the Allowance
@@ -16775,7 +17035,11 @@ function populatePayrollAllowanceMasterOptions() {
       ? ` — ${gradeLabel}`
       : "";
 
-    option.textContent = `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+option.textContent =
+  `${fullName}${gradeSegment} — ` +
+  `${formatCurrency(record.basic_salary, "NGN")} — ` +
+  `${record.salary_effective_date || "--"} — ` +
+  `${getPayrollMasterVersionLabel(record)}`;
     select.appendChild(option);
   });
 
@@ -16848,8 +17112,11 @@ function populatePayrollStatutoryMasterOptions() {
     // DESCRIPTION ITEM 3 - STEP 2A-5
     // Show employee, grade context, salary, and effective date so HR selects
     // the correct payroll profile before configuring statutory deductions.
-    option.textContent =
-      `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+option.textContent =
+  `${fullName}${gradeSegment} — ` +
+  `${formatCurrency(record.basic_salary, "NGN")} — ` +
+  `${record.salary_effective_date || "--"} — ` +
+  `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
   });
