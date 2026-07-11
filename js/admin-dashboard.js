@@ -81,6 +81,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.adminRemoveProfileTenantAccess = async (profileId) => {
       await removeProfileTenantAccess(profileId);
     };
+    // ADMIN COMPLETE USER REMOVAL
+    // Exposes the permanent-delete action. The actual privileged deletion
+    // happens securely inside the delete-company-user Edge Function.
+    window.adminPermanentlyDeleteCompanyUser = async (profileId) => {
+      await permanentlyDeleteCompanyUser(profileId);
+    };
     // ADMIN PASSWORD RESET
     // Expose reset password action for the user access records table.
     window.adminResetUserPassword = (profileId) => {
@@ -3116,23 +3122,20 @@ async function inviteCompanyUser() {
       ? employeeSyncNumber
         ? ` Employee record ${employeeSyncNumber} is ready for HR/payroll.`
         : " Employee record is ready for HR/payroll."
-      : ` Invite succeeded, but employee record sync needs review: ${
-          employeeSyncResult?.message || "No employee record was created."
-        }`;
+      : ` Invite succeeded, but employee record sync needs review: ${employeeSyncResult?.message || "No employee record was created."
+      }`;
 
     showCompanyUserInviteAlert(
       employeeSyncSucceeded ? "success" : "warning",
-      `${
-        data?.message ||
-        `${payload.fullName} has been invited to ${payload.companyName || "the selected company"}.`
+      `${data?.message ||
+      `${payload.fullName} has been invited to ${payload.companyName || "the selected company"}.`
       }${employeeSyncNote}`,
     );
 
     showPageAlert(
       employeeSyncSucceeded ? "success" : "warning",
-      `${
-        data?.message ||
-        `${payload.fullName} has been invited successfully.`
+      `${data?.message ||
+      `${payload.fullName} has been invited successfully.`
       }${employeeSyncNote}`,
     );
 
@@ -3455,8 +3458,24 @@ function renderProfileTenantLinks(records = []) {
                   <i class="bi bi-trash"></i>
                 </button>
 
+                ${String(profile.role || "").trim().toLowerCase() !== "admin"
+            ? `
+    <!-- ADMIN COMPLETE USER REMOVAL
+         This is intentionally separate from Remove company access. -->
+    <button
+      type="button"
+      class="btn btn-sm btn-danger"
+      title="Permanently delete user"
+      onclick="window.adminPermanentlyDeleteCompanyUser('${escapeHtml(profile.id)}')"
+    >
+      <i class="bi bi-person-x-fill"></i>
+    </button>
+  `
+            : ""
+          }
+
                 ${String(profile.role || "").trim().toLowerCase() === "hr"
-                  ? `
+            ? `
                     <!-- HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
                          HR users are MFA-protected, so Admin gets a controlled
                          reset action beside the existing password reset action.
@@ -3470,8 +3489,8 @@ function renderProfileTenantLinks(records = []) {
                       <i class="bi bi-shield-lock"></i>
                     </button>
                   `
-                  : ""
-                }
+            : ""
+          }
               </div>
             </td>
           </tr>
@@ -3690,6 +3709,142 @@ async function removeProfileTenantAccess(profileId = "") {
       "danger",
       "Access removal failed",
       error.message || "User company access could not be removed.",
+    );
+  }
+}
+
+// ADMIN COMPLETE USER REMOVAL
+// Permanently deletes the selected company user through the secure
+// delete-company-user Edge Function.
+//
+// The backend verifies Admin authority, protects payroll/history records,
+// deletes the employee record, releases the employee number and email,
+// and permanently removes the Supabase Auth account.
+async function permanentlyDeleteCompanyUser(profileId = "") {
+  const profile = getProfileForTenantLinkById(profileId);
+
+  if (!profile) {
+    showPageAlert(
+      "warning",
+      "The selected user profile could not be found. Please refresh and try again.",
+    );
+    return;
+  }
+
+  const profileRole = String(profile.role || "")
+    .trim()
+    .toLowerCase();
+
+  if (profileRole === "admin") {
+    showPageAlert(
+      "warning",
+      "Platform Admin accounts cannot be permanently deleted from company user management.",
+    );
+    return;
+  }
+
+  const profileName = getProfileDisplayName(profile);
+  const profileEmail = String(profile.email || "")
+    .trim()
+    .toLowerCase();
+
+  if (!profileEmail) {
+    showPageAlert(
+      "warning",
+      "The selected user does not have a valid email address.",
+    );
+    return;
+  }
+
+  const confirmationEmail = window.prompt(
+    `Permanently delete "${profileName}"?\n\n` +
+      `${profileEmail}\n\n` +
+      "This will permanently remove the employee record, login account, and profile. " +
+      "The employee number and email will become reusable.\n\n" +
+      "Type the user's full email address to confirm:",
+    "",
+  );
+
+  if (confirmationEmail === null) return;
+
+  const normalisedConfirmationEmail = String(confirmationEmail)
+    .trim()
+    .toLowerCase();
+
+  if (normalisedConfirmationEmail !== profileEmail) {
+    showPageAlert(
+      "warning",
+      "Permanent deletion was cancelled because the confirmation email did not match.",
+    );
+    return;
+  }
+
+  const finalConfirmation = window.confirm(
+    `Final confirmation\n\n` +
+      `Permanently delete ${profileName}?\n\n` +
+      `${profileEmail}\n\n` +
+      "This action cannot be undone.",
+  );
+
+  if (!finalConfirmation) return;
+
+  try {
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.functions.invoke(
+      "delete-company-user",
+      {
+        body: {
+          profileId: String(profile.id || "").trim(),
+          confirmationEmail: profileEmail,
+        },
+      },
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    if (data?.success === false) {
+      throw new Error(
+        data?.error ||
+          "The company user could not be permanently deleted.",
+      );
+    }
+
+    await refreshProfileTenantLinkingWorkspace();
+
+    resetProfileTenantLinkForm();
+    openAdminUserCompanyAssignmentPanel();
+
+    const message =
+      data?.message ||
+      `${profileName} was permanently deleted. The email and employee number are now reusable.`;
+
+    showPageAlert("success", message);
+
+    showDashboardToast(
+      "success",
+      "User permanently deleted",
+      message,
+    );
+  } catch (error) {
+    console.error(
+      "Error permanently deleting company user:",
+      error,
+    );
+
+    const message = await getAdminEdgeFunctionErrorMessage(
+      error,
+      "The company user could not be permanently deleted.",
+    );
+
+    showPageAlert("danger", message);
+
+    showDashboardToast(
+      "danger",
+      "Permanent deletion failed",
+      message,
     );
   }
 }
