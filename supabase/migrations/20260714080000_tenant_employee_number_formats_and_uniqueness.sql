@@ -35,7 +35,7 @@ ADD
 
 -- Add a safe padding constraint without duplicating it if this
 -- migration is inspected or reapplied in a repair environment.
-DO $ $ BEGIN IF NOT EXISTS (
+DO $$ BEGIN IF NOT EXISTS (
   SELECT
     1
   FROM
@@ -56,7 +56,7 @@ END IF;
 
 END;
 
-$ $;
+$$;
 
 COMMENT ON COLUMN public.company_employee_sequences.number_prefix IS 'Organisation-controlled text placed before the serial number, for example P or AENL.';
 
@@ -227,7 +227,7 @@ WHERE
 CREATE
 OR REPLACE FUNCTION public.get_next_employee_number(p_tenant_id UUID) RETURNS TEXT LANGUAGE plpgsql SECURITY DEFINER
 SET
-  search_path = public AS $ $ DECLARE v_caller_tenant_id UUID;
+  search_path = public AS $$ DECLARE v_caller_tenant_id UUID;
 
 v_next_number BIGINT;
 
@@ -342,7 +342,7 @@ RETURN v_candidate;
 
 END;
 
-$ $;
+$$;
 
 COMMENT ON FUNCTION public.get_next_employee_number(UUID) IS 'Generates the next serial Employee Number using the current organisation format. It is tenant-scoped, concurrency-safe and skips existing numbers.';
 
@@ -371,7 +371,7 @@ GRANT EXECUTE ON FUNCTION public.get_next_employee_number(UUID) TO authenticated
 CREATE
 OR REPLACE FUNCTION public.sync_company_employee_sequence_from_employee_number() RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
 SET
-  search_path = public AS $ $ DECLARE v_clean_employee_number TEXT;
+  search_path = public AS $$ DECLARE v_clean_employee_number TEXT;
 
 v_number_prefix TEXT;
 
@@ -454,7 +454,7 @@ RETURN NEW;
 
 END;
 
-$ $;
+$$;
 
 DROP TRIGGER IF EXISTS trg_sync_company_employee_sequence_from_employee_number ON public.employees;
 
