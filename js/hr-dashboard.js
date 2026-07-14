@@ -5880,10 +5880,10 @@ function populatePayrollOtherDeductionMasterOptions() {
 
     option.value = record.id;
     option.textContent =
-  `${fullName}${gradeSegment} — ` +
-  `${formatCurrency(record.basic_salary, "NGN")} — ` +
-  `${record.salary_effective_date || "--"} — ` +
-  `${getPayrollMasterVersionLabel(record)}`;
+      `${fullName}${gradeSegment} — ` +
+      `${formatCurrency(record.basic_salary, "NGN")} — ` +
+      `${record.salary_effective_date || "--"} — ` +
+      `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
   });
@@ -7438,12 +7438,12 @@ function resetPayrollEmployeeOverrideForm() {
     }
   });
 
-    // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3A
+  // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3A
   // Reset the Payroll Element dropdown to its safe create-mode state.
   // No category means no element may be selected yet.
   populatePayrollEmployeeOverrideElementOptions();
 
-    syncPayrollEmployeeOverrideRuleSnapshotVisibility({
+  syncPayrollEmployeeOverrideRuleSnapshotVisibility({
     clearWhenHidden: true,
   });
 
@@ -7736,7 +7736,7 @@ function startPayrollEmployeeOverrideEdit(overrideId) {
     state.dom.payrollEmployeeOverrideMethod.value = savedMethod;
   }
 
-    // Reveal Rule Snapshot only when this saved historical record
+  // Reveal Rule Snapshot only when this saved historical record
   // uses the retired Rule Replacement method.
   syncPayrollEmployeeOverrideRuleSnapshotVisibility();
 
@@ -9600,25 +9600,25 @@ function bindEvents() {
     field?.addEventListener("change", updatePayrollEmployeeOverrideSaveButtonState);
   });
 
-// EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 2B
-// Changing category clears the old element and shows only relevant choices.
-state.dom.payrollEmployeeOverrideCategory?.addEventListener("change", () => {
-  populatePayrollEmployeeOverrideElementOptions();
+  // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 2B
+  // Changing category clears the old element and shows only relevant choices.
+  state.dom.payrollEmployeeOverrideCategory?.addEventListener("change", () => {
+    populatePayrollEmployeeOverrideElementOptions();
 
-  state.dom.payrollEmployeeOverrideElement?.classList.remove("is-invalid");
+    state.dom.payrollEmployeeOverrideElement?.classList.remove("is-invalid");
 
-  updatePayrollEmployeeOverrideSaveButtonState();
-});
-
-// EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 4C
-// Show Rule Snapshot only when an older Rule Replacement method is selected.
-state.dom.payrollEmployeeOverrideMethod?.addEventListener("change", () => {
-  syncPayrollEmployeeOverrideRuleSnapshotVisibility({
-    clearWhenHidden: true,
+    updatePayrollEmployeeOverrideSaveButtonState();
   });
 
-  updatePayrollEmployeeOverrideSaveButtonState();
-});
+  // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 4C
+  // Show Rule Snapshot only when an older Rule Replacement method is selected.
+  state.dom.payrollEmployeeOverrideMethod?.addEventListener("change", () => {
+    syncPayrollEmployeeOverrideRuleSnapshotVisibility({
+      clearWhenHidden: true,
+    });
+
+    updatePayrollEmployeeOverrideSaveButtonState();
+  });
 
   updatePayrollEmployeeOverrideSaveButtonState();
 
@@ -9945,20 +9945,15 @@ function escapeBatchEmployeeCsvCell(value) {
 
 // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1C
 // Download a clean employee import template.
-// Employee Number is intentionally excluded because the system already
-// generates employee numbers safely when employee profiles are created.
+// Employee Number is optional:
+// - supplied values are preserved and validated;
+// - blank values are generated during employee creation.
 function downloadBatchEmployeeCsvImportTemplate() {
-  // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A
-  // Keep the batch employee CSV aligned with the direct employee biodata
-  // fields saved by the manual Create Employee Profile form.
-  // Employee Number remains excluded because the system generates it safely.
-  // Repeatable sub-records such as address, next of kin, education, and
-  // dependants are handled separately in Step 1B because they require the
-  // saved employee_id after insert.
   const headers = [
     "First Name",
     "Middle Name",
     "Last Name",
+    "Employee Number",
     "Work Email",
     "Personal Email",
     "Phone Number",
@@ -10505,9 +10500,38 @@ async function handleBatchEmployeeSubmit() {
     // carries the correct tenant_id without an extra lookup per row.
     const batchTenantId = getRequiredTenantIdForHrEmployeeData();
 
+    // EMPLOYEE NUMBER MANUAL OR AUTOMATIC ENTRY - STEP 1E
+    // Reserve all supplied CSV Employee Numbers before generating blank ones.
+    // This prevents an automatic number from colliding with a manual number
+    // waiting inside the same batch.
+    const reservedEmployeeNumbers = new Set(
+      preparedRows
+        .map((employee) =>
+          String(employee.employee_number || "").trim().toUpperCase(),
+        )
+        .filter(Boolean),
+    );
+
     for (const employee of preparedRows) {
-      const employeeNumber = await generateNextEmployeeCustomId();
-      rowsToInsert.push(buildBatchEmployeeInsertPayload(employee, employeeNumber, batchTenantId));
+      let employeeNumber = String(employee.employee_number || "").trim();
+
+      if (!employeeNumber) {
+        do {
+          employeeNumber = await generateNextEmployeeCustomId();
+        } while (
+          reservedEmployeeNumbers.has(employeeNumber.toUpperCase())
+        );
+      }
+
+      reservedEmployeeNumbers.add(employeeNumber.toUpperCase());
+
+      rowsToInsert.push(
+        buildBatchEmployeeInsertPayload(
+          employee,
+          employeeNumber,
+          batchTenantId,
+        ),
+      );
     }
 
     const supabase = getSupabaseClient();
@@ -10564,7 +10588,7 @@ async function handleBatchEmployeeSubmit() {
     if (state.dom.batchEmployeeReviewTableBody) {
       state.dom.batchEmployeeReviewTableBody.innerHTML = `
         <tr>
-          <td colspan="7" class="text-center text-success py-4">
+          <td colspan="8" class="text-center text-success py-4">
             ${createdCount} employee profile(s) were created successfully. Check the Full Employee List below.
           </td>
         </tr>
@@ -10908,13 +10932,33 @@ function buildBatchEmployeeNameDuplicateKey(employee = {}) {
 
 // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1F-4
 // seenNames is used to stop duplicate employees inside the same CSV file.
-function buildBatchEmployeePreparedRowFromCsv(row = [], headerMap, rowNumber, seenEmails, seenNames) {
+function buildBatchEmployeePreparedRowFromCsv(
+  row = [],
+  headerMap,
+  rowNumber,
+  seenEmails = new Set(),
+  seenNames = new Set(),
+  seenEmployeeNumbers = new Set(),
+) {
   // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A
   // Parse the same direct employee biodata fields that the manual employee
   // form saves to the employees table.
   const firstName = getBatchEmployeeCsvCell(row, headerMap, "First Name");
   const middleName = getBatchEmployeeCsvCell(row, headerMap, "Middle Name");
   const lastName = getBatchEmployeeCsvCell(row, headerMap, "Last Name");
+
+  // EMPLOYEE NUMBER MANUAL OR AUTOMATIC ENTRY - STEP 1D
+  // Employee Number is optional in the CSV.
+  // Supplied values are preserved; blank values are generated during creation.
+  const employeeNumber = getBatchEmployeeCsvCell(
+    row,
+    headerMap,
+    "Employee Number",
+  );
+
+  const normalizedEmployeeNumber = String(employeeNumber || "")
+    .trim()
+    .toUpperCase();
 
   const workEmail = getBatchEmployeeCsvCell(row, headerMap, "Work Email").toLowerCase();
   const personalEmail = getBatchEmployeeCsvCell(row, headerMap, "Personal Email").toLowerCase();
@@ -11053,6 +11097,31 @@ function buildBatchEmployeePreparedRowFromCsv(row = [], headerMap, rowNumber, se
     seenEmails.add(normalizeText(workEmail));
   }
 
+  // EMPLOYEE NUMBER MANUAL OR AUTOMATIC ENTRY - STEP 1D
+  // Check supplied Employee Numbers against current tenant employees
+  // and against earlier rows in this same CSV.
+  const existingEmployeeNumber = (state.employees || []).some((employee) => {
+    return (
+      String(employee.employee_number || "").trim().toUpperCase() ===
+      normalizedEmployeeNumber
+    );
+  });
+
+  if (normalizedEmployeeNumber && existingEmployeeNumber) {
+    missingFields.push("Employee Number already exists");
+  }
+
+  if (
+    normalizedEmployeeNumber &&
+    seenEmployeeNumbers.has(normalizedEmployeeNumber)
+  ) {
+    missingFields.push("Duplicate Employee Number in CSV");
+  }
+
+  if (normalizedEmployeeNumber) {
+    seenEmployeeNumbers.add(normalizedEmployeeNumber);
+  }
+
   const incomingNameKey = buildBatchEmployeeNameDuplicateKey({
     first_name: firstName,
     middle_name: middleName,
@@ -11168,6 +11237,7 @@ function buildBatchEmployeePreparedRowFromCsv(row = [], headerMap, rowNumber, se
     first_name: firstName,
     middle_name: middleName || null,
     last_name: lastName,
+    employee_number: employeeNumber || null,
 
     work_email: workEmail,
     personal_email: personalEmail || null,
@@ -11250,7 +11320,7 @@ function renderImportedBatchEmployeeCsvRows(preparedRows = [], skippedRows = [])
   if (!preparedRows.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="text-center text-secondary py-4">
+        <td colspan="8" class="text-center text-secondary py-4">
           No valid employee rows were found in the CSV.
         </td>
       </tr>
@@ -11310,6 +11380,29 @@ function renderImportedBatchEmployeeCsvRows(preparedRows = [], skippedRows = [])
         ? `<div class="text-secondary small mt-1">${escapeHtml(biodataSummary)}</div>`
         : ""
       }
+      </td>
+
+      <!-- EMPLOYEE NUMBER MANUAL OR AUTOMATIC ENTRY - STEP 1F
+           Show exactly what will happen before HR creates the employee. -->
+      <td class="text-nowrap">
+        ${employee.employee_number
+          ? `
+            <div class="fw-semibold">
+              ${escapeHtml(employee.employee_number)}
+            </div>
+            <div class="text-secondary small">
+              Supplied by CSV
+            </div>
+          `
+          : `
+            <div class="fw-semibold text-secondary">
+              Auto-generate
+            </div>
+            <div class="text-secondary small">
+              Assigned on creation
+            </div>
+          `
+        }
       </td>
 
       <td class="text-break">
@@ -11476,6 +11569,10 @@ async function handleBatchEmployeeCsvImport() {
     // Track names inside the uploaded CSV so the same person is not prepared twice.
     const seenNames = new Set();
 
+    // EMPLOYEE NUMBER MANUAL OR AUTOMATIC ENTRY - STEP 1D
+    // Track supplied Employee Numbers inside this CSV.
+    const seenEmployeeNumbers = new Set();
+
     dataRows.forEach((row, index) => {
       const preparedRow = buildBatchEmployeePreparedRowFromCsv(
         row,
@@ -11483,6 +11580,7 @@ async function handleBatchEmployeeCsvImport() {
         headerRowIndex + index + 2,
         seenEmails,
         seenNames,
+        seenEmployeeNumbers,
       );
 
       if (preparedRow.skipped) {
@@ -11591,7 +11689,7 @@ function clearBatchEmployeeCsvImportUi() {
   if (state.dom.batchEmployeeReviewTableBody) {
     state.dom.batchEmployeeReviewTableBody.innerHTML = `
       <tr>
-        <td colspan="7" class="text-center text-secondary py-4">
+        <td colspan="8" class="text-center text-secondary py-4">
           No employee CSV rows imported yet.
         </td>
       </tr>
@@ -17035,11 +17133,11 @@ function populatePayrollAllowanceMasterOptions() {
       ? ` — ${gradeLabel}`
       : "";
 
-option.textContent =
-  `${fullName}${gradeSegment} — ` +
-  `${formatCurrency(record.basic_salary, "NGN")} — ` +
-  `${record.salary_effective_date || "--"} — ` +
-  `${getPayrollMasterVersionLabel(record)}`;
+    option.textContent =
+      `${fullName}${gradeSegment} — ` +
+      `${formatCurrency(record.basic_salary, "NGN")} — ` +
+      `${record.salary_effective_date || "--"} — ` +
+      `${getPayrollMasterVersionLabel(record)}`;
     select.appendChild(option);
   });
 
@@ -17112,11 +17210,11 @@ function populatePayrollStatutoryMasterOptions() {
     // DESCRIPTION ITEM 3 - STEP 2A-5
     // Show employee, grade context, salary, and effective date so HR selects
     // the correct payroll profile before configuring statutory deductions.
-option.textContent =
-  `${fullName}${gradeSegment} — ` +
-  `${formatCurrency(record.basic_salary, "NGN")} — ` +
-  `${record.salary_effective_date || "--"} — ` +
-  `${getPayrollMasterVersionLabel(record)}`;
+    option.textContent =
+      `${fullName}${gradeSegment} — ` +
+      `${formatCurrency(record.basic_salary, "NGN")} — ` +
+      `${record.salary_effective_date || "--"} — ` +
+      `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
   });
@@ -27948,6 +28046,46 @@ async function checkDuplicateEmployee(workEmail, currentEmployeeId = null) {
   return rows.find((row) => String(row.id) !== String(currentEmployeeId || ""));
 }
 
+// EMPLOYEE NUMBER MANUAL OR AUTOMATIC ENTRY - STEP 1B
+// Block duplicate Employee Numbers inside the current tenant.
+// Comparison ignores surrounding spaces and letter casing.
+async function checkDuplicateEmployeeNumber(
+  employeeNumber,
+  currentEmployeeId = null,
+) {
+  const normalizedEmployeeNumber = String(employeeNumber || "")
+    .trim()
+    .toUpperCase();
+
+  if (!normalizedEmployeeNumber) {
+    return null;
+  }
+
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await applyCurrentTenantFilter(
+    supabase
+      .from("employees")
+      .select("id, employee_number")
+      .not("employee_number", "is", null),
+  );
+
+  if (error) throw error;
+
+  const rows = Array.isArray(data) ? data : [];
+
+  return rows.find((row) => {
+    const rowEmployeeNumber = String(row.employee_number || "")
+      .trim()
+      .toUpperCase();
+
+    return (
+      String(row.id) !== String(currentEmployeeId || "") &&
+      rowEmployeeNumber === normalizedEmployeeNumber
+    );
+  });
+}
+
 function sanitizeFileName(fileName) {
   return String(fileName || "")
     .trim()
@@ -29329,15 +29467,39 @@ async function handleEmployeeSave() {
       return;
     }
 
-    // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
-    // Only create mode generates a new Employee Number.
-    // Edit mode must preserve the existing Employee Number.
-    if (!isEditMode) {
+    // EMPLOYEE NUMBER MANUAL OR AUTOMATIC ENTRY - STEP 1C
+    // Preserve an Employee Number entered by HR.
+    // Generate the next tenant-specific number only when the field is blank.
+    // This also supports assigning a number later when editing an older employee.
+    if (!employeePayload.employee_number) {
       employeePayload.employee_number = await generateNextEmployeeCustomId();
 
       if (state.dom.employeeNumber) {
         state.dom.employeeNumber.value = employeePayload.employee_number;
       }
+    }
+
+    const duplicateEmployeeNumber = await checkDuplicateEmployeeNumber(
+      employeePayload.employee_number,
+      isEditMode ? editingId : null,
+    );
+
+    if (duplicateEmployeeNumber) {
+      showPageAlert(
+        "warning",
+        `Employee Number <strong>${escapeHtml(
+          employeePayload.employee_number,
+        )}</strong> is already assigned to another employee in this organization.`,
+      );
+
+      showDashboardToast(
+        "warning",
+        "Duplicate Employee Number",
+        `Employee Number ${employeePayload.employee_number} is already in use. Enter a different number or leave the field blank for automatic generation.`,
+      );
+
+      state.dom.employeeNumber?.focus();
+      return;
     }
 
     const supabase = getSupabaseClient();

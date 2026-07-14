@@ -1311,6 +1311,7 @@
                 <thead>
                   <tr>
                     <th>Employee</th>
+                    <th>Employee Number</th>
                     <th>Work Email</th>
                     <th>Department</th>
                     <th>Job Title</th>
@@ -1321,7 +1322,7 @@
                 </thead>
                 <tbody id="batchEmployeeReviewTableBody">
                   <tr>
-                    <td colspan="7" class="text-center text-secondary py-4">
+                    <td colspan="8" class="text-center text-secondary py-4">
                       No employee CSV rows imported yet.
                     </td>
                   </tr>
@@ -1923,17 +1924,20 @@
                   <div class="invalid-feedback">Employment date is required.</div>
                 </div>
 
-                <!-- EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
-     Employee Number is now system-generated.
-     HR should not type this manually because that can cause duplicate IDs. -->
+                <!-- EMPLOYEE NUMBER MANUAL OR AUTOMATIC ENTRY - STEP 1A
+     HR may enter an organisation-issued Employee Number manually.
+     When left blank, BexHR generates the next tenant-specific number. -->
                 <div class="col-md-6 col-xl-4">
                   <label for="employeeNumber" class="form-label fw-semibold">
                     Employee Number
                   </label>
-                  <input type="text" id="employeeNumber" class="form-control bg-light"
-                    placeholder="Auto-generated on save" autocomplete="off" readonly />
+
+                  <input type="text" id="employeeNumber" class="form-control"
+                    placeholder="Enter an ID or leave blank to auto-generate" autocomplete="off" />
+
                   <div class="form-text">
-                    This will be generated automatically when the employee is created.
+                    Enter the organisation-issued Employee Number, or leave this blank for
+                    BexHR to generate the next available number.
                   </div>
                 </div>
 
