@@ -10,7 +10,10 @@
 // deduction, or bank data from the browser.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import {
+  createClient,
+  type SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,6 +65,12 @@ type PayslipEmailBrandingContext = {
   isAlpatech: boolean;
   brandName: string;
   fromName: string;
+
+  // TENANT EMAIL IDENTITY HARDENING - STEP 1
+  // Replies must go to the tenant-controlled HR/payroll mailbox rather than
+  // the individual HR user who clicked Send Payslips.
+  replyToEmail: string;
+
   headerTitle: string;
   headerSubtitle: string;
   primaryColor: string;
@@ -90,6 +99,21 @@ type PayslipEmailDeliveryRequest = {
   // Safe employee payroll landing URL.
   // This must point to the protected employee dashboard payroll section,
   // not to a payroll record ID or salary-bearing public page.
+  payslipAccessUrl: string;
+};
+
+// RESEND PAYSLIP DELIVERY - STEP 1
+// Alpatech payslips use the BexHR-controlled verified sender domain.
+// The tenant HR mailbox remains the Reply-To destination.
+type ResendPayslipEmailDeliveryRequest = {
+  apiKey: string;
+  toEmail: string;
+  toName: string;
+  subject: string;
+  message: string;
+  payCycle: string;
+  payrollRecordId: string;
+  branding: PayslipEmailBrandingContext;
   payslipAccessUrl: string;
 };
 
@@ -172,6 +196,12 @@ const DEFAULT_PAYSLIP_EMAIL_BRANDING: PayslipEmailBrandingContext = {
   isAlpatech: false,
   brandName: "BexHR",
   fromName: "BexHR",
+
+  // TENANT EMAIL IDENTITY HARDENING - STEP 1
+  // Empty for tenants that do not yet have a configured payroll mailbox.
+  // Their current initiating-user reply behaviour remains as the fallback.
+  replyToEmail: "",
+
   headerTitle: "BexHR",
   headerSubtitle: "Confidential payslip notification",
   primaryColor: "#2bb8c7",
@@ -205,7 +235,7 @@ function buildPublicAssetUrl(baseUrl: string, assetPath: string) {
 // If tenant lookup is blocked by RLS, the function safely falls back to
 // non-Alpatech branding rather than leaking Alpatech branding to other tenants.
 async function resolvePayslipEmailBrandingContext(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient<any, "public", any>,
   profile: Record<string, unknown> | null,
   payslipAccessUrl: string,
 ): Promise<PayslipEmailBrandingContext> {
@@ -264,6 +294,11 @@ async function resolvePayslipEmailBrandingContext(
     isAlpatech: true,
     brandName: "ALPATECH",
     fromName: "Alpatech HR & Payroll",
+
+    // TENANT EMAIL IDENTITY HARDENING - STEP 1
+    // Confirmed Alpatech Engineering Nigeria Limited HR/payroll mailbox.
+    replyToEmail: "humanresources@alpatechlimited.com",
+
     headerTitle: "ALPATECH HR & Payroll",
     headerSubtitle: "Confidential payslip notification",
     primaryColor: "#0b5f95",
@@ -308,6 +343,14 @@ async function sendPayslipEmailViaEmailJs({
           // from_name is tenant-aware for Alpatech, but falls back to the
           // configured EmailJS sender name for every other tenant.
           from_name: branding.fromName || config.fromName,
+
+          // TENANT EMAIL IDENTITY HARDENING - STEP 1
+          // Alpatech replies go to its controlled HR mailbox.
+          // Other tenants temporarily preserve the existing initiator fallback
+          // until their own tenant email settings are introduced.
+          reply_to_email:
+            branding.replyToEmail || initiatedByEmail || "",
+
           initiated_by_email: initiatedByEmail || "",
           pay_cycle: payCycle,
           payroll_record_id: payrollRecordId,
@@ -338,6 +381,207 @@ async function sendPayslipEmailViaEmailJs({
       }),
     },
   );
+
+  const responseText = await response.text();
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    responseText,
+  };
+}
+
+// RESEND PAYSLIP DELIVERY - STEP 1
+// This sender belongs to BexHR's already verified auth.bexhr.com domain.
+// It does not modify or replace the existing Supabase Auth SMTP settings.
+const BEXHR_PAYSLIP_FROM_ADDRESS =
+  "Alpatech HR & Payroll via BexHR <payslips@auth.bexhr.com>";
+
+function escapeEmailHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function buildResendPayslipEmailHtml(
+  message: string,
+  branding: PayslipEmailBrandingContext,
+  payslipAccessUrl: string,
+) {
+  const primaryColor = /^#[0-9a-f]{6}$/i.test(branding.primaryColor)
+    ? branding.primaryColor
+    : "#0b5f95";
+
+  const messageParagraphs = message
+    .split(/\n{2,}/)
+    .map((paragraph) =>
+      `<p style="margin:0 0 18px;line-height:1.7;color:#344054;">${
+        escapeEmailHtml(paragraph).replace(/\n/g, "<br>")
+      }</p>`
+    )
+    .join("");
+
+  const logoMarkup = branding.logoUrl
+    ? `
+      <img
+        src="${escapeEmailHtml(branding.logoUrl)}"
+        alt="${escapeEmailHtml(branding.brandName)}"
+        width="52"
+        style="display:block;width:52px;height:auto;margin:0 auto 14px;"
+      >
+    `
+    : "";
+
+  const accessButtonMarkup = payslipAccessUrl
+    ? `
+      <div style="margin:28px 0;text-align:center;">
+        <a
+          href="${escapeEmailHtml(payslipAccessUrl)}"
+          style="
+            display:inline-block;
+            padding:13px 24px;
+            border-radius:8px;
+            background:${primaryColor};
+            color:#ffffff;
+            font-weight:700;
+            text-decoration:none;
+          "
+        >
+          ${escapeEmailHtml(branding.payslipAccessLabel)}
+        </a>
+      </div>
+    `
+    : "";
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>${escapeEmailHtml(branding.headerTitle)}</title>
+  </head>
+
+  <body style="margin:0;padding:0;background:#f2f4f7;font-family:Arial,Helvetica,sans-serif;">
+    <table
+      role="presentation"
+      width="100%"
+      cellspacing="0"
+      cellpadding="0"
+      style="width:100%;background:#f2f4f7;"
+    >
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table
+            role="presentation"
+            width="100%"
+            cellspacing="0"
+            cellpadding="0"
+            style="
+              width:100%;
+              max-width:640px;
+              overflow:hidden;
+              border:1px solid #e4e7ec;
+              border-radius:14px;
+              background:#ffffff;
+            "
+          >
+            <tr>
+              <td
+                align="center"
+                style="padding:28px 24px;background:${primaryColor};color:#ffffff;"
+              >
+                ${logoMarkup}
+
+                <div style="font-size:22px;font-weight:700;line-height:1.3;">
+                  ${escapeEmailHtml(branding.headerTitle)}
+                </div>
+
+                <div style="margin-top:7px;font-size:14px;opacity:0.92;">
+                  ${escapeEmailHtml(branding.headerSubtitle)}
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:30px 30px 20px;">
+                ${messageParagraphs}
+                ${accessButtonMarkup}
+
+                <div
+                  style="
+                    margin-top:28px;
+                    padding-top:18px;
+                    border-top:1px solid #eaecf0;
+                    color:#667085;
+                    font-size:12px;
+                    line-height:1.6;
+                  "
+                >
+                  This confidential notification was sent securely by
+                  ${escapeEmailHtml(branding.footerName)} via BexHR.
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+async function sendPayslipEmailViaResend({
+  apiKey,
+  toEmail,
+  toName,
+  subject,
+  message,
+  payCycle,
+  payrollRecordId,
+  branding,
+  payslipAccessUrl,
+}: ResendPayslipEmailDeliveryRequest) {
+  if (!isValidEmail(branding.replyToEmail)) {
+    throw new Error(
+      "The tenant HR/payroll Reply-To address is not configured correctly.",
+    );
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+
+      // RESEND PAYSLIP DELIVERY - STEP 1A
+      // Required for direct REST API requests to Resend.
+      "User-Agent": "BexHR-Payslip-Edge-Function/1.0",
+
+      // Prevent an uncertain network retry from creating a duplicate email.
+      "Idempotency-Key": `bexhr-payslip-${payrollRecordId}`,
+    },
+    body: JSON.stringify({
+      from: BEXHR_PAYSLIP_FROM_ADDRESS,
+      to: [
+        `${toName || toEmail} <${toEmail}>`,
+      ],
+      subject,
+      html: buildResendPayslipEmailHtml(
+        message,
+        branding,
+        payslipAccessUrl,
+      ),
+      text: message,
+      reply_to: branding.replyToEmail,
+      headers: {
+        "X-BexHR-Email-Type": "payslip-notification",
+        "X-BexHR-Pay-Cycle": payCycle.slice(0, 100),
+      },
+    }),
+  });
 
   const responseText = await response.text();
 
@@ -473,7 +717,7 @@ function buildPayslipEmailMessage(
 }
 
 async function updatePayslipEmailLogStatus(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient<any, "public", any>,
   logId: string,
   status: "Sent" | "Failed",
   errorMessage: string | null = null,
@@ -623,6 +867,13 @@ serve(async (request) => {
       payslipAccessUrl,
     );
 
+    // RESEND PAYSLIP DELIVERY - STEP 1
+    // Fail closed for Alpatech if its dedicated Resend secret is unavailable.
+    // Do not silently fall back to the personal Gmail-connected EmailJS service.
+    const resendPayslipApiKey = emailBrandingContext.isAlpatech
+      ? getRequiredEnv("RESEND_PAYSLIP_API_KEY")
+      : "";
+
     const body = await request.json().catch(() => ({}));
 
     const payCycle = cleanText(body.payCycle || body.pay_cycle);
@@ -701,10 +952,10 @@ serve(async (request) => {
         message: "Payslip email preparation stopped because the selected payroll records are missing employee ownership data.",
         summary: {
           finalisedRecords: finalisedRecords.length,
-          prepared,
-          alreadyPending,
-          alreadySent,
-          missingRequiredData,
+          prepared: 0,
+          alreadyPending: 0,
+          alreadySent: 0,
+          missingRequiredData: finalisedRecords.length,
 
           // ALPATECH EMAIL BRANDING - STEP 2H
           // Non-sensitive diagnostic so HR can confirm whether the backend
@@ -935,29 +1186,43 @@ serve(async (request) => {
       );
 
       try {
-        const emailJsResult = await sendPayslipEmailViaEmailJs({
-          config: emailJsConfig,
-          toEmail: recipientEmail,
-          toName: employeeName,
-          subject,
-          message,
-          initiatedByEmail: user.email || "",
-          payCycle: cleanText(record.pay_cycle),
-          payrollRecordId,
-
-          // ALPATECH EMAIL BRANDING - STEP 2E
-          // Tenant-safe branding context passed to EmailJS template params.
-          branding: emailBrandingContext,
-
-          // PAYROLL SECURE DELIVERY - STEP 2F-3B-3
-          // Passed as an EmailJS template parameter for optional button/link rendering.
-          payslipAccessUrl,
+        // RESEND PAYSLIP DELIVERY - STEP 1
+        // Alpatech uses the verified BexHR Resend sender.
+        // Other tenants temporarily retain their existing EmailJS route.
+        const emailDeliveryResult = emailBrandingContext.isAlpatech
+          ? await sendPayslipEmailViaResend({
+            apiKey: resendPayslipApiKey,
+            toEmail: recipientEmail,
+            toName: employeeName,
+            subject,
+            message,
+            payCycle: cleanText(record.pay_cycle),
+            payrollRecordId,
+            branding: emailBrandingContext,
+            payslipAccessUrl,
+          })
+          : await sendPayslipEmailViaEmailJs({
+            config: emailJsConfig,
+            toEmail: recipientEmail,
+            toName: employeeName,
+            subject,
+            message,
+            initiatedByEmail: user.email || "",
+            payCycle: cleanText(record.pay_cycle),
+            payrollRecordId,
+            branding: emailBrandingContext,
+            payslipAccessUrl,
         });
 
-        if (!emailJsResult.ok) {
+
+        if (!emailDeliveryResult.ok) {
+          const providerName = emailBrandingContext.isAlpatech
+            ? "Resend"
+            : "EmailJS";
+
           const errorMessage =
-            emailJsResult.responseText ||
-            `EmailJS failed with HTTP status ${emailJsResult.status}.`;
+            emailDeliveryResult.responseText ||
+            `${providerName} failed with HTTP status ${emailDeliveryResult.status}.`;
 
           await updatePayslipEmailLogStatus(
             supabase,
