@@ -23899,11 +23899,15 @@ async function refreshOrganizationSettingsWorkspace() {
     // Other tenants remain on the shared BexHR shell.
     applyTenantWorkspaceShellBranding();
 
-    const { data, error } = await supabase
-      .from("organization_settings")
-      .select("*")
-      .eq("singleton_key", true)
-      .maybeSingle();
+    // TENANT ORGANIZATION SETTINGS ISOLATION - STEP 1
+    // Organization details belong to the active company workspace.
+    // Never load the legacy system-wide singleton row without tenant_id.
+    const { data, error } = await applyCurrentTenantFilter(
+      supabase
+        .from("organization_settings")
+        .select("*")
+        .eq("singleton_key", true),
+    ).maybeSingle();
 
     if (error) throw error;
 
@@ -24181,6 +24185,10 @@ function buildOrganizationSettingsPayload(isEditMode = false) {
   const payload = {
     singleton_key: true,
 
+    // TENANT ORGANIZATION SETTINGS ISOLATION - STEP 2
+    // Every organization snapshot must be owned by the signed-in company.
+    tenant_id: getRequiredTenantIdForHrEmployeeData(),
+
     // ADMIN COMPANY IDENTITY WIRING - STEP 1M-A
     // Store the Admin-controlled company name as the organization snapshot.
     // HR must not overwrite company identity from Manage Organization.
@@ -24275,6 +24283,8 @@ async function handleOrganizationSettingsSave() {
         .from("organization_settings")
         .update(payload)
         .eq("id", existingId)
+        .eq("tenant_id", payload.tenant_id)
+        .eq("singleton_key", true)
         .select("*")
         .maybeSingle()
       : await supabase
