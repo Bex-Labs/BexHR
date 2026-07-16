@@ -109,6 +109,7 @@ type ResendPayslipEmailDeliveryRequest = {
   apiKey: string;
   toEmail: string;
   toName: string;
+  initiatedByEmail: string;
   subject: string;
   message: string;
   payCycle: string;
@@ -391,11 +392,20 @@ async function sendPayslipEmailViaEmailJs({
   };
 }
 
-// RESEND PAYSLIP DELIVERY - STEP 1
-// This sender belongs to BexHR's already verified auth.bexhr.com domain.
-// It does not modify or replace the existing Supabase Auth SMTP settings.
-const BEXHR_PAYSLIP_FROM_ADDRESS =
-  "Alpatech HR & Payroll via BexHR <payslips@auth.bexhr.com>";
+// SYSTEM-WIDE RESEND PAYSLIP DELIVERY - STEP 1
+// All tenants send from the verified BexHR domain.
+// Only the display name and Reply-To destination vary by tenant.
+const BEXHR_PAYSLIP_FROM_EMAIL = "payslips@auth.bexhr.com";
+
+function getPayslipFromAddress(
+  branding: PayslipEmailBrandingContext,
+) {
+  const displayName = branding.isAlpatech
+    ? "Alpatech HR & Payroll via BexHR"
+    : "BexHR Payslips";
+
+  return `${displayName} <${BEXHR_PAYSLIP_FROM_EMAIL}>`;
+}
 
 function escapeEmailHtml(value: unknown) {
   return String(value ?? "")
@@ -418,8 +428,7 @@ function buildResendPayslipEmailHtml(
   const messageParagraphs = message
     .split(/\n{2,}/)
     .map((paragraph) =>
-      `<p style="margin:0 0 18px;line-height:1.7;color:#344054;">${
-        escapeEmailHtml(paragraph).replace(/\n/g, "<br>")
+      `<p style="margin:0 0 18px;line-height:1.7;color:#344054;">${escapeEmailHtml(paragraph).replace(/\n/g, "<br>")
       }</p>`
     )
     .join("");
@@ -537,6 +546,7 @@ async function sendPayslipEmailViaResend({
   apiKey,
   toEmail,
   toName,
+  initiatedByEmail,
   subject,
   message,
   payCycle,
@@ -544,9 +554,16 @@ async function sendPayslipEmailViaResend({
   branding,
   payslipAccessUrl,
 }: ResendPayslipEmailDeliveryRequest) {
-  if (!isValidEmail(branding.replyToEmail)) {
+  // SYSTEM-WIDE RESEND PAYSLIP DELIVERY - STEP 1
+  // Use the tenant mailbox when configured.
+  // Otherwise preserve the existing behaviour by replying to the HR/payroll
+  // user who initiated the payslip delivery.
+  const replyToEmail =
+    branding.replyToEmail || initiatedByEmail;
+
+  if (!isValidEmail(replyToEmail)) {
     throw new Error(
-      "The tenant HR/payroll Reply-To address is not configured correctly.",
+      "A valid HR/payroll Reply-To address could not be resolved.",
     );
   }
 
@@ -564,7 +581,7 @@ async function sendPayslipEmailViaResend({
       "Idempotency-Key": `bexhr-payslip-${payrollRecordId}`,
     },
     body: JSON.stringify({
-      from: BEXHR_PAYSLIP_FROM_ADDRESS,
+      from: getPayslipFromAddress(branding),
       to: [
         `${toName || toEmail} <${toEmail}>`,
       ],
@@ -575,7 +592,7 @@ async function sendPayslipEmailViaResend({
         payslipAccessUrl,
       ),
       text: message,
-      reply_to: branding.replyToEmail,
+      reply_to: replyToEmail,
       headers: {
         "X-BexHR-Email-Type": "payslip-notification",
         "X-BexHR-Pay-Cycle": payCycle.slice(0, 100),
@@ -770,23 +787,8 @@ serve(async (request) => {
       throw new Error("Supabase Edge Function environment is not configured.");
     }
 
-    // PAYROLL EMAIL DELIVERY - STEP 2E
-    // Reuse the EmailJS secrets already proven by HRP-85.
-    const emailJsConfig: EmailJsConfig = {
-      serviceId: getRequiredEnv("EMAILJS_SERVICE_ID"),
-      // PAYROLL EMAIL DELIVERY - STEP 2E-C
-      // Payslip delivery uses its own EmailJS template so it does not inherit
-      // HRP-85 validation/test wording.
-      templateId: getRequiredEnv("EMAILJS_PAYSLIP_TEMPLATE_ID"),
-      publicKey: getRequiredEnv("EMAILJS_PUBLIC_KEY"),
-      privateKey: getRequiredEnv("EMAILJS_PRIVATE_KEY"),
-      fromName:
-        Deno.env.get("EMAILJS_FROM_NAME")?.trim() ||
-        "BexHR",
-    };
-
     // PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 1
-    // EmailJS receives only the public landing page URL.
+// Payslip notifications include only the public landing page URL.
     // The employee signs in from the landing page instead of first touching a
     // protected dashboard route that can flash before session validation finishes.
     const payslipAccessUrl = getOptionalPayslipAccessUrlEnv("PAYSLIP_ACCESS_URL");
@@ -867,12 +869,12 @@ serve(async (request) => {
       payslipAccessUrl,
     );
 
-    // RESEND PAYSLIP DELIVERY - STEP 1
-    // Fail closed for Alpatech if its dedicated Resend secret is unavailable.
-    // Do not silently fall back to the personal Gmail-connected EmailJS service.
-    const resendPayslipApiKey = emailBrandingContext.isAlpatech
-      ? getRequiredEnv("RESEND_PAYSLIP_API_KEY")
-      : "";
+    // SYSTEM-WIDE RESEND PAYSLIP DELIVERY - STEP 1
+    // All tenant payslip notifications now use the verified BexHR sender.
+    // Fail closed rather than falling back to a personal EmailJS account.
+    const resendPayslipApiKey = getRequiredEnv(
+      "RESEND_PAYSLIP_API_KEY",
+    );
 
     const body = await request.json().catch(() => ({}));
 
@@ -1186,44 +1188,28 @@ serve(async (request) => {
       );
 
       try {
-        // RESEND PAYSLIP DELIVERY - STEP 1
-        // Alpatech uses the verified BexHR Resend sender.
-        // Other tenants temporarily retain their existing EmailJS route.
-        const emailDeliveryResult = emailBrandingContext.isAlpatech
-          ? await sendPayslipEmailViaResend({
+        // SYSTEM-WIDE RESEND PAYSLIP DELIVERY - STEP 1
+        // Branding remains tenant-aware, but transport is now consistently
+        // handled through the verified BexHR Resend domain.
+        const emailDeliveryResult =
+          await sendPayslipEmailViaResend({
             apiKey: resendPayslipApiKey,
             toEmail: recipientEmail,
             toName: employeeName,
-            subject,
-            message,
-            payCycle: cleanText(record.pay_cycle),
-            payrollRecordId,
-            branding: emailBrandingContext,
-            payslipAccessUrl,
-          })
-          : await sendPayslipEmailViaEmailJs({
-            config: emailJsConfig,
-            toEmail: recipientEmail,
-            toName: employeeName,
-            subject,
-            message,
             initiatedByEmail: user.email || "",
+            subject,
+            message,
             payCycle: cleanText(record.pay_cycle),
             payrollRecordId,
             branding: emailBrandingContext,
             payslipAccessUrl,
-        });
+          });
 
 
-        if (!emailDeliveryResult.ok) {
-          const providerName = emailBrandingContext.isAlpatech
-            ? "Resend"
-            : "EmailJS";
-
+      if (!emailDeliveryResult.ok) {
           const errorMessage =
             emailDeliveryResult.responseText ||
-            `${providerName} failed with HTTP status ${emailDeliveryResult.status}.`;
-
+            `Resend failed with HTTP status ${emailDeliveryResult.status}.`;
           await updatePayslipEmailLogStatus(
             supabase,
             deliveryLogId,
