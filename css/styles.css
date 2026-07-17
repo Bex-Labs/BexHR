@@ -2882,3 +2882,3060 @@ body.dashboard-page .bexhr-brand-action-btn:disabled {
   cursor: not-allowed;
   box-shadow: none !important;
 }
+/* =========================================================
+   BEXHR HR DASHBOARD VISUAL REFRESH - PILOT STEP 1
+   Presentation-only HR dashboard shell.
+
+   Safety:
+   - scoped to .bexhr-hr-visual-refresh so other dashboards stay unchanged;
+   - Alpatech retains its own colours, flame branding, and tenant favicon;
+   - no IDs, events, Supabase calls, payroll logic, or role checks change.
+   ========================================================= */
+
+body.bexhr-hr-visual-refresh {
+  --bexhr-navy-950: #071426;
+  --bexhr-navy-900: #0b1f38;
+  --bexhr-navy-800: #123253;
+  --bexhr-teal-600: #0f9f9a;
+  --bexhr-teal-500: #16b8ae;
+  --bexhr-teal-100: #dff8f5;
+  --bexhr-page: #f4f7fb;
+  --bexhr-panel: #ffffff;
+  --bexhr-panel-soft: #f8fafc;
+  --bexhr-text: #172033;
+  --bexhr-muted: #667085;
+  --bexhr-line: #e4eaf1;
+  --bexhr-shadow: 0 12px 34px rgba(15, 23, 42, 0.07);
+  --bexhr-shadow-hover: 0 18px 44px rgba(15, 23, 42, 0.11);
+  --bexhr-accent-rgb: 15, 159, 154;
+  background: var(--bexhr-page);
+}
+
+body.bexhr-hr-visual-refresh.alpatech-workspace {
+  --bexhr-accent-rgb: 11, 95, 149;
+}
+
+/* Default BexHR visual identity only. Alpatech keeps its existing palette. */
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) {
+  --hr-primary: var(--bexhr-teal-600);
+  --hr-primary-soft: var(--bexhr-teal-500);
+  --hr-primary-dark: #0a7b78;
+  --hr-background: var(--bexhr-page);
+  --hr-surface: var(--bexhr-panel);
+  --hr-text: var(--bexhr-text);
+  --hr-muted: var(--bexhr-muted);
+  --hr-border: var(--bexhr-line);
+  --hr-soft-surface: #effbf9;
+}
+
+body.bexhr-hr-visual-refresh main.container {
+  width: min(100%, 1500px);
+  max-width: 1500px;
+  padding-left: clamp(1rem, 2vw, 2rem);
+  padding-right: clamp(1rem, 2vw, 2rem);
+}
+
+/* Wider app rail and improved spacing for every HR tenant. */
+@media (min-width: 992px) {
+  body.bexhr-hr-visual-refresh {
+    --sidebar-width: 220px;
+    padding-left: var(--sidebar-width);
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-sidebar {
+    width: var(--sidebar-width);
+    padding: 1.1rem 0.9rem;
+    gap: 0.75rem;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-sidebar-brand {
+    min-height: 64px;
+    padding: 0.35rem 0.55rem 1rem;
+    margin-bottom: 0.65rem;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-sidebar-nav {
+    gap: 0.35rem;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-sidebar-item {
+    min-height: 46px;
+    padding: 0.68rem 0.8rem;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-sidebar-item i {
+    width: 24px;
+    height: 24px;
+    font-size: 1.05rem;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-sidebar-footer {
+    padding-top: 0.9rem;
+  }
+
+  /* Dark navy shell applies only to standard BexHR workspaces. */
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar {
+    background: linear-gradient(180deg, var(--bexhr-navy-950) 0%, var(--bexhr-navy-900) 100%);
+    border-right: 0;
+    box-shadow: 12px 0 38px rgba(7, 20, 38, 0.16);
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-brand {
+    border-bottom-color: rgba(255, 255, 255, 0.12);
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-brand::after {
+    content: "BexHR";
+    color: #ffffff;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-brand .hr-brand-mark {
+    background: linear-gradient(135deg, var(--bexhr-teal-500), #55d7cd);
+    color: var(--bexhr-navy-950);
+    box-shadow: 0 10px 26px rgba(22, 184, 174, 0.28);
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-item {
+    color: #aebbc9;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-item i {
+    color: #7890a8;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    transform: translateX(2px);
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-item:hover i {
+    color: #9ce8e2;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-item.active {
+    background: rgba(22, 184, 174, 0.15);
+    color: #ffffff;
+    box-shadow: inset 0 0 0 1px rgba(98, 221, 211, 0.16);
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-item.active::before {
+    left: -0.9rem;
+    top: 8px;
+    bottom: 8px;
+    width: 4px;
+    background: linear-gradient(180deg, #62ddd3, var(--bexhr-teal-500));
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-item.active i {
+    color: #62ddd3;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-footer {
+    border-top-color: rgba(255, 255, 255, 0.12);
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-footer .bexhr-sidebar-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+  }
+}
+
+/* Compact product header instead of the old oversized marketing hero. */
+body.bexhr-hr-visual-refresh .dashboard-hero {
+  min-height: 0;
+  padding: clamp(1.25rem, 2vw, 1.75rem);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 22px;
+  box-shadow: 0 18px 42px rgba(11, 31, 56, 0.14);
+}
+
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .dashboard-hero {
+  background:
+    radial-gradient(circle at 88% 0%, rgba(22, 184, 174, 0.32), transparent 28%),
+    linear-gradient(135deg, var(--bexhr-navy-950) 0%, var(--bexhr-navy-800) 72%, #164862 100%);
+}
+
+body.bexhr-hr-visual-refresh .dashboard-hero::before {
+  width: 190px;
+  height: 190px;
+  right: -70px;
+  top: -85px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body.bexhr-hr-visual-refresh .dashboard-hero::after {
+  width: 110px;
+  height: 110px;
+  left: auto;
+  right: 12%;
+  bottom: -65px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body.bexhr-hr-visual-refresh .dashboard-hero h1 {
+  font-size: clamp(1.65rem, 3vw, 2.35rem);
+  letter-spacing: -0.035em;
+}
+
+body.bexhr-hr-visual-refresh .dashboard-hero p {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.93rem;
+  line-height: 1.6;
+}
+
+body.bexhr-hr-visual-refresh .hero-badge {
+  min-height: 32px;
+  margin-bottom: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 0.76rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+body.bexhr-hr-visual-refresh .dashboard-avatar {
+  width: 58px;
+  height: 58px;
+  font-size: 1.05rem;
+}
+
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .dashboard-avatar {
+  color: var(--bexhr-navy-900);
+  background: linear-gradient(135deg, #ffffff 0%, var(--bexhr-teal-100) 100%);
+}
+
+body.bexhr-hr-visual-refresh .hero-meta-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+body.bexhr-hr-visual-refresh .hero-meta-card {
+  min-height: 68px;
+  padding: 0.78rem 0.9rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+body.bexhr-hr-visual-refresh .hero-meta-label {
+  margin-bottom: 0.2rem;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+
+body.bexhr-hr-visual-refresh .hero-meta-value {
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+/* Clean application panels and consistent density. */
+body.bexhr-hr-visual-refresh .dashboard-section-card {
+  border: 1px solid var(--bexhr-line);
+  border-radius: 18px;
+  box-shadow: var(--bexhr-shadow);
+  overflow: hidden;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+body.bexhr-hr-visual-refresh .dashboard-section-card:hover {
+  border-color: #d8e0ea;
+  box-shadow: var(--bexhr-shadow-hover);
+}
+
+body.bexhr-hr-visual-refresh .dashboard-section-card .card-body {
+  padding: clamp(1.2rem, 2vw, 1.65rem) !important;
+}
+
+body.bexhr-hr-visual-refresh .dashboard-section-card .section-heading {
+  color: var(--bexhr-text);
+  font-weight: 780;
+  letter-spacing: -0.02em;
+}
+
+body.bexhr-hr-visual-refresh .dashboard-section-card .section-subtext {
+  color: var(--bexhr-muted);
+  line-height: 1.55;
+}
+
+body.bexhr-hr-visual-refresh .summary-tile,
+body.bexhr-hr-visual-refresh #currentPayrollSummaryGrid .info-tile {
+  min-height: 92px;
+  border: 1px solid var(--bexhr-line) !important;
+  border-radius: 16px !important;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%) !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.045) !important;
+}
+
+body.bexhr-hr-visual-refresh .summary-tile::before,
+body.bexhr-hr-visual-refresh #currentPayrollSummaryGrid .info-tile::before {
+  left: 0;
+  right: auto;
+  top: 0.9rem;
+  bottom: 0.9rem;
+  width: 3px;
+  height: auto;
+  background: linear-gradient(180deg, var(--hr-primary), var(--hr-primary-soft));
+}
+
+body.bexhr-hr-visual-refresh .summary-tile::after {
+  width: 68px;
+  height: 68px;
+  right: -22px;
+  bottom: -28px;
+  background: rgba(var(--bexhr-accent-rgb), 0.07);
+}
+
+body.bexhr-hr-visual-refresh .summary-tile-label,
+body.bexhr-hr-visual-refresh #currentPayrollSummaryGrid .info-tile-label {
+  color: #778395 !important;
+  font-size: 0.73rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+
+body.bexhr-hr-visual-refresh .summary-tile-value,
+body.bexhr-hr-visual-refresh #currentPayrollSummaryGrid .info-tile-value {
+  color: var(--bexhr-text) !important;
+  font-size: clamp(1.05rem, 1.6vw, 1.35rem) !important;
+  font-weight: 800 !important;
+}
+
+/* Buttons, fields, tables, and notices. */
+body.bexhr-hr-visual-refresh .dashboard-action-btn {
+  min-height: 40px;
+  border-radius: 10px;
+  padding: 0.48rem 0.85rem;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .btn-primary,
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .dashboard-action-btn.btn-primary,
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-brand-action-btn {
+  background: linear-gradient(135deg, var(--bexhr-teal-600), var(--bexhr-teal-500)) !important;
+  border-color: var(--bexhr-teal-600) !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(15, 159, 154, 0.2) !important;
+}
+
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .btn-primary:hover,
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .dashboard-action-btn.btn-primary:hover,
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-brand-action-btn:hover {
+  background: linear-gradient(135deg, #0a7b78, var(--bexhr-teal-600)) !important;
+  border-color: #0a7b78 !important;
+}
+
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .btn-outline-primary {
+  color: var(--bexhr-teal-600);
+  border-color: rgba(15, 159, 154, 0.46);
+}
+
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .btn-outline-primary:hover {
+  color: #ffffff;
+  background: var(--bexhr-teal-600);
+  border-color: var(--bexhr-teal-600);
+}
+
+body.bexhr-hr-visual-refresh .form-control,
+body.bexhr-hr-visual-refresh .form-select,
+body.bexhr-hr-visual-refresh .input-group-text {
+  min-height: 44px;
+  border-color: #dbe3ec;
+}
+
+body.bexhr-hr-visual-refresh .form-control,
+body.bexhr-hr-visual-refresh .form-select {
+  border-radius: 10px;
+  background-color: #ffffff;
+  font-size: 0.9rem;
+}
+
+body.bexhr-hr-visual-refresh .form-control:focus,
+body.bexhr-hr-visual-refresh .form-select:focus {
+  border-color: var(--hr-primary-soft);
+  box-shadow: 0 0 0 0.2rem rgba(var(--bexhr-accent-rgb), 0.14);
+}
+
+body.bexhr-hr-visual-refresh .dashboard-table-wrap {
+  border: 1px solid var(--bexhr-line);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+body.bexhr-hr-visual-refresh .dashboard-table-wrap thead th {
+  padding-top: 0.78rem;
+  padding-bottom: 0.78rem;
+  background: #f5f8fb;
+  color: #5e6b7c;
+  border-bottom-color: var(--bexhr-line);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body.bexhr-hr-visual-refresh .dashboard-table-wrap tbody td {
+  padding-top: 0.78rem;
+  padding-bottom: 0.78rem;
+  border-color: #edf1f5;
+  color: #344054;
+  font-size: 0.86rem;
+}
+
+body.bexhr-hr-visual-refresh .dashboard-table-wrap tbody tr:hover td {
+  background: #f9fbfd;
+}
+
+body.bexhr-hr-visual-refresh .alert {
+  border-radius: 12px;
+}
+
+body.bexhr-hr-visual-refresh .border.rounded-4,
+body.bexhr-hr-visual-refresh .bg-light-subtle {
+  border-color: var(--bexhr-line) !important;
+}
+
+body.bexhr-hr-visual-refresh .bg-light-subtle {
+  background-color: var(--bexhr-panel-soft) !important;
+}
+
+/* Mobile keeps the existing switcher and adopts the new visual language. */
+@media (max-width: 991.98px) {
+  body.bexhr-hr-visual-refresh main.container {
+    padding-top: 1rem !important;
+    padding-bottom: 2rem !important;
+  }
+
+  body.bexhr-hr-visual-refresh .dashboard-hero {
+    border-radius: 18px;
+  }
+
+  body.bexhr-hr-visual-refresh .hero-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.bexhr-hr-visual-refresh .workspace-switcher-card {
+    border-color: var(--bexhr-line) !important;
+    background: #ffffff !important;
+    box-shadow: var(--bexhr-shadow) !important;
+  }
+
+  body.bexhr-hr-visual-refresh .workspace-switcher-card .dashboard-action-btn {
+    min-height: 38px;
+    border-radius: 10px !important;
+  }
+}
+
+@media (max-width: 575.98px) {
+  body.bexhr-hr-visual-refresh .dashboard-hero {
+    padding: 1.15rem;
+  }
+
+  body.bexhr-hr-visual-refresh .dashboard-hero h1 {
+    font-size: 1.55rem;
+  }
+
+  body.bexhr-hr-visual-refresh .dashboard-section-card .card-body {
+    padding: 1rem !important;
+  }
+
+  body.bexhr-hr-visual-refresh .summary-tile,
+  body.bexhr-hr-visual-refresh #currentPayrollSummaryGrid .info-tile {
+    min-height: 82px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.bexhr-hr-visual-refresh .dashboard-section-card,
+  body.bexhr-hr-visual-refresh .bexhr-sidebar-item {
+    transition: none;
+  }
+
+  body.bexhr-hr-visual-refresh .dashboard-section-card:hover,
+  body.bexhr-hr-visual-refresh .bexhr-sidebar-item:hover {
+    transform: none;
+  }
+}
+/* =========================================================
+   BEXHR HR PROFILE REFINEMENT - STEP 2
+   Presentation-only follow-up to the HR dashboard visual pilot.
+
+   Safety:
+   - keeps every existing profile ID and JavaScript event intact;
+   - keeps Alpatech colours, flame identity, and tenant favicon intact;
+   - keeps the refined HR profile arrangement without changing product or tenant branding;
+   - does not change Supabase, payroll, employee, email, tenant, or role logic.
+   ========================================================= */
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-workspace-card {
+  overflow: visible;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-eyebrow {
+  margin-bottom: 0.35rem;
+  color: var(--hr-primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-security-badge,
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-member-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(var(--bexhr-accent-rgb), 0.2);
+  border-radius: 999px;
+  background: rgba(var(--bexhr-accent-rgb), 0.08);
+  color: var(--hr-primary-dark);
+  font-size: 0.76rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-security-badge {
+  min-height: 34px;
+  padding: 0.4rem 0.72rem;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 315px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-identity-panel,
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-details-panel {
+  border: 1px solid var(--bexhr-line);
+  border-radius: 18px;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-identity-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 1.45rem;
+  overflow: hidden;
+  text-align: center;
+  background:
+    radial-gradient(circle at top right, rgba(var(--bexhr-accent-rgb), 0.13), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-identity-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 1.4rem;
+  right: 1.4rem;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--hr-primary), var(--hr-primary-soft));
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-avatar-stage {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  margin: 0.25rem auto 1rem;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-main-avatar,
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-main-image {
+  width: 112px !important;
+  height: 112px !important;
+  border-radius: 50%;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-main-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--hr-primary-dark);
+  background: linear-gradient(135deg, #ffffff 0%, rgba(var(--bexhr-accent-rgb), 0.15) 100%);
+  border: 4px solid #ffffff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.13);
+  font-size: 1.55rem;
+  font-weight: 850;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-main-image {
+  display: block;
+  object-fit: cover;
+  border: 4px solid #ffffff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.13);
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-main-image.d-none,
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-main-avatar.d-none {
+  display: none !important;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-avatar-status {
+  position: absolute;
+  right: 6px;
+  bottom: 8px;
+  width: 18px;
+  height: 18px;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  background: #18a957;
+  box-shadow: 0 4px 10px rgba(24, 169, 87, 0.25);
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-name {
+  color: var(--bexhr-text);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-email {
+  max-width: 100%;
+  color: var(--bexhr-muted);
+  font-size: 0.84rem;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-member-pill {
+  min-height: 30px;
+  padding: 0.32rem 0.66rem;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-photo-panel {
+  width: 100%;
+  margin-top: 1.35rem;
+  padding: 1rem;
+  border: 1px solid var(--bexhr-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  text-align: left;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.045);
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-photo-title {
+  display: block;
+  color: var(--bexhr-text);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-photo-help {
+  color: var(--bexhr-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-photo-icon {
+  color: var(--hr-primary);
+  font-size: 1.2rem;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection #hrProfileImageInput {
+  min-height: 42px;
+  padding: 0.42rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection #saveHrProfileImageBtn {
+  width: 100%;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-details-panel {
+  min-width: 0;
+  padding: 1.45rem;
+  background: #ffffff;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-details-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-details-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(var(--bexhr-accent-rgb), 0.18);
+  border-radius: 12px;
+  background: rgba(var(--bexhr-accent-rgb), 0.08);
+  color: var(--hr-primary);
+  font-size: 1.1rem;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection input.form-control[readonly] {
+  background-color: #f5f7fa !important;
+  border-color: #dfe5ec;
+  color: #667085;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid var(--bexhr-line);
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-system-note {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  max-width: 540px;
+  color: var(--bexhr-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-system-note i {
+  margin-top: 0.1rem;
+  color: var(--hr-primary);
+}
+
+body.bexhr-hr-visual-refresh #hrProfileSection #saveHrProfileBtn {
+  flex: 0 0 auto;
+  min-width: 184px;
+}
+
+@media (max-width: 1199.98px) {
+  body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-layout {
+    grid-template-columns: minmax(230px, 285px) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-layout {
+    grid-template-columns: 1fr;
+  }
+
+  body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-identity-panel {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-avatar-stage {
+    margin-left: 0;
+  }
+
+  body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-photo-panel {
+    margin-top: 1rem;
+  }
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-card-header,
+  body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-details-heading,
+  body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-form-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  body.bexhr-hr-visual-refresh #hrProfileSection .hr-profile-security-badge {
+    align-self: flex-start;
+  }
+
+  body.bexhr-hr-visual-refresh #hrProfileSection #saveHrProfileBtn {
+    width: 100%;
+    min-width: 0;
+  }
+}
+/* =========================================================
+   BEXHR HR REVIEW WORKSPACE VISUAL UPGRADE - STEP 5
+   Restore static icons and refine the HR Review workspace.
+
+   Scope and safety:
+   - icons return to their original static behaviour;
+   - presentation only;
+   - HR dashboard visual-refresh pilot only;
+   - no HTML IDs, JavaScript handlers, Supabase queries, tenant filters,
+     role access, payroll logic, leave decisions, or correction workflows change;
+   - Alpatech keeps its existing tenant colours and branding.
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   STATIC ICON RESTORE
+   Remove all experimental movement while preserving icon colour changes.
+   --------------------------------------------------------- */
+body.bexhr-hr-visual-refresh :is(
+  .bexhr-sidebar-item,
+  .dashboard-action-btn,
+  .btn,
+  .hr-profile-security-badge,
+  .hr-profile-member-pill,
+  .hr-profile-photo-panel,
+  .hr-profile-details-panel,
+  .hero-badge,
+  .summary-tile,
+  .info-tile
+) i {
+  animation: none !important;
+  transform: none !important;
+  filter: none !important;
+  will-change: auto !important;
+  transition: color 160ms ease, opacity 160ms ease !important;
+}
+
+body.bexhr-hr-visual-refresh :is(
+  .bexhr-sidebar-item,
+  .dashboard-action-btn,
+  .btn
+):not(:disabled):is(:hover, :focus-visible) i,
+body.bexhr-hr-visual-refresh :is(
+  .bexhr-sidebar-item,
+  .dashboard-action-btn,
+  .btn
+):not(:disabled):active i {
+  animation: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+/* Keep controls visually responsive without playful movement. */
+body.bexhr-hr-visual-refresh :is(
+  .dashboard-action-btn,
+  .btn
+):not(:disabled):is(:hover, :focus-visible),
+body.bexhr-hr-visual-refresh :is(
+  .dashboard-action-btn,
+  .btn
+):not(:disabled):active {
+  transform: none !important;
+}
+
+/* ---------------------------------------------------------
+   HR REVIEW LANDING CARD
+   Convert the simple introduction into a clear operational overview.
+   --------------------------------------------------------- */
+body.bexhr-hr-visual-refresh #hrReviewLandingCard {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(13, 148, 136, 0.16) !important;
+  background:
+    radial-gradient(circle at 92% 12%, rgba(20, 184, 166, 0.11), transparent 28%),
+    linear-gradient(135deg, #ffffff 0%, #f7fbfc 100%) !important;
+}
+
+body.bexhr-hr-visual-refresh #hrReviewLandingCard::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, #14b8a6 0%, #0f766e 100%);
+}
+
+body.bexhr-hr-visual-refresh #hrReviewLandingCard .card-body {
+  padding: 1.5rem !important;
+}
+
+body.bexhr-hr-visual-refresh #hrReviewLandingCard .mb-4:first-child {
+  margin-bottom: 1.1rem !important;
+}
+
+body.bexhr-hr-visual-refresh #hrReviewLandingCard .section-heading {
+  font-size: 1.35rem;
+  letter-spacing: -0.025em;
+}
+
+body.bexhr-hr-visual-refresh #hrReviewLandingCard .section-subtext {
+  max-width: 760px;
+  line-height: 1.55;
+}
+
+body.bexhr-hr-visual-refresh #hrReviewLandingCard .row {
+  --bs-gutter-x: 1rem;
+  --bs-gutter-y: 1rem;
+}
+
+body.bexhr-hr-visual-refresh #hrReviewLandingCard .summary-tile {
+  min-height: 88px;
+  padding: 1rem 1.1rem 1rem 1.25rem !important;
+  border: 1px solid #dce7eb !important;
+  border-radius: 16px !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.045) !important;
+}
+
+body.bexhr-hr-visual-refresh #hrReviewLandingCard .summary-tile::before {
+  left: 0;
+  right: auto;
+  top: 1rem;
+  bottom: 1rem;
+  width: 3px;
+  height: auto;
+  background: #14b8a6;
+}
+
+body.bexhr-hr-visual-refresh #hrReviewLandingCard .summary-tile::after {
+  width: 64px;
+  height: 64px;
+  right: -24px;
+  bottom: -26px;
+  background: rgba(20, 184, 166, 0.07);
+}
+
+body.bexhr-hr-visual-refresh #hrReviewLandingCard .summary-tile-label {
+  color: #64748b !important;
+  font-size: 0.72rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+}
+
+body.bexhr-hr-visual-refresh #hrReviewLandingCard .summary-tile-value {
+  color: #0f172a !important;
+  font-size: 0.98rem !important;
+  font-weight: 750 !important;
+}
+
+/* ---------------------------------------------------------
+   REVIEW WORK CARDS
+   Separate headings, controls, metrics, guidance, and records clearly.
+   --------------------------------------------------------- */
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) {
+  border: 1px solid #dce4ea !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.055) !important;
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) > .card-body {
+  padding: 1.5rem !important;
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) .section-heading {
+  font-size: 1.22rem;
+  letter-spacing: -0.02em;
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) .section-subtext {
+  max-width: 760px;
+  line-height: 1.55;
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) .d-flex.flex-wrap.gap-2.align-self-start {
+  padding: 0.35rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) .dashboard-action-btn,
+body.bexhr-hr-visual-refresh #profileCorrectionRequestsViewFilter {
+  min-height: 36px !important;
+  height: 36px !important;
+  border-radius: 10px !important;
+  padding: 0.42rem 0.72rem !important;
+  font-size: 0.78rem !important;
+}
+
+/* Review metrics: compact, number-first operational tiles. */
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) .row.g-4.mb-4 {
+  --bs-gutter-x: 0.85rem;
+  --bs-gutter-y: 0.85rem;
+  margin-bottom: 1.15rem !important;
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) .summary-tile {
+  min-height: 80px;
+  padding: 0.85rem 0.95rem !important;
+  border-radius: 15px !important;
+  border-color: #dce7eb !important;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbfc 100%) !important;
+  box-shadow: none !important;
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) .summary-tile::before {
+  left: 0.85rem;
+  right: 0.85rem;
+  height: 2px;
+  background: linear-gradient(90deg, #14b8a6 0%, #0f766e 100%);
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) .summary-tile::after {
+  width: 54px;
+  height: 54px;
+  right: -20px;
+  bottom: -20px;
+  background: rgba(20, 184, 166, 0.06);
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) .summary-tile-label {
+  font-size: 0.68rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) .summary-tile-value {
+  font-size: 1.1rem !important;
+}
+
+/* Guidance panels should read like structured process notes, not warnings. */
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCollapse,
+  #managerLeaveDecisionsCollapse
+) > .alert.alert-light.border {
+  border: 1px solid #dce7eb !important;
+  border-left: 4px solid #14b8a6 !important;
+  border-radius: 14px !important;
+  background: #f8fbfc !important;
+  color: #334155;
+  padding: 1rem 1.05rem;
+}
+
+body.bexhr-hr-visual-refresh #profileCorrectionRequestsCollapse > .alert .row {
+  --bs-gutter-x: 0.75rem;
+  --bs-gutter-y: 0.75rem;
+}
+
+body.bexhr-hr-visual-refresh #profileCorrectionRequestsCollapse > .alert .row > [class*="col-"] {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+body.bexhr-hr-visual-refresh #profileCorrectionRequestsCollapse > .alert .badge {
+  margin-bottom: 0.35rem;
+}
+
+/* Review tables: clearer headers, lighter rows, contained scroll. */
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsTableWrapper,
+  #managerLeaveDecisionsTableWrapper
+) {
+  border: 1px solid #dce4ea !important;
+  border-radius: 14px !important;
+  background: #ffffff;
+  scrollbar-color: rgba(15, 118, 110, 0.32) rgba(15, 23, 42, 0.04);
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsTableWrapper,
+  #managerLeaveDecisionsTableWrapper
+) thead th {
+  background: #f1f5f7 !important;
+  color: #475569 !important;
+  font-size: 0.68rem !important;
+  font-weight: 800 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  border-bottom: 1px solid #dce4ea !important;
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsTableWrapper,
+  #managerLeaveDecisionsTableWrapper
+) tbody td {
+  padding-top: 0.78rem;
+  padding-bottom: 0.78rem;
+  border-bottom-color: #edf1f4;
+}
+
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsTableWrapper,
+  #managerLeaveDecisionsTableWrapper
+) tbody tr:hover td {
+  background: #f8fbfc;
+}
+
+/* Empty states remain calm and purposeful. */
+body.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsEmptyState,
+  #managerLeaveDecisionsEmptyState
+) {
+  border: 1px dashed #cbd5e1 !important;
+  border-radius: 14px !important;
+  background: #f8fafc !important;
+  color: #64748b;
+  padding: 1rem 1.05rem;
+}
+
+/* Alpatech inherits layout only; use its own blue/cyan identity. */
+body.alpatech-workspace.bexhr-hr-visual-refresh #hrReviewLandingCard,
+body.alpatech-workspace.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) {
+  border-color: rgba(11, 95, 149, 0.16) !important;
+}
+
+body.alpatech-workspace.bexhr-hr-visual-refresh #hrReviewLandingCard::before,
+body.alpatech-workspace.bexhr-hr-visual-refresh #hrReviewLandingCard .summary-tile::before,
+body.alpatech-workspace.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCard,
+  #recentManagerLeaveDecisionsCard
+) .summary-tile::before {
+  background: linear-gradient(180deg, #0b5f95 0%, #36b9cf 100%) !important;
+}
+
+body.alpatech-workspace.bexhr-hr-visual-refresh :is(
+  #profileCorrectionRequestsCollapse,
+  #managerLeaveDecisionsCollapse
+) > .alert.alert-light.border {
+  border-left-color: #0b5f95 !important;
+  background: #f4f9fc !important;
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-hr-visual-refresh #hrReviewLandingCard .card-body,
+  body.bexhr-hr-visual-refresh :is(
+    #profileCorrectionRequestsCard,
+    #recentManagerLeaveDecisionsCard
+  ) > .card-body {
+    padding: 1.1rem !important;
+  }
+
+  body.bexhr-hr-visual-refresh :is(
+    #profileCorrectionRequestsCard,
+    #recentManagerLeaveDecisionsCard
+  ) .d-flex.flex-wrap.gap-2.align-self-start {
+    width: 100%;
+  }
+
+  body.bexhr-hr-visual-refresh :is(
+    #profileCorrectionRequestsCard,
+    #recentManagerLeaveDecisionsCard
+  ) .d-flex.flex-wrap.gap-2.align-self-start > * {
+    flex: 1 1 100%;
+    width: 100% !important;
+  }
+
+  body.bexhr-hr-visual-refresh #profileCorrectionRequestsViewFilter {
+    min-width: 0 !important;
+  }
+}
+/* =========================================================
+   BEXHR HR MODERN APPLICATION SHELL AND OVERVIEW - STEP 6
+   Major structural UI upgrade for the HR dashboard.
+
+   Scope and safety:
+   - adds a real operational Dashboard workspace;
+   - replaces the oversized hero with a compact application header;
+   - uses existing tenant-scoped in-memory records only;
+   - preserves every employee, payroll, review, setup, self-service,
+     role, Supabase, tenant-filtering, and profile workflow;
+   - keeps icons static;
+   - Alpatech keeps its blue/cyan tenant palette and flame identity.
+   ========================================================= */
+
+body.bexhr-hr-visual-refresh main.container {
+  padding-top: 1.1rem !important;
+}
+
+/* Compact app header */
+body.bexhr-hr-visual-refresh .hr-modern-app-header {
+  position: relative;
+  z-index: 1030;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.055);
+  backdrop-filter: blur(14px);
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-app-header-main {
+  min-height: 82px;
+  padding: 0.95rem 1.1rem 0.95rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-page-heading {
+  min-width: 0;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-context-line {
+  margin-bottom: 0.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-company-name {
+  max-width: min(44vw, 420px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--hr-primary);
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-context-separator {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-page-heading h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  font-weight: 820;
+  letter-spacing: -0.035em;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-page-heading p {
+  margin: 0.2rem 0 0;
+  max-width: 760px;
+  color: #64748b;
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-account-area {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 0 0 auto;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-account-button {
+  min-height: 50px;
+  padding: 0.35rem 0.55rem 0.35rem 0.4rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-family: inherit;
+  text-align: left;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-account-button:hover,
+body.bexhr-hr-visual-refresh .hr-modern-account-button:focus-visible {
+  border-color: rgba(var(--bexhr-accent-rgb), 0.45);
+  background: #ffffff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--bexhr-accent-rgb), 0.1);
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-avatar-wrap {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-avatar-wrap .dashboard-avatar {
+  width: 38px !important;
+  height: 38px !important;
+  border: 0;
+  font-size: 0.78rem;
+  object-fit: cover;
+}
+
+body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .hr-modern-avatar-wrap .dashboard-avatar {
+  color: #ffffff;
+  background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-account-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  max-width: 210px;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-account-copy strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-account-copy small {
+  color: #64748b;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  text-transform: capitalize;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-account-button > .bi-chevron-down {
+  color: #94a3b8;
+  font-size: 0.72rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-modern-logout-button {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 992px) {
+  body.bexhr-hr-visual-refresh .hr-modern-app-header {
+    position: sticky;
+    top: 0.75rem;
+  }
+}
+
+/* New overview welcome */
+body.bexhr-hr-visual-refresh .hr-overview-welcome {
+  min-height: 180px;
+  padding: clamp(1.5rem, 3vw, 2.2rem);
+  border-radius: 22px;
+  color: #ffffff;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2rem;
+  overflow: hidden;
+  position: relative;
+  background:
+    radial-gradient(circle at 88% 18%, rgba(45, 212, 191, 0.28), transparent 25%),
+    radial-gradient(circle at 72% 110%, rgba(255, 255, 255, 0.09), transparent 32%),
+    linear-gradient(135deg, #071426 0%, #0b2542 62%, #0f5963 100%);
+  box-shadow: 0 20px 44px rgba(7, 20, 38, 0.16);
+}
+
+body.bexhr-hr-visual-refresh.alpatech-workspace .hr-overview-welcome {
+  background:
+    radial-gradient(circle at 88% 18%, rgba(54, 185, 207, 0.34), transparent 25%),
+    radial-gradient(circle at 72% 110%, rgba(255, 255, 255, 0.1), transparent 32%),
+    linear-gradient(135deg, #073b63 0%, #0b5f95 64%, #168fae 100%);
+  box-shadow: 0 20px 44px rgba(7, 59, 99, 0.18);
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-welcome-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-kicker {
+  display: inline-block;
+  margin-bottom: 0.55rem;
+  color: #99f6e4;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+}
+
+body.bexhr-hr-visual-refresh.alpatech-workspace .hr-overview-kicker {
+  color: #c8f6ff;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-welcome h2 {
+  margin: 0;
+  font-size: clamp(1.75rem, 3.5vw, 2.55rem);
+  font-weight: 820;
+  letter-spacing: -0.045em;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-welcome p {
+  margin: 0.65rem 0 0;
+  max-width: 650px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.6;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-quick-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-quick-actions .btn {
+  min-height: 40px;
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  backdrop-filter: blur(8px);
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-quick-actions .btn:hover,
+body.bexhr-hr-visual-refresh .hr-overview-quick-actions .btn:focus-visible {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+/* Overview metric cards */
+body.bexhr-hr-visual-refresh .hr-overview-metrics {
+  margin-bottom: 1rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-metric-card {
+  min-height: 132px;
+  padding: 1.15rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #ffffff;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-metric-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 42px;
+  font-size: 1.1rem;
+}
+
+body.bexhr-hr-visual-refresh .metric-people .hr-overview-metric-icon {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+body.bexhr-hr-visual-refresh .metric-review .hr-overview-metric-icon {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+
+body.bexhr-hr-visual-refresh .metric-payroll .hr-overview-metric-icon {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+body.bexhr-hr-visual-refresh .metric-attention .hr-overview-metric-icon {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-metric-label {
+  margin-bottom: 0.28rem;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 760;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-metric-value {
+  color: #0f172a;
+  font-size: clamp(1.55rem, 2.5vw, 2rem);
+  font-weight: 840;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-metric-detail {
+  margin-top: 0.4rem;
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+/* Readiness */
+body.bexhr-hr-visual-refresh .hr-overview-readiness-card,
+body.bexhr-hr-visual-refresh .hr-overview-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-readiness-card {
+  padding: 1.25rem 1.35rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-readiness-heading {
+  margin-bottom: 0.85rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-section-kicker {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: var(--hr-primary);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-readiness-heading h3,
+body.bexhr-hr-visual-refresh .hr-overview-panel-header h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-readiness-heading > strong {
+  color: #0f172a;
+  font-size: 1.35rem;
+  font-weight: 820;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-readiness-card .progress {
+  height: 9px;
+  border-radius: 999px;
+  background: #e8edf3;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-readiness-card .progress-bar {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--hr-primary) 0%, var(--hr-primary-soft) 100%);
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-readiness-card p {
+  margin: 0.75rem 0 0;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+/* Operational panels */
+body.bexhr-hr-visual-refresh .hr-overview-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-panel {
+  min-width: 0;
+  padding: 1.25rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-panel-header {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-panel-header .btn {
+  min-height: 34px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-priority-list,
+body.bexhr-hr-visual-refresh .hr-overview-department-list,
+body.bexhr-hr-visual-refresh .hr-overview-activity-list {
+  display: flex;
+  flex-direction: column;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-priority-item {
+  width: 100%;
+  min-height: 68px;
+  padding: 0.75rem 0;
+  border: 0;
+  border-top: 1px solid #eef2f6;
+  background: transparent;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 0.75rem;
+  color: #0f172a;
+  font-family: inherit;
+  text-align: left;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-priority-item:first-child {
+  border-top: 0;
+  padding-top: 0.1rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-priority-item:hover,
+body.bexhr-hr-visual-refresh .hr-overview-priority-item:focus-visible {
+  outline: none;
+  background: #f8fafc;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-priority-icon,
+body.bexhr-hr-visual-refresh .hr-overview-activity-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.bexhr-hr-visual-refresh .tone-review .hr-overview-priority-icon,
+body.bexhr-hr-visual-refresh .hr-overview-activity-icon.tone-review {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+
+body.bexhr-hr-visual-refresh .tone-warning .hr-overview-priority-icon {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+body.bexhr-hr-visual-refresh .tone-payroll .hr-overview-priority-icon,
+body.bexhr-hr-visual-refresh .hr-overview-activity-icon.tone-payroll {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+body.bexhr-hr-visual-refresh .tone-danger .hr-overview-priority-icon {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-priority-copy,
+body.bexhr-hr-visual-refresh .hr-overview-activity-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-priority-copy strong,
+body.bexhr-hr-visual-refresh .hr-overview-activity-copy strong {
+  color: #1e293b;
+  font-size: 0.82rem;
+  font-weight: 730;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-priority-copy small,
+body.bexhr-hr-visual-refresh .hr-overview-activity-copy small {
+  margin-top: 0.15rem;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-priority-arrow {
+  color: #94a3b8;
+  font-size: 0.72rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-clear-state {
+  min-height: 128px;
+  padding: 1rem;
+  border: 1px dashed #bfe7df;
+  border-radius: 14px;
+  background: #f0fdfa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  color: #0f766e;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-clear-state > i {
+  font-size: 1.5rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-clear-state div {
+  display: flex;
+  flex-direction: column;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-clear-state strong {
+  font-size: 0.85rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-clear-state span {
+  margin-top: 0.15rem;
+  color: #477a73;
+  font-size: 0.72rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-department-row {
+  min-height: 62px;
+  padding: 0.65rem 0;
+  border-top: 1px solid #eef2f6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-department-row:first-child {
+  border-top: 0;
+  padding-top: 0.1rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-department-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-department-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  color: var(--hr-primary-dark);
+  background: rgba(var(--bexhr-accent-rgb), 0.12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  font-size: 0.68rem;
+  font-weight: 820;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-department-main > span:last-child,
+body.bexhr-hr-visual-refresh .hr-overview-department-readiness {
+  display: flex;
+  flex-direction: column;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-department-main strong {
+  overflow: hidden;
+  color: #1e293b;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-department-main small,
+body.bexhr-hr-visual-refresh .hr-overview-department-readiness small {
+  color: #64748b;
+  font-size: 0.68rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-department-readiness {
+  align-items: flex-end;
+  flex: 0 0 auto;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-department-readiness strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+
+/* Activity */
+body.bexhr-hr-visual-refresh .hr-overview-activity-panel {
+  padding-bottom: 0.6rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-live-badge > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 3px #d1fae5;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-activity-row {
+  min-height: 62px;
+  padding: 0.65rem 0;
+  border-top: 1px solid #eef2f6;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-activity-row:first-child {
+  border-top: 0;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-activity-icon.tone-people {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-activity-icon.tone-leave {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-activity-row time {
+  color: #94a3b8;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+body.bexhr-hr-visual-refresh .hr-overview-empty-state {
+  min-height: 110px;
+  border: 1px dashed #d7dee7;
+  border-radius: 14px;
+  color: #64748b;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+/* Sidebar hierarchy: Profile is now an account action, not the landing module. */
+@media (min-width: 992px) {
+  body.bexhr-hr-visual-refresh .bexhr-sidebar-footer #sidebarProfileBtn {
+    margin-bottom: 0.35rem;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace) .bexhr-sidebar-footer #sidebarProfileBtn {
+    background: rgba(255, 255, 255, 0.045);
+  }
+}
+
+/* Responsive overview */
+@media (max-width: 1199.98px) {
+  body.bexhr-hr-visual-refresh .hr-overview-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-hr-visual-refresh .hr-modern-app-header-main {
+    align-items: flex-start;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-modern-account-copy,
+  body.bexhr-hr-visual-refresh .hr-modern-account-button > .bi-chevron-down {
+    display: none;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-modern-account-button {
+    min-width: 48px;
+    padding: 0.3rem;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-welcome {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-quick-actions {
+    justify-content: flex-start;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-content-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-hr-visual-refresh main.container {
+    padding-top: 0.75rem !important;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-modern-app-header-main {
+    min-height: 74px;
+    padding: 0.8rem;
+    gap: 0.75rem;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-modern-page-heading p {
+    display: none;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-modern-context-line {
+    font-size: 0.62rem;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-modern-company-name {
+    max-width: 44vw;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-modern-page-heading h1 {
+    font-size: 1.2rem;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-modern-logout-button {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-welcome {
+    min-height: 0;
+    padding: 1.35rem;
+    border-radius: 18px;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-welcome h2 {
+    font-size: 1.65rem;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-quick-actions {
+    width: 100%;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-quick-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-metrics {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-metric-card {
+    min-height: 108px;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-panel,
+  body.bexhr-hr-visual-refresh .hr-overview-readiness-card {
+    padding: 1rem;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-activity-row {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  body.bexhr-hr-visual-refresh .hr-overview-activity-row time {
+    grid-column: 2;
+  }
+}
+
+/* =========================================================
+   BEXHR WORKSPACE LOADER - PEOPLE UI REFRESH STEP 1
+
+   Purpose:
+   - Replace the blank white first paint with immediate branded feedback.
+   - Remain visible only until the exact remembered workspace is restored.
+   - Respect tenant colour variables and reduced-motion preferences.
+   ========================================================= */
+.bexhr-workspace-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.96), rgba(248, 249, 255, 0.98) 48%, rgba(241, 245, 249, 0.99) 100%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    visibility 180ms ease;
+}
+
+body.hr-workspace-booting .bexhr-workspace-loader {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.bexhr-workspace-loader-panel {
+  width: min(100%, 360px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 2rem;
+  border: 1px solid color-mix(in srgb, var(--hr-primary) 16%, white);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.13);
+  text-align: center;
+  backdrop-filter: blur(14px);
+}
+
+.bexhr-workspace-loader-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--hr-primary-dark);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.bexhr-workspace-loader-mark {
+  width: 38px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--hr-primary), var(--hr-primary-soft));
+  color: #ffffff;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--hr-primary) 26%, transparent);
+}
+
+.bexhr-workspace-loader-spinner {
+  width: 34px;
+  height: 34px;
+  margin-top: 0.3rem;
+  border: 3px solid color-mix(in srgb, var(--hr-primary) 16%, white);
+  border-top-color: var(--hr-primary);
+  border-radius: 50%;
+  animation: bexhrWorkspaceLoaderSpin 760ms linear infinite;
+}
+
+.bexhr-workspace-loader-panel strong {
+  color: var(--hr-text);
+  font-size: 1.02rem;
+}
+
+.bexhr-workspace-loader-panel > span:last-child {
+  color: var(--hr-muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+@keyframes bexhrWorkspaceLoaderSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =========================================================
+   PEOPLE SUMMARY MODERNISATION - STEP 1
+   Existing IDs and data calculations are untouched.
+   ========================================================= */
+.hr-people-summary-card {
+  overflow: hidden;
+}
+
+.hr-people-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.hr-people-section-kicker {
+  display: inline-block;
+  margin-bottom: 0.35rem;
+  color: var(--hr-primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.hr-people-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.hr-people-summary-tile {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-height: 108px;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--hr-primary) 12%, #dbe4ee);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--hr-primary-soft) 10%, transparent), transparent 42%),
+    linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055);
+}
+
+.hr-people-summary-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 14px;
+  font-size: 1.05rem;
+}
+
+.hr-people-summary-icon--people {
+  background: #d8faf3;
+  color: #087f70;
+}
+
+.hr-people-summary-icon--active {
+  background: #e5f7e9;
+  color: #198754;
+}
+
+.hr-people-summary-icon--departments {
+  background: #e8e3ff;
+  color: #7058d6;
+}
+
+.hr-people-summary-icon--attention {
+  background: #fff1c7;
+  color: #b56a00;
+}
+
+.hr-people-summary-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.hr-people-summary-label {
+  color: var(--hr-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.065em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.hr-people-summary-value {
+  margin-top: 0.1rem;
+  color: var(--hr-text);
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  line-height: 1.15;
+}
+
+.hr-people-summary-detail {
+  margin-top: 0.24rem;
+  color: var(--hr-muted);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+/* =========================================================
+   EMPLOYEE DIRECTORY MODERN LIST - STEP 1
+   Table semantics and every existing action remain intact.
+   ========================================================= */
+.hr-employee-directory-card {
+  overflow: hidden;
+}
+
+.hr-employee-directory-card .dashboard-table-hint {
+  display: none !important;
+}
+
+.hr-employee-directory-header {
+  padding-bottom: 1.15rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.hr-employee-directory-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f8fbfd 0%, #ffffff 100%);
+}
+
+.hr-employee-directory-search {
+  width: min(100%, 380px);
+  flex: 0 1 380px;
+}
+
+.hr-employee-directory-search .form-control {
+  min-height: 44px;
+  background-color: #ffffff;
+}
+
+.hr-employee-directory-download {
+  min-height: 40px;
+}
+
+.hr-employee-directory-wrapper {
+  max-height: 560px;
+  overflow: auto;
+  padding: 0 0.25rem 0.75rem;
+  border: 0;
+  background: transparent;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--hr-primary) 38%, #cbd5e1) transparent;
+}
+
+.hr-employee-directory-table {
+  min-width: 1060px;
+  border-collapse: separate;
+  border-spacing: 0 10px;
+}
+
+.hr-employee-directory-head {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.hr-employee-directory-head th {
+  padding: 0.7rem 0.75rem;
+  border: 0;
+  background: #f3f7fa;
+  color: #52647a;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.hr-employee-directory-head th:first-child {
+  border-radius: 12px 0 0 12px;
+}
+
+.hr-employee-directory-head th:last-child {
+  border-radius: 0 12px 12px 0;
+}
+
+.hr-employee-directory-row {
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.hr-employee-directory-row > td {
+  padding: 0.9rem 0.75rem;
+  border-top: 1px solid #e5edf4;
+  border-bottom: 1px solid #e5edf4;
+  background: #ffffff;
+  vertical-align: middle;
+}
+
+.hr-employee-directory-row > td:first-child:not(.d-none),
+.hr-employee-directory-row > td.d-none + td {
+  border-left: 1px solid #e5edf4;
+  border-radius: 14px 0 0 14px;
+}
+
+.hr-employee-directory-row > td:last-child {
+  border-right: 1px solid #e5edf4;
+  border-radius: 0 14px 14px 0;
+}
+
+.hr-employee-directory-row:hover > td {
+  background: #fbfdff;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.055);
+}
+
+.hr-employee-directory-row--recent > td {
+  background: color-mix(in srgb, #fff4d6 44%, white);
+  border-color: #f4d99d;
+}
+
+.hr-employee-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.hr-employee-avatar {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--hr-primary) 12%, white);
+  color: var(--hr-primary);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.hr-employee-identity-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.hr-employee-name-button {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--hr-primary);
+  font: inherit;
+  font-weight: 750;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hr-employee-name-button:hover,
+.hr-employee-name-button:focus-visible {
+  color: var(--hr-primary-dark);
+  text-decoration: underline;
+}
+
+.hr-employee-number,
+.hr-employee-cell-secondary {
+  color: var(--hr-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.hr-employee-cell-primary {
+  color: var(--hr-text);
+  font-size: 0.78rem;
+  font-weight: 550;
+}
+
+.hr-employee-role-badge,
+.hr-employee-recent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: fit-content;
+  margin-top: 0.35rem;
+  padding: 0.2rem 0.46rem;
+  border: 1px solid #dce5ee;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #52647a;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.hr-employee-recent-badge {
+  border-color: #f1cf7a;
+  background: #fff6da;
+  color: #8a5b00;
+}
+
+.hr-employee-documents-badge {
+  min-width: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32rem;
+  padding: 0.28rem 0.48rem;
+  border: 1px solid #dce5ee;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.hr-employee-documents-badge.has-documents {
+  border-color: #a8e0eb;
+  background: #dff8fc;
+  color: #087b91;
+}
+
+.hr-employee-start-date {
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.hr-employee-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  flex-wrap: nowrap;
+}
+
+.hr-employee-action-btn {
+  min-width: 34px;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border-radius: 10px;
+}
+
+.hr-employee-action-btn > span {
+  display: none;
+}
+
+.hr-employee-directory-loading {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  border: 1px dashed #d5e0ea;
+  border-radius: 16px;
+  background: #fbfdff;
+  color: var(--hr-muted);
+}
+
+@media (max-width: 1199.98px) {
+  .hr-people-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hr-employee-directory-toolbar {
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .hr-employee-directory-toolbar {
+    flex-direction: column;
+  }
+
+  .hr-employee-directory-search {
+    width: 100%;
+    max-width: none;
+    flex-basis: auto;
+  }
+
+  body.dashboard-page #employeeRecordsTableWrapper.hr-employee-directory-wrapper {
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+  }
+
+  body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-table {
+    display: block;
+    min-width: 0 !important;
+    width: 100%;
+    border-spacing: 0;
+  }
+
+  .hr-employee-directory-table thead {
+    display: none;
+  }
+
+  .hr-employee-directory-table tbody {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .hr-employee-directory-table .hr-employee-directory-row {
+    display: block;
+    padding: 0.25rem 1rem;
+    border: 1px solid #dfe8f0;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.055);
+  }
+
+  .hr-employee-directory-table .hr-employee-directory-row--recent {
+    border-color: #efcf86;
+    background: #fffdf6;
+  }
+
+  .hr-employee-directory-table .hr-employee-directory-row > td {
+    display: grid;
+    grid-template-columns: minmax(105px, 0.42fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 0.85rem;
+    width: 100%;
+    padding: 0.78rem 0;
+    border: 0;
+    border-bottom: 1px solid #edf2f6;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    text-align: left !important;
+  }
+
+  .hr-employee-directory-table .hr-employee-directory-row > td::before {
+    content: attr(data-label);
+    color: #718096;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.065em;
+    text-transform: uppercase;
+  }
+
+  .hr-employee-directory-table .hr-employee-directory-row > td:last-child {
+    border-bottom: 0;
+  }
+
+  .hr-employee-directory-table .hr-employee-primary-cell {
+    grid-template-columns: 1fr !important;
+    padding-block: 1rem !important;
+  }
+
+  .hr-employee-directory-table .hr-employee-primary-cell::before {
+    display: none;
+  }
+
+  .hr-employee-directory-table .hr-employee-actions-cell {
+    display: block !important;
+  }
+
+  .hr-employee-directory-table .hr-employee-actions-cell::before {
+    display: block;
+    margin-bottom: 0.65rem;
+  }
+
+  .hr-employee-row-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hr-employee-action-btn {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .hr-employee-action-btn > span {
+    display: inline;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hr-employee-directory-loading-row {
+    display: block;
+  }
+
+  .hr-employee-directory-loading-row > td {
+    display: block !important;
+    width: 100%;
+    border: 0 !important;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .hr-people-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hr-people-summary-tile {
+    min-height: 96px;
+  }
+
+  .hr-employee-directory-card > .card-body,
+  .hr-people-summary-card > .card-body {
+    padding: 1.15rem !important;
+  }
+
+  .hr-employee-directory-table .hr-employee-directory-row > td {
+    grid-template-columns: minmax(88px, 0.36fr) minmax(0, 1fr);
+    gap: 0.7rem;
+  }
+
+  .bexhr-workspace-loader-panel {
+    padding: 1.6rem 1.25rem;
+    border-radius: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bexhr-workspace-loader,
+  .hr-employee-directory-row {
+    transition: none;
+  }
+
+  .bexhr-workspace-loader-spinner {
+    animation-duration: 1.4s;
+  }
+}
+
+/* =========================================================
+   PEOPLE DIRECTORY SCROLL, SEARCH, AND DETAILS MODAL - STEP 2
+
+   HR/product behaviour:
+   - Desktop retains the existing 560px inner directory scroll.
+   - Tablet and mobile now use a controlled viewport-height inner scroll,
+     preventing a large employee directory from stretching the whole page.
+   - The read-only employee details view is shared by the employee name link
+     and View action; only its presentation and scroll behaviour are changed.
+   ========================================================= */
+body.hr-employee-details-modal-open {
+  overflow: hidden;
+}
+
+@media (max-width: 991.98px) {
+  body.dashboard-page #employeeRecordsTableWrapper.hr-employee-directory-wrapper {
+    max-height: min(68vh, 720px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 0.3rem 0.8rem 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .hr-employee-directory-table tbody {
+    padding-right: 0.1rem;
+  }
+}
+
+@media (max-width: 575.98px) {
+  body.dashboard-page #employeeRecordsTableWrapper.hr-employee-directory-wrapper {
+    max-height: min(64vh, 620px);
+  }
+}
+
+.hr-employee-details-modal {
+  z-index: 1055;
+  background: rgba(7, 18, 34, 0.62);
+  backdrop-filter: blur(8px);
+  padding: clamp(0.65rem, 2vw, 1.5rem);
+}
+
+.hr-employee-details-modal-shell {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.hr-employee-details-modal-panel {
+  width: min(100%, 1060px);
+  max-height: min(94vh, 920px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 26px;
+  background: #ffffff;
+  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.28);
+}
+
+.hr-employee-details-modal-header,
+.hr-employee-details-modal-footer {
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(14px);
+}
+
+.hr-employee-details-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.4rem;
+  border-bottom: 1px solid #e7edf3;
+}
+
+.hr-employee-details-modal-heading {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.hr-employee-details-modal-heading-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--hr-primary) 12%, white);
+  color: var(--hr-primary);
+  font-size: 1.05rem;
+}
+
+.hr-employee-details-modal-kicker {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: var(--hr-primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.hr-employee-details-modal-header h2 {
+  color: var(--hr-text);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.hr-employee-details-modal-header p {
+  color: var(--hr-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.hr-employee-details-modal-close {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #d7e0e8;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #52647a;
+}
+
+.hr-employee-details-modal-close:hover,
+.hr-employee-details-modal-close:focus-visible {
+  border-color: var(--hr-primary);
+  color: var(--hr-primary);
+  background: color-mix(in srgb, var(--hr-primary) 6%, white);
+}
+
+.hr-employee-details-modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: clamp(1rem, 2vw, 1.5rem);
+  background: #f5f8fb;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--hr-primary) 34%, #cbd5e1) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.hr-employee-details-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.4rem;
+  border-top: 1px solid #e7edf3;
+}
+
+.hr-employee-details-modal-footer-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--hr-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.hr-employee-details-loading {
+  min-height: 240px;
+  display: grid;
+  place-items: center;
+  color: var(--hr-muted);
+  text-align: center;
+}
+
+.hr-employee-details-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1.15rem;
+  border: 1px solid color-mix(in srgb, var(--hr-primary) 16%, #dce5ed);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--hr-primary-soft) 15%, transparent), transparent 38%),
+    linear-gradient(135deg, #ffffff 0%, #f8fbfd 100%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.055);
+}
+
+.hr-employee-details-hero-avatar {
+  width: 58px;
+  height: 58px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--hr-primary), var(--hr-primary-soft));
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 800;
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--hr-primary) 22%, transparent);
+}
+
+.hr-employee-details-hero-copy {
+  min-width: 0;
+}
+
+.hr-employee-details-hero-kicker {
+  display: block;
+  margin-bottom: 0.15rem;
+  color: var(--hr-primary);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.hr-employee-details-hero h3 {
+  margin: 0;
+  color: var(--hr-text);
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.hr-employee-details-hero p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0;
+  color: var(--hr-muted);
+  font-size: 0.78rem;
+}
+
+.hr-employee-details-hero-badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.hr-employee-details-modal-content > section,
+.hr-employee-details-section {
+  margin-bottom: 1rem !important;
+  padding: 1.1rem !important;
+  border: 1px solid #dfe7ef !important;
+  border-radius: 20px !important;
+  background: #ffffff !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+}
+
+.hr-employee-details-modal-content > section:last-child {
+  margin-bottom: 0 !important;
+}
+
+.hr-employee-details-section-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1rem !important;
+}
+
+.hr-employee-details-modal-content > section > .mb-3 {
+  margin-bottom: 1rem !important;
+}
+
+.hr-employee-details-section-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--hr-primary) 10%, white);
+  color: var(--hr-primary);
+}
+
+.hr-employee-details-section-heading h3,
+.hr-employee-details-modal-content > section h3 {
+  margin: 0;
+  color: var(--hr-text);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.hr-employee-details-section-heading p,
+.hr-employee-details-modal-content > section > .mb-3 p {
+  margin: 0.18rem 0 0;
+  color: var(--hr-muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.hr-employee-details-field {
+  height: 100%;
+  min-height: 78px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.78rem 0.85rem;
+  border: 1px solid #e5ebf1;
+  border-radius: 14px;
+  background: #f9fbfd;
+}
+
+.hr-employee-details-field-label {
+  color: #718096;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.hr-employee-details-field-value {
+  color: var(--hr-text);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.hr-employee-details-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.hr-employee-details-list-item {
+  padding: 0.9rem;
+  border: 1px solid #e4eaf0;
+  border-radius: 14px;
+  background: #f9fbfd;
+}
+
+.hr-employee-details-empty {
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 1rem;
+  border: 1px dashed #d5e0e9;
+  border-radius: 14px;
+  background: #f9fbfd;
+  color: var(--hr-muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.hr-employee-details-modal-content .alert-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  padding: 0.9rem 1rem;
+  border-color: color-mix(in srgb, var(--hr-primary) 24%, #cbd5e1) !important;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--hr-primary) 7%, white);
+  color: var(--hr-text);
+}
+
+@media (max-width: 767.98px) {
+  .hr-employee-details-modal {
+    padding: 0;
+  }
+
+  .hr-employee-details-modal-shell {
+    align-items: end;
+  }
+
+  .hr-employee-details-modal-panel {
+    width: 100%;
+    max-height: 96vh;
+    border-radius: 22px 22px 0 0;
+  }
+
+  .hr-employee-details-modal-header {
+    padding: 1rem;
+  }
+
+  .hr-employee-details-modal-heading-icon {
+    display: none;
+  }
+
+  .hr-employee-details-modal-content {
+    padding: 0.85rem;
+  }
+
+  .hr-employee-details-modal-footer {
+    padding: 0.85rem 1rem;
+  }
+
+  .hr-employee-details-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .hr-employee-details-hero-badges {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .hr-employee-details-modal-footer-note {
+    display: none;
+  }
+
+  .hr-employee-details-modal-footer {
+    justify-content: flex-end;
+  }
+
+  .hr-employee-details-hero-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 16px;
+  }
+
+  .hr-employee-details-field {
+    min-height: 70px;
+  }
+}

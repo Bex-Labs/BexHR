@@ -266,6 +266,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Do this before the long async HR/payroll data refreshes continue.
     restoreHrWorkspaceAfterRefresh();
 
+    // HR WORKSPACE FIRST PAINT FINALISATION - STEP 2
+    // The exact user-and-tenant workspace, active navigation item, title,
+    // and subtitle are now restored. Reveal the application shell.
+    revealRestoredHrWorkspace();
+
     // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - STEP 5
     // Build the Pay Cycle dropdown dynamically before resetting the payroll form.
     populatePayrollPayCycleOptions();
@@ -385,10 +390,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Load approved Bex recipients and recent delivery logs for the
     // Email / Communication Setup card. This does not send payslips and
     // does not load salary, deduction, or bank data.
-    await refreshHrp85EmailIntegrationWorkspace();
+        await refreshHrp85EmailIntegrationWorkspace();
     // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
     // Email / Communication Setup is review-only for non-HR maintenance roles.
     applyHrCommunicationSetupAccessControls();
+
+    // BEXHR HR MODERN OVERVIEW - STEP 6
+    // All tenant-scoped source records are now loaded. Render the overview
+    // from existing state without adding new database requests.
+    updateHrModernApplicationHeader(getRememberedHrWorkspace());
+    renderHrModernOverview();
 
     // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
     // Keep employee editing blocked for Payroll, Auditor, QA, and custom
@@ -539,6 +550,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (error) {
     console.error("Error initialising HR dashboard:", error);
 
+    // HR WORKSPACE FIRST PAINT FINALISATION - STEP 3
+    // Never leave the page hidden if startup fails after the first-paint gate.
+    document.body?.classList.remove("hr-workspace-booting");
+    document.body?.setAttribute("aria-busy", "false");
+
     showPageAlert(
       "danger",
       error.message ||
@@ -563,7 +579,7 @@ const TENANT_CONTEXT_STORAGE_KEY = "hrPayrollTenantContext";
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
 // Remembers only the active HR workspace tab during browser refresh.
 // This must stay sessionStorage-based so logout/new sessions return to Profile.
-const HR_DASHBOARD_WORKSPACE_MEMORY_PREFIX = "hrPayroll:lastHrWorkspace";
+const HR_DASHBOARD_WORKSPACE_MEMORY_PREFIX = "hrPayroll:lastHrWorkspace:v2";
 
 // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
 // Controlled Nigerian state list used by State of Origin and issuing-state fields.
@@ -2929,7 +2945,7 @@ function isValidHrWorkspaceKey(workspace = "") {
   // Review is a real top-level HR workspace, safe to remember across refresh.
   // It stores only the workspace key, not employee, leave, payroll, salary,
   // bank, or decision data.
-  return ["profile", "employees", "review", "setup", "payroll", "selfservice"].includes(
+  return ["dashboard", "profile", "employees", "review", "setup", "payroll", "selfservice"].includes(
     String(workspace || "").trim(),
   );
 }
@@ -3002,28 +3018,28 @@ function getRequestedHrWorkspaceFromUrl() {
 }
 
 function getRememberedHrWorkspace() {
-  // PAYSLIP EMAIL DEEP LINK ROUTING - STEP 1B
-  // URL request takes priority over remembered workspace so an email link
-  // can deliberately open HR Self-Service > Payroll after login.
+  // BEXHR HR MODERN OVERVIEW - STEP 6
+  // URL requests still take priority. The versioned workspace-memory key
+  // makes Dashboard the fresh operational landing page after this upgrade.
   const requestedWorkspace = getRequestedHrWorkspaceFromUrl();
 
   if (isValidHrWorkspaceKey(requestedWorkspace)) {
     return requestedWorkspace;
   }
 
-  // Prefer in-memory value (set when user clicks a tab this session).
-  // Falls back to sessionStorage for page refreshes.
-  if (isValidHrWorkspaceKey(_hrWorkspaceInMemory)) return _hrWorkspaceInMemory;
+  if (isValidHrWorkspaceKey(_hrWorkspaceInMemory)) {
+    return _hrWorkspaceInMemory;
+  }
 
   try {
     const workspace = sessionStorage.getItem(getHrWorkspaceMemoryKey());
 
     return isValidHrWorkspaceKey(workspace)
       ? workspace
-      : "profile";
+      : "dashboard";
   } catch (error) {
     console.warn("HR workspace memory could not be read.", error);
-    return "profile";
+    return "dashboard";
   }
 }
 
@@ -3041,17 +3057,16 @@ function clearRememberedHrWorkspace() {
 // Hide workspace sections during startup so the browser does not briefly show
 // Profile before the remembered workspace is restored after refresh.
 function suppressHrWorkspaceFlashDuringStartup() {
-  // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1C
-  // The HTML body now starts with hr-workspace-booting before first paint.
-  // Keep this as a defensive fallback in case the body class is missing.
   document.body?.classList.add("hr-workspace-booting");
 
   [
+    state.dom.hrDashboardSection,
     state.dom.hrProfileSection,
     state.dom.hrEmployeesSection,
     state.dom.hrReviewSection,
     state.dom.hrSetupSection,
     state.dom.hrPayrollSection,
+    state.dom.hrSelfServiceSection,
   ].forEach((section) => {
     section?.classList.add("d-none");
   });
@@ -3068,10 +3083,11 @@ function prepareRestoredHrWorkspaceDuringStartup() {
 // Reveal the dashboard only after startup work has had a chance to complete.
 // HR sees one controlled restore state instead of tab/content flicker.
 function revealRestoredHrWorkspace() {
-  // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1D CORRECTION
-  // Release the first-paint gate immediately after the remembered workspace
-  // has been selected. Do not wait for employee/payroll/setup data loads.
+  // BEXHR WORKSPACE LOADER - PEOPLE UI REFRESH STEP 1
+  // Release the first-paint gate immediately after the exact remembered
+  // workspace has been selected. Long data loads continue progressively.
   document.body?.classList.remove("hr-workspace-booting");
+  document.body?.setAttribute("aria-busy", "false");
 
   window.scrollTo({
     top: 0,
@@ -3381,7 +3397,7 @@ function applyTenantFaviconBranding() {
   }
 
   favicon.type = "image/x-icon";
-  favicon.href = "assets/favicon.png";
+  favicon.href = "assets/favicon.ico";
 }
 
 // ALPATECH TENANT BRANDING - STEP 1F
@@ -3471,7 +3487,29 @@ function applyTenantWorkspaceShellBranding() {
 
 function cacheDomElements() {
   state.dom = {
-    pageAlert: document.getElementById("pageAlert"),
+        pageAlert: document.getElementById("pageAlert"),
+
+    // BEXHR HR MODERN OVERVIEW - STEP 6
+    // Compact application header and operational overview references.
+    hrModernCompanyName: document.getElementById("hrModernCompanyName"),
+    hrModernPageTitle: document.getElementById("hrModernPageTitle"),
+    hrModernPageSubtitle: document.getElementById("hrModernPageSubtitle"),
+    hrModernUserName: document.getElementById("hrModernUserName"),
+    hrDashboardSection: document.getElementById("hrDashboardSection"),
+    hrOverviewUserFirstName: document.getElementById("hrOverviewUserFirstName"),
+    hrOverviewTotalEmployees: document.getElementById("hrOverviewTotalEmployees"),
+    hrOverviewActiveEmployees: document.getElementById("hrOverviewActiveEmployees"),
+    hrOverviewOpenReviews: document.getElementById("hrOverviewOpenReviews"),
+    hrOverviewPayrollReady: document.getElementById("hrOverviewPayrollReady"),
+    hrOverviewPayrollReadyDetail: document.getElementById("hrOverviewPayrollReadyDetail"),
+    hrOverviewMissingInformation: document.getElementById("hrOverviewMissingInformation"),
+    hrOverviewPayrollReadinessPercent: document.getElementById("hrOverviewPayrollReadinessPercent"),
+    hrOverviewPayrollReadinessProgress: document.getElementById("hrOverviewPayrollReadinessProgress"),
+    hrOverviewPayrollReadinessBar: document.getElementById("hrOverviewPayrollReadinessBar"),
+    hrOverviewPayrollReadinessMessage: document.getElementById("hrOverviewPayrollReadinessMessage"),
+    hrOverviewPriorityList: document.getElementById("hrOverviewPriorityList"),
+    hrOverviewDepartmentList: document.getElementById("hrOverviewDepartmentList"),
+    hrOverviewRecentActivity: document.getElementById("hrOverviewRecentActivity"),
 
     // GUIDED HELP LAYER - STEP 1R-FIX
     // On-demand HR operating guide modal.
@@ -3486,6 +3524,7 @@ function cacheDomElements() {
     refreshEmployeesBtn: document.getElementById("refreshEmployeesBtn"),
     cancelEditBtn: document.getElementById("cancelEditBtn"),
 
+        hrTabDashboardBtn: document.getElementById("hrTabDashboardBtn"),
     hrTabProfileBtn: document.getElementById("hrTabProfileBtn"),
     hrTabEmployeesBtn: document.getElementById("hrTabEmployeesBtn"),
 
@@ -8598,6 +8637,12 @@ function bindEvents() {
   });
 
   updateBackToTopButtonVisibility();
+
+    state.dom.hrTabDashboardBtn?.addEventListener("click", () => {
+    rememberHrWorkspace("dashboard");
+    switchHrWorkspace("dashboard");
+    renderHrModernOverview();
+  });
 
   state.dom.hrTabProfileBtn?.addEventListener("click", () => {
     // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
@@ -16205,6 +16250,11 @@ async function refreshProfileCorrectionRequestsWorkspace(options = {}) {
   } finally {
     await waitForMinimumLoadingFeedback(startedAt, 400);
     setWorkspaceRefreshLoading(button, false);
+
+    // HR OVERVIEW METRIC SYNCHRONISATION - STEP 2
+    // Open HR Reviews, priority attention, and recent review activity now use
+    // the latest tenant-scoped correction-request state.
+    renderHrModernOverview();
   }
 }
 
@@ -16371,6 +16421,11 @@ async function refreshPayrollMasterWorkspace() {
 
   // Load payroll master records from the database, then apply client-side search.
   await loadPayrollMasterRecords();
+
+  // HR MODERN OVERVIEW FUNCTIONAL REFRESH - STEP 1
+  // Salary setup create/update/refresh has now replaced the in-memory records.
+  // Refresh the visible metrics immediately without a full browser reload.
+  renderHrModernOverview();
 }
 
 function clearPayrollMasterValidationState() {
@@ -21830,22 +21885,628 @@ function startRunPayrollSelectionFlow() {
   });
 }
 
+// BEXHR HR MODERN OVERVIEW - STEP 6
+// Page-level title and description for the compact application header.
+function getHrWorkspacePresentation(workspace = "dashboard") {
+  const presentations = {
+    dashboard: {
+      title: "HR Overview",
+      subtitle: "Monitor people operations, HR reviews, payroll readiness, and recent activity.",
+      module: "Dashboard",
+    },
+    profile: {
+      title: "My Profile",
+      subtitle: "Maintain your personal HR account information and profile photo.",
+      module: "My Profile",
+    },
+    employees: {
+      title: "People",
+      subtitle: "Manage employee records, organisation details, imports, and supporting documents.",
+      module: "People",
+    },
+    review: {
+      title: "HR Review",
+      subtitle: "Work through employee correction requests and manager leave decisions.",
+      module: "HR Review",
+    },
+    payroll: {
+      title: "Payroll",
+      subtitle: "Prepare payroll, finalise records, deliver payslips, and review payment readiness.",
+      module: "Payroll",
+    },
+    setup: {
+      title: "Setup",
+      subtitle: "Maintain organisation, payroll, deduction, payment, and communication configuration.",
+      module: "Setup",
+    },
+    selfservice: {
+      title: "My Self-Service",
+      subtitle: "View your own leave, payroll, payslips, and employee information.",
+      module: "Self-Service",
+    },
+  };
+
+  return presentations[workspace] || presentations.dashboard;
+}
+
+function updateHrModernApplicationHeader(workspace = "dashboard") {
+  const presentation = getHrWorkspacePresentation(workspace);
+  const fullName = String(state.currentProfile?.full_name || "HR User").trim();
+  const tenantContext = getCurrentTenantContext();
+  const companyName = String(
+    state.currentTenantCompany?.company_name ||
+    tenantContext?.companyName ||
+    tenantContext?.tenantName ||
+    tenantContext?.tenantCode ||
+    "BexHR Workspace",
+  ).trim();
+
+  if (state.dom.hrModernPageTitle) {
+    state.dom.hrModernPageTitle.textContent = presentation.title;
+  }
+
+  if (state.dom.hrModernPageSubtitle) {
+    state.dom.hrModernPageSubtitle.textContent = presentation.subtitle;
+  }
+
+  if (state.dom.hrModuleValue) {
+    state.dom.hrModuleValue.textContent = presentation.module;
+  }
+
+  if (state.dom.hrModernCompanyName) {
+    state.dom.hrModernCompanyName.textContent = companyName || "BexHR Workspace";
+  }
+
+  if (state.dom.hrModernUserName) {
+    state.dom.hrModernUserName.textContent = fullName || "HR User";
+  }
+}
+
+function getHrOverviewEmployeeName(employee = {}) {
+  const fullName = String(employee.full_name || "").trim();
+  if (fullName) return fullName;
+
+  const combinedName = [employee.first_name, employee.middle_name, employee.last_name]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
+
+  return combinedName || employee.work_email || employee.employee_number || "Employee";
+}
+
+function getHrOverviewRecordDate(record = {}, fields = []) {
+  for (const field of fields) {
+    const value = record?.[field];
+    if (!value) continue;
+
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+
+  return null;
+}
+
+function isHrOverviewEmployeeActive(employee = {}) {
+  const status = normalizeText(employee.employment_status || employee.status || "active");
+  return !status || status === "active";
+}
+
+function formatHrOverviewActivityDateTime(value = "") {
+  if (!value) return "--";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// HR OVERVIEW RECENT ACTIVITY - SALARY SETUP VISIBILITY FIX
+// Rebuild only the Recent activity list from the already tenant-scoped state.
+// No audit row is inserted and no database value is changed.
+function renderHrOverviewRecentActivityWithSalarySetups() {
+  const container = state.dom.hrOverviewRecentActivity;
+
+  if (!container) return;
+
+  const employees = Array.isArray(state.employees) ? state.employees : [];
+  const payrollRecords = Array.isArray(state.payrollRecords)
+    ? state.payrollRecords
+    : [];
+  const salaryRecords = Array.isArray(state.payrollMasterRecords)
+    ? state.payrollMasterRecords
+    : [];
+
+  const employeeById = new Map(
+    employees
+      .map((employee) => [
+        String(employee.id || "").trim(),
+        employee,
+      ])
+      .filter(([employeeId]) => Boolean(employeeId)),
+  );
+
+  const resolveEmployeeName = (record = {}) => {
+    const employeeId = String(record.employee_id || record.id || "").trim();
+    const employee = employeeById.get(employeeId) || {};
+
+    return (
+      `${record.first_name || employee.first_name || ""} ${
+        record.last_name || employee.last_name || ""
+      }`.trim() ||
+      record.work_email ||
+      employee.work_email ||
+      "Unknown employee"
+    );
+  };
+
+  const buildActivity = ({
+    type,
+    title,
+    subtitle,
+    timestamp,
+  }) => {
+    const sortTime = new Date(timestamp || 0).getTime();
+
+    if (!Number.isFinite(sortTime) || sortTime <= 0) {
+      return null;
+    }
+
+    return {
+      type,
+      title,
+      subtitle,
+      timestamp,
+      sortTime,
+    };
+  };
+
+  const employeeActivities = employees.map((employee) =>
+    buildActivity({
+      type: "employee",
+      title: "Employee record updated",
+      subtitle: resolveEmployeeName(employee),
+      timestamp: employee.updated_at || employee.created_at,
+    }),
+  );
+
+  const salaryActivities = salaryRecords.map((record) => {
+    const salaryStatus = formatStatusLabel(
+      record.payroll_status ||
+        record.salary_status ||
+        record.status ||
+        "--",
+    );
+
+    const versionLabel = getPayrollMasterVersionLabel(record);
+    const versionSuffix = versionLabel ? ` / ${versionLabel}` : "";
+
+    return buildActivity({
+      type: "salary",
+      title: "Employee salary setup updated",
+      subtitle: `${resolveEmployeeName(record)} â€” ${salaryStatus}${versionSuffix}`,
+      timestamp: record.updated_at || record.created_at,
+    });
+  });
+
+  const payrollActivities = payrollRecords.map((record) => {
+    const payCycle = String(record.pay_cycle || "").trim();
+    const cycleSuffix = payCycle ? ` â€” ${payCycle}` : "";
+
+    return buildActivity({
+      type: "payroll",
+      title: "Payroll record updated",
+      subtitle: `${resolveEmployeeName(record)}${cycleSuffix}`,
+      timestamp:
+        record.updated_at ||
+        record.created_at ||
+        record.pay_date,
+    });
+  });
+
+  const activities = [
+    ...employeeActivities,
+    ...salaryActivities,
+    ...payrollActivities,
+  ]
+    .filter(Boolean)
+    .sort((left, right) => right.sortTime - left.sortTime)
+    .slice(0, 6);
+
+  if (!activities.length) {
+    container.innerHTML = `
+      <div class="text-secondary py-4">
+        Recent employee, salary setup, and payroll activity will appear here.
+      </div>
+    `;
+    return;
+  }
+
+  const visualByType = {
+    employee: {
+      icon: "bi-person-gear",
+      background: "#ccfbf1",
+      color: "#0f766e",
+    },
+    salary: {
+      icon: "bi-cash-stack",
+      background: "#e0f2fe",
+      color: "#0369a1",
+    },
+    payroll: {
+      icon: "bi-receipt",
+      background: "#e0f2fe",
+      color: "#0369a1",
+    },
+  };
+
+  container.innerHTML = activities
+    .map((activity) => {
+      const visual = visualByType[activity.type] || visualByType.employee;
+
+      return `
+        <article
+          class="d-flex align-items-center gap-3 py-3 border-bottom"
+          data-hr-overview-activity-type="${escapeHtml(activity.type)}"
+        >
+          <span
+            class="rounded-3 d-inline-flex align-items-center justify-content-center flex-shrink-0"
+            style="width: 40px; height: 40px; background: ${visual.background}; color: ${visual.color};"
+            aria-hidden="true"
+          >
+            <i class="bi ${visual.icon}"></i>
+          </span>
+
+          <span class="flex-grow-1 overflow-hidden">
+            <strong class="d-block">${escapeHtml(activity.title)}</strong>
+            <span class="d-block small text-secondary text-truncate">
+              ${escapeHtml(activity.subtitle)}
+            </span>
+          </span>
+
+          <time
+            class="small text-secondary text-nowrap"
+            datetime="${escapeHtml(activity.timestamp)}"
+          >
+            ${escapeHtml(formatHrOverviewActivityDateTime(activity.timestamp))}
+          </time>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderHrModernOverview() {
+  if (!state.dom.hrDashboardSection) return;
+
+  const employees = Array.isArray(state.employees) ? state.employees : [];
+  const activeEmployees = employees.filter(isHrOverviewEmployeeActive);
+  const employeeById = new Map(
+    employees.map((employee) => [String(employee.id || "").trim(), employee]),
+  );
+
+  const openReviews = (Array.isArray(state.profileCorrectionRequests)
+    ? state.profileCorrectionRequests
+    : []
+  ).filter((request) => {
+    const status = normalizeText(request.status || request.request_status || "pending");
+    return !["completed", "rejected", "cancelled", "closed"].includes(status);
+  });
+
+  const missingInformationEmployees = activeEmployees.filter((employee) => {
+    return !String(employee.employee_number || "").trim() ||
+      !String(employee.department || "").trim() ||
+      !String(employee.job_title || "").trim() ||
+      !String(employee.work_email || "").trim();
+  });
+
+  // HR OVERVIEW PAYROLL READINESS - CURRENT SALARY SETUP FIX
+  // An employee is payroll-ready only when the salary setup is:
+  // 1. the Current effective-dated version,
+  // 2. active according to the existing version helper, and
+  // 3. backed by a positive salary amount.
+  // Draft, Inactive, Scheduled, and Historical rows must not count.
+  const activePayrollMasterEmployeeIds = new Set(
+    (Array.isArray(state.payrollMasterRecords) ? state.payrollMasterRecords : [])
+      .filter((record) => {
+        const salary = Number(record.basic_salary || 0);
+
+        return (
+          getPayrollMasterVersionLabel(record) === "Current" &&
+          Number.isFinite(salary) &&
+          salary > 0
+        );
+      })
+      .map((record) => String(record.employee_id || "").trim())
+      .filter(Boolean),
+  );
+
+  const payrollReadyEmployees = activeEmployees.filter((employee) =>
+    activePayrollMasterEmployeeIds.has(String(employee.id || "").trim()),
+  );
+
+  const readinessPercent = activeEmployees.length
+    ? Math.round((payrollReadyEmployees.length / activeEmployees.length) * 100)
+    : 0;
+
+  if (state.dom.hrOverviewTotalEmployees) {
+    state.dom.hrOverviewTotalEmployees.textContent = String(employees.length);
+  }
+
+  if (state.dom.hrOverviewActiveEmployees) {
+    state.dom.hrOverviewActiveEmployees.textContent = `${activeEmployees.length} active`;
+  }
+
+  if (state.dom.hrOverviewOpenReviews) {
+    state.dom.hrOverviewOpenReviews.textContent = String(openReviews.length);
+  }
+
+  if (state.dom.hrOverviewPayrollReady) {
+    state.dom.hrOverviewPayrollReady.textContent = String(payrollReadyEmployees.length);
+  }
+
+  if (state.dom.hrOverviewPayrollReadyDetail) {
+    state.dom.hrOverviewPayrollReadyDetail.textContent =
+      `${payrollReadyEmployees.length} of ${activeEmployees.length} active employees`;
+  }
+
+  if (state.dom.hrOverviewMissingInformation) {
+    state.dom.hrOverviewMissingInformation.textContent = String(missingInformationEmployees.length);
+  }
+
+  if (state.dom.hrOverviewPayrollReadinessPercent) {
+    state.dom.hrOverviewPayrollReadinessPercent.textContent = `${readinessPercent}%`;
+  }
+
+  if (state.dom.hrOverviewPayrollReadinessProgress) {
+    state.dom.hrOverviewPayrollReadinessProgress.setAttribute(
+      "aria-valuenow",
+      String(readinessPercent),
+    );
+  }
+
+  if (state.dom.hrOverviewPayrollReadinessBar) {
+    state.dom.hrOverviewPayrollReadinessBar.style.width = `${readinessPercent}%`;
+  }
+
+  if (state.dom.hrOverviewPayrollReadinessMessage) {
+    const missingPayrollSetup = Math.max(
+      activeEmployees.length - payrollReadyEmployees.length,
+      0,
+    );
+
+    state.dom.hrOverviewPayrollReadinessMessage.textContent = activeEmployees.length
+      ? missingPayrollSetup
+        ? `${missingPayrollSetup} active employee(s) still need an active salary setup before payroll finalisation.`
+        : "All active employees currently have an active salary setup."
+      : "No active employees are currently available for payroll preparation.";
+  }
+
+  if (state.dom.hrOverviewPriorityList) {
+    const failedPayslipEmails = (Array.isArray(state.payslipEmailLogs)
+      ? state.payslipEmailLogs
+      : []
+    ).filter((log) => normalizeText(log.status || log.delivery_status) === "failed");
+
+    const priorityItems = [
+      openReviews.length
+        ? {
+          tone: "review",
+          icon: "bi-inbox",
+          title: `${openReviews.length} open HR review${openReviews.length === 1 ? "" : "s"}`,
+          detail: "Employee correction requests require HR attention.",
+          target: "hrTabReviewBtn",
+        }
+        : null,
+      missingInformationEmployees.length
+        ? {
+          tone: "warning",
+          icon: "bi-person-exclamation",
+          title: `${missingInformationEmployees.length} incomplete employee record${missingInformationEmployees.length === 1 ? "" : "s"}`,
+          detail: "Complete employee number, department, job title, or work email information.",
+          target: "hrTabEmployeesBtn",
+        }
+        : null,
+      activeEmployees.length > payrollReadyEmployees.length
+        ? {
+          tone: "payroll",
+          icon: "bi-cash-stack",
+          title: `${activeEmployees.length - payrollReadyEmployees.length} employee${activeEmployees.length - payrollReadyEmployees.length === 1 ? "" : "s"} not payroll ready`,
+          detail: "Active salary setup is still missing.",
+          target: "hrTabPayrollBtn",
+        }
+        : null,
+      failedPayslipEmails.length
+        ? {
+          tone: "danger",
+          icon: "bi-envelope-exclamation",
+          title: `${failedPayslipEmails.length} failed payslip email${failedPayslipEmails.length === 1 ? "" : "s"}`,
+          detail: "Review delivery status before the next payroll closeout.",
+          target: "hrTabPayrollBtn",
+        }
+        : null,
+    ].filter(Boolean);
+
+    state.dom.hrOverviewPriorityList.innerHTML = priorityItems.length
+      ? priorityItems.slice(0, 4).map((item) => `
+          <button type="button" class="hr-overview-priority-item tone-${escapeHtml(item.tone)}"
+            onclick="document.getElementById('${escapeHtml(item.target)}')?.click()">
+            <span class="hr-overview-priority-icon"><i class="bi ${escapeHtml(item.icon)}"></i></span>
+            <span class="hr-overview-priority-copy">
+              <strong>${escapeHtml(item.title)}</strong>
+              <small>${escapeHtml(item.detail)}</small>
+            </span>
+            <i class="bi bi-chevron-right hr-overview-priority-arrow" aria-hidden="true"></i>
+          </button>
+        `).join("")
+      : `
+          <div class="hr-overview-clear-state">
+            <i class="bi bi-check2-circle"></i>
+            <div>
+              <strong>No urgent HR actions</strong>
+              <span>Employee, review, payroll, and delivery checks are currently clear.</span>
+            </div>
+          </div>
+        `;
+  }
+
+  if (state.dom.hrOverviewDepartmentList) {
+    const departments = new Map();
+
+    employees.forEach((employee) => {
+      const department = String(employee.department || "Unassigned").trim() || "Unassigned";
+      const current = departments.get(department) || { total: 0, active: 0, ready: 0 };
+
+      current.total += 1;
+
+      if (isHrOverviewEmployeeActive(employee)) {
+        current.active += 1;
+        if (activePayrollMasterEmployeeIds.has(String(employee.id || "").trim())) {
+          current.ready += 1;
+        }
+      }
+
+      departments.set(department, current);
+    });
+
+    const departmentRows = Array.from(departments.entries())
+      .sort((left, right) => right[1].total - left[1].total)
+      .slice(0, 6);
+
+    state.dom.hrOverviewDepartmentList.innerHTML = departmentRows.length
+      ? departmentRows.map(([department, counts]) => {
+          const departmentReadiness = counts.active
+            ? Math.round((counts.ready / counts.active) * 100)
+            : 0;
+
+          return `
+            <div class="hr-overview-department-row">
+              <div class="hr-overview-department-main">
+                <span class="hr-overview-department-mark">${escapeHtml(department.slice(0, 2).toUpperCase())}</span>
+                <span>
+                  <strong>${escapeHtml(department)}</strong>
+                  <small>${counts.total} employee${counts.total === 1 ? "" : "s"}</small>
+                </span>
+              </div>
+              <div class="hr-overview-department-readiness">
+                <strong>${departmentReadiness}%</strong>
+                <small>payroll ready</small>
+              </div>
+            </div>
+          `;
+        }).join("")
+      : '<div class="hr-overview-empty-state">No department records are available yet.</div>';
+  }
+
+  if (state.dom.hrOverviewRecentActivity) {
+    const activities = [];
+
+    employees.forEach((employee) => {
+      const date = getHrOverviewRecordDate(employee, ["updated_at", "created_at"]);
+      if (!date) return;
+
+      activities.push({
+        date,
+        icon: "bi-person-check",
+        tone: "people",
+        title: "Employee record updated",
+        detail: getHrOverviewEmployeeName(employee),
+      });
+    });
+
+    (Array.isArray(state.profileCorrectionRequests) ? state.profileCorrectionRequests : [])
+      .forEach((request) => {
+        const date = getHrOverviewRecordDate(request, ["updated_at", "submitted_at", "created_at"]);
+        if (!date) return;
+
+        const employee = employeeById.get(String(request.employee_id || "").trim());
+        activities.push({
+          date,
+          icon: "bi-clipboard-check",
+          tone: "review",
+          title: "Profile correction activity",
+          detail: employee
+            ? getHrOverviewEmployeeName(employee)
+            : String(request.field_label || request.field_name || "Employee request"),
+        });
+      });
+
+    (Array.isArray(state.recentManagerLeaveDecisionRecords)
+      ? state.recentManagerLeaveDecisionRecords
+      : []
+    ).forEach((decision) => {
+      const date = getHrOverviewRecordDate(decision, ["decision_at", "decided_at", "updated_at", "created_at"]);
+      if (!date) return;
+
+      const employee = employeeById.get(String(decision.employee_id || "").trim());
+      activities.push({
+        date,
+        icon: "bi-calendar-check",
+        tone: "leave",
+        title: "Leave decision recorded",
+        detail: employee ? getHrOverviewEmployeeName(employee) : "Employee leave request",
+      });
+    });
+
+    (Array.isArray(state.payrollRecords) ? state.payrollRecords : [])
+      .forEach((record) => {
+        const date = getHrOverviewRecordDate(record, ["updated_at", "created_at", "pay_date"]);
+        if (!date) return;
+
+        const employee = employeeById.get(String(record.employee_id || "").trim());
+        activities.push({
+          date,
+          icon: "bi-cash-coin",
+          tone: "payroll",
+          title: "Payroll record updated",
+          detail: employee
+            ? `${getHrOverviewEmployeeName(employee)}${record.pay_cycle ? ` - ${record.pay_cycle}` : ""}`
+            : String(record.pay_cycle || "Payroll processing"),
+        });
+      });
+
+    activities.sort((left, right) => right.date.getTime() - left.date.getTime());
+
+    state.dom.hrOverviewRecentActivity.innerHTML = activities.length
+      ? activities.slice(0, 6).map((activity) => `
+          <div class="hr-overview-activity-row">
+            <span class="hr-overview-activity-icon tone-${escapeHtml(activity.tone)}">
+              <i class="bi ${escapeHtml(activity.icon)}"></i>
+            </span>
+            <span class="hr-overview-activity-copy">
+              <strong>${escapeHtml(activity.title)}</strong>
+              <small>${escapeHtml(activity.detail)}</small>
+            </span>
+            <time datetime="${escapeHtml(activity.date.toISOString())}">${escapeHtml(formatCompactDateTime(activity.date))}</time>
+          </div>
+        `).join("")
+      : '<div class="hr-overview-empty-state">No recent tenant activity is available yet.</div>';
+  }
+
+
+  // HR OVERVIEW RECENT ACTIVITY - SALARY SETUP VISIBILITY FIX
+  // Run after the original overview values are prepared so the mixed activity
+  // feed includes Employee Salary Setup changes in chronological order.
+  renderHrOverviewRecentActivityWithSalarySetups();
+}
+
 function switchHrWorkspace(workspace) {
+  const isDashboard = workspace === "dashboard";
   const isProfile = workspace === "profile";
   const isEmployees = workspace === "employees";
-
-  // HR REVIEW WORKSPACE SEPARATION - STEP 1P
-  // HR Review is separate from People, Setup, and Payroll.
-  // It contains oversight/audit work only.
   const isReview = workspace === "review";
-
   const isSetup = workspace === "setup";
   const isPayroll = workspace === "payroll";
-
-  // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1A
-  // My Self-Service is the signed-in HR user's own leave and payroll view.
   const isSelfService = workspace === "selfservice";
 
+  state.dom.hrDashboardSection?.classList.toggle("d-none", !isDashboard);
   state.dom.hrProfileSection?.classList.toggle("d-none", !isProfile);
   state.dom.hrEmployeesSection?.classList.toggle("d-none", !isEmployees);
   state.dom.hrReviewSection?.classList.toggle("d-none", !isReview);
@@ -21853,64 +22514,30 @@ function switchHrWorkspace(workspace) {
   state.dom.hrPayrollSection?.classList.toggle("d-none", !isPayroll);
   state.dom.hrSelfServiceSection?.classList.toggle("d-none", !isSelfService);
 
-  if (state.dom.hrTabProfileBtn) {
-    state.dom.hrTabProfileBtn.className = isProfile
+  const tabStates = [
+    [state.dom.hrTabDashboardBtn, isDashboard],
+    [state.dom.hrTabProfileBtn, isProfile],
+    [state.dom.hrTabEmployeesBtn, isEmployees],
+    [state.dom.hrTabReviewBtn, isReview],
+    [state.dom.hrTabSetupBtn, isSetup],
+    [state.dom.hrTabPayrollBtn, isPayroll],
+    [state.dom.hrTabSelfServiceBtn, isSelfService],
+  ];
+
+  tabStates.forEach(([button, active]) => {
+    if (!button) return;
+    button.className = active
       ? "btn btn-primary dashboard-action-btn text-nowrap"
       : "btn btn-outline-primary dashboard-action-btn text-nowrap";
-  }
+  });
 
-  if (state.dom.hrTabEmployeesBtn) {
-    state.dom.hrTabEmployeesBtn.className = isEmployees
-      ? "btn btn-primary dashboard-action-btn text-nowrap"
-      : "btn btn-outline-primary dashboard-action-btn text-nowrap";
-  }
-
-  if (state.dom.hrTabReviewBtn) {
-    state.dom.hrTabReviewBtn.className = isReview
-      ? "btn btn-primary dashboard-action-btn text-nowrap"
-      : "btn btn-outline-primary dashboard-action-btn text-nowrap";
-  }
-
-  if (state.dom.hrTabSetupBtn) {
-    state.dom.hrTabSetupBtn.className = isSetup
-      ? "btn btn-primary dashboard-action-btn text-nowrap"
-      : "btn btn-outline-primary dashboard-action-btn text-nowrap";
-  }
-
-  if (state.dom.hrTabPayrollBtn) {
-    state.dom.hrTabPayrollBtn.className = isPayroll
-      ? "btn btn-primary dashboard-action-btn text-nowrap"
-      : "btn btn-outline-primary dashboard-action-btn text-nowrap";
-  }
-
-  if (state.dom.hrTabSelfServiceBtn) {
-    state.dom.hrTabSelfServiceBtn.className = isSelfService
-      ? "btn btn-primary dashboard-action-btn text-nowrap"
-      : "btn btn-outline-primary dashboard-action-btn text-nowrap";
-  }
-
-  if (state.dom.hrModuleValue) {
-    state.dom.hrModuleValue.textContent = isProfile
-      ? "Profile"
-      : isEmployees
-        ? "People"
-        : isReview
-          ? "HR Review"
-          : isSetup
-            ? "Setup & Configuration"
-            : isPayroll
-              ? "Payroll Processing"
-              : "My Self-Service";
-  }
-
-  // HR REVIEW WORKSPACE SEPARATION - STEP 1P
-  // Keep the left sidebar active state aligned with the selected workspace.
   const sidebarMap = [
+    { id: "sidebarDashboardBtn", active: isDashboard },
     { id: "sidebarProfileBtn", active: isProfile },
     { id: "sidebarPeopleBtn", active: isEmployees },
     { id: "sidebarReviewBtn", active: isReview },
-    { id: "sidebarSetupBtn", active: isSetup },
     { id: "sidebarPayrollBtn", active: isPayroll },
+    { id: "sidebarSetupBtn", active: isSetup },
     { id: "sidebarSelfServiceBtn", active: isSelfService },
   ];
 
@@ -21918,6 +22545,12 @@ function switchHrWorkspace(workspace) {
     const element = document.getElementById(id);
     if (element) element.classList.toggle("active", active);
   });
+
+  updateHrModernApplicationHeader(workspace);
+
+  if (isDashboard) {
+    renderHrModernOverview();
+  }
 
   if (isSelfService) {
     initHrSelfServiceOnFirstOpen();
@@ -22563,8 +23196,12 @@ function renderHrProfile(profile, user) {
 
   if (state.dom.hrEmail) state.dom.hrEmail.textContent = email;
   if (state.dom.hrRole) state.dom.hrRole.textContent = role;
-  if (state.dom.hrProfileCardName) state.dom.hrProfileCardName.textContent = fullName;
+    if (state.dom.hrProfileCardName) state.dom.hrProfileCardName.textContent = fullName;
   if (state.dom.hrProfileCardEmail) state.dom.hrProfileCardEmail.textContent = email;
+  if (state.dom.hrModernUserName) state.dom.hrModernUserName.textContent = fullName;
+  if (state.dom.hrOverviewUserFirstName) {
+    state.dom.hrOverviewUserFirstName.textContent = fullName.split(/\s+/).filter(Boolean)[0] || "HR";
+  }
   if (state.dom.hrProfileFullName) state.dom.hrProfileFullName.value = fullName;
   if (state.dom.hrProfileEmail) state.dom.hrProfileEmail.value = email;
   if (state.dom.hrProfileRole) state.dom.hrProfileRole.value = role;
@@ -24342,6 +24979,11 @@ async function refreshEmployeeWorkspace() {
   // Keep the Create/Edit Employee Assign Line Manager dropdown in sync
   // with the latest active employee records.
   populateAssignedLineManagerOptions();
+
+  // HR OVERVIEW METRIC SYNCHRONISATION - STEP 1
+  // Total Employees, Active Employees, Missing Information, department
+  // distribution, and recent employee activity use the refreshed state.
+  renderHrModernOverview();
 }
 
 async function loadAllEmployeeDocuments() {
@@ -24544,6 +25186,7 @@ function downloadEmployeeListCsv() {
 
 function applyEmployeeSearch() {
   const searchTerm = normalizeText(state.dom.employeeSearchInput?.value || "");
+  const searchTokens = searchTerm.split(/\s+/).filter(Boolean);
 
   // BATCH PAYROLL DEFAULT - STEP 1
   // Normal Employee Management still shows all employees.
@@ -24555,30 +25198,35 @@ function applyEmployeeSearch() {
     )
     : [...state.employees];
 
-  if (!searchTerm) {
+  if (!searchTokens.length) {
     state.filteredEmployees = employeeSource;
   } else {
     state.filteredEmployees = employeeSource.filter((employee) => {
-      // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1C
-      // Include optional Middle Name in Employee Management search.
-      // This applies only to the main employee list search.
+      // EMPLOYEE DIRECTORY SEARCH RELIABILITY - STEP 1
+      // Normalise each field before joining it. Missing middle names no longer
+      // create doubled spaces that break a full-name search such as
+      // "Hilda Okwori". Every entered word may match any searchable field.
       const searchableText = [
         employee.first_name,
         employee.middle_name,
         employee.last_name,
         employee.work_email,
+        employee.personal_email,
         employee.department,
         employee.job_title,
+        employee.system_role,
         employee.line_manager,
         employee.approver_email,
         employee.status,
         employee.employee_number,
         employee.phone_number,
+        employee.alternative_phone_number,
       ]
-        .join(" ")
-        .toLowerCase();
+        .map((value) => normalizeText(value))
+        .filter(Boolean)
+        .join(" ");
 
-      return searchableText.includes(searchTerm);
+      return searchTokens.every((token) => searchableText.includes(token));
     });
   }
 
@@ -26453,9 +27101,12 @@ function renderEmployeeRecordsLoadingState() {
   }
 
   state.dom.employeeRecordsTableBody.innerHTML = `
-    <tr>
-      <td colspan="10" class="text-center text-secondary py-4">
-        Loading employee records.
+    <tr class="hr-employee-directory-loading-row">
+      <td colspan="9">
+        <div class="hr-employee-directory-loading" role="status" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+          <span>Loading employee directory...</span>
+        </div>
       </td>
     </tr>
   `;
@@ -26514,15 +27165,31 @@ function renderEmployeeFilledFormField(label, value, options = {}) {
 
 // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
 // Section wrapper for the read-only filled form.
+// EMPLOYEE DETAILS MODAL MODERNISATION - STEP 2
+// Shared section styling for the employee-name link and View action.
 function renderEmployeeFilledFormSection(title, fieldsHtml, helperText = "") {
+  const sectionIconByTitle = {
+    "Core Details": "bi-person-vcard",
+    "Personal, Origin & Identity Details": "bi-fingerprint",
+    "Employment Details": "bi-briefcase",
+  };
+
+  const iconClass = sectionIconByTitle[title] || "bi-card-text";
+
   return `
-    <section class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
-      <div class="mb-3">
-        <h3 class="h6 fw-bold mb-1">${escapeHtml(title)}</h3>
-        ${helperText
-      ? `<p class="text-secondary small mb-0">${escapeHtml(helperText)}</p>`
+    <section class="hr-employee-details-section">
+      <div class="hr-employee-details-section-heading">
+        <span class="hr-employee-details-section-icon" aria-hidden="true">
+          <i class="bi ${iconClass}"></i>
+        </span>
+
+        <div>
+          <h3>${escapeHtml(title)}</h3>
+          ${helperText
+      ? `<p>${escapeHtml(helperText)}</p>`
       : ""
     }
+        </div>
       </div>
 
       <div class="row g-3">
@@ -26537,19 +27204,20 @@ function renderEmployeeFilledFormSection(title, fieldsHtml, helperText = "") {
 function renderEmployeeFilledFormList(records = [], emptyText = "", renderRecord) {
   if (!Array.isArray(records) || records.length === 0) {
     return `
-      <div class="alert alert-light border mb-0">
-        ${escapeHtml(emptyText || "No records available.")}
+      <div class="hr-employee-details-empty">
+        <i class="bi bi-inbox" aria-hidden="true"></i>
+        <span>${escapeHtml(emptyText || "No records available.")}</span>
       </div>
     `;
   }
 
   return `
-    <div class="list-group">
+    <div class="hr-employee-details-list">
       ${records
       .map((record) => `
-          <div class="list-group-item">
+          <article class="hr-employee-details-list-item">
             ${renderRecord(record)}
-          </div>
+          </article>
         `)
       .join("")}
     </div>
@@ -26958,6 +27626,11 @@ async function viewEmployeeFilledForm(employeeId) {
 
   modal.classList.remove("d-none");
   modal.setAttribute("aria-hidden", "false");
+  document.body?.classList.add("hr-employee-details-modal-open");
+
+  window.requestAnimationFrame(() => {
+    modal.querySelector(".hr-employee-details-modal-close")?.focus();
+  });
 
   try {
     const relatedData = await loadEmployeeFilledFormRelatedData(employeeKey);
@@ -26982,6 +27655,7 @@ function closeEmployeeFilledFormModal() {
 
   modal.classList.add("d-none");
   modal.setAttribute("aria-hidden", "true");
+  document.body?.classList.remove("hr-employee-details-modal-open");
 }
 
 function renderEmployeeRecords(employees) {
@@ -26999,8 +27673,6 @@ function renderEmployeeRecords(employees) {
       state.dom.employeeRecordsTableWrapper.classList.add("d-none");
     }
 
-    // EMPLOYEE LIST ROW ALIGNMENT CLEANUP - STEP 4
-    // Keep the master checkbox disabled when no employee rows are visible.
     syncSelectAllEmployeesForPayrollCheckbox();
     return;
   }
@@ -27014,17 +27686,10 @@ function renderEmployeeRecords(employees) {
   }
 
   const documentCountMap = buildEmployeeDocumentCountMap();
-
-  // EMPLOYEE LIST ROW ALIGNMENT CLEANUP - STEP 4
-  // Keep the employee list in stable Employee Number order.
   const employeesToRender = sortEmployeeRecordsByEmployeeNumber(employees);
-  // EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1
-  // Row-level Pay checkboxes should only show during the Run Payroll flow.
   const isPayrollSelectionMode = Boolean(state.isRunPayrollSelectionMode);
 
   employeesToRender.forEach((employee) => {
-    // EMPLOYEE LIST ROW ALIGNMENT CLEANUP - STEP 4
-    // Build employee display name from First + Middle + Last where available.
     const fullName = [
       employee.first_name,
       employee.middle_name,
@@ -27034,6 +27699,8 @@ function renderEmployeeRecords(employees) {
       .filter(Boolean)
       .join(" ");
 
+    const employeeDisplayName = fullName || "Unnamed Employee";
+    const employeeInitials = getInitials(employeeDisplayName, "E");
     const documentCount = documentCountMap.get(String(employee.id)) || 0;
     const accountLinkage = getEmployeeAccountLinkage(employee);
     const rawEmployeeId = String(employee.id || "").trim();
@@ -27049,190 +27716,176 @@ function renderEmployeeRecords(employees) {
 
     const recentlySavedEmployeeBadgeHtml = isRecentlySavedEmployee
       ? `
-        <div class="mt-1">
-          <span class="badge text-bg-warning border text-dark">
-            <i class="bi bi-pencil-square me-1"></i>${escapeHtml(recentlySavedEmployeeLabel)}
-          </span>
-        </div>
+        <span class="hr-employee-recent-badge">
+          <i class="bi bi-stars" aria-hidden="true"></i>
+          ${escapeHtml(recentlySavedEmployeeLabel)}
+        </span>
       `
       : "";
 
-    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
-    // Read-only People roles can view employee rows but cannot edit employees
-    // or change dashboard role assignment from the quick action.
     const canMaintainPeople = canCurrentUserMaintainPeopleData();
     const quickRoleAction = getManagerQuickActionState(employee);
     const canToggleRole = canMaintainPeople && quickRoleAction.canUseQuickAction;
     const isManager = quickRoleAction.isQuickManager;
+    const quickRoleActionLabel = canToggleRole
+      ? isManager
+        ? "Remove manager"
+        : "Make manager"
+      : "Change role";
 
-    // HR EMPLOYEE LOGIN RESEND - STEP 15C
-    // Show the secure login-link action to HR users whenever the employee has a work email.
-    // For unlinked records, it sends/repairs the initial invite.
-    // For linked records, it resends a fresh setup/recovery link via the backend.
     const shouldShowLoginInviteRecovery =
       canMaintainPeople && Boolean(String(employee.work_email || "").trim());
 
     const row = document.createElement("tr");
+    row.className = "hr-employee-directory-row";
 
     if (isRecentlySavedEmployee) {
-      row.classList.add("table-warning");
+      row.classList.add("hr-employee-directory-row--recent");
     }
 
     row.innerHTML = `
-      <td class="text-center align-middle py-3 ${isPayrollSelectionMode ? "" : "d-none"}">
-        <!-- EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1C
-             Hide the row checkbox outside Run Payroll mode so the Employee
-             header and Employee row data start in the same column. -->
+      <td
+        class="hr-employee-pay-cell text-center ${isPayrollSelectionMode ? "" : "d-none"}"
+        data-label="Payroll"
+      >
         <input
           type="checkbox"
           class="form-check-input mt-0"
-          aria-label="Select employee for payroll"
+          aria-label="Select ${escapeHtml(employeeDisplayName)} for payroll"
           ${isEmployeeSelectedForPayroll(employee.id) ? "checked" : ""}
           onchange="window.hrToggleEmployeePayrollSelection('${safeEmployeeId}', this.checked)"
         />
       </td>
 
-<td class="align-middle py-3">
-  <!-- HR PEOPLE EMPLOYEE PROFILE DRILLDOWN - STEP 1A
-       Employee name is now the natural HR drilldown point.
-       This reuses the existing read-only filled-form modal and does not route
-       HR into the employee dashboard or expose employee IDs in the URL. -->
-  <button
-    type="button"
-    class="btn btn-link p-0 fw-semibold text-start text-decoration-none text-nowrap"
-    title="Open employee profile details"
-    aria-label="Open employee profile details for ${escapeHtml(fullName || "Unnamed Employee")}"
-    onclick="window.hrViewEmployeeFilledForm('${safeEmployeeId}')"
-  >
-    ${escapeHtml(fullName || "Unnamed Employee")}
-  </button>
-
-  <div class="text-secondary small text-nowrap">
-    ${escapeHtml(employee.employee_number || "--")}
-  </div>
-  ${recentlySavedEmployeeBadgeHtml}
-</td>
-
-      <td class="align-middle py-3">
-        <!-- EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1C
-             Keep Contact compact and vertically centred. -->
-        <div class="text-break">${escapeHtml(employee.work_email || "--")}</div>
-        <div class="text-secondary small text-nowrap">
-          ${escapeHtml(employee.phone_number || "--")}
-        </div>
-      </td>
-
-      <td class="align-middle py-3">
-        <!-- ASSIGN LINE MANAGER - STEP 1E
-             Keep salary out of the employee list, but show System Role clearly
-             so HR can tell Employee, Manager, HR, Payroll, etc. apart. -->
-        <div>${escapeHtml(employee.department || "--")}</div>
-        <div class="text-secondary small">
-          ${escapeHtml(employee.job_title || "--")}
-        </div>
-        <div class="mt-1">
-          <span class="badge text-bg-light border text-dark">
-            ${escapeHtml(formatEmployeeSystemRoleLabel(employee.system_role))}
+      <td class="hr-employee-primary-cell" data-label="Employee">
+        <div class="hr-employee-identity">
+          <span class="hr-employee-avatar" aria-hidden="true">
+            ${escapeHtml(employeeInitials)}
           </span>
+
+          <div class="hr-employee-identity-copy">
+            <button
+              type="button"
+              class="hr-employee-name-button"
+              title="Open employee profile details"
+              aria-label="Open employee profile details for ${escapeHtml(employeeDisplayName)}"
+              onclick="window.hrViewEmployeeFilledForm('${safeEmployeeId}')"
+            >
+              ${escapeHtml(employeeDisplayName)}
+            </button>
+
+            <span class="hr-employee-number">
+              ${escapeHtml(employee.employee_number || "Employee ID pending")}
+            </span>
+
+            ${recentlySavedEmployeeBadgeHtml}
+          </div>
         </div>
       </td>
 
-      <td class="text-center align-middle py-3">
-        <!-- EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1C
-             Centre badge content within the existing Status column. -->
-        <span class="badge ${getStatusBadgeClass(employee.status)}">
+      <td data-label="Contact">
+        <div class="hr-employee-cell-primary text-break">
+          ${escapeHtml(employee.work_email || "--")}
+        </div>
+        <div class="hr-employee-cell-secondary">
+          ${escapeHtml(employee.phone_number || "No phone number")}
+        </div>
+      </td>
+
+      <td data-label="Role">
+        <div class="hr-employee-cell-primary">
+          ${escapeHtml(employee.department || "No department")}
+        </div>
+        <div class="hr-employee-cell-secondary">
+          ${escapeHtml(employee.job_title || "No job title")}
+        </div>
+        <span class="hr-employee-role-badge">
+          ${escapeHtml(formatEmployeeSystemRoleLabel(employee.system_role))}
+        </span>
+      </td>
+
+      <td class="text-center" data-label="Status">
+        <span class="badge rounded-pill ${getStatusBadgeClass(employee.status)}">
           ${escapeHtml(formatStatusLabel(employee.status))}
         </span>
       </td>
 
-      <td class="text-center align-middle py-3">
-        <!-- EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1C
-             Centre account badge content within the existing Account column. -->
-        <span class="badge ${accountLinkage.badgeClass}">
+      <td class="text-center" data-label="Account">
+        <span class="badge rounded-pill ${accountLinkage.badgeClass}">
           ${escapeHtml(accountLinkage.label)}
         </span>
       </td>
 
-      <td class="text-center align-middle py-3">
-        <!-- EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1C
-             Centre document count within the existing Docs column. -->
-        <span class="badge ${documentCount > 0 ? "text-bg-info" : "text-bg-light border text-dark"} text-nowrap">
-          <i class="bi bi-paperclip me-1"></i>${documentCount}
+      <td class="text-center" data-label="Documents">
+        <span class="hr-employee-documents-badge ${documentCount > 0 ? "has-documents" : ""}">
+          <i class="bi bi-paperclip" aria-hidden="true"></i>
+          <span>${documentCount}</span>
         </span>
       </td>
 
-      <td class="text-nowrap align-middle py-3">
-        <!-- EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1C
-             Keep date on one line and vertically centred. -->
-        ${formatDate(employee.employment_date)}
+      <td class="text-nowrap" data-label="Start Date">
+        <span class="hr-employee-start-date">
+          ${formatDate(employee.employment_date)}
+        </span>
       </td>
 
-      <td class="text-center align-middle py-3">
-        <!-- EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1C
-             Keep existing compact icon actions centred. -->
-        <div class="d-inline-flex align-items-center gap-2 flex-nowrap">
-          <!-- HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
-               View is read-only and available inside HR confines.
-               It does not depend on edit permission, so HR read-only roles can review
-               the filled form without changing employee data. -->
+      <td class="hr-employee-actions-cell" data-label="Actions">
+        <div class="hr-employee-row-actions">
           <button
             type="button"
-            class="btn btn-sm btn-outline-secondary"
+            class="btn btn-sm btn-outline-secondary hr-employee-action-btn"
             title="View employee filled form"
             aria-label="View employee filled form"
             onclick="window.hrViewEmployeeFilledForm('${safeEmployeeId}')"
           >
-            <i class="bi bi-eye"></i>
+            <i class="bi bi-eye" aria-hidden="true"></i>
+            <span>View</span>
           </button>
 
-<button
-  type="button"
-  class="btn btn-sm ${canMaintainPeople ? "btn-outline-primary" : "btn-outline-secondary"}"
-  title="${canMaintainPeople ? "Edit employee" : "People records are read-only for this role"}"
-  aria-label="${canMaintainPeople ? "Edit employee" : "People records are read-only"}"
-  ${canMaintainPeople ? "" : "disabled"}
-  onclick="window.hrEditEmployee('${safeEmployeeId}')"
->
-            <i class="bi bi-pencil-square"></i>
+          <button
+            type="button"
+            class="btn btn-sm ${canMaintainPeople ? "btn-outline-primary" : "btn-outline-secondary"} hr-employee-action-btn"
+            title="${canMaintainPeople ? "Edit employee" : "People records are read-only for this role"}"
+            aria-label="${canMaintainPeople ? "Edit employee" : "People records are read-only"}"
+            ${canMaintainPeople ? "" : "disabled"}
+            onclick="window.hrEditEmployee('${safeEmployeeId}')"
+          >
+            <i class="bi bi-pencil-square" aria-hidden="true"></i>
+            <span>Edit</span>
           </button>
 
           ${shouldShowLoginInviteRecovery
         ? `
-<!-- HR EMPLOYEE LOGIN RESEND - STEP 15C
-     HR-only secure login-link action for sending an initial invite
-     or resending a fresh setup/recovery link. -->
-<button
-  type="button"
-  class="btn btn-sm btn-outline-warning"
-  title="Send or resend employee login invite"
-  aria-label="Send or resend employee login invite"
-  data-hr-login-invite-btn="${safeEmployeeId}"
-  onclick="window.hrSendEmployeeLoginInvite('${safeEmployeeId}')"
->
-  <i class="bi bi-envelope-plus"></i>
-</button>
-`
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-warning hr-employee-action-btn"
+            title="Send or resend employee login invite"
+            aria-label="Send or resend employee login invite"
+            data-hr-login-invite-btn="${safeEmployeeId}"
+            onclick="window.hrSendEmployeeLoginInvite('${safeEmployeeId}')"
+          >
+            <i class="bi bi-envelope-plus" aria-hidden="true"></i>
+            <span>Login</span>
+          </button>
+          `
         : ""}
 
-<!-- MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1F
-     Quick action is only for Employee <-> Manager.
-     Other roles must be changed from the employee form because the form
-     is now the master control for full role assignment. -->
-<button
-  type="button"
-  class="btn btn-sm ${quickRoleAction.buttonClass}"
-title="${canToggleRole
+          <button
+            type="button"
+            class="btn btn-sm ${quickRoleAction.buttonClass} hr-employee-action-btn"
+            title="${canToggleRole
         ? quickRoleAction.title
         : canMaintainPeople
           ? "Use the employee form to change this role"
           : "People role changes are restricted for this role"
       }"
-  aria-label="${quickRoleAction.ariaLabel}"
-  ${canToggleRole ? "" : "disabled"}
-  onclick="window.hrToggleManagerRole('${safeEmployeeId}')"
->
-  <i class="bi ${quickRoleAction.iconClass}"></i>
-</button>
+            aria-label="${quickRoleAction.ariaLabel}"
+            ${canToggleRole ? "" : "disabled"}
+            onclick="window.hrToggleManagerRole('${safeEmployeeId}')"
+          >
+            <i class="bi ${quickRoleAction.iconClass}" aria-hidden="true"></i>
+            <span>${escapeHtml(quickRoleActionLabel)}</span>
+          </button>
         </div>
       </td>
     `;
@@ -27240,8 +27893,6 @@ title="${canToggleRole
     tbody.appendChild(row);
   });
 
-  // EMPLOYEE LIST ROW ALIGNMENT CLEANUP - STEP 4
-  // Recalculate master checkbox state after every employee table render.
   syncSelectAllEmployeesForPayrollCheckbox();
 }
 

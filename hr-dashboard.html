@@ -77,10 +77,35 @@
   </style>
 
 
-  <link rel="icon" type="image/x-icon" href="assets/favicon.png" />
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
+  <style id="hrWorkspaceFirstPaintGate">
+    body.hr-workspace-booting .bexhr-sidebar,
+    body.hr-workspace-booting main {
+      visibility: hidden !important;
+    }
+  </style>
 </head>
 
-<body class="dashboard-page bexhr-has-sidebar">
+<body class="dashboard-page bexhr-has-sidebar bexhr-hr-visual-refresh hr-workspace-booting"
+  aria-busy="true">
+
+  <!-- BEXHR WORKSPACE LOADER - PEOPLE UI REFRESH STEP 1
+       Visible only while the exact remembered HR workspace is restored.
+       It gives immediate feedback instead of showing a blank white page. -->
+  <div id="bexhrWorkspaceLoader" class="bexhr-workspace-loader"
+    role="status" aria-live="polite" aria-atomic="true">
+    <div class="bexhr-workspace-loader-panel">
+      <div class="bexhr-workspace-loader-brand" aria-hidden="true">
+        <span class="bexhr-workspace-loader-mark">B</span>
+        <span>BexHR</span>
+      </div>
+
+      <span class="bexhr-workspace-loader-spinner" aria-hidden="true"></span>
+
+      <strong>BexHR is preparing your workspace</strong>
+      <span>Restoring your last HR workspace securely.</span>
+    </div>
+  </div>
   <!-- ALPATECH TENANT BRANDING - STEP 1H
        Pre-apply Alpatech branding from the already validated tenant context.
 
@@ -193,13 +218,15 @@
     <div class="bexhr-sidebar-brand" id="tenantSidebarBrand">
       <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">HR</span>
     </div>
-
+    <!-- BEXHR HR MODERN OVERVIEW - STEP 6
+         Dashboard becomes the operational HR landing workspace.
+         Existing tab buttons remain the routing source of truth. -->
     <ul class="bexhr-sidebar-nav">
       <li>
-        <button class="bexhr-sidebar-item active" id="sidebarProfileBtn"
-          onclick="document.getElementById('hrTabProfileBtn').click()" title="Profile">
-          <i class="bi bi-person-circle"></i>
-          <span>Profile</span>
+        <button class="bexhr-sidebar-item active" id="sidebarDashboardBtn"
+          onclick="document.getElementById('hrTabDashboardBtn').click()" title="Dashboard">
+          <i class="bi bi-grid-1x2"></i>
+          <span>Dashboard</span>
         </button>
       </li>
       <li>
@@ -209,11 +236,6 @@
           <span>People</span>
         </button>
       </li>
-
-      <!-- HR REVIEW WORKSPACE SEPARATION - STEP 1P
-           HR Review sits after People and before Setup/Payroll because it is
-           operational HR oversight, not employee master-data maintenance and
-           not system configuration. -->
       <li>
         <button class="bexhr-sidebar-item" id="sidebarReviewBtn"
           onclick="document.getElementById('hrTabReviewBtn').click()" title="HR Review">
@@ -221,19 +243,18 @@
           <span>HR Review</span>
         </button>
       </li>
-
-      <li>
-        <button class="bexhr-sidebar-item" id="sidebarSetupBtn"
-          onclick="document.getElementById('hrTabSetupBtn').click()" title="Setup">
-          <i class="bi bi-sliders"></i>
-          <span>Setup</span>
-        </button>
-      </li>
       <li>
         <button class="bexhr-sidebar-item" id="sidebarPayrollBtn"
           onclick="document.getElementById('hrTabPayrollBtn').click()" title="Payroll">
           <i class="bi bi-cash-coin"></i>
           <span>Payroll</span>
+        </button>
+      </li>
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarSetupBtn"
+          onclick="document.getElementById('hrTabSetupBtn').click()" title="Setup">
+          <i class="bi bi-sliders"></i>
+          <span>Setup</span>
         </button>
       </li>
       <li>
@@ -246,70 +267,74 @@
     </ul>
 
     <div class="bexhr-sidebar-footer">
-      <!-- GUIDED HELP LAYER - STEP 1R-FIX 3
-           Desktop sidebar access for the HR operating guide.
-           The existing Help Guide button still remains in the mobile
-           workspace switcher. This sidebar action simply proxies to it,
-           so we avoid duplicate IDs and avoid changing modal JavaScript. -->
+      <button type="button" class="bexhr-sidebar-item" id="sidebarProfileBtn"
+        onclick="document.getElementById('hrTabProfileBtn').click()" title="My Profile">
+        <i class="bi bi-person-circle"></i>
+        <span>My Profile</span>
+      </button>
+
       <button type="button" class="bexhr-sidebar-item"
         onclick="document.getElementById('openHrOperatingGuideBtn')?.click()" title="Help Guide">
         <i class="bi bi-question-circle"></i>
         <span>Help Guide</span>
       </button>
 
-      <button class="bexhr-sidebar-item" onclick="document.getElementById('logoutBtn')?.click()" title="Sign out">
-        <i class="bi bi-box-arrow-left"></i>
-        <span>Sign out</span>
-      </button>
     </div>
   </nav>
 
   <main class="container py-4 py-lg-5">
-    <section class="dashboard-hero mb-4">
-      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-4">
-        <div id="tenantHeroBrandingBlock">
-          <div class="hero-badge">
-            <i class="bi bi-people"></i>
-            HR Workspace
+    <section class="hr-modern-app-header mb-4" aria-label="HR workspace header">
+      <div class="hr-modern-app-header-main">
+        <div class="hr-modern-page-heading">
+          <div class="hr-modern-context-line">
+            <span class="hr-modern-company-name" id="hrModernCompanyName">BexHR Workspace</span>
+            <span class="hr-modern-context-separator" aria-hidden="true"></span>
+            <span id="hrModuleValue">Dashboard</span>
           </div>
-          <h1 class="display-6 fw-bold mb-2">HR Dashboard</h1>
-          <p class="mb-0" style="max-width: 760px">
-            Manage your HR profile, employee records, supporting documents, and payroll records in one place.
+
+          <h1 id="hrModernPageTitle">HR Overview</h1>
+          <p id="hrModernPageSubtitle">
+            Monitor people operations, HR reviews, payroll readiness, and recent activity.
           </p>
         </div>
 
-        <div class="d-flex flex-column align-items-lg-end gap-2">
-          <div class="position-relative">
-            <div class="dashboard-avatar" id="hrInitials">HR</div>
-            <img id="hrHeroImage" src="" alt="HR hero avatar" class="dashboard-avatar d-none"
-              style="width: 68px; height: 68px; object-fit: cover;" />
-          </div>
+        <div class="hr-modern-account-area">
+          <button type="button" class="hr-modern-account-button"
+            onclick="document.getElementById('hrTabProfileBtn')?.click()"
+            aria-label="Open my profile">
+            <span class="hr-modern-avatar-wrap">
+              <span class="dashboard-avatar" id="hrInitials">HR</span>
+              <img id="hrHeroImage" src="" alt="HR profile avatar"
+                class="dashboard-avatar d-none" />
+            </span>
 
-          <button id="logoutBtn" class="btn btn-light dashboard-action-btn">
-            <i class="bi bi-box-arrow-right me-2"></i>Logout
+            <span class="hr-modern-account-copy">
+              <strong id="hrModernUserName">HR User</strong>
+              <small id="hrRole"><span class="skeleton">&nbsp;</span></small>
+            </span>
+
+            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+          </button>
+
+          <button id="logoutBtn" type="button"
+            class="btn btn-outline-secondary hr-modern-logout-button"
+            aria-label="Sign out" title="Sign out">
+            <i class="bi bi-box-arrow-right"></i>
           </button>
         </div>
       </div>
 
-      <div class="hero-meta-grid">
-        <div class="hero-meta-card">
-          <div class="hero-meta-label">Signed in as</div>
-          <div class="hero-meta-value text-break" id="hrEmail"><span class="skeleton skeleton-wide">&nbsp;</span></div>
-        </div>
-
-        <div class="hero-meta-card">
-          <div class="hero-meta-label">Role</div>
-          <div class="hero-meta-value" id="hrRole"><span class="skeleton">&nbsp;</span></div>
-        </div>
-
-        <div class="hero-meta-card">
-          <div class="hero-meta-label">Current Workspace</div>
-          <div class="hero-meta-value" id="hrModuleValue">Profile</div>
+      <!-- Existing identity and tenant-branding IDs remain available to the
+           current JavaScript, but no longer dominate the visible page shell. -->
+      <div class="d-none" aria-hidden="true">
+        <span id="hrEmail"><span class="skeleton skeleton-wide">&nbsp;</span></span>
+        <div id="tenantHeroBrandingBlock">
+          <div class="hero-badge"><i class="bi bi-people"></i> HR Workspace</div>
         </div>
       </div>
     </section>
 
-    <div id="pageAlert" class="alert d-none mb-4" role="alert"></div>
+    <div id="pageAlert"' class="alert d-none mb-4" role="alert"></div>
 
 
 
@@ -325,7 +350,7 @@
        and aligns with the reduced tab labels. -->
             <h2 class="section-heading h4 mb-1">HR Workspace</h2>
             <p class="section-subtext mb-0">
-              Switch between your profile, people records, HR reviews, setup data, and payroll processing.
+              Move between the HR overview, people records, review queues, payroll, setup, and self-service.
             </p>
           </div>
 
@@ -337,7 +362,11 @@
             <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 10
        Use shorter top-level tab labels so the HR workspace navigation
        stays inline more naturally. -->
-            <button type="button" class="btn btn-primary dashboard-action-btn text-nowrap" id="hrTabProfileBtn">
+                        <button type="button" class="btn btn-primary dashboard-action-btn text-nowrap" id="hrTabDashboardBtn">
+              <i class="bi bi-grid-1x2 me-2"></i>Dashboard
+            </button>
+
+            <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap" id="hrTabProfileBtn">
               <i class="bi bi-person-circle me-2"></i>Profile
             </button>
 
@@ -383,98 +412,259 @@
       </div>
     </section>
 
-    <section id="hrProfileSection" class="workspace-section">
-      <section class="card dashboard-section-card mb-4">
-        <div class="card-body p-4 p-lg-5">
-          <div class="mb-4">
-            <h2 class="section-heading h4 mb-1">My Profile</h2>
-            <p class="section-subtext mb-0">
-              View and update your own HR profile details.
-            </p>
+            <!-- BEXHR HR MODERN OVERVIEW - STEP 6
+         New operational landing workspace. All values are rendered from the
+         existing tenant-scoped employee, review, payroll, and delivery state. -->
+    <section id="hrDashboardSection" class="workspace-section">
+      <section class="hr-overview-welcome mb-4">
+        <div class="hr-overview-welcome-copy">
+          <span class="hr-overview-kicker">People operations</span>
+          <h2>Good to see you, <span id="hrOverviewUserFirstName">HR</span>.</h2>
+          <p>
+            Here is the current position across employee records, review work, and payroll readiness.
+          </p>
+        </div>
+
+        <div class="hr-overview-quick-actions" aria-label="HR quick actions">
+          <button type="button" class="btn btn-light dashboard-action-btn"
+            onclick="document.getElementById('hrTabEmployeesBtn')?.click()">
+            <i class="bi bi-person-plus me-2"></i>People
+          </button>
+          <button type="button" class="btn btn-light dashboard-action-btn"
+            onclick="document.getElementById('hrTabReviewBtn')?.click()">
+            <i class="bi bi-clipboard-check me-2"></i>Review Queue
+          </button>
+          <button type="button" class="btn btn-light dashboard-action-btn"
+            onclick="document.getElementById('hrTabPayrollBtn')?.click()">
+            <i class="bi bi-cash-coin me-2"></i>Payroll
+          </button>
+        </div>
+      </section>
+
+      <section class="hr-overview-metrics" aria-label="HR overview metrics">
+        <article class="hr-overview-metric-card metric-people">
+          <div class="hr-overview-metric-icon"><i class="bi bi-people"></i></div>
+          <div>
+            <div class="hr-overview-metric-label">Total employees</div>
+            <div class="hr-overview-metric-value" id="hrOverviewTotalEmployees">0</div>
+            <div class="hr-overview-metric-detail" id="hrOverviewActiveEmployees">0 active</div>
           </div>
+        </article>
 
-          <div class="row g-4 align-items-start">
-            <div class="col-lg-4">
-              <div class="border rounded-4 p-4 h-100 text-center">
-                <div class="dashboard-avatar mx-auto mb-3" id="hrProfileAvatar">
-                  HR
-                </div>
-                <h3 class="h5 mb-1" id="hrProfileCardName">HR User</h3>
-                <p class="text-secondary mb-3 text-break" id="hrProfileCardEmail">
-                  --
-                </p>
+        <article class="hr-overview-metric-card metric-review">
+          <div class="hr-overview-metric-icon"><i class="bi bi-inbox"></i></div>
+          <div>
+            <div class="hr-overview-metric-label">Open HR reviews</div>
+            <div class="hr-overview-metric-value" id="hrOverviewOpenReviews">0</div>
+            <div class="hr-overview-metric-detail">Requests needing attention</div>
+          </div>
+        </article>
 
-                <div class="small text-secondary mb-2">Profile Photo</div>
+        <article class="hr-overview-metric-card metric-payroll">
+          <div class="hr-overview-metric-icon"><i class="bi bi-check2-circle"></i></div>
+          <div>
+            <div class="hr-overview-metric-label">Payroll ready</div>
+            <div class="hr-overview-metric-value" id="hrOverviewPayrollReady">0</div>
+            <div class="hr-overview-metric-detail" id="hrOverviewPayrollReadyDetail">0 of 0 active employees</div>
+          </div>
+        </article>
 
-                <div class="border rounded-4 p-3 bg-light-subtle">
-                  <div class="mb-3">
-                    <img id="hrProfileImagePreview" src="" alt="HR profile preview"
-                      class="img-fluid rounded-circle d-none" style="width: 96px; height: 96px; object-fit: cover;" />
-                  </div>
+        <article class="hr-overview-metric-card metric-attention">
+          <div class="hr-overview-metric-icon"><i class="bi bi-exclamation-circle"></i></div>
+          <div>
+            <div class="hr-overview-metric-label">Missing information</div>
+            <div class="hr-overview-metric-value" id="hrOverviewMissingInformation">0</div>
+            <div class="hr-overview-metric-detail">Employee records to complete</div>
+          </div>
+        </article>
+      </section>
 
-                  <div class="d-grid gap-2">
-                    <input type="file" id="hrProfileImageInput" class="form-control" accept=".png,.jpg,.jpeg,.webp" />
+      <section class="hr-overview-readiness-card mb-4">
+        <div class="hr-overview-readiness-heading">
+          <div>
+            <span class="hr-overview-section-kicker">Payroll preparation</span>
+            <h3>Employee payroll readiness</h3>
+          </div>
+          <strong id="hrOverviewPayrollReadinessPercent">0%</strong>
+        </div>
+        <div class="progress" role="progressbar" aria-label="Payroll readiness"
+          aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+          id="hrOverviewPayrollReadinessProgress">
+          <div class="progress-bar" id="hrOverviewPayrollReadinessBar" style="width: 0%"></div>
+        </div>
+        <p id="hrOverviewPayrollReadinessMessage">
+          Payroll setup information will appear after employee and salary records load.
+        </p>
+      </section>
 
-                    <!-- ADMIN UI CLEANUP - STEP 1D-HR PARITY
-     Match Admin behaviour: keep HR profile photo upload grey/disabled
-     until HR selects a valid image file. -->
-                    <button type="button" id="saveHrProfileImageBtn" class="btn btn-secondary dashboard-action-btn"
-                      disabled>
-                      <i class="bi bi-image me-2"></i>Upload Profile Photo
-                    </button>
-                  </div>
+      <div class="hr-overview-content-grid mb-4">
+        <section class="hr-overview-panel">
+          <div class="hr-overview-panel-header">
+            <div>
+              <span class="hr-overview-section-kicker">Work queue</span>
+              <h3>Priority attention</h3>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary"
+              onclick="document.getElementById('hrTabReviewBtn')?.click()">
+              Open HR Review
+            </button>
+          </div>
+          <div id="hrOverviewPriorityList" class="hr-overview-priority-list">
+            <div class="hr-overview-empty-state">Loading priority work...</div>
+          </div>
+        </section>
 
-                  <div class="text-secondary small mt-3">
-                    Allowed: PNG, JPG, JPEG, WEBP. Maximum file size: 5MB.
-                  </div>
-                </div>
-              </div>
+        <section class="hr-overview-panel">
+          <div class="hr-overview-panel-header">
+            <div>
+              <span class="hr-overview-section-kicker">Organisation</span>
+              <h3>Department snapshot</h3>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary"
+              onclick="document.getElementById('hrTabEmployeesBtn')?.click()">
+              View People
+            </button>
+          </div>
+          <div id="hrOverviewDepartmentList" class="hr-overview-department-list">
+            <div class="hr-overview-empty-state">Loading departments...</div>
+          </div>
+        </section>
+      </div>
+
+      <section class="hr-overview-panel hr-overview-activity-panel mb-4">
+        <div class="hr-overview-panel-header">
+          <div>
+            <span class="hr-overview-section-kicker">Audit visibility</span>
+            <h3>Recent activity</h3>
+          </div>
+          <span class="hr-overview-live-badge"><span></span> Live workspace data</span>
+        </div>
+        <div id="hrOverviewRecentActivity" class="hr-overview-activity-list">
+          <div class="hr-overview-empty-state">Loading recent activity...</div>
+        </div>
+      </section>
+    </section>
+
+    <section id="hrProfileSection" class="workspace-section d-none">
+      <!-- BEXHR HR PROFILE VISUAL REFINEMENT - STEP 2
+           Presentation-only profile workspace.
+           Existing IDs, form submission, image upload, validation, and Supabase logic remain unchanged. -->
+      <section class="card dashboard-section-card hr-profile-workspace-card mb-4">
+        <div class="card-body p-4 p-lg-5">
+          <div class="hr-profile-card-header mb-4">
+            <div>
+              <div class="hr-profile-eyebrow">My account</div>
+              <h2 class="section-heading h4 mb-1">My Profile</h2>
+              <p class="section-subtext mb-0">
+                Keep your personal profile accurate while system-controlled role and department details remain protected.
+              </p>
             </div>
 
-            <div class="col-lg-8">
+            <span class="hr-profile-security-badge">
+              <i class="bi bi-shield-check"></i>
+              Secure HR profile
+            </span>
+          </div>
+
+          <div class="hr-profile-layout">
+            <aside class="hr-profile-identity-panel" aria-label="Profile identity and photo">
+              <div class="hr-profile-avatar-stage">
+                <div class="dashboard-avatar hr-profile-main-avatar" id="hrProfileAvatar">
+                  HR
+                </div>
+
+                <img id="hrProfileImagePreview" src="" alt="HR profile preview"
+                  class="hr-profile-main-avatar hr-profile-main-image d-none" />
+
+                <span class="hr-profile-avatar-status" title="Active profile" aria-label="Active profile"></span>
+              </div>
+
+              <h3 class="hr-profile-name mb-1" id="hrProfileCardName">HR User</h3>
+              <p class="hr-profile-email text-break mb-3" id="hrProfileCardEmail">--</p>
+
+              <span class="hr-profile-member-pill">
+                <i class="bi bi-person-check"></i>
+                HR workspace member
+              </span>
+
+              <div class="hr-profile-photo-panel">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                  <div>
+                    <label for="hrProfileImageInput" class="hr-profile-photo-title mb-1">Profile photo</label>
+                    <div class="hr-profile-photo-help">
+                      PNG, JPG, JPEG or WEBP. Maximum 5MB.
+                    </div>
+                  </div>
+
+                  <i class="bi bi-camera hr-profile-photo-icon" aria-hidden="true"></i>
+                </div>
+
+                <input type="file" id="hrProfileImageInput" class="form-control"
+                  accept=".png,.jpg,.jpeg,.webp" />
+
+                <!-- ADMIN UI CLEANUP - STEP 1D-HR PARITY
+                     Keep upload grey/disabled until a valid image file is selected. -->
+                <button type="button" id="saveHrProfileImageBtn"
+                  class="btn btn-secondary dashboard-action-btn mt-2" disabled>
+                  <i class="bi bi-cloud-arrow-up me-2"></i>Upload Photo
+                </button>
+              </div>
+            </aside>
+
+            <div class="hr-profile-details-panel">
+              <div class="hr-profile-details-heading mb-4">
+                <div>
+                  <div class="hr-profile-eyebrow">Account details</div>
+                  <h3 class="h5 fw-bold mb-1">Personal information</h3>
+                  <p class="text-secondary small mb-0">
+                    Your email, role, and department are shown for reference. Only your name can be edited here.
+                  </p>
+                </div>
+
+                <span class="hr-profile-details-icon" aria-hidden="true">
+                  <i class="bi bi-person-vcard"></i>
+                </span>
+              </div>
+
               <form id="hrProfileForm" novalidate>
-                <div class="row g-4">
+                <div class="row g-3 g-xl-4">
                   <div class="col-md-6">
                     <label for="hrProfileFullName" class="form-label fw-semibold">
                       Full Name <span class="text-danger">*</span>
                     </label>
-                    <input type="text" id="hrProfileFullName" class="form-control" placeholder="Enter your full name"
-                      required />
+                    <input type="text" id="hrProfileFullName" class="form-control"
+                      placeholder="Enter your full name" required />
                   </div>
 
                   <div class="col-md-6">
-                    <label for="hrProfileEmail" class="form-label fw-semibold">
-                      Email
-                    </label>
+                    <label for="hrProfileEmail" class="form-label fw-semibold">Email</label>
                     <input type="email" id="hrProfileEmail" class="form-control" readonly />
                   </div>
 
                   <div class="col-md-6">
-                    <label for="hrProfileRole" class="form-label fw-semibold">
-                      Role
-                    </label>
-                    <!-- ADMIN UI CLEANUP - STEP 1D-HR PARITY
-     Role is system-controlled, so keep it readonly and visually greyed out
-     like the Admin profile role field. -->
+                    <label for="hrProfileRole" class="form-label fw-semibold">Role</label>
                     <input type="text" id="hrProfileRole" class="form-control bg-light" readonly />
                   </div>
 
                   <div class="col-md-6">
-                    <label for="hrProfileDepartment" class="form-label fw-semibold">
-                      Department
-                    </label>
+                    <label for="hrProfileDepartment" class="form-label fw-semibold">Department</label>
                     <input type="text" id="hrProfileDepartment" class="form-control bg-light" readonly />
                   </div>
+                </div>
 
-                  <div class="col-12">
-                    <!-- DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
-     Profile save should follow the same HR/payroll button behaviour:
-     grey and disabled until HR changes editable profile values. -->
-                    <button type="submit" id="saveHrProfileBtn" class="btn btn-secondary dashboard-action-btn" disabled>
-                      <i class="bi bi-save me-2"></i>
-                      <span id="saveHrProfileBtnText">Save Profile Changes</span>
-                    </button>
+                <div class="hr-profile-form-footer">
+                  <div class="hr-profile-system-note">
+                    <i class="bi bi-lock"></i>
+                    <span>Role and department are managed by authorised administrators.</span>
                   </div>
+
+                  <!-- DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+                       Save remains disabled until HR changes an editable profile value. -->
+                  <button type="submit" id="saveHrProfileBtn"
+                    class="btn btn-secondary dashboard-action-btn" disabled>
+                    <i class="bi bi-save me-2"></i>
+                    <span id="saveHrProfileBtnText">Save Profile Changes</span>
+                  </button>
                 </div>
               </form>
             </div>
@@ -484,46 +674,73 @@
     </section>
 
     <section id="hrEmployeesSection" class="workspace-section d-none">
-      <section class="card dashboard-section-card mb-4">
+      <!-- PEOPLE SUMMARY MODERNISATION - STEP 1
+           Existing metric IDs remain unchanged, so the current tenant-scoped
+           employee summary renderer continues to supply every value. -->
+      <section class="card dashboard-section-card hr-people-summary-card mb-4">
         <div class="card-body p-4 p-lg-5">
-          <div class="mb-4">
-            <h2 class="section-heading h4 mb-1">Employee Management Summary</h2>
-            <p class="section-subtext mb-0">
-              Quick view of employee records currently stored in the system.
-            </p>
+          <div class="hr-people-section-heading">
+            <div>
+              <span class="hr-people-section-kicker">People intelligence</span>
+              <h2 class="section-heading h4 mb-1">Employee Management Summary</h2>
+              <p class="section-subtext mb-0">
+                Live employee coverage across records, status, departments, and employee IDs.
+              </p>
+            </div>
           </div>
 
-          <div class="row g-4">
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Total Employees</div>
-                <div class="summary-tile-value" id="totalEmployeesValue"><span class="skeleton">&nbsp;&nbsp;</span>
-                </div>
+          <div class="hr-people-summary-grid" aria-label="Employee management metrics">
+            <article class="hr-people-summary-tile">
+              <span class="hr-people-summary-icon hr-people-summary-icon--people" aria-hidden="true">
+                <i class="bi bi-people"></i>
+              </span>
+              <div class="hr-people-summary-copy">
+                <span class="hr-people-summary-label">Total Employees</span>
+                <strong class="hr-people-summary-value" id="totalEmployeesValue">
+                  <span class="skeleton">&nbsp;&nbsp;</span>
+                </strong>
+                <span class="hr-people-summary-detail">All employee records</span>
               </div>
-            </div>
+            </article>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Active Employees</div>
-                <div class="summary-tile-value" id="activeEmployeesValue"><span class="skeleton">&nbsp;&nbsp;</span>
-                </div>
+            <article class="hr-people-summary-tile">
+              <span class="hr-people-summary-icon hr-people-summary-icon--active" aria-hidden="true">
+                <i class="bi bi-person-check"></i>
+              </span>
+              <div class="hr-people-summary-copy">
+                <span class="hr-people-summary-label">Active Employees</span>
+                <strong class="hr-people-summary-value" id="activeEmployeesValue">
+                  <span class="skeleton">&nbsp;&nbsp;</span>
+                </strong>
+                <span class="hr-people-summary-detail">Currently active</span>
               </div>
-            </div>
+            </article>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Departments</div>
-                <div class="summary-tile-value" id="departmentsValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+            <article class="hr-people-summary-tile">
+              <span class="hr-people-summary-icon hr-people-summary-icon--departments" aria-hidden="true">
+                <i class="bi bi-diagram-3"></i>
+              </span>
+              <div class="hr-people-summary-copy">
+                <span class="hr-people-summary-label">Departments</span>
+                <strong class="hr-people-summary-value" id="departmentsValue">
+                  <span class="skeleton">&nbsp;&nbsp;</span>
+                </strong>
+                <span class="hr-people-summary-detail">Represented in People</span>
               </div>
-            </div>
+            </article>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Without Employee Number</div>
-                <div class="summary-tile-value" id="missingEmployeeNumberValue"><span
-                    class="skeleton">&nbsp;&nbsp;</span></div>
+            <article class="hr-people-summary-tile">
+              <span class="hr-people-summary-icon hr-people-summary-icon--attention" aria-hidden="true">
+                <i class="bi bi-person-exclamation"></i>
+              </span>
+              <div class="hr-people-summary-copy">
+                <span class="hr-people-summary-label">Missing Employee IDs</span>
+                <strong class="hr-people-summary-value" id="missingEmployeeNumberValue">
+                  <span class="skeleton">&nbsp;&nbsp;</span>
+                </strong>
+                <span class="hr-people-summary-detail">Records needing attention</span>
               </div>
-            </div>
+            </article>
           </div>
         </div>
       </section>
@@ -2633,12 +2850,12 @@ Disable browser address autofill popup on HR employee address fields. -->
         </div>
       </section>
 
-      <section class="card dashboard-section-card">
+      <section class="card dashboard-section-card hr-employee-directory-card">
         <div class="card-body p-4 p-lg-5">
           <!-- REMOVE GRADE LEVEL FIELD FROM EMPLOYEE DATA - STEP 3
                Stable scroll target for post-save redirect.
                This prevents the Full Employee List heading from being cut off. -->
-          <div id="employeeListCardHeader" class="mb-4">
+          <div id="employeeListCardHeader" class="hr-employee-directory-header mb-4">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
               <div>
                 <h2 class="section-heading h4 mb-1">Full Employee List</h2>
@@ -2657,7 +2874,7 @@ Disable browser address autofill popup on HR employee address fields. -->
           </div>
 
           <div id="employeeListCardCollapse">
-            <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-start gap-4 mb-4">
+            <div class="hr-employee-directory-toolbar">
               <div class="flex-grow-1">
                 <!-- DESCRIPTION ITEM 1 - STEP 5A
                      Keep the HR/payroll context chips inside the collapsible area. -->
@@ -2677,17 +2894,19 @@ Disable browser address autofill popup on HR employee address fields. -->
                      identity values such as NIN and document links. -->
                 <div class="d-flex flex-wrap gap-2 mt-3">
                   <button type="button" id="downloadEmployeeListCsvBtn"
-                    class="btn btn-outline-success dashboard-action-btn">
+                    class="btn btn-outline-success dashboard-action-btn hr-employee-directory-download">
                     <i class="bi bi-download me-2"></i>Download Employee List
                   </button>
                 </div>
               </div>
 
-              <div class="w-100 w-xl-auto" style="max-width: 360px">
+              <div class="hr-employee-directory-search">
                 <label for="employeeSearchInput" class="form-label fw-semibold mb-2">
                   Search employee list
                 </label>
-                <input type="text" id="employeeSearchInput" class="form-control"
+                <input type="search" id="employeeSearchInput" class="form-control"
+                  name="bexhrEmployeeDirectorySearch" autocomplete="off" autocapitalize="none"
+                  spellcheck="false" enterkeyhint="search"
                   placeholder="Search by employee ID, name, email, department..." />
               </div>
             </div>
@@ -2743,17 +2962,17 @@ Disable browser address autofill popup on HR employee address fields. -->
      This prevents the whole HR dashboard page from becoming tiring to navigate
      when many employees exist, while keeping search, payroll selection,
      and card controls visible above the table. -->
-            <div id="employeeRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
-              style="max-height: 520px; overflow-y: auto;">
+            <div id="employeeRecordsTableWrapper"
+              class="dashboard-table-wrap table-responsive hr-employee-directory-wrapper d-none">
               <!-- EMPLOYEE LIST ROW ALIGNMENT CLEANUP - STEP 1
        Use top alignment so Employee, Contact, Role, Status, Account,
        Docs, Start Date, and Action all begin from the same vertical line.
        This prevents short badge/action cells from sitting lower than text cells. -->
-              <table class="table align-top">
+              <table class="table align-top hr-employee-directory-table mb-0" aria-label="Employee directory">
                 <!-- FULL EMPLOYEE LIST UX - STEP 1
      Sticky header keeps Employee, Contact, Role, Status, Account, Docs,
      Start Date, and Action labels visible while HR scrolls through records. -->
-                <thead class="position-sticky top-0 bg-white" style="z-index: 2;">
+                <thead class="hr-employee-directory-head">
                   <tr>
                     <th class="text-center">
                       <div class="d-inline-flex align-items-center gap-2">
@@ -6366,37 +6585,55 @@ Disable browser address autofill popup on HR employee address fields. -->
        Read-only HR view of the employee's filled form.
        This is intentionally separate from Edit Employee Profile so HR can
        review records without accidentally changing saved employee data. -->
-  <div id="employeeFilledFormModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
-    style="z-index: 1055; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
-    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
-      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 980px; max-height: 92vh; overflow: auto;">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
-          <div>
-            <h2 id="employeeFilledFormTitle" class="h4 mb-1">Employee Filled Form</h2>
-            <p class="text-secondary mb-0">
-              Read-only HR view of the employee information currently held on record.
-            </p>
+  <!-- EMPLOYEE DETAILS MODAL MODERNISATION - STEP 1
+       The employee name link and the View action both open this one shared,
+       read-only modal. The content area scrolls internally on every viewport. -->
+  <div id="employeeFilledFormModal"
+    class="d-none position-fixed top-0 start-0 w-100 h-100 hr-employee-details-modal"
+    aria-hidden="true">
+    <div class="hr-employee-details-modal-shell">
+      <section class="hr-employee-details-modal-panel" role="dialog" aria-modal="true"
+        aria-labelledby="employeeFilledFormTitle">
+        <header class="hr-employee-details-modal-header">
+          <div class="hr-employee-details-modal-heading">
+            <span class="hr-employee-details-modal-heading-icon" aria-hidden="true">
+              <i class="bi bi-person-vcard"></i>
+            </span>
+
+            <div>
+              <span class="hr-employee-details-modal-kicker">Read-only employee record</span>
+              <h2 id="employeeFilledFormTitle" class="h4 mb-1">Employee Filled Form</h2>
+              <p class="mb-0">
+                Review the employee information currently held by HR without entering edit mode.
+              </p>
+            </div>
           </div>
 
-          <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Close employee filled form"
+          <button type="button" class="btn hr-employee-details-modal-close"
+            aria-label="Close employee filled form"
             onclick="window.hrCloseEmployeeFilledForm?.()">
-            <i class="bi bi-x-lg"></i>
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
           </button>
-        </div>
+        </header>
 
-        <div id="employeeFilledFormContent" class="card-body p-4">
-          <div class="text-center text-secondary py-4">
+        <div id="employeeFilledFormContent" class="hr-employee-details-modal-content">
+          <div class="hr-employee-details-loading" role="status">
             Select an employee record to view the filled form.
           </div>
         </div>
 
-        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
+        <footer class="hr-employee-details-modal-footer">
+          <span class="hr-employee-details-modal-footer-note">
+            <i class="bi bi-shield-lock" aria-hidden="true"></i>
+            Controlled HR view
+          </span>
+
           <button type="button" class="btn btn-outline-secondary dashboard-action-btn"
             onclick="window.hrCloseEmployeeFilledForm?.()">
             Close View
           </button>
-        </div>
-      </div>
+        </footer>
+      </section>
     </div>
   </div>
 
@@ -6409,64 +6646,96 @@ Disable browser address autofill popup on HR employee address fields. -->
        Login/logout clears the key so they always land on Profile. -->
   <script>
     (function () {
-      try {
-        var PREFIX = "hrPayroll:lastHrWorkspace";
-        var workspace = "profile";
+      var workspace = "dashboard";
 
-        // Scan sessionStorage for any key written by rememberHrWorkspace.
-        // The full key includes userId:tenantId which we don't have here,
-        // so match by prefix. One HR user per browser session in practice.
-        for (var i = 0; i < sessionStorage.length; i++) {
-          var key = sessionStorage.key(i);
-          if (key && key.indexOf(PREFIX) === 0) {
-            var val = sessionStorage.getItem(key);
-            if (val === "employees" || val === "review" || val === "setup" || val === "payroll" || val === "selfservice") {
-              workspace = val;
-            }
+      var sectionIds = {
+        dashboard: "hrDashboardSection",
+        profile: "hrProfileSection",
+        employees: "hrEmployeesSection",
+        review: "hrReviewSection",
+        payroll: "hrPayrollSection",
+        setup: "hrSetupSection",
+        selfservice: "hrSelfServiceSection"
+      };
+
+      var buttonIds = {
+        dashboard: "hrTabDashboardBtn",
+        profile: "hrTabProfileBtn",
+        employees: "hrTabEmployeesBtn",
+        review: "hrTabReviewBtn",
+        payroll: "hrTabPayrollBtn",
+        setup: "hrTabSetupBtn",
+        selfservice: "hrTabSelfServiceBtn"
+      };
+
+      try {
+        var prefix = "hrPayroll:lastHrWorkspace:v2";
+
+        for (var index = 0; index < sessionStorage.length; index += 1) {
+          var key = sessionStorage.key(index);
+
+          if (!key || key.indexOf(prefix) !== 0) {
+            continue;
+          }
+
+          var rememberedWorkspace = sessionStorage.getItem(key);
+
+          if (
+            rememberedWorkspace &&
+            Object.prototype.hasOwnProperty.call(
+              sectionIds,
+              rememberedWorkspace
+            )
+          ) {
+            workspace = rememberedWorkspace;
             break;
           }
         }
 
-        if (workspace !== "profile") {
-          // Hide profile section (visible by default in HTML)
-          var profileSection = document.getElementById("hrProfileSection");
-          if (profileSection) profileSection.classList.add("d-none");
+        Object.keys(sectionIds).forEach(function (workspaceName) {
+          var section = document.getElementById(sectionIds[workspaceName]);
 
-          // Show the remembered section (hidden by default in HTML)
-          var sectionIds = {
-            employees: "hrEmployeesSection",
-            review: "hrReviewSection",
-            setup: "hrSetupSection",
-            payroll: "hrPayrollSection",
-            selfservice: "hrSelfServiceSection"
-          };
-          var activeSection = document.getElementById(sectionIds[workspace]);
-          if (activeSection) activeSection.classList.remove("d-none");
-
-          // Deactivate Profile tab button
-          var profileBtn = document.getElementById("hrTabProfileBtn");
-          if (profileBtn) {
-            profileBtn.className = profileBtn.className.replace("btn-primary", "btn-outline-primary");
+          if (section) {
+            section.classList.add("d-none");
           }
+        });
 
-          // Activate the correct tab button
-          var btnIds = {
-            employees: "hrTabEmployeesBtn",
-            review: "hrTabReviewBtn",
-            setup: "hrTabSetupBtn",
-            payroll: "hrTabPayrollBtn",
-            selfservice: "hrTabSelfServiceBtn"
-          };
-          var activeBtn = document.getElementById(btnIds[workspace]);
-          if (activeBtn) {
-            activeBtn.className = activeBtn.className.replace("btn-outline-primary", "btn-primary");
-          }
+        var activeSection = document.getElementById(sectionIds[workspace]);
+
+        if (activeSection) {
+          activeSection.classList.remove("d-none");
         }
 
-        // Always scroll to top on refresh regardless of which workspace is restored
-        window.scrollTo(0, 0);
-      } catch (e) {
-        // sessionStorage blocked — HTML defaults handle it fine
+        Object.keys(buttonIds).forEach(function (workspaceName) {
+          var button = document.getElementById(buttonIds[workspaceName]);
+
+          if (!button) {
+            return;
+          }
+
+          button.classList.remove("active");
+          button.removeAttribute("aria-current");
+        });
+
+        var activeButton = document.getElementById(buttonIds[workspace]);
+
+        if (activeButton) {
+          activeButton.classList.add("active");
+          activeButton.setAttribute("aria-current", "page");
+        }
+
+        document.body.dataset.hrInitialWorkspace = workspace;
+      }
+      catch (error) {
+        console.warn(
+          "The remembered HR workspace could not be applied before first paint.",
+          error
+        );
+      }
+      finally {
+        // HR WORKSPACE FIRST PAINT FINALISATION - STEP 1
+        // Keep the shell hidden until authenticated JavaScript resolves the
+        // exact user-and-tenant workspace key and restores the full header.
       }
     })();
   </script>
