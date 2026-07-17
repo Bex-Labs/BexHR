@@ -1433,98 +1433,121 @@
           </div>
         </div>
       </section>
-      <!-- =========================================================
-     HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1A
-     UI only for importing multiple employee records from CSV.
-
-     This is placed inside the HR Employees workspace, before the
-     single Create Employee Profile form, so HR can choose either:
-     - batch employee upload, or
-     - manual one-by-one employee creation.
-
-     JavaScript parsing, validation, template download, and saving
-     will be added in later steps.
-========================================================== -->
-      <section class="card dashboard-section-card mb-4">
+      <!-- FLEXIBLE BATCH EMPLOYEE IMPORT - STEP 1
+           Modern three-stage workflow. First Name, Last Name, and a valid
+           unique Work Email remain the only minimum identity fields.
+           Other incomplete details are reviewed as warnings, not blockers. -->
+      <section class="card dashboard-section-card hr-batch-employee-card mb-4" id="batchEmployeeImportCard">
         <div class="card-body p-4 p-lg-5">
-          <div class="mb-4">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+          <div class="hr-batch-employee-header mb-4">
+            <div class="hr-batch-employee-heading">
+              <span class="hr-batch-employee-icon" aria-hidden="true">
+                <i class="bi bi-people-fill"></i>
+              </span>
               <div>
+                <span class="hr-people-section-kicker">Bulk onboarding</span>
                 <h2 class="section-heading h4 mb-1">Batch Employee Import</h2>
                 <p class="section-subtext mb-0">
-                  Upload a CSV file to prepare multiple employee profiles for review before saving.
+                  Upload, review, and create multiple employee profiles without blocking rows that only need optional details completed later.
                 </p>
               </div>
             </div>
+
+            <span class="hr-batch-flexible-pill">
+              <i class="bi bi-unlock me-2"></i>Flexible import
+            </span>
           </div>
 
-          <div id="batchEmployeeCsvImportPanel" class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
-              <div>
-                <div class="fw-bold">Employee CSV Import</div>
-                <div class="small text-secondary">
-                  Import employee rows using the approved employee CSV template.
-                </div>
-              </div>
+          <div class="hr-batch-workflow" aria-label="Batch employee import workflow">
+            <div class="hr-batch-workflow-step is-active">
+              <span>1</span>
+              <div><strong>Upload CSV</strong><small>Select the approved employee template.</small></div>
+            </div>
+            <div class="hr-batch-workflow-connector" aria-hidden="true"></div>
+            <div class="hr-batch-workflow-step">
+              <span>2</span>
+              <div><strong>Review records</strong><small>Confirm eligible, incomplete, duplicate, and blocked rows.</small></div>
+            </div>
+            <div class="hr-batch-workflow-connector" aria-hidden="true"></div>
+            <div class="hr-batch-workflow-step">
+              <span>3</span>
+              <div><strong>Create employees</strong><small>Import every eligible row independently.</small></div>
+            </div>
+          </div>
 
-              <span class="badge rounded-pill text-bg-light border px-3 py-2">
-                Review before save
-              </span>
+          <div class="hr-batch-minimum-rule" role="note">
+            <i class="bi bi-info-circle" aria-hidden="true"></i>
+            <div>
+              <strong>Minimum identity rule</strong>
+              <span>First Name, Last Name, and a valid unique Work Email are required. Department, job title, employment date, and optional biodata can be completed later.</span>
+            </div>
+          </div>
+
+          <div id="batchEmployeeCsvImportPanel" class="hr-batch-upload-panel mb-4">
+            <div class="hr-batch-upload-copy">
+              <span class="hr-batch-upload-symbol" aria-hidden="true"><i class="bi bi-file-earmark-spreadsheet"></i></span>
+              <div>
+                <div class="fw-bold">Employee CSV file</div>
+                <div class="small text-secondary">Use the approved template so column names map safely to employee records.</div>
+              </div>
             </div>
 
-            <div class="row g-3 align-items-end">
-              <div class="col-12 col-lg-6">
-                <label for="batchEmployeeCsvFile" class="form-label fw-semibold">
-                  Employee CSV File <span class="text-danger">*</span>
-                </label>
+            <div class="hr-batch-upload-controls">
+              <div class="hr-batch-file-field">
+                <label for="batchEmployeeCsvFile" class="form-label fw-semibold">Choose CSV file</label>
                 <input type="file" id="batchEmployeeCsvFile" class="form-control" accept=".csv,text/csv" />
-                <div class="form-text">
-                  Use the employee import template, then upload the completed CSV here.
-                </div>
               </div>
 
-              <div class="col-12 col-lg-6">
-                <div class="d-flex flex-wrap gap-2">
-                  <button type="button" id="importBatchEmployeesCsvBtn" class="btn btn-secondary dashboard-action-btn"
-                    disabled>
-                    <i class="bi bi-upload me-2"></i>Import CSV
-                  </button>
-
-                  <button type="button" id="clearBatchEmployeesCsvBtn"
-                    class="btn btn-outline-secondary dashboard-action-btn">
-                    <i class="bi bi-x-circle me-2"></i>Clear
-                  </button>
-
-                  <button type="button" id="downloadBatchEmployeesCsvTemplateBtn"
-                    class="btn btn-outline-primary dashboard-action-btn">
-                    <i class="bi bi-download me-2"></i>Download Employee Template
-                  </button>
-                </div>
+              <div class="hr-batch-action-row">
+                <button type="button" id="importBatchEmployeesCsvBtn" class="btn btn-secondary dashboard-action-btn" disabled>
+                  <i class="bi bi-upload me-2"></i>Import CSV
+                </button>
+                <button type="button" id="clearBatchEmployeesCsvBtn" class="btn btn-outline-secondary dashboard-action-btn">
+                  <i class="bi bi-x-circle me-2"></i>Clear
+                </button>
+                <button type="button" id="downloadBatchEmployeesCsvTemplateBtn" class="btn btn-outline-primary dashboard-action-btn">
+                  <i class="bi bi-download me-2"></i>Download Template
+                </button>
               </div>
             </div>
 
             <div id="batchEmployeeCsvImportSummary" class="alert alert-light border d-none mt-3 mb-0"></div>
           </div>
 
-          <div id="batchEmployeeReviewPanel" class="alert alert-light border d-none mb-0">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
-              <div>
-                <div class="fw-bold">Batch Employee Review</div>
-                <div class="small text-secondary">
-                  Review valid employee rows before creating employee profiles.
-                </div>
-              </div>
+          <div class="hr-batch-status-grid" aria-label="Batch import review totals">
+            <article class="hr-batch-status-card status-ready">
+              <span><i class="bi bi-check2-circle"></i></span>
+              <div><small>Ready</small><strong id="batchEmployeeReadyCount">0</strong></div>
+            </article>
+            <article class="hr-batch-status-card status-warning">
+              <span><i class="bi bi-exclamation-circle"></i></span>
+              <div><small>Eligible with gaps</small><strong id="batchEmployeeNeedsCompletionCount">0</strong></div>
+            </article>
+            <article class="hr-batch-status-card status-duplicate">
+              <span><i class="bi bi-files"></i></span>
+              <div><small>Duplicates</small><strong id="batchEmployeeDuplicateCount">0</strong></div>
+            </article>
+            <article class="hr-batch-status-card status-blocked">
+              <span><i class="bi bi-slash-circle"></i></span>
+              <div><small>Blocked</small><strong id="batchEmployeeBlockedCount">0</strong></div>
+            </article>
+          </div>
 
-              <div id="batchEmployeeReviewCount" class="badge text-bg-primary rounded-pill px-3 py-2">
-                0 ready
+          <div id="batchEmployeeReviewPanel" class="hr-batch-review-panel d-none">
+            <div class="hr-batch-review-header">
+              <div>
+                <span class="hr-people-section-kicker">Review queue</span>
+                <h3 class="h5 fw-bold mb-1">Batch Employee Review</h3>
+                <p class="small text-secondary mb-0">Every row shown below is eligible to create. Amber notes identify profile details that can be completed later. Duplicate and Blocked rows are excluded.</p>
               </div>
+              <div id="batchEmployeeReviewCount" class="badge text-bg-primary rounded-pill px-3 py-2">0 eligible</div>
             </div>
 
             <div id="batchEmployeeSkippedRows" class="alert alert-warning border d-none mb-3"></div>
 
             <div class="dashboard-table-hint">Swipe to view more →</div>
-            <div class="dashboard-table-wrap table-responsive">
-              <table class="table align-middle mb-0">
+            <div class="dashboard-table-wrap table-responsive hr-batch-review-table-wrap">
+              <table class="table align-middle mb-0 hr-batch-review-table">
                 <thead>
                   <tr>
                     <th>Employee</th>
@@ -1538,66 +1561,54 @@
                   </tr>
                 </thead>
                 <tbody id="batchEmployeeReviewTableBody">
-                  <tr>
-                    <td colspan="8" class="text-center text-secondary py-4">
-                      No employee CSV rows imported yet.
-                    </td>
-                  </tr>
+                  <tr><td colspan="8" class="text-center text-secondary py-4">No employee CSV rows imported yet.</td></tr>
                 </tbody>
               </table>
             </div>
 
-            <div
-              class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mt-3 pt-3 border-top">
+            <div class="hr-batch-review-footer">
               <div class="small text-secondary">
-                Only valid rows will be created as employee profiles.
+                Eligible rows are created independently, so one failed or duplicate row does not stop the rest of the batch.
               </div>
-
-              <button type="button" id="submitBatchEmployeesBtn"
-                class="btn btn-primary dashboard-action-btn text-nowrap" disabled>
-                <i class="bi bi-person-plus me-2"></i>Create Employees
+              <button type="button" id="submitBatchEmployeesBtn" class="btn btn-primary dashboard-action-btn text-nowrap" disabled>
+                <i class="bi bi-person-plus me-2"></i>Create Eligible Employees
               </button>
             </div>
           </div>
         </div>
       </section>
-      <section class="card dashboard-section-card mb-4">
+      <section class="card dashboard-section-card hr-create-employee-card mb-4" id="createEmployeeProfileCard">
         <div class="card-body p-4 p-lg-5">
 
-          <!-- CREATE EMPLOYEE PROFILE HEADER REPAIR - STEP 1
-               Keep the employee creation card clearly separated from payroll finalisation.
-               JS expects employeeFormTitle / employeeFormSubtext for create/edit mode,
-               while payrollFormTitle / payrollFormSubtext must remain reserved for Payroll only. -->
-          <div class="mb-4">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+          <!-- CREATE EMPLOYEE PROFILE MODERNISATION - STEP 1
+               Presentation shell only. Existing form IDs, validation, save/edit,
+               role restrictions, document uploads, and Supabase behaviour remain. -->
+          <div class="hr-create-employee-header mb-4">
+            <div class="hr-create-employee-heading">
+              <span class="hr-create-employee-icon" aria-hidden="true"><i class="bi bi-person-plus"></i></span>
               <div>
-                <h2 class="section-heading h4 mb-1" id="employeeFormTitle">
-                  Create Employee Profile
-                </h2>
+                <span class="hr-people-section-kicker">Employee onboarding</span>
+                <h2 class="section-heading h4 mb-1" id="employeeFormTitle">Create Employee Profile</h2>
                 <p class="section-subtext mb-0" id="employeeFormSubtext">
                   Create a new employee record, link account access, and complete core HR profile details.
                 </p>
               </div>
-
-              <!-- CREATE EMPLOYEE PROFILE HEADER REPAIR - STEP 1
-                   Keep the collapse/expand control on one line.
-                   This prevents the icon from sitting above the label on deployed layouts. -->
-              <button type="button" id="toggleEmployeeFormCardBtn"
-                class="btn btn-outline-secondary dashboard-action-btn text-nowrap d-inline-flex align-items-center justify-content-center flex-shrink-0 align-self-start"
-                aria-expanded="true" aria-controls="employeeFormCardCollapse">
-                <i class="bi bi-chevron-up me-2"></i>
-                <span>Collapse</span>
-              </button>
             </div>
+
+            <button type="button" id="toggleEmployeeFormCardBtn"
+              class="btn btn-outline-secondary dashboard-action-btn text-nowrap d-inline-flex align-items-center justify-content-center flex-shrink-0"
+              aria-expanded="true" aria-controls="employeeFormCardCollapse">
+              <i class="bi bi-chevron-up me-2"></i><span>Collapse</span>
+            </button>
           </div>
 
           <!-- CREATE EMPLOYEE PROFILE HEADER REPAIR - STEP 2
                Restore the employee form stepper wrapper.
                Without this wrapper, the stepper renders vertically and looks broken. -->
 
-          <div id="employeeFormCardCollapse">
-            <div class="bexhr-form-steps mb-4" id="employeeFormSteps">
-              <div class="bexhr-form-step form-step-done" data-step="1" title="Core Details">
+          <div id="employeeFormCardCollapse" class="hr-create-employee-collapse">
+            <div class="bexhr-form-steps hr-create-employee-stepper mb-4" id="employeeFormSteps">
+              <div class="bexhr-form-step form-step-current" data-step="1" title="Core Details" aria-current="step">
                 <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">1</span></div>
                 <span class="bexhr-step-label">Core Details</span>
               </div>
@@ -1632,7 +1643,7 @@
                 <span class="bexhr-step-label">Documents</span>
               </div>
             </div>
-            <div class="dashboard-toolbar hr-form-toolbar mb-4">
+            <div class="dashboard-toolbar hr-form-toolbar hr-create-employee-toolbar mb-4">
               <!-- CREATE EMPLOYEE PROFILE HEADER REPAIR - STEP 3
                    Employee form badge must not reuse payrollFormModeBadge.
                    The payroll badge belongs only to the Payroll workspace. -->
@@ -1656,7 +1667,7 @@
             <!-- EMPLOYEE BIODATA COMPLETION - STEP 4I
      Disable browser autofill/address-save prompts on the HR employee form.
      Employee address data is app data, not the signed-in user's browser address. -->
-            <form id="employeeCreateForm" novalidate autocomplete="off">
+            <form id="employeeCreateForm" class="hr-create-employee-form" novalidate autocomplete="off">
               <input type="hidden" id="editingEmployeeId" />
 
               <div class="row g-4">
@@ -2829,12 +2840,15 @@ Disable browser address autofill popup on HR employee address fields. -->
                   </div>
 
                   <div class="col-12">
-                    <div class="d-flex flex-wrap gap-2 pt-2">
+                    <div class="hr-create-employee-submit-bar">
+                      <div class="hr-create-employee-submit-copy">
+                        <strong>Ready to save?</strong>
+                        <span>Required identity fields must be complete. Optional sections can be updated later.</span>
+                      </div>
+
                       <!-- EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1D FIX
-     Employee create/update should stay disabled until required fields are complete.
-     This keeps employee creation consistent with other HR/payroll forms. -->
-                      <button type="submit" id="saveEmployeeBtn" class="btn btn-secondary dashboard-action-btn"
-                        disabled>
+                           Existing readiness and save behaviour remain unchanged. -->
+                      <button type="submit" id="saveEmployeeBtn" class="btn btn-secondary dashboard-action-btn" disabled>
                         <i class="bi bi-person-plus me-2"></i>
                         <span id="saveEmployeeBtnText">Create Employee Profile</span>
                       </button>

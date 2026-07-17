@@ -4489,6 +4489,22 @@ function cacheDomElements() {
     dashboardToastCloseBtn: document.getElementById("dashboardToastCloseBtn"),
   };
 }
+// CREATE EMPLOYEE CONTROLLED VIEWPORT - STEP 1
+// Desktop and tablet use an internal form scroll area. On phones, the expanded
+// employee form becomes a full-screen workspace and locks the page behind it.
+function syncEmployeeFormViewportState() {
+  const isExpanded = Boolean(
+    state.dom.employeeFormCardCollapse &&
+    !state.dom.employeeFormCardCollapse.classList.contains("d-none"),
+  );
+  const isMobileViewport = window.matchMedia("(max-width: 767.98px)").matches;
+
+  document.body?.classList.toggle(
+    "hr-employee-form-mobile-open",
+    isExpanded && isMobileViewport,
+  );
+}
+
 // DESCRIPTION ITEM 1 - STEP 5
 // Simple reusable collapse toggle for HR dashboard cards.
 // Uses d-none so we do not depend on external collapse plugins.
@@ -4510,6 +4526,10 @@ function bindCardCollapseToggle(button, panel) {
 
     if (label) {
       label.textContent = isNowHidden ? "Expand" : "Collapse";
+    }
+
+    if (panel === state.dom.employeeFormCardCollapse) {
+      syncEmployeeFormViewportState();
     }
   });
 }
@@ -4534,6 +4554,10 @@ function setDashboardCardExpanded(button, panel, shouldExpand) {
 
   if (label) {
     label.textContent = shouldExpand ? "Collapse" : "Expand";
+  }
+
+  if (panel === state.dom.employeeFormCardCollapse) {
+    syncEmployeeFormViewportState();
   }
 }
 
@@ -9121,6 +9145,12 @@ function bindEvents() {
     state.dom.employeeFormCardCollapse,
   );
 
+  // CREATE EMPLOYEE CONTROLLED VIEWPORT - STEP 1
+  // Keep the mobile page lock accurate when the viewport changes orientation
+  // or crosses the phone breakpoint while the form is expanded.
+  window.addEventListener("resize", syncEmployeeFormViewportState);
+  syncEmployeeFormViewportState();
+
   bindCardCollapseToggle(
     state.dom.toggleEmployeeListCardBtn,
     state.dom.employeeListCardCollapse,
@@ -10500,7 +10530,7 @@ async function handleBatchEmployeeSubmit() {
   if (!preparedRows.length) {
     showPageAlert(
       "warning",
-      "There are no valid employee rows ready to create. Please import a valid employee CSV first.",
+      "There are no eligible employee rows ready to create. Import and review an employee CSV first.",
     );
     return;
   }
@@ -10511,93 +10541,76 @@ async function handleBatchEmployeeSubmit() {
     setBatchEmployeeSubmitLoading(true);
     await waitForNextPaint();
 
-    const duplicateEmails = await findExistingBatchEmployeeEmails(
-      preparedRows.map((employee) => employee.work_email),
+    // FLEXIBLE BATCH EMPLOYEE IMPORT - STEP 5
+    // Recheck email duplicates, then insert each eligible row independently.
+    // A duplicate or database failure on one row must not stop the rest.
+    const duplicateEmailSet = new Set(
+      await findExistingBatchEmployeeEmails(
+        preparedRows.map((employee) => employee.work_email),
+      ),
     );
-
-    if (duplicateEmails.length) {
-      showPageAlert(
-        "warning",
-        `Employee creation stopped because ${duplicateEmails.length} email(s) already exist: <strong>${escapeHtml(
-          duplicateEmails.slice(0, 5).join(", "),
-        )}</strong>. Please clear, correct the CSV, and import again.`,
-      );
-
-      showDashboardToast(
-        "warning",
-        "Batch employee creation stopped",
-        "One or more reviewed employees already exist. No new employee records were created.",
-      );
-
-      await refreshEmployeeWorkspace();
-      // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
-      // Employee records are now loaded, so resolve the signed-in user's
-      // employees.system_role and apply People maintenance restrictions.
-      applyHrPeopleAccessControls();
-      return;
-    }
-
-    const rowsToInsert = [];
-
-    // HRP-EMPNUM - Resolve tenant ID once for the whole batch.
-    // generateNextEmployeeCustomId() also calls this internally, but capturing
-    // it here lets us pass it directly to the payload builder so every row
-    // carries the correct tenant_id without an extra lookup per row.
     const batchTenantId = getRequiredTenantIdForHrEmployeeData();
-
-    // EMPLOYEE NUMBER MANUAL OR AUTOMATIC ENTRY - STEP 1E
-    // Reserve all supplied CSV Employee Numbers before generating blank ones.
-    // This prevents an automatic number from colliding with a manual number
-    // waiting inside the same batch.
+    const supabase = getSupabaseClient();
     const reservedEmployeeNumbers = new Set(
       preparedRows
-        .map((employee) =>
-          String(employee.employee_number || "").trim().toUpperCase(),
-        )
+        .map((employee) => String(employee.employee_number || "").trim().toUpperCase())
         .filter(Boolean),
     );
 
+    const createdRows = [];
+    const excludedRows = [];
+
     for (const employee of preparedRows) {
+      const normalisedEmail = String(employee.work_email || "").trim().toLowerCase();
+
+      if (duplicateEmailSet.has(normalisedEmail)) {
+        excludedRows.push({
+          employee,
+          category: "duplicate",
+          reason: "Work Email already exists",
+        });
+        continue;
+      }
+
       let employeeNumber = String(employee.employee_number || "").trim();
 
       if (!employeeNumber) {
         do {
           employeeNumber = await generateNextEmployeeCustomId();
-        } while (
-          reservedEmployeeNumbers.has(employeeNumber.toUpperCase())
-        );
+        } while (reservedEmployeeNumbers.has(employeeNumber.toUpperCase()));
       }
 
       reservedEmployeeNumbers.add(employeeNumber.toUpperCase());
 
-      rowsToInsert.push(
-        buildBatchEmployeeInsertPayload(
-          employee,
-          employeeNumber,
-          batchTenantId,
-        ),
+      const payload = buildBatchEmployeeInsertPayload(
+        employee,
+        employeeNumber,
+        batchTenantId,
       );
+
+      const { error } = await supabase.from("employees").insert([payload]);
+
+      if (error) {
+        const errorMessage = String(error.message || "Employee could not be created").trim();
+        const lowerMessage = errorMessage.toLowerCase();
+        const isDuplicate =
+          lowerMessage.includes("duplicate") ||
+          lowerMessage.includes("work_email") ||
+          lowerMessage.includes("employee_number") ||
+          lowerMessage.includes("unique");
+
+        excludedRows.push({
+          employee,
+          category: isDuplicate ? "duplicate" : "failed",
+          reason: errorMessage,
+        });
+        continue;
+      }
+
+      createdRows.push({ ...employee, employee_number: employeeNumber });
+      duplicateEmailSet.add(normalisedEmail);
     }
 
-    const supabase = getSupabaseClient();
-
-    // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1F-3
-    // Insert the reviewed employees without chaining .select("*").
-    // Some Supabase/RLS setups allow insert but reject the immediate select,
-    // which makes the UI show "creation failed" even when the insert worked.
-    const { error } = await supabase
-      .from("employees")
-      .insert(rowsToInsert);
-
-    if (error) {
-      throw new Error(error.message || "Employee batch insert failed.");
-    }
-
-    const createdCount = rowsToInsert.length;
-
-    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
-    // Child biodata cannot be inserted until the employees exist.
-    // Save it after employee creation and before clearing the reviewed batch.
     let childBiodataSummary = {
       addressRows: 0,
       nextOfKinRows: 0,
@@ -10605,127 +10618,95 @@ async function handleBatchEmployeeSubmit() {
       dependantRows: 0,
       totalRows: 0,
     };
-
     let childBiodataWarning = "";
 
-    try {
-      childBiodataSummary = await saveBatchEmployeeChildBiodataForCreatedEmployees(
-        preparedRows,
-        batchTenantId,
-      );
-    } catch (childError) {
-      console.error("Batch employee child biodata save failed:", childError);
-      childBiodataWarning = String(childError?.message || "").trim();
+    if (createdRows.length) {
+      try {
+        childBiodataSummary = await saveBatchEmployeeChildBiodataForCreatedEmployees(
+          createdRows,
+          batchTenantId,
+        );
+      } catch (childError) {
+        console.error("Batch employee child biodata save failed:", childError);
+        childBiodataWarning = String(childError?.message || "").trim();
+      }
     }
 
-    // Clear prepared rows after successful save so HR cannot accidentally
-    // click Create Employees again for the same CSV batch.
     state.batchEmployeePreparedRows = [];
-
-    if (state.dom.batchEmployeeCsvFile) {
-      state.dom.batchEmployeeCsvFile.value = "";
-    }
-
+    if (state.dom.batchEmployeeCsvFile) state.dom.batchEmployeeCsvFile.value = "";
     if (state.dom.batchEmployeeReviewCount) {
-      state.dom.batchEmployeeReviewCount.textContent = `${createdCount} created`;
+      state.dom.batchEmployeeReviewCount.textContent = `${createdRows.length} created`;
     }
-
     if (state.dom.batchEmployeeReviewTableBody) {
       state.dom.batchEmployeeReviewTableBody.innerHTML = `
         <tr>
-          <td colspan="8" class="text-center text-success py-4">
-            ${createdCount} employee profile(s) were created successfully. Check the Full Employee List below.
+          <td colspan="8" class="text-center ${createdRows.length ? "text-success" : "text-warning"} py-4">
+            ${createdRows.length} employee profile(s) created. ${excludedRows.length} row(s) excluded without stopping the batch.
           </td>
-        </tr>
-      `;
+        </tr>`;
     }
 
     if (state.dom.batchEmployeeSkippedRows) {
-      state.dom.batchEmployeeSkippedRows.classList.add("d-none");
-      state.dom.batchEmployeeSkippedRows.innerHTML = "";
+      if (excludedRows.length) {
+        state.dom.batchEmployeeSkippedRows.classList.remove("d-none");
+        state.dom.batchEmployeeSkippedRows.innerHTML = `
+          <div class="fw-semibold mb-1">Rows not created</div>
+          <ul class="small mb-0">
+            ${excludedRows.slice(0, 12).map(({ employee, category, reason }) => `
+              <li>
+                <span class="badge ${category === "duplicate" ? "text-bg-info" : "text-bg-danger"} me-1">
+                  ${category === "duplicate" ? "Duplicate" : "Failed"}
+                </span>
+                Row ${escapeHtml(employee.rowNumber)} — ${escapeHtml(employee.work_email)}: ${escapeHtml(reason)}
+              </li>`).join("")}
+          </ul>`;
+      } else {
+        state.dom.batchEmployeeSkippedRows.classList.add("d-none");
+        state.dom.batchEmployeeSkippedRows.innerHTML = "";
+      }
     }
 
     if (state.dom.batchEmployeeCsvImportSummary) {
       state.dom.batchEmployeeCsvImportSummary.classList.remove("d-none");
       state.dom.batchEmployeeCsvImportSummary.innerHTML = `
         <div class="fw-semibold">Batch employee creation completed</div>
-        <div class="small">
-          ${createdCount} employee profile(s) were created successfully.
-        </div>
+        <div class="small">${createdRows.length} employee profile(s) created; ${excludedRows.length} row(s) excluded.</div>
         <div class="small text-secondary mt-1">
-          Child biodata saved:
-          ${childBiodataSummary.addressRows} address row(s),
-          ${childBiodataSummary.nextOfKinRows} next of kin row(s),
-          ${childBiodataSummary.educationRows} education row(s),
-          ${childBiodataSummary.dependantRows} dependant row(s).
+          Child biodata saved: ${childBiodataSummary.addressRows} address, ${childBiodataSummary.nextOfKinRows} next of kin, ${childBiodataSummary.educationRows} education, and ${childBiodataSummary.dependantRows} dependant row(s).
         </div>
-        ${childBiodataWarning
-          ? `<div class="small text-warning mt-1">Some child biodata could not be saved: ${escapeHtml(childBiodataWarning)}</div>`
-          : ""
-        }
-      `;
+        ${childBiodataWarning ? `<div class="small text-warning mt-1">Some child biodata could not be saved: ${escapeHtml(childBiodataWarning)}</div>` : ""}`;
     }
 
+    updateBatchEmployeeImportCounts([], []);
     updateBatchEmployeeCsvImportButtonState();
-
     await refreshEmployeeWorkspace();
+    applyHrPeopleAccessControls();
 
+    const alertType = excludedRows.length || childBiodataWarning ? "warning" : "success";
     showPageAlert(
-      childBiodataWarning ? "warning" : "success",
-      childBiodataWarning
-        ? `${createdCount} employee profile(s) were created, but some child biodata could not be saved: ${escapeHtml(childBiodataWarning)}`
-        : `${createdCount} employee profile(s) and ${childBiodataSummary.totalRows} child biodata row(s) were created successfully from the CSV import.`,
+      alertType,
+      `${createdRows.length} employee profile(s) were created. ${excludedRows.length} row(s) were excluded without stopping eligible employees.`,
     );
-
     showDashboardToast(
-      "success",
-      "Employees created",
-      `${createdCount} employee profile(s) were added to the HR employee list.`,
+      alertType,
+      createdRows.length ? "Batch import completed" : "No employees created",
+      `${createdRows.length} created; ${excludedRows.length} excluded.`,
     );
 
-    redirectToFullEmployeeListAfterEmployeeSave();
+    if (createdRows.length) redirectToFullEmployeeListAfterEmployeeSave();
   } catch (error) {
-    // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1F-3
-    // Surface Supabase errors clearly instead of hiding them behind [object Object].
     const errorMessage = String(error?.message || "").trim();
-    const lowerMessage = errorMessage.toLowerCase();
-
     console.error("Error creating batch employees:", error);
-
-    if (
-      lowerMessage.includes("duplicate key") ||
-      lowerMessage.includes("work_email") ||
-      lowerMessage.includes("employees_work_email")
-    ) {
-      showPageAlert(
-        "warning",
-        "One or more employees in this CSV already exist by Work Email. Please clear the import, remove existing employees from the CSV, and import again.",
-      );
-
-      showDashboardToast(
-        "warning",
-        "Duplicate employee found",
-        "Batch import is create-only, so existing employees are skipped instead of being created again.",
-      );
-
-      await refreshEmployeeWorkspace();
-      return;
-    }
-
     showPageAlert(
       "danger",
       errorMessage || "Batch employee records could not be created.",
     );
-
     showDashboardToast(
       "danger",
       "Batch employee creation failed",
-      errorMessage || "The reviewed employee rows could not be saved. Please check the CSV and try again.",
+      errorMessage || "The batch could not be processed. No successful row was rolled back.",
     );
-  }
-
-  finally {
-    // Keep spinner visible briefly so the user sees feedback.
+  } finally {
     await waitForMinimumLoadingFeedback(startedAt, 600);
     setBatchEmployeeSubmitLoading(false);
   }
@@ -11095,35 +11076,19 @@ function buildBatchEmployeePreparedRowFromCsv(
   const dependantPhoneNumber = getBatchEmployeeCsvCell(row, headerMap, "Dependant Phone Number");
   const dependantCoverageType = getBatchEmployeeCsvCell(row, headerMap, "Dependant Coverage Type");
 
-  const missingFields = [];
-
-  if (!firstName) missingFields.push("First Name");
-  if (!lastName) missingFields.push("Last Name");
-  if (!workEmail) missingFields.push("Work Email");
-  if (!department) missingFields.push("Department");
-  if (!jobTitle) missingFields.push("Job Title");
-  if (!employmentDate) missingFields.push("Valid Employment Date");
-
-  if (rawDateOfBirth && !dateOfBirth) {
-    missingFields.push("Valid Date Of Birth");
-  }
-
-  if (rawExitDate && !exitDate) {
-    missingFields.push("Valid Exit Date");
-  }
-
+  // FLEXIBLE BATCH EMPLOYEE IMPORT - STEP 2
+  // Only minimum identity failures block a row. Optional employment and
+  // biodata gaps become warnings so the employee can be completed later.
+  const blockReasons = [];
+  const duplicateReasons = [];
+  const warnings = [];
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+  if (!firstName) blockReasons.push("First Name is required");
+  if (!lastName) blockReasons.push("Last Name is required");
+  if (!workEmail) blockReasons.push("Work Email is required");
   if (workEmail && !emailPattern.test(workEmail)) {
-    missingFields.push("Valid Work Email");
-  }
-
-  if (personalEmail && !emailPattern.test(personalEmail)) {
-    missingFields.push("Valid Personal Email");
-  }
-
-  if (approverEmail && !emailPattern.test(approverEmail)) {
-    missingFields.push("Valid Approver Email");
+    blockReasons.push("Work Email must be valid");
   }
 
   const existingEmployeeEmail = (state.employees || []).some(
@@ -11131,36 +11096,32 @@ function buildBatchEmployeePreparedRowFromCsv(
   );
 
   if (workEmail && existingEmployeeEmail) {
-    missingFields.push("Work Email already exists");
+    duplicateReasons.push("Work Email already exists");
   }
 
   if (workEmail && seenEmails.has(normalizeText(workEmail))) {
-    missingFields.push("Duplicate Work Email in CSV");
+    duplicateReasons.push("Duplicate Work Email in CSV");
   }
 
-  if (workEmail) {
-    seenEmails.add(normalizeText(workEmail));
-  }
+  if (workEmail) seenEmails.add(normalizeText(workEmail));
 
-  // EMPLOYEE NUMBER MANUAL OR AUTOMATIC ENTRY - STEP 1D
-  // Check supplied Employee Numbers against current tenant employees
-  // and against earlier rows in this same CSV.
-  const existingEmployeeNumber = (state.employees || []).some((employee) => {
-    return (
+  const existingEmployeeNumber = (state.employees || []).some((employee) =>
+    Boolean(
+      normalizedEmployeeNumber &&
       String(employee.employee_number || "").trim().toUpperCase() ===
-      normalizedEmployeeNumber
-    );
-  });
+        normalizedEmployeeNumber,
+    ),
+  );
 
-  if (normalizedEmployeeNumber && existingEmployeeNumber) {
-    missingFields.push("Employee Number already exists");
+  if (existingEmployeeNumber) {
+    duplicateReasons.push("Employee Number already exists");
   }
 
   if (
     normalizedEmployeeNumber &&
     seenEmployeeNumbers.has(normalizedEmployeeNumber)
   ) {
-    missingFields.push("Duplicate Employee Number in CSV");
+    duplicateReasons.push("Duplicate Employee Number in CSV");
   }
 
   if (normalizedEmployeeNumber) {
@@ -11173,24 +11134,54 @@ function buildBatchEmployeePreparedRowFromCsv(
     last_name: lastName,
   });
 
-  const existingEmployeeName = (state.employees || []).some((employee) => {
-    return buildBatchEmployeeNameDuplicateKey(employee) === incomingNameKey;
-  });
+  const existingEmployeeName = (state.employees || []).some(
+    (employee) =>
+      Boolean(
+        incomingNameKey &&
+        buildBatchEmployeeNameDuplicateKey(employee) === incomingNameKey,
+      ),
+  );
 
   if (incomingNameKey && existingEmployeeName) {
-    missingFields.push("Employee name already exists");
+    warnings.push("Name matches an existing employee; verify identity");
   }
 
   if (incomingNameKey && seenNames.has(incomingNameKey)) {
-    missingFields.push("Duplicate employee name in CSV");
+    warnings.push("Name is repeated in this CSV; verify identity");
   }
 
-  if (incomingNameKey) {
-    seenNames.add(incomingNameKey);
+  if (incomingNameKey) seenNames.add(incomingNameKey);
+
+  if (!department) warnings.push("Department not provided");
+  if (!jobTitle) warnings.push("Job Title not provided");
+
+  if (!rawEmploymentDate) {
+    warnings.push("Employment Date not provided");
+  } else if (!employmentDate) {
+    warnings.push("Employment Date was invalid and will be left blank");
   }
 
-  // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
-  // Validate optional child sections only when HR started them in the CSV.
+  if (rawDateOfBirth && !dateOfBirth) {
+    warnings.push("Date Of Birth was invalid and will be left blank");
+  }
+
+  if (rawExitDate && !exitDate) {
+    warnings.push("Exit Date was invalid and will be left blank");
+  }
+
+  const safePersonalEmail =
+    personalEmail && emailPattern.test(personalEmail) ? personalEmail : "";
+  const safeApproverEmail =
+    approverEmail && emailPattern.test(approverEmail) ? approverEmail : "";
+
+  if (personalEmail && !safePersonalEmail) {
+    warnings.push("Personal Email was invalid and will be omitted");
+  }
+
+  if (approverEmail && !safeApproverEmail) {
+    warnings.push("Approver Email was invalid and will be omitted");
+  }
+
   const currentAddressStarted = hasBatchEmployeeCsvAnyValue([
     currentAddressLine1,
     currentCity,
@@ -11198,6 +11189,12 @@ function buildBatchEmployeePreparedRowFromCsv(
     currentCountry,
     currentPostalCode,
   ]);
+  const includeCurrentAddress = Boolean(
+    currentAddressStarted && currentAddressLine1,
+  );
+  if (currentAddressStarted && !includeCurrentAddress) {
+    warnings.push("Incomplete current address was omitted");
+  }
 
   const permanentAddressStarted = hasBatchEmployeeCsvAnyValue([
     permanentAddressLine1,
@@ -11206,6 +11203,12 @@ function buildBatchEmployeePreparedRowFromCsv(
     permanentCountry,
     permanentPostalCode,
   ]);
+  const includePermanentAddress = Boolean(
+    permanentAddressStarted && permanentAddressLine1,
+  );
+  if (permanentAddressStarted && !includePermanentAddress) {
+    warnings.push("Incomplete permanent address was omitted");
+  }
 
   const nextOfKinStarted = hasBatchEmployeeCsvAnyValue([
     nextOfKinFullName,
@@ -11214,14 +11217,32 @@ function buildBatchEmployeePreparedRowFromCsv(
     nextOfKinEmail,
     nextOfKinAddress,
   ]);
+  const includeNextOfKin = Boolean(
+    nextOfKinStarted &&
+    nextOfKinFullName &&
+    nextOfKinRelationship &&
+    nextOfKinPhoneNumber &&
+    (!nextOfKinEmail || emailPattern.test(nextOfKinEmail)),
+  );
+  if (nextOfKinStarted && !includeNextOfKin) {
+    warnings.push("Incomplete next of kin details were omitted");
+  }
 
   const educationStarted = hasBatchEmployeeCsvAnyValue([
     educationInstitution,
     educationQualification,
     educationFieldOfStudy,
     rawEducationGraduationYear,
-    educationStatus,
   ]);
+  const includeEducation = Boolean(
+    educationStarted &&
+    educationInstitution &&
+    educationQualification &&
+    (!rawEducationGraduationYear || educationGraduationYear),
+  );
+  if (educationStarted && !includeEducation) {
+    warnings.push("Incomplete education details were omitted");
+  }
 
   const dependantStarted = hasBatchEmployeeCsvAnyValue([
     dependantFullName,
@@ -11230,53 +11251,32 @@ function buildBatchEmployeePreparedRowFromCsv(
     dependantPhoneNumber,
     dependantCoverageType,
   ]);
-
-  if (currentAddressStarted && !currentAddressLine1) {
-    missingFields.push("Current Address Line 1");
+  const includeDependant = Boolean(
+    dependantStarted &&
+    dependantFullName &&
+    dependantRelationship &&
+    dependantCoverageType &&
+    (!rawDependantDateOfBirth || dependantDateOfBirth),
+  );
+  if (dependantStarted && !includeDependant) {
+    warnings.push("Incomplete dependant details were omitted");
   }
 
-  if (permanentAddressStarted && !permanentAddressLine1) {
-    missingFields.push("Permanent Address Line 1");
-  }
-
-  if (nextOfKinStarted) {
-    if (!nextOfKinFullName) missingFields.push("Next Of Kin Full Name");
-    if (!nextOfKinRelationship) missingFields.push("Next Of Kin Relationship");
-    if (!nextOfKinPhoneNumber) missingFields.push("Next Of Kin Phone Number");
-    if (nextOfKinEmail && !emailPattern.test(nextOfKinEmail)) {
-      missingFields.push("Valid Next Of Kin Email");
-    }
-  }
-
-  if (educationStarted) {
-    if (!educationInstitution) missingFields.push("Education Institution");
-    if (!educationQualification) missingFields.push("Education Qualification");
-    if (rawEducationGraduationYear && !educationGraduationYear) {
-      missingFields.push("Valid Education Graduation Year");
-    }
-  }
-
-  if (dependantStarted) {
-    if (!dependantFullName) missingFields.push("Dependant Full Name");
-    if (!dependantRelationship) missingFields.push("Dependant Relationship");
-    if (!dependantCoverageType) missingFields.push("Dependant Coverage Type");
-    if (rawDependantDateOfBirth && !dependantDateOfBirth) {
-      missingFields.push("Valid Dependant Date Of Birth");
-    }
-  }
-
-  if (missingFields.length) {
+  if (blockReasons.length || duplicateReasons.length) {
     return {
       skipped: true,
+      category: duplicateReasons.length ? "duplicate" : "blocked",
       rowNumber,
       employeeName: `${firstName} ${lastName}`.trim() || "--",
       workEmail: workEmail || "--",
-      reason: missingFields.join(", "),
+      reason: [...duplicateReasons, ...blockReasons].join(", "),
     };
   }
 
   return {
     skipped: false,
+    import_status: warnings.length ? "needs_completion" : "ready",
+    warnings,
     rowNumber,
 
     first_name: firstName,
@@ -11285,7 +11285,7 @@ function buildBatchEmployeePreparedRowFromCsv(
     employee_number: employeeNumber || null,
 
     work_email: workEmail,
-    personal_email: personalEmail || null,
+    personal_email: safePersonalEmail || null,
     phone_number: phoneNumber || null,
     alternative_phone_number: alternativePhoneNumber || null,
 
@@ -11303,12 +11303,12 @@ function buildBatchEmployeePreparedRowFromCsv(
     identification_issue_state: identificationIssueState || null,
     nin: nin || null,
 
-    department,
-    job_title: jobTitle,
+    department: department || "",
+    job_title: jobTitle || "",
     line_manager: lineManager || null,
-    approver_email: approverEmail || null,
+    approver_email: safeApproverEmail || null,
 
-    employment_date: employmentDate,
+    employment_date: employmentDate || null,
     exit_date: exitDate || null,
 
     hmo_provider: hmoProvider || null,
@@ -11318,215 +11318,167 @@ function buildBatchEmployeePreparedRowFromCsv(
     status,
     system_role: systemRole || null,
 
-    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
-    // Keep child biodata on the prepared row until the employee_id exists.
-    current_address_line_1: currentAddressLine1 || null,
-    current_city: currentCity || null,
-    current_state_region: currentStateRegion || null,
-    current_country: currentCountry || null,
-    current_postal_code: currentPostalCode || null,
+    current_address_line_1: includeCurrentAddress ? currentAddressLine1 : null,
+    current_city: includeCurrentAddress ? currentCity || null : null,
+    current_state_region: includeCurrentAddress ? currentStateRegion || null : null,
+    current_country: includeCurrentAddress ? currentCountry || null : null,
+    current_postal_code: includeCurrentAddress ? currentPostalCode || null : null,
 
-    permanent_address_line_1: permanentAddressLine1 || null,
-    permanent_city: permanentCity || null,
-    permanent_state_region: permanentStateRegion || null,
-    permanent_country: permanentCountry || null,
-    permanent_postal_code: permanentPostalCode || null,
+    permanent_address_line_1: includePermanentAddress ? permanentAddressLine1 : null,
+    permanent_city: includePermanentAddress ? permanentCity || null : null,
+    permanent_state_region: includePermanentAddress ? permanentStateRegion || null : null,
+    permanent_country: includePermanentAddress ? permanentCountry || null : null,
+    permanent_postal_code: includePermanentAddress ? permanentPostalCode || null : null,
 
-    next_of_kin_full_name: nextOfKinFullName || null,
-    next_of_kin_relationship: nextOfKinRelationship || null,
-    next_of_kin_phone_number: nextOfKinPhoneNumber || null,
-    next_of_kin_email: nextOfKinEmail || null,
-    next_of_kin_address: nextOfKinAddress || null,
+    next_of_kin_full_name: includeNextOfKin ? nextOfKinFullName : null,
+    next_of_kin_relationship: includeNextOfKin ? nextOfKinRelationship : null,
+    next_of_kin_phone_number: includeNextOfKin ? nextOfKinPhoneNumber : null,
+    next_of_kin_email: includeNextOfKin ? nextOfKinEmail || null : null,
+    next_of_kin_address: includeNextOfKin ? nextOfKinAddress || null : null,
 
-    education_institution: educationInstitution || null,
-    education_qualification: educationQualification || null,
-    education_field_of_study: educationFieldOfStudy || null,
-    education_graduation_year: educationGraduationYear || null,
-    education_status: educationStatus || "Completed",
-    is_highest_qualification: isHighestQualification,
+    education_institution: includeEducation ? educationInstitution : null,
+    education_qualification: includeEducation ? educationQualification : null,
+    education_field_of_study: includeEducation ? educationFieldOfStudy || null : null,
+    education_graduation_year: includeEducation ? educationGraduationYear || null : null,
+    education_status: includeEducation ? educationStatus || "Completed" : null,
+    is_highest_qualification: includeEducation ? isHighestQualification : false,
 
-    dependant_full_name: dependantFullName || null,
-    dependant_relationship: dependantRelationship || null,
-    dependant_date_of_birth: dependantDateOfBirth || null,
-    dependant_phone_number: dependantPhoneNumber || null,
-    dependant_coverage_type: dependantCoverageType || null,
+    dependant_full_name: includeDependant ? dependantFullName : null,
+    dependant_relationship: includeDependant ? dependantRelationship : null,
+    dependant_date_of_birth: includeDependant ? dependantDateOfBirth || null : null,
+    dependant_phone_number: includeDependant ? dependantPhoneNumber || null : null,
+    dependant_coverage_type: includeDependant ? dependantCoverageType : null,
   };
 }
 
 // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1E
 // Render valid employee CSV rows into the review table.
 // Nothing is saved here.
+function updateBatchEmployeeImportCounts(preparedRows = [], skippedRows = []) {
+  const readyCount = preparedRows.filter(
+    (row) => row.import_status === "ready",
+  ).length;
+  const needsCompletionCount = preparedRows.filter(
+    (row) => row.import_status === "needs_completion",
+  ).length;
+  const duplicateCount = skippedRows.filter(
+    (row) => row.category === "duplicate",
+  ).length;
+  const blockedCount = skippedRows.length - duplicateCount;
+
+  const values = {
+    batchEmployeeReadyCount: readyCount,
+    batchEmployeeNeedsCompletionCount: needsCompletionCount,
+    batchEmployeeDuplicateCount: duplicateCount,
+    batchEmployeeBlockedCount: blockedCount,
+  };
+
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (element) element.textContent = String(value);
+  });
+
+  return { readyCount, needsCompletionCount, duplicateCount, blockedCount };
+}
+
+// FLEXIBLE BATCH EMPLOYEE IMPORT - STEP 3
+// Render every importable row, including rows that need optional details later.
 function renderImportedBatchEmployeeCsvRows(preparedRows = [], skippedRows = []) {
   const tbody = state.dom.batchEmployeeReviewTableBody;
   if (!tbody) return;
 
+  const counts = updateBatchEmployeeImportCounts(preparedRows, skippedRows);
   tbody.innerHTML = "";
 
   if (!preparedRows.length) {
     tbody.innerHTML = `
       <tr>
         <td colspan="8" class="text-center text-secondary py-4">
-          No valid employee rows were found in the CSV.
+          No eligible employee rows were found in the CSV.
         </td>
       </tr>
     `;
   }
 
   preparedRows.forEach((employee) => {
-    const fullName = [
-      employee.first_name,
-      employee.middle_name,
-      employee.last_name,
-    ]
+    const fullName = [employee.first_name, employee.middle_name, employee.last_name]
       .filter(Boolean)
       .join(" ");
+    const needsCompletion = employee.import_status === "needs_completion";
+    const warnings = Array.isArray(employee.warnings) ? employee.warnings : [];
+    const missingDetailCount = warnings.length;
+    const missingDetailLabel = `${missingDetailCount} profile detail${missingDetailCount === 1 ? "" : "s"} missing`;
 
-    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A
-    // Keep the review table compact but show enough biodata so HR can spot
-    // obvious CSV issues before creating employee records.
-    const biodataSummary = [
-      employee.gender,
-      employee.date_of_birth ? `DOB: ${formatDate(employee.date_of_birth)}` : "",
-      employee.nationality,
-    ]
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-      .join(" • ");
-
-    const originSummary = [
-      employee.state_of_origin,
-      employee.local_government_area,
-      employee.town,
-    ]
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-      .join(" / ");
-
-    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
-    // Show which child biodata sections will be created after the employee row.
     const childBiodataSummary = [
       employee.current_address_line_1 ? "Current address" : "",
       employee.permanent_address_line_1 ? "Permanent address" : "",
       employee.next_of_kin_full_name ? "Next of kin" : "",
       employee.education_institution ? "Education" : "",
       employee.dependant_full_name ? "Dependant" : "",
-    ]
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-      .join(" • ");
+    ].filter(Boolean).join(" • ");
 
     const rowElement = document.createElement("tr");
-
+    rowElement.className = needsCompletion ? "hr-batch-row-needs-completion" : "";
     rowElement.innerHTML = `
       <td>
         <div class="fw-semibold">${escapeHtml(fullName)}</div>
         <div class="text-secondary small">CSV row ${escapeHtml(employee.rowNumber)}</div>
-        ${biodataSummary
-        ? `<div class="text-secondary small mt-1">${escapeHtml(biodataSummary)}</div>`
-        : ""
-      }
       </td>
-
-      <!-- EMPLOYEE NUMBER MANUAL OR AUTOMATIC ENTRY - STEP 1F
-           Show exactly what will happen before HR creates the employee. -->
       <td class="text-nowrap">
         ${employee.employee_number
-          ? `
-            <div class="fw-semibold">
-              ${escapeHtml(employee.employee_number)}
-            </div>
-            <div class="text-secondary small">
-              Supplied by CSV
-            </div>
-          `
-          : `
-            <div class="fw-semibold text-secondary">
-              Auto-generate
-            </div>
-            <div class="text-secondary small">
-              Assigned on creation
-            </div>
-          `
-        }
+          ? `<div class="fw-semibold">${escapeHtml(employee.employee_number)}</div><div class="text-secondary small">Supplied by CSV</div>`
+          : `<div class="fw-semibold text-secondary">Auto-generate</div><div class="text-secondary small">Assigned on creation</div>`}
       </td>
-
-      <td class="text-break">
-        <div>${escapeHtml(employee.work_email)}</div>
-        ${employee.personal_email
-        ? `<div class="text-secondary small">${escapeHtml(employee.personal_email)}</div>`
-        : ""
-      }
-      </td>
-
+      <td class="text-break">${escapeHtml(employee.work_email)}</td>
+      <td>${escapeHtml(employee.department || "Not provided")}</td>
+      <td>${escapeHtml(employee.job_title || "Not provided")}</td>
+      <td class="text-nowrap">${employee.employment_date ? formatDate(employee.employment_date) : "Not provided"}</td>
+      <td><span class="badge ${getStatusBadgeClass(employee.status || "Active")}">${escapeHtml(formatStatusLabel(employee.status || "Active"))}</span></td>
       <td>
-        <div>${escapeHtml(employee.department || "--")}</div>
-        ${originSummary
-        ? `<div class="text-secondary small">${escapeHtml(originSummary)}</div>`
-        : ""
-      }
-      </td>
-
-      <td>
-        <div>${escapeHtml(employee.job_title || "--")}</div>
-        ${employee.phone_number
-        ? `<div class="text-secondary small">${escapeHtml(employee.phone_number)}</div>`
-        : ""
-      }
-      </td>
-
-<!-- HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1F-2
-     Show the same friendly date style used by the employee list.
-     The saved value remains database-safe YYYY-MM-DD underneath. -->
-<td class="text-nowrap">${formatDate(employee.employment_date)}</td>
-
-      <td>
-        <span class="badge ${getStatusBadgeClass(employee.status || "Active")}">
-          ${escapeHtml(formatStatusLabel(employee.status || "Active"))}
-        </span>
-      </td>
-
-      <td>
-        <span class="badge text-bg-success">Ready</span>
-        <div class="text-secondary small mt-1">Ready to create</div>
-        ${childBiodataSummary
-        ? `<div class="text-secondary small mt-1">${escapeHtml(childBiodataSummary)}</div>`
-        : ""
-      }
+        <div class="hr-batch-row-status-stack">
+          <span class="badge text-bg-success">Eligible to create</span>
+          ${needsCompletion
+            ? `<span class="badge text-bg-warning">${escapeHtml(missingDetailLabel)}</span>`
+            : `<span class="badge text-bg-light border text-dark">Profile details complete</span>`}
+        </div>
+        <div class="text-secondary small mt-1">
+          ${needsCompletion
+            ? "Create now and complete the profile later."
+            : "The supplied profile details are ready to create."}
+        </div>
+        ${warnings.length
+          ? `<ul class="hr-batch-row-warning-list">${warnings.slice(0, 4).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
+          : ""}
+        ${childBiodataSummary ? `<div class="text-secondary small mt-1">${escapeHtml(childBiodataSummary)}</div>` : ""}
       </td>
     `;
-
     tbody.appendChild(rowElement);
   });
 
   if (state.dom.batchEmployeeReviewCount) {
-    state.dom.batchEmployeeReviewCount.textContent =
-      `${preparedRows.length} ready`;
+    state.dom.batchEmployeeReviewCount.textContent = `${preparedRows.length} eligible`;
   }
-
   if (state.dom.submitBatchEmployeesBtn) {
     state.dom.submitBatchEmployeesBtn.disabled = preparedRows.length === 0;
   }
-
-  if (state.dom.batchEmployeeReviewPanel) {
-    state.dom.batchEmployeeReviewPanel.classList.remove("d-none");
-  }
+  state.dom.batchEmployeeReviewPanel?.classList.remove("d-none");
 
   if (state.dom.batchEmployeeSkippedRows) {
     if (skippedRows.length) {
       state.dom.batchEmployeeSkippedRows.classList.remove("d-none");
       state.dom.batchEmployeeSkippedRows.innerHTML = `
-        <div class="fw-semibold mb-1">Some CSV rows were skipped</div>
+        <div class="fw-semibold mb-1">Rows excluded from creation</div>
         <div class="small mb-2">
-          ${skippedRows.length} row(s) could not be prepared for employee creation.
+          ${counts.duplicateCount} duplicate row(s) and ${counts.blockedCount} blocked row(s) will not stop eligible employees.
         </div>
         <ul class="small mb-0">
-          ${skippedRows
-          .slice(0, 8)
-          .map(
-            (item) =>
-              `<li>Row ${escapeHtml(item.rowNumber)} — ${escapeHtml(item.workEmail)}: ${escapeHtml(item.reason)}</li>`,
-          )
-          .join("")}
+          ${skippedRows.slice(0, 12).map((item) => `
+            <li>
+              <span class="badge ${item.category === "duplicate" ? "text-bg-info" : "text-bg-danger"} me-1">
+                ${item.category === "duplicate" ? "Duplicate" : "Blocked"}
+              </span>
+              Row ${escapeHtml(item.rowNumber)} — ${escapeHtml(item.employeeName || item.workEmail)}: ${escapeHtml(item.reason)}
+            </li>`).join("")}
         </ul>
       `;
     } else {
@@ -11566,14 +11518,10 @@ async function handleBatchEmployeeCsvImport() {
     const csvText = await file.text();
     const rows = parseBatchEmployeeCsvText(csvText);
 
-    const requiredHeaders = [
-      "First Name",
-      "Last Name",
-      "Work Email",
-      "Department",
-      "Job Title",
-      "Employment Date",
-    ];
+    // FLEXIBLE BATCH EMPLOYEE IMPORT - STEP 4
+    // Only the minimum identity columns are mandatory. All other approved
+    // template columns remain optional and can be completed after creation.
+    const requiredHeaders = ["First Name", "Last Name", "Work Email"];
 
     const headerRowIndex = rows.findIndex((row) => {
       const normalisedRowHeaders = new Set(
@@ -11645,8 +11593,9 @@ async function handleBatchEmployeeCsvImport() {
       state.dom.batchEmployeeCsvImportSummary.innerHTML = `
         <div class="fw-semibold">Employee CSV import prepared</div>
         <div class="small">
-          ${preparedRows.length} row(s) are ready for review.
-          ${skippedRows.length ? `${skippedRows.length} row(s) were skipped.` : "No rows were skipped."}
+          ${preparedRows.length} row(s) can be created.
+          ${preparedRows.filter((row) => row.import_status === "needs_completion").length} need optional details completed later.
+          ${skippedRows.length ? `${skippedRows.length} duplicate or blocked row(s) were excluded.` : "No rows were excluded."}
         </div>
       `;
     }
@@ -11654,8 +11603,8 @@ async function handleBatchEmployeeCsvImport() {
     showPageAlert(
       preparedRows.length ? "success" : "warning",
       preparedRows.length
-        ? `${preparedRows.length} employee row(s) were imported into Batch Employee Review. Review them before creating employee profiles.`
-        : "No employee rows were imported. Please check the CSV values and try again.",
+        ? `${preparedRows.length} employee row(s) are eligible to create. Rows with profile gaps can be completed later.`
+        : "No employee rows are eligible to create. Check the minimum identity fields and duplicate warnings.",
     );
 
     // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 2B
@@ -11728,8 +11677,10 @@ function clearBatchEmployeeCsvImportUi() {
   }
 
   if (state.dom.batchEmployeeReviewCount) {
-    state.dom.batchEmployeeReviewCount.textContent = "0 ready";
+    state.dom.batchEmployeeReviewCount.textContent = "0 eligible";
   }
+
+  updateBatchEmployeeImportCounts([], []);
 
   if (state.dom.batchEmployeeReviewTableBody) {
     state.dom.batchEmployeeReviewTableBody.innerHTML = `
@@ -14658,40 +14609,58 @@ function updateEmployeeSaveButtonState() {
   updateEmployeeFormSteps();
 }
 
-// BEXHR FORM PROGRESS STEPPER
-// Marks each form section step as done when the user has entered data.
-// Step 1 (Core Details) is always marked done — it contains the required fields.
-// All other sections are optional and light up as the user fills them in.
+// CREATE EMPLOYEE STEPPER SEMANTICS - STEP 1
+// A checkmark means the section contains the information needed for that step.
+// Core Details begins as the current step and is not marked complete until the
+// manual-form identity fields are present and Work Email has a valid format.
 function updateEmployeeFormSteps() {
   const hasVal = (el) => Boolean(String(el?.value || "").trim());
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const workEmail = String(state.dom.workEmail?.value || "").trim();
+
+  const hasCompleteCoreDetails = [
+    state.dom.firstName,
+    state.dom.lastName,
+    state.dom.workEmail,
+    state.dom.department,
+    state.dom.jobTitle,
+    state.dom.employmentDate,
+  ].every(hasVal) && emailPattern.test(workEmail);
 
   const stepDone = [
-    // Step 1: Core Details — always active once form is open
-    true,
-    // Step 2: Reporting Lines — primary line manager selected
+    // Step 1: Core Details — complete only when required manual-form fields are valid.
+    hasCompleteCoreDetails,
+    // Step 2: Reporting Lines — primary line manager selected.
     hasVal(state.dom.assignedLineManagerEmployeeId),
-    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6C
-    // Step 3: Dependants — complete when HR has either started a visible
-    // dependant row or has saved/staged dependant records in the list.
-    // The old selector checked [data-dependant-id], but rendered rows do not
-    // have database IDs because rows are staged/replaced on employee save.
+    // Step 3: Dependants — staged or visible dependant information exists.
     hasVal(state.dom.employeeDependantFullName) ||
     Boolean(state.pendingEmployeeDependants?.length) ||
     Boolean(state.dom.employeeDependantsRecordsList?.querySelector("[data-dependant-record]")),
-    // Step 4: Address — current address line 1 entered
+    // Step 4: Address — current or permanent primary address line entered.
     hasVal(state.dom.employeeCurrentAddressLine1) || hasVal(state.dom.employeePermanentAddressLine1),
-    // Step 5: Next of Kin — full name entered
+    // Step 5: Next of Kin — full name entered.
     hasVal(state.dom.employeeNextOfKinFullName),
-    // Step 6: Education — institution name entered
+    // Step 6: Education — institution entered.
     hasVal(state.dom.employeeEducationInstitutionName),
-    // Step 7: Documents — pending file queued or attached doc exists
+    // Step 7: Documents — pending or saved document exists.
     state.pendingFiles?.length > 0 ||
     Boolean(state.dom.attachedDocumentsList?.querySelector("[data-document-id]")),
   ];
 
   stepDone.forEach((done, i) => {
     const step = document.querySelector(`#employeeFormSteps [data-step="${i + 1}"]`);
-    if (step) step.classList.toggle("form-step-done", done);
+    if (!step) return;
+
+    const isCurrentCoreStep = i === 0 && !done;
+
+    step.classList.toggle("form-step-done", done);
+    step.classList.toggle("form-step-current", isCurrentCoreStep);
+
+    if (isCurrentCoreStep) {
+      step.setAttribute("aria-current", "step");
+    } else {
+      step.removeAttribute("aria-current");
+    }
   });
 }
 
@@ -25202,10 +25171,10 @@ function applyEmployeeSearch() {
     state.filteredEmployees = employeeSource;
   } else {
     state.filteredEmployees = employeeSource.filter((employee) => {
-      // EMPLOYEE DIRECTORY SEARCH RELIABILITY - STEP 1
-      // Normalise each field before joining it. Missing middle names no longer
-      // create doubled spaces that break a full-name search such as
-      // "Hilda Okwori". Every entered word may match any searchable field.
+      // EMPLOYEE DIRECTORY SEARCH SCOPE - STEP 2
+      // Search only the employee's own directory fields. Reporting-line and
+      // approver values are intentionally excluded so searching one employee
+      // does not return colleagues who merely reference that person.
       const searchableText = [
         employee.first_name,
         employee.middle_name,
@@ -25215,8 +25184,6 @@ function applyEmployeeSearch() {
         employee.department,
         employee.job_title,
         employee.system_role,
-        employee.line_manager,
-        employee.approver_email,
         employee.status,
         employee.employee_number,
         employee.phone_number,

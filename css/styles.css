@@ -5939,3 +5939,447 @@ body.hr-employee-details-modal-open {
     min-height: 70px;
   }
 }
+
+/* FLEXIBLE BATCH AND CREATE EMPLOYEE UI - STEP 1
+   Presentation is isolated to the People onboarding cards. Existing control
+   IDs, validation, account linkage, role restrictions, and save handlers remain. */
+.hr-create-employee-card,
+.hr-batch-employee-card {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--hr-primary-soft) 9%, transparent), transparent 24rem),
+    #ffffff;
+}
+
+.hr-create-employee-header,
+.hr-batch-employee-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.hr-create-employee-heading,
+.hr-batch-employee-heading {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.hr-create-employee-icon,
+.hr-batch-employee-icon {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--hr-primary) 12%, white);
+  color: var(--hr-primary);
+  font-size: 1.15rem;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hr-primary) 16%, transparent);
+}
+
+.hr-create-employee-stepper {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 1rem 1.1rem;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f7fafc 0%, #ffffff 100%);
+  scrollbar-width: thin;
+}
+
+.hr-create-employee-stepper .bexhr-form-step {
+  flex: 0 0 auto;
+  min-width: 78px;
+}
+
+.hr-create-employee-stepper .bexhr-step-dot {
+  width: 36px;
+  height: 36px;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+}
+
+.hr-create-employee-toolbar {
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 16px;
+  background: #fbfdff;
+}
+
+.hr-create-employee-form > .row {
+  row-gap: 1.25rem !important;
+}
+
+.hr-create-employee-form .bg-light-subtle.border.rounded-4,
+.hr-create-employee-form .border.rounded-4.p-3,
+.hr-create-employee-form .border.rounded-4.p-3.p-lg-4 {
+  border-color: rgba(148, 163, 184, 0.22) !important;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%) !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.hr-create-employee-form h3.h6 {
+  color: #17324d;
+  font-size: 0.98rem;
+}
+
+.hr-create-employee-form .form-label {
+  color: #30445b;
+  font-size: 0.82rem;
+}
+
+.hr-create-employee-form .form-control,
+.hr-create-employee-form .form-select {
+  background-color: #ffffff;
+  border-color: #d9e3ec;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+}
+
+.hr-create-employee-form .form-control:focus,
+.hr-create-employee-form .form-select:focus {
+  border-color: var(--hr-primary);
+  box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--hr-primary) 14%, transparent);
+}
+
+.hr-create-employee-submit-bar {
+  position: sticky;
+  bottom: 0.75rem;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--hr-primary) 20%, #d7e1ea);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.12);
+}
+
+.hr-create-employee-submit-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.hr-create-employee-submit-copy strong { color: #17324d; }
+.hr-create-employee-submit-copy span { color: var(--hr-muted); font-size: 0.76rem; }
+
+.hr-batch-flexible-pill {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid #a7e3c2;
+  border-radius: 999px;
+  background: #eafbf1;
+  color: #167544;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.hr-batch-workflow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.hr-batch-workflow-step {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid #dfe7ef;
+  border-radius: 16px;
+  background: #fbfdff;
+}
+
+.hr-batch-workflow-step > span {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #edf2f7;
+  color: #607286;
+  font-weight: 800;
+}
+
+.hr-batch-workflow-step.is-active > span {
+  background: var(--hr-primary);
+  color: #ffffff;
+}
+
+.hr-batch-workflow-step div { min-width: 0; display: flex; flex-direction: column; }
+.hr-batch-workflow-step strong { color: #17324d; font-size: 0.82rem; }
+.hr-batch-workflow-step small { color: var(--hr-muted); font-size: 0.68rem; line-height: 1.4; }
+.hr-batch-workflow-connector { width: 24px; height: 2px; background: #dce5ee; }
+
+.hr-batch-minimum-rule {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #b9dff5;
+  border-radius: 16px;
+  background: #eff9ff;
+  color: #23506d;
+}
+.hr-batch-minimum-rule div { display: flex; flex-direction: column; }
+.hr-batch-minimum-rule span { font-size: 0.76rem; line-height: 1.5; }
+
+.hr-batch-upload-panel {
+  padding: 1.15rem;
+  border: 1px dashed color-mix(in srgb, var(--hr-primary) 35%, #cbd5e1);
+  border-radius: 20px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--hr-primary) 4%, white), #ffffff);
+}
+
+.hr-batch-upload-copy,
+.hr-batch-upload-controls,
+.hr-batch-action-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.hr-batch-upload-copy { margin-bottom: 1rem; }
+.hr-batch-upload-symbol {
+  width: 42px; height: 42px; flex: 0 0 42px; display: inline-grid; place-items: center;
+  border-radius: 14px; background: color-mix(in srgb, var(--hr-primary) 11%, white); color: var(--hr-primary);
+}
+.hr-batch-upload-controls { align-items: flex-end; justify-content: space-between; }
+.hr-batch-file-field { width: min(100%, 520px); }
+.hr-batch-action-row { flex-wrap: wrap; justify-content: flex-end; }
+
+.hr-batch-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.hr-batch-status-card {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid #e0e8ef;
+  border-radius: 16px;
+  background: #ffffff;
+}
+.hr-batch-status-card > span { width: 36px; height: 36px; flex: 0 0 36px; display: inline-grid; place-items: center; border-radius: 12px; }
+.hr-batch-status-card > div { min-width: 0; display: flex; flex-direction: column; }
+.hr-batch-status-card small { color: var(--hr-muted); font-size: 0.68rem; font-weight: 750; text-transform: uppercase; letter-spacing: 0.04em; }
+.hr-batch-status-card strong { color: var(--hr-text); font-size: 1.25rem; }
+.hr-batch-status-card.status-ready > span { background: #e7f8ed; color: #198754; }
+.hr-batch-status-card.status-warning > span { background: #fff5d7; color: #a56a00; }
+.hr-batch-status-card.status-duplicate > span { background: #e7f4fb; color: #087b91; }
+.hr-batch-status-card.status-blocked > span { background: #fdeaea; color: #b42318; }
+
+.hr-batch-review-panel {
+  padding: 1.15rem;
+  border: 1px solid #dfe7ef;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.055);
+}
+.hr-batch-review-header,
+.hr-batch-review-footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.hr-batch-review-header { margin-bottom: 1rem; }
+.hr-batch-review-footer { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e6edf3; }
+.hr-batch-review-table-wrap { max-height: 500px; overflow: auto; }
+.hr-batch-review-table { min-width: 1040px; }
+.hr-batch-row-needs-completion > td { background: #fffdf5; }
+.hr-batch-row-warning-list { margin: 0.4rem 0 0; padding-left: 1rem; color: #8a6200; font-size: 0.67rem; line-height: 1.4; }
+
+@media (max-width: 1199.98px) {
+  .hr-batch-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hr-batch-upload-controls { align-items: stretch; flex-direction: column; }
+  .hr-batch-file-field { width: 100%; }
+  .hr-batch-action-row { justify-content: flex-start; }
+}
+
+@media (max-width: 991.98px) {
+  .hr-create-employee-header,
+  .hr-batch-employee-header,
+  .hr-batch-review-header,
+  .hr-batch-review-footer { align-items: stretch; flex-direction: column; }
+
+  .hr-batch-workflow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hr-batch-workflow-connector { width: 2px; height: 16px; margin-left: 1.9rem; }
+  .hr-create-employee-submit-bar { align-items: stretch; flex-direction: column; }
+  .hr-create-employee-submit-bar .btn { width: 100%; }
+}
+
+@media (max-width: 575.98px) {
+  .hr-create-employee-card > .card-body,
+  .hr-batch-employee-card > .card-body { padding: 1.15rem !important; }
+  .hr-create-employee-heading,
+  .hr-batch-employee-heading { gap: 0.7rem; }
+  .hr-create-employee-icon,
+  .hr-batch-employee-icon { width: 42px; height: 42px; flex-basis: 42px; }
+  .hr-batch-status-grid { grid-template-columns: minmax(0, 1fr); }
+  .hr-batch-action-row { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .hr-batch-action-row .btn { width: 100%; }
+  .hr-create-employee-stepper .bexhr-step-label { display: block; }
+  .hr-create-employee-stepper .bexhr-form-step { min-width: 88px; }
+}
+
+
+/* =========================================================
+   CREATE EMPLOYEE SEMANTICS AND CONTROLLED VIEWPORT - STEP 1
+   - A checkmark means completed, never merely active.
+   - Desktop/tablet keep the long form inside a controlled scroll area.
+   - Phone expansion becomes a full-screen single-scroll workspace.
+   ========================================================= */
+.hr-create-employee-stepper .bexhr-form-step.form-step-current .bexhr-step-dot {
+  border-color: var(--hr-primary);
+  background: color-mix(in srgb, var(--hr-primary) 9%, white);
+  color: var(--hr-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--hr-primary) 10%, transparent);
+}
+
+.hr-create-employee-stepper .bexhr-form-step.form-step-current .bexhr-step-label {
+  color: var(--hr-primary);
+  font-weight: 700;
+}
+
+.hr-create-employee-collapse:not(.d-none) {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: min(76dvh, 860px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.hr-create-employee-collapse > .hr-create-employee-stepper,
+.hr-create-employee-collapse > .hr-create-employee-toolbar {
+  position: relative;
+  z-index: 10;
+  margin-bottom: 0.75rem !important;
+}
+
+.hr-create-employee-collapse > .hr-create-employee-form {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  padding: 0.15rem 0.4rem 1rem 0;
+}
+
+.hr-create-employee-collapse > .hr-create-employee-form::-webkit-scrollbar {
+  width: 10px;
+}
+
+.hr-create-employee-collapse > .hr-create-employee-form::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(71, 84, 103, 0.28);
+  background-clip: padding-box;
+}
+
+.hr-create-employee-collapse > .hr-create-employee-form::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hr-create-employee-collapse .hr-create-employee-submit-bar {
+  bottom: 0;
+}
+
+.hr-batch-row-status-stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.hr-batch-row-status-stack .badge {
+  white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+  body.hr-employee-form-mobile-open {
+    overflow: hidden;
+  }
+
+  body.hr-employee-form-mobile-open .hr-create-employee-card {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    width: 100%;
+    height: 100dvh;
+    margin: 0 !important;
+    border: 0;
+    border-radius: 0;
+  }
+
+  body.hr-employee-form-mobile-open .hr-create-employee-card > .card-body {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: 100%;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding: 1rem !important;
+  }
+
+  body.hr-employee-form-mobile-open .hr-create-employee-header {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 0.75rem !important;
+    padding-bottom: 0.75rem;
+  }
+
+  body.hr-employee-form-mobile-open .hr-create-employee-heading .section-subtext,
+  body.hr-employee-form-mobile-open .hr-create-employee-icon {
+    display: none;
+  }
+
+  body.hr-employee-form-mobile-open .hr-create-employee-collapse:not(.d-none) {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    min-height: 0;
+  }
+
+  body.hr-employee-form-mobile-open .hr-create-employee-stepper {
+    padding: 0.7rem;
+  }
+
+  body.hr-employee-form-mobile-open .hr-create-employee-toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 0.65rem;
+  }
+
+  body.hr-employee-form-mobile-open .hr-create-employee-toolbar > * {
+    flex: 0 0 auto;
+  }
+
+  body.hr-employee-form-mobile-open .hr-create-employee-collapse > .hr-create-employee-form {
+    padding-right: 0.25rem;
+  }
+
+  body.hr-employee-form-mobile-open .hr-create-employee-submit-bar {
+    border-radius: 14px;
+  }
+}
