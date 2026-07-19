@@ -2187,26 +2187,27 @@ ${isCancelledAudit
     const employee = getSsPayslipEmployeeContext();
 
     const money = (value) => ssFormatCurrency(value, currency);
-    const percent = (value) => `${Number(value || 0).toFixed(1)}%`;
+    const percent = (value) => {
+      const numericValue = Number(value || 0);
+      if (!Number.isFinite(numericValue) || numericValue === 0) return "0.0%";
+      return `${(Math.abs(numericValue) <= 1 ? numericValue * 100 : numericValue).toFixed(1)}%`;
+    };
 
     const brandHeaderHtml = isSsAlpatechWorkspace()
       ? buildSsAlpatechPayslipPreviewHeaderHtml(record)
       : "";
 
+    // EMPLOYEE-FACING PAYSLIP DATA MINIMISATION - PRODUCTION CORRECTION
+    // Internal model versions, structure variants, layout identifiers, and
+    // allocation configuration remain protected payroll metadata. Employees
+    // see only business-readable pay information in the payslip preview.
     const salaryStructureHtml = buildSsPayslipPreviewSectionHtml("Salary Structure", [
-      { label: "Employee Group", value: record.employee_group || "--" },
-      { label: "Payroll Model", value: record.payroll_model || "--" },
-      { label: "Payroll Model Version", value: record.payroll_model_version || "--" },
-      { label: "Structure Variant", value: record.structure_variant || "--" },
+      {
+        label: "Pay Type",
+        value: record.employee_group || record.payroll_model || "Regular",
+      },
+      { label: "Increment", value: percent(record.increment_percent) },
       { label: "Monthly Gross Salary", value: money(record.gross_pay), bold: true },
-      { label: "Increment %", value: percent(record.increment_percent) },
-      { label: "Increment Amount", value: money(record.increment_amount) },
-      { label: "Revised Monthly Gross Salary", value: money(record.new_base_salary) },
-      { label: "Basic %", value: percent(record.basic_percent) },
-      { label: "Housing %", value: percent(record.housing_percent) },
-      { label: "Transport %", value: percent(record.transport_percent) },
-      { label: "Utility %", value: percent(record.utility_percent) },
-      { label: "Other Allowance %", value: percent(record.other_allowance_percent) },
     ]);
 
     const earningsHtml = buildSsPayslipPreviewSectionHtml("Earnings", [

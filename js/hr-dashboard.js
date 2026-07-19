@@ -26262,6 +26262,22 @@ function formatPayrollReferenceForDisplay(value) {
   return `${prefix.toUpperCase()}-${year}-${month}-${day}-${time}`;
 }
 
+// TENANT-SAFE REGULAR PAYROLL METADATA - CORRECTION
+// Alpatech Rev 2 is a tenant-specific salary schedule revision. Keep that
+// metadata only after the active tenant is verified as Alpatech. Other tenants
+// use the shared REGULAR payroll model without an invented version or layout.
+function getRegularPayrollStructureMetadata() {
+  const alpatechStructureIdentifier = isCurrentTenantAlpatechWorkspace()
+    ? "ALPATECH_REGULAR_REV2"
+    : null;
+
+  return {
+    payrollModelVersion: alpatechStructureIdentifier ? "rev2" : null,
+    structureVariant: alpatechStructureIdentifier,
+    payslipLayout: alpatechStructureIdentifier,
+  };
+}
+
 // BATCH PAYROLL DEFAULT - STEP 7
 // Converts one prepared batch preview row into a payroll_records payload.
 // This deliberately does not use the hidden individual payroll form fields.
@@ -26277,6 +26293,9 @@ function buildBatchPayrollRecordPayload(preparedRow, payrollReference = "") {
   const normalizedIncrementPercent =
     rawIncrementPercent > 1 ? rawIncrementPercent / 100 : rawIncrementPercent;
 
+  const regularPayrollStructureMetadata =
+    getRegularPayrollStructureMetadata();
+
   return {
     employee_id: preparedRow.employee_id,
     pay_cycle: payCycle,
@@ -26289,9 +26308,12 @@ function buildBatchPayrollRecordPayload(preparedRow, payrollReference = "") {
 
     employee_group: "REGULAR",
     payroll_model: "REGULAR",
-    payroll_model_version: "rev2",
-    structure_variant: "ALPATECH_REGULAR_REV2",
-    payslip_layout: "ALPATECH_REGULAR_REV2",
+    payroll_model_version:
+      regularPayrollStructureMetadata.payrollModelVersion,
+    structure_variant:
+      regularPayrollStructureMetadata.structureVariant,
+    payslip_layout:
+      regularPayrollStructureMetadata.payslipLayout,
 
     // BATCH PAYROLL CSV IMPORT - STEP 5
     // Save the actual increment from the prepared row.
@@ -35856,11 +35878,17 @@ function renderPayrollStructurePreview() {
 }
 
 function buildRegularPayrollModelFields() {
+  const regularPayrollStructureMetadata =
+    getRegularPayrollStructureMetadata();
+
   return {
     payroll_model: "REGULAR",
-    payroll_model_version: "rev2",
-    structure_variant: "ALPATECH_REGULAR_REV2",
-    payslip_layout: "ALPATECH_REGULAR_REV2",
+    payroll_model_version:
+      regularPayrollStructureMetadata.payrollModelVersion,
+    structure_variant:
+      regularPayrollStructureMetadata.structureVariant,
+    payslip_layout:
+      regularPayrollStructureMetadata.payslipLayout,
 
     increment_percent: percentInputToDecimal(
       state.dom.regularIncrementPercent?.value,
