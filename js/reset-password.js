@@ -17,6 +17,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const pageTitle = document.getElementById("pageTitle");
   const pageSubtitle = document.getElementById("pageSubtitle");
   const submitBtn = document.getElementById("resetSubmitBtn");
+  const mfaSection = document.getElementById("resetMfaSection");
+  const mfaCodeInput = document.getElementById("resetMfaCode");
 
   const toggleNewPasswordBtn = document.getElementById("toggleNewPasswordBtn");
   const toggleNewPasswordIcon = document.getElementById("toggleNewPasswordIcon");
@@ -25,6 +27,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode") || "recovery";
+
+  let mfaFactorId = null;
 
   if (mode === "first-time") {
     pageTitle.textContent = "Complete First-Time Account Setup";
@@ -67,6 +71,33 @@ document.addEventListener("DOMContentLoaded", function () {
     );
   }
 
+  function normaliseMfaCode(value) {
+    return String(value || "")
+      .replace(/\D/g, "")
+      .slice(0, 6);
+  }
+
+  function showMfaSection() {
+    if (!mfaSection || !mfaCodeInput) {
+      return;
+    }
+
+    mfaSection.classList.remove("d-none");
+    mfaSection.setAttribute("aria-hidden", "false");
+    mfaCodeInput.required = true;
+  }
+
+  function hideMfaSection() {
+    if (!mfaSection || !mfaCodeInput) {
+      return;
+    }
+
+    mfaSection.classList.add("d-none");
+    mfaSection.setAttribute("aria-hidden", "true");
+    mfaCodeInput.required = false;
+    mfaCodeInput.value = "";
+  }
+
   async function ensureSessionExistsForReset() {
     const { data, error } = await supabaseClient.auth.getSession();
 
@@ -76,6 +107,101 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     return data?.session || null;
+  }
+
+  async function getMfaRequirement() {
+    const { data: aalData, error: aalError } =
+      await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+
+    if (aalError) {
+      throw aalError;
+    }
+
+    const requiresMfa =
+      aalData?.nextLevel === "aal2" && aalData?.currentLevel !== "aal2";
+
+    if (!requiresMfa) {
+      mfaFactorId = null;
+      hideMfaSection();
+      return { required: false, factorId: null };
+    }
+
+    const { data: factorsData, error: factorsError } =
+      await supabaseClient.auth.mfa.listFactors();
+
+    if (factorsError) {
+      throw factorsError;
+    }
+
+    const totpFactors = Array.isArray(factorsData?.totp)
+      ? factorsData.totp
+      : [];
+    const totpFactor =
+      totpFactors.find(function (factor) {
+        return factor?.status === "verified";
+      }) || totpFactors[0];
+
+    if (!totpFactor?.id) {
+      const factorError = new Error(
+        "No verified authenticator factor is available for this account.",
+      );
+      factorError.code = "MFA_FACTOR_NOT_FOUND";
+      throw factorError;
+    }
+
+    mfaFactorId = totpFactor.id;
+    showMfaSection();
+
+    return { required: true, factorId: mfaFactorId };
+  }
+
+  async function verifyMfaForPasswordReset(factorId, code) {
+    const { error: verifyError } =
+      await supabaseClient.auth.mfa.challengeAndVerify({
+        factorId,
+        code,
+      });
+
+    if (verifyError) {
+      throw verifyError;
+    }
+
+    const { data: verifiedAalData, error: verifiedAalError } =
+      await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+
+    if (verifiedAalError) {
+      throw verifiedAalError;
+    }
+
+    if (verifiedAalData?.currentLevel !== "aal2") {
+      const assuranceError = new Error(
+        "Authenticator verification did not reach the required security level.",
+      );
+      assuranceError.code = "MFA_AAL2_REQUIRED";
+      throw assuranceError;
+    }
+  }
+
+  function getFriendlyMfaError(error) {
+    if (error?.code === "MFA_FACTOR_NOT_FOUND") {
+      return "Your account requires authenticator verification, but no verified authenticator factor could be loaded. Return to sign in and contact your administrator.";
+    }
+
+    if (error?.code === "MFA_AAL2_REQUIRED") {
+      return "Authenticator verification could not be completed. Enter a new code from your authenticator app and try again.";
+    }
+
+    const message = String(error?.message || "").toLowerCase();
+
+    if (
+      message.includes("totp") ||
+      message.includes("invalid code") ||
+      message.includes("challenge")
+    ) {
+      return "The authenticator code is invalid or has expired. Enter the current 6-digit code and try again.";
+    }
+
+    return "Authenticator verification could not be completed. Please try again.";
   }
 
   async function clearFirstTimeFlag(userId) {
@@ -101,6 +227,28 @@ document.addEventListener("DOMContentLoaded", function () {
       togglePassword(confirmPasswordInput, toggleConfirmPasswordIcon);
     });
   }
+
+  if (mfaCodeInput) {
+    mfaCodeInput.addEventListener("input", function () {
+      mfaCodeInput.value = normaliseMfaCode(mfaCodeInput.value);
+    });
+  }
+
+  async function initialiseMfaRequirement() {
+    try {
+      const session = await ensureSessionExistsForReset();
+
+      if (!session?.user) {
+        return;
+      }
+
+      await getMfaRequirement();
+    } catch (error) {
+      console.error("Initial MFA requirement check failed:", error);
+    }
+  }
+
+  initialiseMfaRequirement();
 
   if (form) {
     form.addEventListener("submit", async function (event) {
@@ -132,7 +280,7 @@ document.addEventListener("DOMContentLoaded", function () {
       submitBtn.disabled = true;
       const originalBtnHtml = submitBtn.innerHTML;
       submitBtn.innerHTML =
-        `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Updating...`;
+        `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Checking...`;
 
       try {
         const session = await ensureSessionExistsForReset();
@@ -144,6 +292,49 @@ document.addEventListener("DOMContentLoaded", function () {
           );
           return;
         }
+
+        let mfaRequirement;
+
+        try {
+          mfaRequirement = await getMfaRequirement();
+        } catch (error) {
+          console.error("MFA requirement check failed:", error);
+          showAlert(getFriendlyMfaError(error), "danger");
+          return;
+        }
+
+        if (mfaRequirement.required) {
+          const mfaCode = normaliseMfaCode(mfaCodeInput?.value);
+
+          if (!/^\d{6}$/.test(mfaCode)) {
+            showMfaSection();
+            showAlert(
+              "Enter the current 6-digit code from your authenticator app.",
+              "warning",
+            );
+            mfaCodeInput?.focus();
+            return;
+          }
+
+          submitBtn.innerHTML =
+            `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Verifying...`;
+
+          try {
+            await verifyMfaForPasswordReset(
+              mfaRequirement.factorId,
+              mfaCode,
+            );
+          } catch (error) {
+            console.error("MFA verification failed:", error);
+            showAlert(getFriendlyMfaError(error), "danger");
+            mfaCodeInput?.focus();
+            mfaCodeInput?.select();
+            return;
+          }
+        }
+
+        submitBtn.innerHTML =
+          `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Updating...`;
 
         const { error: updateError } = await supabaseClient.auth.updateUser({
           password: newPassword,
