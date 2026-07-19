@@ -817,7 +817,20 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    const resetRedirectUrl = `${window.location.origin}/reset-password.html?mode=recovery`;
+    // PASSWORD RESET PRODUCTION ROUTING - STEP 1
+    // Local development stays local. Any hosted deployment, including the
+    // Vercel preview URL, sends recovery links to the public BexHR domain.
+    const isLocalPasswordResetOrigin = [
+      "localhost",
+      "127.0.0.1",
+    ].includes(window.location.hostname);
+
+    const resetRedirectOrigin = isLocalPasswordResetOrigin
+      ? window.location.origin
+      : "https://app.bexhr.com";
+
+    const resetRedirectUrl =
+      `${resetRedirectOrigin}/reset-password.html?mode=recovery`;
 
     try {
       const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
@@ -848,6 +861,35 @@ document.addEventListener("DOMContentLoaded", function () {
   function showMessageFromQueryString() {
     const params = new URLSearchParams(window.location.search);
     const message = params.get("message");
+    const authError = String(params.get("error") || "")
+      .trim()
+      .toLowerCase();
+    const authErrorCode = String(params.get("error_code") || "")
+      .trim()
+      .toLowerCase();
+    const authErrorDescription = String(
+      params.get("error_description") || "",
+    ).trim();
+
+    const isExpiredAuthLink =
+      authErrorCode === "otp_expired" ||
+      authErrorDescription.toLowerCase().includes("expired");
+
+    if (isExpiredAuthLink) {
+      showAlert(
+        "This password reset link is invalid or has expired. Request a new password reset email and use only the newest link.",
+        "danger",
+      );
+      return;
+    }
+
+    if (authError || authErrorCode) {
+      showAlert(
+        "This authentication link could not be completed. Please request a new password reset email and try again.",
+        "danger",
+      );
+      return;
+    }
 
     if (!message) return;
 
