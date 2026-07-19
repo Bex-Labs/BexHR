@@ -24266,6 +24266,11 @@ async function handleOrganizationSettingsSave() {
       "warning",
       "Please complete the required organization fields before saving.",
     );
+    showDashboardToast(
+      "warning",
+      "Organization details incomplete",
+      "Complete the required organization fields before saving.",
+    );
     return;
   }
 
@@ -24295,7 +24300,16 @@ async function handleOrganizationSettingsSave() {
 
     if (response.error) throw response.error;
 
-    state.organizationSettings = response.data || null;
+    // ORGANIZATION SETTINGS SAVE CONFIRMATION - STEP 1
+    // Supabase can return no row when an update filter matches nothing.
+    // Do not display a false success message in that case.
+    if (!response.data?.id) {
+      throw new Error(
+        "Organization details were not saved for this company workspace. Refresh and try again.",
+      );
+    }
+
+    state.organizationSettings = response.data;
 
     // MANAGE ORGANIZATION - HR/PAYROLL STANDARD STEP 1B
     // Refresh the saved summary and keep the single-organization form populated.
@@ -24308,6 +24322,15 @@ async function handleOrganizationSettingsSave() {
         ? "Organization details were updated successfully."
         : "Organization details were saved successfully.",
     );
+
+    // SETUP ORGANIZATION NOTIFICATION PARITY - STEP 1
+    // Reuse the existing floating dashboard notification so the result remains
+    // visible even after HR scrolls away from the page-level alert.
+    showDashboardToast(
+      "success",
+      isEditMode ? "Organization details updated" : "Organization details saved",
+      "The company-specific organization record was saved successfully.",
+    );
   } catch (error) {
     console.error("Error saving organization settings:", error);
 
@@ -24318,12 +24341,22 @@ async function handleOrganizationSettingsSave() {
         "warning",
         "Organization details already exist. Refresh the page and update the existing record instead.",
       );
+      showDashboardToast(
+        "warning",
+        "Organization record already exists",
+        "Refresh Setup and update the existing company record instead of creating another one.",
+      );
       return;
     }
 
     showPageAlert(
       "danger",
       error.message || "Organization details could not be saved.",
+    );
+    showDashboardToast(
+      "danger",
+      "Organization save failed",
+      escapeHtml(error.message || "Organization details could not be saved."),
     );
   } finally {
     setOrganizationSettingsSaveLoading(false, isEditMode);
