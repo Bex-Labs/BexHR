@@ -480,10 +480,17 @@
       </section>
 
       <section class="hr-overview-readiness-card mb-4">
-        <div class="hr-overview-readiness-heading">
-          <div>
-            <span class="hr-overview-section-kicker">Payroll preparation</span>
-            <h3>Employee payroll readiness</h3>
+        <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1A
+             Shared icon-led heading. Existing readiness value and progress IDs stay unchanged. -->
+        <div class="hr-overview-readiness-heading hr-card-heading">
+          <div class="hr-card-heading-main">
+            <span class="hr-card-heading-icon hr-card-heading-icon--payroll" aria-hidden="true">
+              <i class="bi bi-check2-circle"></i>
+            </span>
+            <div class="hr-card-heading-copy">
+              <span class="hr-overview-section-kicker">Payroll preparation</span>
+              <h3>Employee payroll readiness</h3>
+            </div>
           </div>
           <strong id="hrOverviewPayrollReadinessPercent">0%</strong>
         </div>
@@ -498,27 +505,45 @@
       </section>
 
       <div class="hr-overview-content-grid mb-4">
-        <section class="hr-overview-panel">
-          <div class="hr-overview-panel-header">
-            <div>
-              <span class="hr-overview-section-kicker">Work queue</span>
-              <h3>Priority attention</h3>
+        <section class="hr-overview-panel hr-overview-priority-panel">
+          <!-- DASHBOARD PRIORITY ATTENTION BALANCE - STEP 2
+               Keep the live work queue useful even when all four checks are clear.
+               Existing triggers and workspace destinations remain unchanged. -->
+          <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1B
+               Shared operational heading. Existing action routing stays unchanged. -->
+          <div class="hr-overview-panel-header hr-card-heading">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--attention" aria-hidden="true">
+                <i class="bi bi-exclamation-circle"></i>
+              </span>
+              <div class="hr-card-heading-copy">
+                <span class="hr-overview-section-kicker">Work queue</span>
+                <h3>Priority attention</h3>
+              </div>
             </div>
             <button type="button" class="btn btn-sm btn-outline-primary"
               onclick="document.getElementById('hrTabReviewBtn')?.click()">
               Open HR Review
             </button>
           </div>
-          <div id="hrOverviewPriorityList" class="hr-overview-priority-list">
+          <div id="hrOverviewPriorityList" class="hr-overview-priority-list"
+            aria-live="polite" aria-atomic="true">
             <div class="hr-overview-empty-state">Loading priority work...</div>
           </div>
         </section>
 
         <section class="hr-overview-panel">
-          <div class="hr-overview-panel-header">
-            <div>
-              <span class="hr-overview-section-kicker">Organisation</span>
-              <h3>Department snapshot</h3>
+          <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1C
+               Shared operational heading. Existing People navigation stays unchanged. -->
+          <div class="hr-overview-panel-header hr-card-heading">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--organisation" aria-hidden="true">
+                <i class="bi bi-diagram-3"></i>
+              </span>
+              <div class="hr-card-heading-copy">
+                <span class="hr-overview-section-kicker">Organisation</span>
+                <h3>Department snapshot</h3>
+              </div>
             </div>
             <button type="button" class="btn btn-sm btn-outline-primary"
               onclick="document.getElementById('hrTabEmployeesBtn')?.click()">
@@ -532,10 +557,17 @@
       </div>
 
       <section class="hr-overview-panel hr-overview-activity-panel mb-4">
-        <div class="hr-overview-panel-header">
-          <div>
-            <span class="hr-overview-section-kicker">Audit visibility</span>
-            <h3>Recent activity</h3>
+        <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1D
+             Shared operational heading. Live data status remains unchanged. -->
+        <div class="hr-overview-panel-header hr-card-heading">
+          <div class="hr-card-heading-main">
+            <span class="hr-card-heading-icon hr-card-heading-icon--activity" aria-hidden="true">
+              <i class="bi bi-clock-history"></i>
+            </span>
+            <div class="hr-card-heading-copy">
+              <span class="hr-overview-section-kicker">Audit visibility</span>
+              <h3>Recent activity</h3>
+            </div>
           </div>
           <span class="hr-overview-live-badge"><span></span> Live workspace data</span>
         </div>
@@ -679,13 +711,20 @@
            employee summary renderer continues to supply every value. -->
       <section class="card dashboard-section-card hr-people-summary-card mb-4">
         <div class="card-body p-4 p-lg-5">
-          <div class="hr-people-section-heading">
-            <div>
-              <span class="hr-people-section-kicker">People intelligence</span>
-              <h2 class="section-heading h4 mb-1">Employee Management Summary</h2>
-              <p class="section-subtext mb-0">
-                Live employee coverage across records, status, departments, and employee IDs.
-              </p>
+          <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 2A
+               Summary calculations and metric IDs remain unchanged. -->
+          <div class="hr-people-section-heading hr-card-heading">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--people" aria-hidden="true">
+                <i class="bi bi-bar-chart"></i>
+              </span>
+              <div class="hr-card-heading-copy">
+                <span class="hr-people-section-kicker">People intelligence</span>
+                <h2 class="section-heading h4 mb-1">Employee Management Summary</h2>
+                <p class="section-subtext mb-0">
+                  Live employee coverage across records, status, departments, and employee IDs.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -748,115 +787,129 @@
       <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
            Real HR review queue for correction requests submitted from Employee Self Service.
            This step is read-only: HR can see requests before approve/reject actions are wired. -->
-      <section class="card dashboard-section-card mb-4" id="profileCorrectionRequestsCard">
+      <section class="card dashboard-section-card hr-review-operational-card hr-review-profile-card mb-4" id="profileCorrectionRequestsCard">
         <div class="card-body p-4 p-lg-5">
-          <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1E FIX
-         Restore a stable card header layout and reuse the same normal
-         dashboard-action-btn shape used across the HR dashboard.
-         Keep controls separate from the summary tiles so the card never
-         squeezes the heading, counters, or queue into narrow vertical columns. -->
-          <div class="mb-4">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
-              <div class="flex-grow-1">
+          <!-- HR REVIEW WORKSPACE MODERNISATION - STEP 2
+               Profile correction card now follows the shared platform heading system.
+               Refresh, filter, collapse, counters, table, and decision IDs remain unchanged. -->
+          <div class="hr-card-heading hr-review-card-heading mb-4">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--profile-review" aria-hidden="true">
+                <i class="bi bi-person-exclamation"></i>
+              </span>
+
+              <div class="hr-card-heading-copy">
+                <span class="hr-review-section-kicker">Profile governance</span>
                 <h2 class="section-heading h4 mb-1">Profile Correction Requests</h2>
                 <p class="section-subtext mb-0">
                   Review employee-submitted requests to correct HR-held profile information.
                 </p>
               </div>
+            </div>
 
-              <div class="d-flex flex-wrap gap-2 align-self-start">
-                <button type="button" id="refreshProfileCorrectionRequestsBtn"
-                  class="btn btn-outline-primary dashboard-action-btn align-self-start">
-                  <i class="bi bi-arrow-clockwise me-2"></i>
-                  Refresh Requests
-                </button>
+            <div class="hr-review-card-toolbar">
+              <button type="button" id="refreshProfileCorrectionRequestsBtn"
+                class="btn btn-outline-primary dashboard-action-btn">
+                <i class="bi bi-arrow-clockwise me-2"></i>
+                Refresh Requests
+              </button>
 
-                <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1E FILTER HEIGHT FIX
-     Keep this as a real select so the dropdown stays white/native.
-     Do not use dashboard-action-btn here because that makes the select taller
-     than the Refresh and Collapse buttons. -->
-                <select id="profileCorrectionRequestsViewFilter" class="form-select align-self-start"
-                  style="width: auto; min-width: 136px; height: 38px; min-height: 38px; padding-top: 0.375rem; padding-bottom: 0.375rem; border-radius: 0.75rem; background-color: #fff; font-weight: 600;"
-                  aria-label="Filter profile correction requests">
-                  <option value="open" selected>Open Only</option>
-                  <option value="all">All Requests</option>
-                </select>
+              <select id="profileCorrectionRequestsViewFilter"
+                class="form-select hr-review-filter-select"
+                aria-label="Filter profile correction requests">
+                <option value="open" selected>Open Only</option>
+                <option value="all">All Requests</option>
+              </select>
 
-                <button type="button" id="toggleProfileCorrectionRequestsBtn"
-                  class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
-                  aria-controls="profileCorrectionRequestsCollapse">
-                  <i class="bi bi-chevron-up me-2"></i>
-                  <span>Collapse</span>
-                </button>
-              </div>
+              <button type="button" id="toggleProfileCorrectionRequestsBtn"
+                class="btn btn-outline-secondary dashboard-action-btn" aria-expanded="true"
+                aria-controls="profileCorrectionRequestsCollapse">
+                <i class="bi bi-chevron-up me-2"></i>
+                <span>Collapse</span>
+              </button>
             </div>
           </div>
 
-          <div class="row g-4 mb-4">
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Pending Review</div>
-                <div class="summary-tile-value h6 mb-0" id="profileCorrectionPendingCount">0</div>
+          <div class="hr-review-summary-grid mb-4" aria-label="Profile correction request totals">
+            <article class="hr-review-summary-tile hr-review-summary-tile--pending">
+              <span class="hr-review-summary-icon" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
+              <div>
+                <span class="hr-review-summary-label">Pending Review</span>
+                <strong class="hr-review-summary-value" id="profileCorrectionPendingCount">0</strong>
               </div>
-            </div>
+            </article>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Open Requests</div>
-                <div class="summary-tile-value h6 mb-0" id="profileCorrectionOpenCount">0</div>
+            <article class="hr-review-summary-tile hr-review-summary-tile--open">
+              <span class="hr-review-summary-icon" aria-hidden="true"><i class="bi bi-inbox"></i></span>
+              <div>
+                <span class="hr-review-summary-label">Open Requests</span>
+                <strong class="hr-review-summary-value" id="profileCorrectionOpenCount">0</strong>
               </div>
-            </div>
+            </article>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Closed Requests</div>
-                <div class="summary-tile-value h6 mb-0" id="profileCorrectionClosedCount">0</div>
+            <article class="hr-review-summary-tile hr-review-summary-tile--closed">
+              <span class="hr-review-summary-icon" aria-hidden="true"><i class="bi bi-check2-circle"></i></span>
+              <div>
+                <span class="hr-review-summary-label">Closed Requests</span>
+                <strong class="hr-review-summary-value" id="profileCorrectionClosedCount">0</strong>
               </div>
-            </div>
+            </article>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Total Requests</div>
-                <div class="summary-tile-value h6 mb-0" id="profileCorrectionTotalCount">0</div>
+            <article class="hr-review-summary-tile hr-review-summary-tile--total">
+              <span class="hr-review-summary-icon" aria-hidden="true"><i class="bi bi-collection"></i></span>
+              <div>
+                <span class="hr-review-summary-label">Total Requests</span>
+                <strong class="hr-review-summary-value" id="profileCorrectionTotalCount">0</strong>
               </div>
-            </div>
+            </article>
           </div>
 
           <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1B
      Collapse only the operational queue content.
      Summary tiles remain visible so HR can still see whether work exists. -->
           <div id="profileCorrectionRequestsCollapse">
-            <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1D
-       Lifecycle guidance for HR reviewers.
-       Approved is not final because HR still needs to manually update
-       the employee master record before marking the request Completed. -->
-            <div class="alert alert-light border mb-4">
-              <div class="fw-semibold mb-2">HR review lifecycle guidance</div>
+            <!-- HR REVIEW QUEUE REFINEMENT - STEP 1
+                 Keep lifecycle help available without letting it dominate the queue.
+                 Native details/summary preserves accessibility and needs no new workflow handler. -->
+            <details id="profileCorrectionLifecycleGuidance"
+              class="hr-review-guidance-disclosure mb-4">
+              <summary>
+                <span class="hr-review-guidance-summary-icon" aria-hidden="true">
+                  <i class="bi bi-signpost-split"></i>
+                </span>
+                <span class="hr-review-guidance-summary-copy">
+                  <strong>How the review workflow works</strong>
+                  <small>Open only when you need a reminder of the request lifecycle.</small>
+                </span>
+                <span class="hr-review-guidance-summary-action" aria-hidden="true">
+                  <span>View guidance</span>
+                  <i class="bi bi-chevron-down"></i>
+                </span>
+              </summary>
 
-              <div class="row g-3 small text-secondary">
-                <div class="col-md-6 col-xl-3">
-                  <span class="badge text-bg-primary me-1">In Review</span>
-                  HR is checking the request.
-                </div>
+              <div class="hr-review-guidance-grid">
+                <article class="hr-review-guidance-step hr-review-guidance-step--review">
+                  <span class="badge text-bg-primary">In Review</span>
+                  <p>HR is checking the employee request.</p>
+                </article>
 
-                <div class="col-md-6 col-xl-3">
-                  <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1H
-       Display the workflow meaning clearly. The stored database value remains Approved. -->
-                  <span class="badge text-bg-info me-1">Ready to Update</span>
-                  HR accepts the correction. Open the edit form, update the profile, then mark Completed.
-                </div>
+                <article class="hr-review-guidance-step hr-review-guidance-step--update">
+                  <!-- Stored database value remains Approved. -->
+                  <span class="badge text-bg-info">Ready to Update</span>
+                  <p>HR accepts the correction, updates the employee profile, then marks the request Completed.</p>
+                </article>
 
-                <div class="col-md-6 col-xl-3">
-                  <span class="badge text-bg-success me-1">Completed</span>
-                  Use only after HR has manually updated the employee profile.
-                </div>
+                <article class="hr-review-guidance-step hr-review-guidance-step--complete">
+                  <span class="badge text-bg-success">Completed</span>
+                  <p>Use only after the employee master record has been updated manually.</p>
+                </article>
 
-                <div class="col-md-6 col-xl-3">
-                  <span class="badge text-bg-danger me-1">Rejected</span>
-                  Use when HR does not accept the request. Add a reason.
-                </div>
+                <article class="hr-review-guidance-step hr-review-guidance-step--reject">
+                  <span class="badge text-bg-danger">Rejected</span>
+                  <p>Use when the request is declined and record the HR reason.</p>
+                </article>
               </div>
-            </div>
+            </details>
 
             <div id="profileCorrectionRequestsStatus" class="alert d-none mb-4" role="status"></div>
 
@@ -864,7 +917,7 @@
               No profile correction requests have been submitted yet.
             </div>
 
-            <div id="profileCorrectionRequestsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+            <div id="profileCorrectionRequestsTableWrapper" class="dashboard-table-wrap table-responsive hr-review-table-wrap d-none"
               style="max-height: 460px; overflow-y: auto;">
               <table class="table align-middle mb-0">
                 <thead>
@@ -888,62 +941,74 @@
            HR should not rely on managers manually reporting normal leave decisions.
            This panel gives HR a central view of manager-approved, rejected,
            and returned leave requests using the existing leave_requests audit fields. -->
-      <section class="card dashboard-section-card mb-4" id="recentManagerLeaveDecisionsCard">
+      <section class="card dashboard-section-card hr-review-operational-card hr-review-leave-card mb-4" id="recentManagerLeaveDecisionsCard">
         <div class="card-body p-4 p-lg-5">
-          <div class="mb-4">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
-              <div class="flex-grow-1">
+          <!-- HR REVIEW WORKSPACE MODERNISATION - STEP 3
+               Manager decision card now follows the shared platform heading system.
+               Refresh, collapse, counters, audit table, and cancellation IDs remain unchanged. -->
+          <div class="hr-card-heading hr-review-card-heading mb-4">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--leave-review" aria-hidden="true">
+                <i class="bi bi-calendar2-check"></i>
+              </span>
+
+              <div class="hr-card-heading-copy">
+                <span class="hr-review-section-kicker">Leave governance</span>
                 <h2 class="section-heading h4 mb-1">Recent Manager Leave Decisions</h2>
                 <p class="section-subtext mb-0">
                   Review manager-approved, rejected, and returned leave requests without requiring manual HR reporting.
                 </p>
               </div>
+            </div>
 
-              <div class="d-flex flex-wrap gap-2 align-self-start">
-                <button type="button" id="refreshManagerLeaveDecisionsBtn"
-                  class="btn btn-outline-primary dashboard-action-btn align-self-start">
-                  <i class="bi bi-arrow-clockwise me-2"></i>
-                  Refresh Decisions
-                </button>
+            <div class="hr-review-card-toolbar">
+              <button type="button" id="refreshManagerLeaveDecisionsBtn"
+                class="btn btn-outline-primary dashboard-action-btn">
+                <i class="bi bi-arrow-clockwise me-2"></i>
+                Refresh Decisions
+              </button>
 
-                <button type="button" id="toggleManagerLeaveDecisionsBtn"
-                  class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
-                  aria-controls="managerLeaveDecisionsCollapse">
-                  <i class="bi bi-chevron-up me-2"></i>
-                  <span>Collapse</span>
-                </button>
-              </div>
+              <button type="button" id="toggleManagerLeaveDecisionsBtn"
+                class="btn btn-outline-secondary dashboard-action-btn" aria-expanded="true"
+                aria-controls="managerLeaveDecisionsCollapse">
+                <i class="bi bi-chevron-up me-2"></i>
+                <span>Collapse</span>
+              </button>
             </div>
           </div>
 
-          <div class="row g-4 mb-4">
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Total Decisions</div>
-                <div class="summary-tile-value h6 mb-0" id="managerLeaveDecisionTotalCount">0</div>
+          <div class="hr-review-summary-grid mb-4" aria-label="Manager leave decision totals">
+            <article class="hr-review-summary-tile hr-review-summary-tile--total">
+              <span class="hr-review-summary-icon" aria-hidden="true"><i class="bi bi-collection"></i></span>
+              <div>
+                <span class="hr-review-summary-label">Total Decisions</span>
+                <strong class="hr-review-summary-value" id="managerLeaveDecisionTotalCount">0</strong>
               </div>
-            </div>
+            </article>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Approved</div>
-                <div class="summary-tile-value h6 mb-0" id="managerLeaveDecisionApprovedCount">0</div>
+            <article class="hr-review-summary-tile hr-review-summary-tile--approved">
+              <span class="hr-review-summary-icon" aria-hidden="true"><i class="bi bi-check2-circle"></i></span>
+              <div>
+                <span class="hr-review-summary-label">Approved</span>
+                <strong class="hr-review-summary-value" id="managerLeaveDecisionApprovedCount">0</strong>
               </div>
-            </div>
+            </article>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Rejected / Returned</div>
-                <div class="summary-tile-value h6 mb-0" id="managerLeaveDecisionExceptionCount">0</div>
+            <article class="hr-review-summary-tile hr-review-summary-tile--exception">
+              <span class="hr-review-summary-icon" aria-hidden="true"><i class="bi bi-arrow-return-left"></i></span>
+              <div>
+                <span class="hr-review-summary-label">Cancelled / Rejected / Returned</span>
+                <strong class="hr-review-summary-value" id="managerLeaveDecisionExceptionCount">0</strong>
               </div>
-            </div>
+            </article>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Latest Decision</div>
-                <div class="summary-tile-value h6 mb-0" id="managerLeaveDecisionLatestValue">--</div>
+            <article class="hr-review-summary-tile hr-review-summary-tile--latest">
+              <span class="hr-review-summary-icon" aria-hidden="true"><i class="bi bi-clock-history"></i></span>
+              <div>
+                <span class="hr-review-summary-label">Latest Decision</span>
+                <strong class="hr-review-summary-value hr-review-summary-value--date" id="managerLeaveDecisionLatestValue">--</strong>
               </div>
-            </div>
+            </article>
           </div>
 
           <div id="managerLeaveDecisionsCollapse">
@@ -973,7 +1038,7 @@
                  - horizontal scroll remains available only on smaller screens;
                  - existing tbody ID stays unchanged for current JavaScript wiring. -->
             <div class="dashboard-table-hint">Swipe to view more →</div>
-            <div id="managerLeaveDecisionsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+            <div id="managerLeaveDecisionsTableWrapper" class="dashboard-table-wrap table-responsive hr-review-table-wrap d-none"
               style="max-height: 340px; overflow-y: auto; overflow-x: auto;">
               <!-- HR APPROVED LEAVE CANCELLATION UI - STEP 1A
      Add one controlled Action column for HR-only approved-leave cancellation.
@@ -1022,53 +1087,63 @@
           <!-- MANAGE ORGANIZATION CARD - STEP 3
                This card stores company-level HR/payroll details in one place.
                These details can later be reused on payslips, reports, and HR documents. -->
-          <div class="mb-4">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
-              <div>
+          <!-- SETUP ORGANIZATION HEADER REFINEMENT - STEP 1
+               One purposeful icon identifies this primary setup workspace.
+               Existing collapse ID and behaviour remain unchanged. -->
+          <div class="hr-card-heading hr-setup-primary-heading mb-4">
+            <div class="hr-card-heading-main">
+              <div class="hr-card-heading-copy">
+                <span class="hr-setup-card-kicker">Organisation profile</span>
                 <h2 class="section-heading h4 mb-1">Manage Organization</h2>
                 <p class="section-subtext mb-0">
                   Maintain company details used across HR and payroll records.
                 </p>
               </div>
-
-              <button type="button" id="toggleOrganizationSettingsCardBtn"
-                class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
-                aria-controls="organizationSettingsCardCollapse">
-                <i class="bi bi-chevron-up me-2"></i>
-                <span>Collapse</span>
-              </button>
             </div>
+
+            <button type="button" id="toggleOrganizationSettingsCardBtn"
+              class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+              aria-controls="organizationSettingsCardCollapse">
+              <i class="bi bi-chevron-up me-2"></i>
+              <span>Collapse</span>
+            </button>
           </div>
 
           <div id="organizationSettingsCardCollapse">
-            <div class="row g-4 mb-4">
-              <div class="col-md-6 col-xl-3">
-                <div class="summary-tile">
-                  <div class="summary-tile-label">Organization</div>
-                  <div class="summary-tile-value h6 mb-0" id="organizationSummaryName">Not set</div>
+            <!-- SETUP ORGANIZATION SUMMARY REFINEMENT - STEP 2
+                 Existing summary IDs remain the rendering source of truth. -->
+            <div class="hr-setup-summary-grid mb-4" aria-label="Organization setup summary">
+              <article class="hr-setup-summary-tile hr-setup-summary-tile--identity">
+                <span class="hr-setup-summary-icon" aria-hidden="true"><i class="bi bi-buildings"></i></span>
+                <div>
+                  <span class="hr-setup-summary-label">Organization</span>
+                  <strong class="hr-setup-summary-value" id="organizationSummaryName">Not set</strong>
                 </div>
-              </div>
+              </article>
 
-              <div class="col-md-6 col-xl-3">
-                <div class="summary-tile">
-                  <div class="summary-tile-label">Default Currency</div>
-                  <div class="summary-tile-value h6 mb-0" id="organizationSummaryCurrency">NGN</div>
+              <article class="hr-setup-summary-tile hr-setup-summary-tile--currency">
+                <span class="hr-setup-summary-icon" aria-hidden="true"><i class="bi bi-currency-exchange"></i></span>
+                <div>
+                  <span class="hr-setup-summary-label">Default Currency</span>
+                  <strong class="hr-setup-summary-value" id="organizationSummaryCurrency">NGN</strong>
                 </div>
-              </div>
+              </article>
 
-              <div class="col-md-6 col-xl-3">
-                <div class="summary-tile">
-                  <div class="summary-tile-label">Default Pay Cycle</div>
-                  <div class="summary-tile-value h6 mb-0" id="organizationSummaryPayCycle">Monthly</div>
+              <article class="hr-setup-summary-tile hr-setup-summary-tile--cycle">
+                <span class="hr-setup-summary-icon" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
+                <div>
+                  <span class="hr-setup-summary-label">Default Pay Cycle</span>
+                  <strong class="hr-setup-summary-value" id="organizationSummaryPayCycle">Monthly</strong>
                 </div>
-              </div>
+              </article>
 
-              <div class="col-md-6 col-xl-3">
-                <div class="summary-tile">
-                  <div class="summary-tile-label">Status</div>
-                  <div class="summary-tile-value h6 mb-0" id="organizationSummaryStatus">Not set</div>
+              <article class="hr-setup-summary-tile hr-setup-summary-tile--status">
+                <span class="hr-setup-summary-icon" aria-hidden="true"><i class="bi bi-shield-check"></i></span>
+                <div>
+                  <span class="hr-setup-summary-label">Status</span>
+                  <strong class="hr-setup-summary-value" id="organizationSummaryStatus">Not set</strong>
                 </div>
-              </div>
+              </article>
             </div>
 
             <form id="organizationSettingsForm" novalidate>
@@ -1439,12 +1514,12 @@
            Other incomplete details are reviewed as warnings, not blockers. -->
       <section class="card dashboard-section-card hr-batch-employee-card mb-4" id="batchEmployeeImportCard">
         <div class="card-body p-4 p-lg-5">
-          <div class="hr-batch-employee-header mb-4">
-            <div class="hr-batch-employee-heading">
-              <span class="hr-batch-employee-icon" aria-hidden="true">
-                <i class="bi bi-people-fill"></i>
+          <div class="hr-batch-employee-header hr-card-heading mb-4">
+            <div class="hr-batch-employee-heading hr-card-heading-main">
+              <span class="hr-batch-employee-icon hr-card-heading-icon hr-card-heading-icon--batch" aria-hidden="true">
+                <i class="bi bi-file-earmark-arrow-up"></i>
               </span>
-              <div>
+              <div class="hr-card-heading-copy">
                 <span class="hr-people-section-kicker">Bulk onboarding</span>
                 <h2 class="section-heading h4 mb-1">Batch Employee Import</h2>
                 <p class="section-subtext mb-0">
@@ -1583,10 +1658,12 @@
           <!-- CREATE EMPLOYEE PROFILE MODERNISATION - STEP 1
                Presentation shell only. Existing form IDs, validation, save/edit,
                role restrictions, document uploads, and Supabase behaviour remain. -->
-          <div class="hr-create-employee-header mb-4">
-            <div class="hr-create-employee-heading">
-              <span class="hr-create-employee-icon" aria-hidden="true"><i class="bi bi-person-plus"></i></span>
-              <div>
+          <div class="hr-create-employee-header hr-card-heading mb-4">
+            <div class="hr-create-employee-heading hr-card-heading-main">
+              <span class="hr-create-employee-icon hr-card-heading-icon hr-card-heading-icon--onboarding" aria-hidden="true">
+                <i class="bi bi-person-plus"></i>
+              </span>
+              <div class="hr-card-heading-copy">
                 <span class="hr-people-section-kicker">Employee onboarding</span>
                 <h2 class="section-heading h4 mb-1" id="employeeFormTitle">Create Employee Profile</h2>
                 <p class="section-subtext mb-0" id="employeeFormSubtext">
@@ -2869,22 +2946,28 @@ Disable browser address autofill popup on HR employee address fields. -->
           <!-- REMOVE GRADE LEVEL FIELD FROM EMPLOYEE DATA - STEP 3
                Stable scroll target for post-save redirect.
                This prevents the Full Employee List heading from being cut off. -->
-          <div id="employeeListCardHeader" class="hr-employee-directory-header mb-4">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
-              <div>
+          <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 2D
+               Existing collapse ID and employee-list behaviour remain unchanged. -->
+          <div id="employeeListCardHeader" class="hr-employee-directory-header hr-card-heading mb-4">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--directory" aria-hidden="true">
+                <i class="bi bi-person-lines-fill"></i>
+              </span>
+              <div class="hr-card-heading-copy">
+                <span class="hr-people-section-kicker">Employee directory</span>
                 <h2 class="section-heading h4 mb-1">Full Employee List</h2>
                 <p class="section-subtext mb-0">
                   Read-only employee reference pulled from the main HR database for HR visibility and later payroll use.
                 </p>
               </div>
-
-              <button type="button" id="toggleEmployeeListCardBtn"
-                class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
-                aria-controls="employeeListCardCollapse">
-                <i class="bi bi-chevron-up me-2"></i>
-                <span>Collapse</span>
-              </button>
             </div>
+
+            <button type="button" id="toggleEmployeeListCardBtn"
+              class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+              aria-controls="employeeListCardCollapse">
+              <i class="bi bi-chevron-up me-2"></i>
+              <span>Collapse</span>
+            </button>
           </div>
 
           <div id="employeeListCardCollapse">
@@ -3036,30 +3119,75 @@ Disable browser address autofill popup on HR employee address fields. -->
          counters, filters, refresh buttons, collapse behaviour, and Supabase
          loading logic remain intact. -->
     <section id="hrReviewSection" class="workspace-section d-none">
-      <section id="hrReviewLandingCard" class="card dashboard-section-card mb-4">
+      <section id="hrReviewLandingCard"
+        class="card dashboard-section-card hr-review-landing-card mb-4"
+        aria-labelledby="hrReviewLandingTitle">
         <div class="card-body p-4 p-lg-5">
-          <div class="mb-4">
-            <h2 class="section-heading h4 mb-1">HR Review</h2>
-            <p class="section-subtext mb-0">
-              Review employee-submitted profile corrections and manager leave decisions separately from employee master
-              records.
-            </p>
+          <!-- HR REVIEW OVERVIEW SIMPLIFICATION - STEP 1
+               Keep this card as compact navigation, not a second page introduction.
+               Existing access IDs, operational card IDs, data loading, and actions stay unchanged. -->
+          <div class="hr-card-heading hr-review-overview-header mb-4">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--review" aria-hidden="true">
+                <i class="bi bi-signpost-split"></i>
+              </span>
+
+              <div class="hr-card-heading-copy">
+                <span class="hr-review-section-kicker">Review overview</span>
+                <div class="hr-review-overview-title-row">
+                  <h2 class="section-heading h4 mb-0" id="hrReviewLandingTitle">Choose a review area</h2>
+                  <span class="hr-review-overview-count">2 work areas</span>
+                </div>
+                <p class="section-subtext mb-0">
+                  Open a queue below. Your role controls whether you can review only or take decisions.
+                </p>
+              </div>
+            </div>
+
+            <div class="hr-review-access-panel" aria-live="polite">
+              <span id="hrReviewAccessBadge" class="hr-review-access-badge">
+                <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+                Checking access
+              </span>
+              <span id="hrReviewAccessDescription" class="hr-review-access-description">
+                Checking your review permissions.
+              </span>
+            </div>
           </div>
 
-          <div class="row g-4">
-            <div class="col-md-6 col-xl-6">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Profile Reviews</div>
-                <div class="summary-tile-value h6 mb-0">Employee correction requests</div>
+          <div class="hr-review-lane-grid" aria-label="HR review work areas">
+            <article class="hr-review-lane-card hr-review-lane-card--profile">
+              <span class="hr-review-lane-icon" aria-hidden="true">
+                <i class="bi bi-person-exclamation"></i>
+              </span>
+              <div class="hr-review-lane-content">
+                <h3>Profile Correction Requests</h3>
+                <p>Review employee-submitted profile changes.</p>
               </div>
-            </div>
+              <!-- HR REVIEW STICKY HEADER OFFSET FIX - STEP 1
+                   Use the shared offset-aware review navigation helper instead of raw scrollIntoView.
+                   This keeps the operational card heading visible below the sticky application header. -->
+              <button type="button" class="btn btn-sm hr-review-lane-action"
+                onclick="window.hrOpenReviewArea?.('profileCorrectionRequestsCard');">
+                Open queue
+                <i class="bi bi-arrow-down" aria-hidden="true"></i>
+              </button>
+            </article>
 
-            <div class="col-md-6 col-xl-6">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Leave Decision Visibility</div>
-                <div class="summary-tile-value h6 mb-0">Manager decision audit</div>
+            <article class="hr-review-lane-card hr-review-lane-card--leave">
+              <span class="hr-review-lane-icon" aria-hidden="true">
+                <i class="bi bi-calendar2-check"></i>
+              </span>
+              <div class="hr-review-lane-content">
+                <h3>Manager Leave Decisions</h3>
+                <p>Review recorded manager decisions and leave audit history.</p>
               </div>
-            </div>
+              <button type="button" class="btn btn-sm hr-review-lane-action"
+                onclick="window.hrOpenReviewArea?.('recentManagerLeaveDecisionsCard');">
+                Open audit
+                <i class="bi bi-arrow-down" aria-hidden="true"></i>
+              </button>
+            </article>
           </div>
         </div>
       </section>
@@ -3134,12 +3262,18 @@ Disable browser address autofill popup on HR employee address fields. -->
            expose a free-text message field that could invite payroll data entry. -->
       <section id="hrp85EmailIntegrationCard" class="card dashboard-section-card mb-4">
         <div class="card-body p-4 p-lg-5">
-          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
-            <div>
-              <h2 class="section-heading h4 mb-1">Email Integration</h2>
-              <p class="section-subtext mb-0">
-                Validate controlled email delivery for approved test recipients.
-              </p>
+          <!-- SETUP EMAIL HEADER REFINEMENT - STEP 1
+               One communication icon identifies the workspace without adding
+               decorative icons to every internal panel. -->
+          <div class="hr-card-heading hr-setup-primary-heading mb-4">
+            <div class="hr-card-heading-main">
+              <div class="hr-card-heading-copy">
+                <span class="hr-setup-card-kicker">Communication health</span>
+                <h2 class="section-heading h4 mb-1">Email Integration</h2>
+                <p class="section-subtext mb-0">
+                  Validate controlled email delivery for approved test recipients.
+                </p>
+              </div>
             </div>
 
             <div class="d-flex flex-wrap align-items-center gap-2">
@@ -3165,34 +3299,40 @@ Disable browser address autofill popup on HR employee address fields. -->
               </div>
             </div>
 
-            <div class="row g-4 mb-4">
-              <div class="col-md-6 col-xl-3">
-                <div class="summary-tile">
-                  <div class="summary-tile-label">Email Provider</div>
-                  <div class="summary-tile-value h6 mb-0">Configured</div>
+            <!-- SETUP EMAIL SUMMARY REFINEMENT - STEP 2
+                 Existing recipient, history, and result IDs remain unchanged. -->
+            <div class="hr-setup-summary-grid mb-4" aria-label="Email integration summary">
+              <article class="hr-setup-summary-tile hr-setup-summary-tile--provider">
+                <span class="hr-setup-summary-icon" aria-hidden="true"><i class="bi bi-cloud-check"></i></span>
+                <div>
+                  <span class="hr-setup-summary-label">Email Provider</span>
+                  <strong class="hr-setup-summary-value">Configured</strong>
                 </div>
-              </div>
+              </article>
 
-              <div class="col-md-6 col-xl-3">
-                <div class="summary-tile">
-                  <div class="summary-tile-label">Approved Recipients</div>
-                  <div class="summary-tile-value" id="hrp85RecipientCountValue">0</div>
+              <article class="hr-setup-summary-tile hr-setup-summary-tile--recipients">
+                <span class="hr-setup-summary-icon" aria-hidden="true"><i class="bi bi-people"></i></span>
+                <div>
+                  <span class="hr-setup-summary-label">Approved Recipients</span>
+                  <strong class="hr-setup-summary-value" id="hrp85RecipientCountValue">0</strong>
                 </div>
-              </div>
+              </article>
 
-              <div class="col-md-6 col-xl-3">
-                <div class="summary-tile">
-                  <div class="summary-tile-label">Validation History</div>
-                  <div class="summary-tile-value" id="hrp85DeliveryLogCountValue">0</div>
+              <article class="hr-setup-summary-tile hr-setup-summary-tile--history">
+                <span class="hr-setup-summary-icon" aria-hidden="true"><i class="bi bi-clock-history"></i></span>
+                <div>
+                  <span class="hr-setup-summary-label">Validation History</span>
+                  <strong class="hr-setup-summary-value" id="hrp85DeliveryLogCountValue">0</strong>
                 </div>
-              </div>
+              </article>
 
-              <div class="col-md-6 col-xl-3">
-                <div class="summary-tile">
-                  <div class="summary-tile-label">Last Result</div>
-                  <div class="summary-tile-value h6 mb-0" id="hrp85LastResultValue">--</div>
+              <article class="hr-setup-summary-tile hr-setup-summary-tile--result">
+                <span class="hr-setup-summary-icon" aria-hidden="true"><i class="bi bi-patch-check"></i></span>
+                <div>
+                  <span class="hr-setup-summary-label">Last Result</span>
+                  <strong class="hr-setup-summary-value" id="hrp85LastResultValue">--</strong>
                 </div>
-              </div>
+              </article>
             </div>
 
             <div class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
@@ -3364,64 +3504,78 @@ Disable browser address autofill popup on HR employee address fields. -->
       </section>
     </section>
 
-    <section id="hrPayrollSection" class="workspace-section d-none">
+    <section id="hrPayrollSection" class="workspace-section d-none hr-payroll-workspace">
 
-      <section class="card dashboard-section-card mb-4">
+      <!-- PAYROLL WORKSPACE MODERNISATION - STEP 1
+           Presentation-only payroll overview. Existing metric IDs and Run Payroll
+           action remain the source of truth for live data and workflow routing. -->
+      <section class="card dashboard-section-card hr-payroll-card hr-payroll-overview-card mb-4">
         <div class="card-body p-4 p-lg-5">
+          <div class="hr-card-heading hr-payroll-card-heading mb-4">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--payroll" aria-hidden="true">
+                <i class="bi bi-cash-stack"></i>
+              </span>
 
-          <!-- WORKSPACE REARRANGEMENT - STEP 2A
-     Payroll actions now live inside Payroll, not in the global workspace switcher.
-     Run Payroll is an operational payroll action, not a separate workspace. -->
-          <div class="mb-4">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
-              <div>
+              <div class="hr-card-heading-copy">
+                <span class="hr-payroll-section-kicker">Payroll intelligence</span>
                 <h2 class="section-heading h4 mb-1">Payroll Overview</h2>
                 <p class="section-subtext mb-0">
                   Review payroll totals, start payroll runs, and access payroll records.
                 </p>
               </div>
-
-              <div class="d-flex flex-wrap gap-2">
-                <!-- RUN PAYROLL BUTTON COLOUR ALIGNMENT - STEP 1
-     Use the BexHR dashboard brand action class instead of Bootstrap success green.
-     This keeps Run Payroll as a primary operational action without making it look
-     like a generic green success/status button. -->
-                <button type="button" class="btn bexhr-brand-action-btn dashboard-action-btn text-nowrap"
-                  id="runPayrollActionBtn">
-                  <i class="bi bi-play-circle me-2"></i>Run Payroll
-                </button>
-              </div>
             </div>
+
+            <button type="button" class="btn bexhr-brand-action-btn dashboard-action-btn text-nowrap"
+              id="runPayrollActionBtn">
+              <i class="bi bi-play-circle me-2"></i>Run Payroll
+            </button>
           </div>
 
-          <div class="row g-4">
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Payroll Records</div>
-                <div class="summary-tile-value" id="payrollRecordCountValue">0</div>
-              </div>
-            </div>
+          <!-- PAYROLL OVERVIEW FINANCIAL CARD CLARITY - STEP 1
+               Make the summary's filter scope explicit without changing the
+               existing search, status, pay-cycle, calculation, export, or send logic. -->
+          <div class="hr-payroll-summary-scope" role="status" aria-live="polite">
+            <i class="bi bi-funnel" aria-hidden="true"></i>
+            <span id="payrollSummaryScope">Scope: All pay cycles • All statuses</span>
+          </div>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Finalised</div>
-                <div class="summary-tile-value" id="payrollFinalisedCountValue">0</div>
+          <div class="hr-payroll-summary-grid" aria-label="Payroll overview metrics">
+            <article class="hr-payroll-summary-tile hr-payroll-summary-tile--records">
+              <span class="hr-payroll-summary-icon" aria-hidden="true"><i class="bi bi-journal-text"></i></span>
+              <div>
+                <span class="hr-payroll-summary-label">Records shown</span>
+                <strong class="hr-payroll-summary-value" id="payrollRecordCountValue">0</strong>
+                <span class="hr-payroll-summary-detail">Matching the current payroll filters</span>
               </div>
-            </div>
+            </article>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Gross Payroll</div>
-                <div class="summary-tile-value" id="payrollGrossTotalValue">NGN 0.00</div>
+            <article class="hr-payroll-summary-tile hr-payroll-summary-tile--finalised">
+              <span class="hr-payroll-summary-icon" aria-hidden="true"><i class="bi bi-check2-circle"></i></span>
+              <div>
+                <span class="hr-payroll-summary-label">Finalised shown</span>
+                <strong class="hr-payroll-summary-value" id="payrollFinalisedCountValue">0</strong>
+                <span class="hr-payroll-summary-detail">Finalised records in this view</span>
               </div>
-            </div>
+            </article>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Net Payroll</div>
-                <div class="summary-tile-value" id="payrollNetTotalValue">NGN 0.00</div>
+            <article class="hr-payroll-summary-tile hr-payroll-summary-tile--gross">
+              <span class="hr-payroll-summary-icon" aria-hidden="true"><i class="bi bi-wallet2"></i></span>
+              <div>
+                <span class="hr-payroll-summary-label">Gross total shown</span>
+                <strong class="hr-payroll-summary-value hr-payroll-summary-value--financial" id="payrollGrossTotalValue">NGN 0.00</strong>
+                <span class="hr-payroll-summary-detail">Combined gross pay for records shown</span>
               </div>
-            </div>
+            </article>
+
+            <article class="hr-payroll-summary-tile hr-payroll-summary-tile--net">
+              <span class="hr-payroll-summary-icon" aria-hidden="true"><i class="bi bi-currency-exchange"></i></span>
+              <div>
+                <span class="hr-payroll-summary-label">Net payable shown</span>
+                <strong class="hr-payroll-summary-value hr-payroll-summary-value--financial" id="payrollNetTotalValue">NGN 0.00</strong>
+                <span class="hr-payroll-summary-detail">Combined net pay for records shown</span>
+              </div>
+            </article>
           </div>
         </div>
       </section>
@@ -3758,34 +3912,38 @@ Disable browser address autofill popup on HR employee address fields. -->
            This is the foundation UI for maintaining employee
            salary structure master records.
       ========================================================== -->
-      <section class="card dashboard-section-card mb-4">
+      <section class="card dashboard-section-card hr-payroll-card hr-payroll-salary-card mb-4">
         <div class="card-body p-4 p-lg-5">
           <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 3
      Make Payroll Master Data collapsible like the larger HR working cards.
      The header stays visible; the form and records collapse underneath it. -->
-          <div class="mb-4">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
-              <div>
-                <!-- PAYROLL WORKFLOW UX REPAIR - STEP 1
-     Rename Payroll Master Data to HR/payroll-friendly wording.
-     This card defines each employee's salary setup before payroll is run. -->
+          <!-- PAYROLL WORKSPACE MODERNISATION - STEP 2
+               Shared icon-led salary setup heading. Existing collapse, form, save,
+               edit, refresh, and Supabase IDs remain unchanged. -->
+          <div class="hr-card-heading hr-payroll-card-heading mb-4">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--salary" aria-hidden="true">
+                <i class="bi bi-person-vcard"></i>
+              </span>
+
+              <div class="hr-card-heading-copy">
+                <span class="hr-payroll-section-kicker">Salary configuration</span>
                 <h2 class="section-heading h4 mb-1">Employee Salary Setup</h2>
                 <p class="section-subtext mb-0">
-                  Set up each employee’s monthly salary, pay cycle, effective date, and payroll status before running
-                  payroll.
+                  Set up each employee’s monthly salary, pay cycle, effective date, and payroll status before running payroll.
                 </p>
               </div>
-
-              <button type="button" id="togglePayrollMasterCardBtn"
-                class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
-                aria-controls="payrollMasterCardCollapse">
-                <i class="bi bi-chevron-up me-2"></i>
-                <span>Collapse</span>
-              </button>
             </div>
+
+            <button type="button" id="togglePayrollMasterCardBtn"
+              class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+              aria-controls="payrollMasterCardCollapse">
+              <i class="bi bi-chevron-up me-2"></i>
+              <span>Collapse</span>
+            </button>
           </div>
 
-          <div id="payrollMasterCardCollapse">
+          <div id="payrollMasterCardCollapse" class="hr-payroll-card-collapse">
             <div class="dashboard-toolbar hr-form-toolbar mb-4">
               <span id="payrollMasterFormModeBadge" class="badge rounded-pill text-bg-light border px-3 py-2">
                 Create Mode
@@ -3807,7 +3965,7 @@ Disable browser address autofill popup on HR employee address fields. -->
               </button>
             </div>
 
-            <form id="payrollMasterCreateForm" novalidate>
+            <form id="payrollMasterCreateForm" class="hr-payroll-form-panel" novalidate>
               <!-- Hidden id used later for edit mode -->
               <input type="hidden" id="editingPayrollMasterId" />
 
@@ -3912,7 +4070,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                  This lets HR land cleanly on Payroll Master Records
                  without cutting off the records heading. -->
             <div id="payrollMasterRecordsHeader"
-              class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
+              class="hr-payroll-records-header d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
               <div>
                 <h3 class="h5 mb-1">Employee Salary Setup Records</h3>
                 <p class="section-subtext mb-0">
@@ -3938,9 +4096,9 @@ Disable browser address autofill popup on HR employee address fields. -->
                  Keep the records contained inside this card and remove the
                  duplicate payrollMasterRecordsTableWrapper that could confuse
                  document.getElementById() and table rendering. -->
-            <div id="payrollMasterRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+            <div id="payrollMasterRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none hr-payroll-table-wrap hr-payroll-salary-records-wrap"
               style="max-height: 420px; overflow: auto; overscroll-behavior: contain;">
-              <table class="table align-middle mb-0">
+              <table class="table align-middle mb-0 hr-payroll-records-table">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                   <!-- DESCRIPTION ITEM 3 - STEP 2A-2
                        Payroll Grade / Level is restored to Payroll Master Records
@@ -4933,42 +5091,39 @@ Disable browser address autofill popup on HR employee address fields. -->
         </div>
       </section>
 
-      <section class="card dashboard-section-card mb-4">
+      <section class="card dashboard-section-card hr-payroll-card hr-payroll-finalise-card mb-4">
         <div class="card-body p-4 p-lg-5">
           <!-- BATCH PAYROLL DEFAULT - STEP 6C
                Add scroll landing space above the Create Payroll Batch header
                so Continue to Payroll lands like the cleaner target view. -->
-          <div class="mb-4" style="scroll-margin-top: 96px;">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
-              <div>
-                <!-- PAYROLL WORKFLOW UX REPAIR - STEP 5
-     This card is the payroll finalisation workspace.
-     Payroll records are finalised here; payslips remain a separate deliberate action
-     after finalised records exist. -->
-                <h2 class="section-heading h4 mb-1" id="payrollFormTitle">
-                  Finalise Payroll &amp; Payslips
-                </h2>
+          <!-- PAYROLL WORKSPACE MODERNISATION - STEP 3
+               Modern payroll finalisation heading. Existing title/subtext IDs are
+               preserved because edit and batch modes update them dynamically. -->
+          <div class="hr-card-heading hr-payroll-card-heading mb-4" style="scroll-margin-top: 96px;">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--finalise" aria-hidden="true">
+                <i class="bi bi-send-check"></i>
+              </span>
+
+              <div class="hr-card-heading-copy">
+                <span class="hr-payroll-section-kicker">Payroll processing</span>
+                <h2 class="section-heading h4 mb-1" id="payrollFormTitle">Finalise Payroll &amp; Payslips</h2>
                 <p class="section-subtext mb-0" id="payrollFormSubtext">
-                  Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are
-                  sent separately after payroll records are finalised.
+                  Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.
                 </p>
               </div>
-
-              <!-- PAYROLL WORKFLOW UX REPAIR - STEP 5C
-     Keep the Payroll collapse/expand button on one line.
-     The long "Finalise Payroll & Payslips" heading can squeeze this button,
-     so prevent flex shrinking and text wrapping. -->
-              <button type="button" id="togglePayrollRecordCardBtn"
-                class="btn btn-outline-secondary dashboard-action-btn text-nowrap d-inline-flex align-items-center justify-content-center flex-shrink-0 align-self-start"
-                aria-expanded="true" aria-controls="payrollRecordCardCollapse">
-                <i class="bi bi-chevron-up me-2"></i>
-                <span>Collapse</span>
-              </button>
             </div>
+
+            <button type="button" id="togglePayrollRecordCardBtn"
+              class="btn btn-outline-secondary dashboard-action-btn text-nowrap d-inline-flex align-items-center justify-content-center flex-shrink-0 align-self-start"
+              aria-expanded="true" aria-controls="payrollRecordCardCollapse">
+              <i class="bi bi-chevron-up me-2"></i>
+              <span>Collapse</span>
+            </button>
           </div>
 
-          <div id="payrollRecordCardCollapse">
-            <div class="dashboard-toolbar hr-form-toolbar mb-4">
+          <div id="payrollRecordCardCollapse" class="hr-payroll-card-collapse">
+            <div class="dashboard-toolbar hr-form-toolbar hr-payroll-toolbar mb-4">
               <span id="payrollFormModeBadge" class="badge rounded-pill text-bg-light border px-3 py-2">
                 Single Employee Mode
               </span>
@@ -4998,7 +5153,7 @@ Disable browser address autofill popup on HR employee address fields. -->
      Upload area for Alpatech-format CSV files.
      This step adds the UI only. Parsing and payroll record creation
      will be wired in the next step so we do not disturb existing batch payroll. -->
-            <div id="batchPayrollCsvImportPanel" class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+            <div id="batchPayrollCsvImportPanel" class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4 hr-payroll-subpanel hr-payroll-import-panel">
               <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
                 <div>
                   <div class="fw-bold">Batch Payroll CSV Import</div>
@@ -5053,7 +5208,7 @@ Disable browser address autofill popup on HR employee address fields. -->
      This panel becomes the default Run Payroll review area.
      It shows selected active employees in a table before any payroll
      calculation or submission is performed. -->
-            <div id="batchPayrollReviewPanel" class="alert alert-light border d-none mb-4">
+            <div id="batchPayrollReviewPanel" class="alert alert-light border d-none mb-4 hr-payroll-subpanel hr-payroll-batch-review-panel">
               <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
                 <div>
                   <!-- PAYROLL WORKFLOW UX REPAIR - STEP 5B
@@ -5179,7 +5334,7 @@ Disable browser address autofill popup on HR employee address fields. -->
               </div>
             </div>
 
-            <form id="payrollCreateForm" novalidate>
+            <form id="payrollCreateForm" class="hr-payroll-finalisation-form" novalidate>
               <!-- BATCH PAYROLL CSV IMPORT - STEP 5
        This heading separates manual single payroll from CSV/batch payroll.
        It avoids HR thinking the manual employee dropdown belongs to the CSV import flow. -->
@@ -5231,7 +5386,7 @@ Disable browser address autofill popup on HR employee address fields. -->
        Read-only employee reference panel for payroll.
        This makes it clear payroll is consuming employee data from HR,
        not maintaining a separate employee record. -->
-                  <div id="payrollSelectedEmployeeReference" class="border rounded-4 p-3 p-lg-4 bg-light-subtle">
+                  <div id="payrollSelectedEmployeeReference" class="border rounded-4 p-3 p-lg-4 bg-light-subtle hr-payroll-subpanel hr-payroll-employee-reference">
                     <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
                       <div>
                         <h3 class="h6 fw-bold mb-1">Selected Employee Reference</h3>
@@ -5656,7 +5811,7 @@ Disable browser address autofill popup on HR employee address fields. -->
       </section>
       <!-- SUBMIT PAYROLL - DESCRIPTION ITEM 2
      Stable target for redirecting HR to submitted payroll records. -->
-      <section id="payrollRecordsCard" class="card dashboard-section-card">
+      <section id="payrollRecordsCard" class="card dashboard-section-card hr-payroll-card hr-payroll-records-card mb-4">
         <div class="card-body p-4 p-lg-5">
           <!-- DESCRIPTION ITEM 4 - STEP 2B
      Payroll Records header layout correction.
@@ -5673,13 +5828,22 @@ Disable browser address autofill popup on HR employee address fields. -->
                  Make Payroll Records collapsible like the other long HR/payroll cards.
                  The header remains visible while filters, records, and payslip status
                  sit inside the collapsible body. -->
-            <div id="payrollRecordsHeader"
-              class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
-              <div>
-                <h2 class="section-heading h4 mb-1">Payroll Records</h2>
-                <p class="section-subtext mb-0">
-                  Search payroll records by employee, pay cycle, department, group, or status.
-                </p>
+            <!-- PAYROLL WORKSPACE MODERNISATION - STEP 4
+                 Payroll records heading follows the shared icon-led platform system.
+                 Existing filter, export, email, table, preview, and edit IDs remain unchanged. -->
+            <div id="payrollRecordsHeader" class="hr-card-heading hr-payroll-card-heading mb-4">
+              <div class="hr-card-heading-main">
+                <span class="hr-card-heading-icon hr-card-heading-icon--records" aria-hidden="true">
+                  <i class="bi bi-file-earmark-spreadsheet"></i>
+                </span>
+
+                <div class="hr-card-heading-copy">
+                  <span class="hr-payroll-section-kicker">Payroll register</span>
+                  <h2 class="section-heading h4 mb-1">Payroll Records</h2>
+                  <p class="section-subtext mb-0">
+                    Search payroll records by employee, pay cycle, department, group, or status.
+                  </p>
+                </div>
               </div>
 
               <button type="button" id="togglePayrollRecordsCardBtn"
@@ -5690,13 +5854,13 @@ Disable browser address autofill popup on HR employee address fields. -->
               </button>
             </div>
 
-            <div id="payrollRecordsCardCollapse">
+            <div id="payrollRecordsCardCollapse" class="hr-payroll-card-collapse">
               <!-- DESCRIPTION ITEM 4 - STEP 2E
      Clean Payroll Records toolbar.
      Keep search/status/cycle as form controls in one row.
      Keep CSV and Send Payslips as action buttons in a separate footer row
      so the header no longer looks visually uneven. -->
-              <div class="border rounded-4 p-3 bg-light-subtle">
+              <div class="border rounded-4 p-3 bg-light-subtle hr-payroll-record-filter-panel">
                 <div class="row g-3 align-items-end">
                   <div class="col-12 col-lg-5">
                     <label for="payrollSearchInput" class="form-label fw-semibold mb-2">
@@ -5768,9 +5932,9 @@ Disable browser address autofill popup on HR employee address fields. -->
      Add breathing space between the payroll action toolbar and the
      Payroll Records table so the records area does not visually touch
      the filter/action card. -->
-              <div id="payrollRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none mt-3"
+              <div id="payrollRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none mt-3 hr-payroll-table-wrap hr-payroll-main-records-wrap"
                 style="max-height: 620px; overflow-y: auto;">
-                <table class="table align-middle mb-0">
+                <table class="table align-middle mb-0 hr-payroll-records-table">
                   <!-- DESCRIPTION ITEM 4 - STEP 5C
      Sticky table header keeps payroll columns visible while HR scrolls
      through many payroll records inside the contained panel. -->
@@ -5807,55 +5971,83 @@ Disable browser address autofill popup on HR employee address fields. -->
      This keeps payroll records as the primary table while allowing HR
      to expand status details only when they need to review prepared,
      sent, or failed payslip emails. -->
-              <div id="payslipEmailStatusSection">
-                <div class="border rounded-4 p-3 bg-light-subtle">
-                  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-                    <div>
-                      <h3 class="h5 mb-1">Payslip Email Status</h3>
-                      <p class="section-subtext mb-0">
-                        Track prepared payslip email records for the selected payroll action cycle.
-                      </p>
+              <div id="payslipEmailStatusSection" class="hr-payroll-email-status-section">
+                <div class="hr-payroll-email-status-panel">
+                  <!-- PAYROLL EMAIL STATUS MODERNISATION - STEP 1
+                       Existing IDs, counts, collapse control, refresh action, and
+                       tenant-scoped delivery-log workflow remain unchanged. -->
+                  <div class="hr-payroll-email-status-heading hr-card-heading">
+                    <div class="hr-card-heading-main">
+                      <span class="hr-card-heading-icon hr-card-heading-icon--email-status" aria-hidden="true">
+                        <i class="bi bi-envelope-check"></i>
+                      </span>
+
+                      <div class="hr-card-heading-copy">
+                        <span class="hr-payroll-section-kicker">Delivery monitoring</span>
+                        <h3 class="h5 mb-1">Payslip Email Status</h3>
+                        <p class="section-subtext mb-0">
+                          Track prepared, sent, and failed payslip email records for the selected payroll action cycle.
+                        </p>
+                      </div>
                     </div>
 
-                    <div class="d-flex flex-wrap align-items-center gap-2">
-                      <!-- DESCRIPTION ITEM 4 - STEP 5B
-             Summary badges are placeholders for now.
-             JS will update these when payslip email logs are loaded. -->
-                      <span class="badge rounded-pill text-bg-secondary px-3 py-2">
-                        Pending: <span id="payslipEmailPendingCount">0</span>
-                      </span>
+                    <button type="button" id="togglePayslipEmailLogsBtn"
+                      class="btn btn-outline-secondary dashboard-action-btn text-nowrap" aria-expanded="false"
+                      aria-controls="payslipEmailLogsCollapse">
+                      <i class="bi bi-chevron-down me-2"></i>
+                      <span>View Status</span>
+                    </button>
+                  </div>
 
-                      <span class="badge rounded-pill text-bg-success px-3 py-2">
-                        Sent: <span id="payslipEmailSentCount">0</span>
+                  <div class="hr-payroll-email-status-summary-grid" aria-label="Payslip email delivery totals">
+                    <article class="hr-payroll-email-status-tile hr-payroll-email-status-tile--pending">
+                      <span class="hr-payroll-email-status-icon" aria-hidden="true">
+                        <i class="bi bi-hourglass-split"></i>
                       </span>
+                      <div>
+                        <span class="hr-payroll-email-status-label">Pending</span>
+                        <strong class="hr-payroll-email-status-value" id="payslipEmailPendingCount">0</strong>
+                        <small>Awaiting provider update</small>
+                      </div>
+                    </article>
 
-                      <span class="badge rounded-pill text-bg-danger px-3 py-2">
-                        Failed: <span id="payslipEmailFailedCount">0</span>
+                    <article class="hr-payroll-email-status-tile hr-payroll-email-status-tile--sent">
+                      <span class="hr-payroll-email-status-icon" aria-hidden="true">
+                        <i class="bi bi-send-check"></i>
                       </span>
+                      <div>
+                        <span class="hr-payroll-email-status-label">Sent</span>
+                        <strong class="hr-payroll-email-status-value" id="payslipEmailSentCount">0</strong>
+                        <small>Delivered successfully</small>
+                      </div>
+                    </article>
 
-                      <button type="button" id="togglePayslipEmailLogsBtn"
-                        class="btn btn-outline-secondary dashboard-action-btn text-nowrap" aria-expanded="false"
-                        aria-controls="payslipEmailLogsCollapse">
-                        <i class="bi bi-chevron-down me-2"></i>
-                        <span>View Status</span>
-                      </button>
-                    </div>
+                    <article class="hr-payroll-email-status-tile hr-payroll-email-status-tile--failed">
+                      <span class="hr-payroll-email-status-icon" aria-hidden="true">
+                        <i class="bi bi-exclamation-octagon"></i>
+                      </span>
+                      <div>
+                        <span class="hr-payroll-email-status-label">Failed</span>
+                        <strong class="hr-payroll-email-status-value" id="payslipEmailFailedCount">0</strong>
+                        <small>Needs delivery review</small>
+                      </div>
+                    </article>
                   </div>
 
                   <!-- DESCRIPTION ITEM 4 - STEP 5B
-         Detailed status area remains collapsed by default so the Payroll
-         Records card stays compact. -->
-                  <div id="payslipEmailLogsCollapse" class="d-none mt-4">
-                    <div
-                      class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
-                      <div class="small text-secondary">
-                        Delivery status loads automatically when this panel opens. Use Refresh Status only when you need
-                        the latest provider result.
+                       Detailed status remains collapsed by default so Payroll
+                       Records stays compact until HR needs delivery evidence. -->
+                  <div id="payslipEmailLogsCollapse" class="d-none hr-payroll-email-status-collapse">
+                    <div class="hr-payroll-email-status-toolbar">
+                      <div class="hr-payroll-email-status-guidance">
+                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                        <span>
+                          Status loads automatically when this panel opens. Use Refresh Status only for the latest provider result.
+                        </span>
                       </div>
 
                       <!-- DESCRIPTION ITEM 4 - STEP 6
-     Refresh payslip email logs from Supabase.
-     This only loads audit/status records; it does not send emails. -->
+                           Refresh audit/status rows only. This action never sends email. -->
                       <button type="button" id="refreshPayslipEmailLogsBtn"
                         class="btn btn-outline-primary dashboard-action-btn text-nowrap"
                         title="Refresh prepared payslip email status records">
@@ -5865,22 +6057,23 @@ Disable browser address autofill popup on HR employee address fields. -->
                     </div>
 
                     <!-- PAYROLL EMAIL DELIVERY - STEP 2F-3B-6A
-     Shows HR the latest Send Payslips backend result inside the status panel,
-     so HR does not rely only on the temporary page alert or toast. -->
+                         Latest secure backend preparation result remains visible. -->
                     <div id="payslipEmailRunSummaryNotice" class="alert alert-info border d-none mb-3"></div>
 
-                    <div id="payslipEmailLogsEmptyState" class="alert alert-light border mb-0">
-                      No payslip email logs have been prepared yet.
+                    <div id="payslipEmailLogsEmptyState" class="hr-payroll-email-status-empty">
+                      <span aria-hidden="true"><i class="bi bi-envelope-open"></i></span>
+                      <div>
+                        <strong>No payslip email activity yet</strong>
+                        <small>Prepared delivery records will appear here after payslips are sent.</small>
+                      </div>
                     </div>
 
-                    <!-- CROSS-DASHBOARD UI CLEANUP - STEP 1A
-     Payslip Email Status can grow quickly as payroll emails are sent.
-     Keep the delivery log contained inside the Payroll Records card with
-     its own inner scroll instead of stretching the full HR dashboard page. -->
+                    <!-- PAYROLL EMAIL STATUS MODERNISATION - STEP 2
+                         Controlled inner scroll and responsive delivery records.
+                         Existing tbody ID and provider evidence remain unchanged. -->
                     <div id="payslipEmailLogsTableWrapper"
-                      class="dashboard-table-wrap table-responsive d-none border rounded-4"
-                      style="max-height: 320px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain;">
-                      <table class="table align-middle mb-0" style="min-width: 860px;">
+                      class="dashboard-table-wrap table-responsive d-none hr-payroll-email-log-wrap">
+                      <table class="table align-middle mb-0 hr-payroll-email-log-table">
                         <thead>
                           <tr>
                             <th>Employee / Recipient</th>
@@ -5912,26 +6105,37 @@ Disable browser address autofill popup on HR employee address fields. -->
        HR staff use this section to manage their own leave and payroll,
        just like an employee dashboard embedded inside the HR workspace.
        All DOM IDs are prefixed with "ss" to avoid conflicts with HR elements. -->
-    <section id="hrSelfServiceSection" class="workspace-section d-none">
+    <section id="hrSelfServiceSection" class="workspace-section d-none hr-self-service-workspace">
 
       <div id="ssSelfServiceAlert" class="alert d-none mb-4" role="alert"></div>
 
-      <!-- Sub-navigation: Leave / Payroll -->
-      <section class="card dashboard-section-card workspace-switcher-card mb-4">
+      <!-- SELF-SERVICE NAVIGATION SIMPLIFICATION - STEP 1
+           The application header already names My Self-Service. Keep this
+           second layer as a concise area switcher while preserving the
+           existing Leave and Payroll navigation IDs and handlers. -->
+      <section class="card dashboard-section-card hr-self-service-nav-card hr-self-service-nav-card--compact mb-4"
+        aria-label="Self-service area switcher">
         <div class="card-body p-3 p-lg-4">
-          <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-            <div>
-              <h2 class="section-heading h4 mb-1">My Self-Service</h2>
-              <p class="section-subtext mb-0">
-                Manage your own leave and view your payslips, just as an employee.
-              </p>
+          <div class="hr-self-service-nav-bar">
+            <div class="hr-self-service-nav-context">
+              <span class="hr-self-service-nav-mark" aria-hidden="true">
+                <i class="bi bi-person-check"></i>
+              </span>
+
+              <div>
+                <span class="hr-self-service-kicker">Personal workspace</span>
+                <p class="hr-self-service-nav-description mb-0">
+                  Choose your leave area or your authorised payroll and payslips.
+                </p>
+              </div>
             </div>
-            <div class="d-flex flex-wrap gap-2">
+
+            <div class="hr-self-service-nav-actions" role="group" aria-label="Self-service area">
               <button type="button" class="btn btn-primary dashboard-action-btn" id="ssNavLeaveBtn">
-                <i class="bi bi-calendar-check me-2"></i>Leave Management
+                <i class="bi bi-calendar2-check me-2"></i>Leave
               </button>
               <button type="button" class="btn btn-outline-primary dashboard-action-btn" id="ssNavPayrollBtn">
-                <i class="bi bi-cash-coin me-2"></i>Payroll
+                <i class="bi bi-wallet2 me-2"></i>Payroll &amp; Payslips
               </button>
             </div>
           </div>
@@ -5942,15 +6146,21 @@ Disable browser address autofill popup on HR employee address fields. -->
       <div id="ssLeaveSection">
 
         <!-- Leave Balances -->
-        <section class="card dashboard-section-card mb-4">
+        <section class="card dashboard-section-card hr-self-service-card hr-self-service-balances-card mb-4">
           <div class="card-body p-4 p-lg-5">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-              <div>
-                <h2 class="section-heading h4 mb-1">Leave Balances</h2>
+            <div class="hr-card-heading hr-self-service-card-heading mb-4">
+              <div class="hr-card-heading-main">
+                <span class="hr-card-heading-icon hr-card-heading-icon--self-service-balance" aria-hidden="true">
+                  <i class="bi bi-pie-chart"></i>
+                </span>
+                <div class="hr-card-heading-copy">
+                  <span class="hr-self-service-kicker">Leave availability</span>
+                  <h2 class="section-heading h4 mb-1">Leave Balances</h2>
                 <p class="section-subtext mb-0">Your leave entitlement, used days, and remaining balance by leave type.
                 </p>
+                </div>
               </div>
-              <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+              <div class="hr-self-service-card-toolbar">
                 <!-- HR SELF-SERVICE LEAVE PARITY - STEP 1C-2
                    Leave is now reachable from Payroll, so Payroll must also be
                    reachable from Leave without forcing HR to refresh or scroll
@@ -5977,21 +6187,27 @@ Disable browser address autofill popup on HR employee address fields. -->
                   <i class="bi bi-arrow-clockwise me-2"></i>Refresh Balances
                 </button>
               </div>
-              <div id="ssLeaveBalancesEmptyState" class="text-secondary">No leave balances available yet.</div>
-              <div class="row g-4 d-none" id="ssLeaveBalancesGrid"></div>
+              <div id="ssLeaveBalancesEmptyState" class="text-secondary hr-self-service-empty-state">No leave balances available yet.</div>
+              <div class="row g-4 d-none hr-self-service-balance-grid" id="ssLeaveBalancesGrid"></div>
             </div>
           </div>
         </section>
 
         <!-- Latest Leave Decision -->
-        <section class="card dashboard-section-card mb-4">
+        <section class="card dashboard-section-card hr-self-service-card hr-self-service-decision-card mb-4">
           <div class="card-body p-4 p-lg-5">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-              <div>
-                <h2 class="section-heading h4 mb-1">Latest Leave Decision</h2>
-                <p class="section-subtext mb-0">Review the most recent decision recorded by your manager.</p>
+            <div class="hr-card-heading hr-self-service-card-heading mb-4">
+              <div class="hr-card-heading-main">
+                <span class="hr-card-heading-icon hr-card-heading-icon--self-service-decision" aria-hidden="true">
+                  <i class="bi bi-calendar2-check"></i>
+                </span>
+                <div class="hr-card-heading-copy">
+                  <span class="hr-self-service-kicker">Manager outcome</span>
+                  <h2 class="section-heading h4 mb-1">Latest Leave Decision</h2>
+                  <p class="section-subtext mb-0">Review the most recent decision recorded by your manager.</p>
+                </div>
               </div>
-              <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+              <div class="hr-self-service-card-toolbar">
                 <button type="button" id="ssToggleLatestDecisionCardBtn"
                   class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
                   aria-expanded="false" aria-controls="ssLatestDecisionCardCollapse"
@@ -6008,8 +6224,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                   <i class="bi bi-arrow-clockwise me-2"></i>Refresh Decision
                 </button>
               </div>
-              <div id="ssLatestDecisionEmptyState" class="text-secondary">No leave decision updates available yet.</div>
-              <div id="ssLatestDecisionCard" class="d-none">
+              <div id="ssLatestDecisionEmptyState" class="text-secondary hr-self-service-empty-state">No leave decision updates available yet.</div>
+              <div id="ssLatestDecisionCard" class="d-none hr-self-service-decision-content">
                 <div class="info-tile">
                   <div class="d-flex flex-column flex-lg-row gap-3 gap-lg-5">
                     <div>
@@ -6052,11 +6268,19 @@ Disable browser address autofill popup on HR employee address fields. -->
            and My Leave History. Height is applied only while history is expanded. -->
         <div class="row g-4 ss-leave-main-row">
           <div class="col-12 col-xl-5">
-            <section class="card dashboard-section-card dashboard-form-card ss-leave-equal-card">
+            <section class="card dashboard-section-card dashboard-form-card ss-leave-equal-card hr-self-service-card hr-self-service-request-card">
               <div class="card-body p-4 p-lg-5">
-                <div class="mb-4">
-                  <h2 class="section-heading h4 mb-1">Request Leave</h2>
-                  <p class="section-subtext mb-0">Submit a leave request for your manager to review and approve.</p>
+                <div class="hr-card-heading hr-self-service-card-heading mb-4">
+                  <div class="hr-card-heading-main">
+                    <span class="hr-card-heading-icon hr-card-heading-icon--self-service-request" aria-hidden="true">
+                      <i class="bi bi-calendar2-plus"></i>
+                    </span>
+                    <div class="hr-card-heading-copy">
+                      <span class="hr-self-service-kicker">New request</span>
+                      <h2 class="section-heading h4 mb-1">Request Leave</h2>
+                      <p class="section-subtext mb-0">Submit a leave request for your manager to review and approve.</p>
+                    </div>
+                  </div>
                 </div>
                 <form id="ssLeaveRequestForm" novalidate>
                   <div class="mb-3">
@@ -6097,7 +6321,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                       <i class="bi bi-send-check me-2"></i>Submit for Approval
                     </button>
                   </div>
-                  <div class="border-top mt-4 pt-3">
+                  <div class="hr-self-service-workflow-note mt-4">
                     <div class="small fw-semibold mb-2">What happens next?</div>
                     <div class="d-grid gap-2 small text-secondary">
                       <div class="d-flex align-items-start gap-2">
@@ -6130,15 +6354,20 @@ Disable browser address autofill popup on HR employee address fields. -->
      My Leave History participates in Employee Dashboard-style equal-height
      behaviour only while expanded. When collapsed, JS removes the height rule
      so the card shrinks to header-only. -->
-            <section class="card dashboard-section-card ss-leave-equal-card" id="ssEmployeeLeaveHistoryCard">
+            <section class="card dashboard-section-card ss-leave-equal-card hr-self-service-card hr-self-service-history-card" id="ssEmployeeLeaveHistoryCard">
               <div class="card-body p-4 p-lg-5">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-                  <div>
-                    <h2 class="section-heading h4 mb-1">My Leave History</h2>
-                    <p class="section-subtext mb-0">Track submitted requests, manager decisions, and decision comments.
-                    </p>
+                <div class="hr-card-heading hr-self-service-card-heading mb-4">
+                  <div class="hr-card-heading-main">
+                    <span class="hr-card-heading-icon hr-card-heading-icon--self-service-history" aria-hidden="true">
+                      <i class="bi bi-clock-history"></i>
+                    </span>
+                    <div class="hr-card-heading-copy">
+                      <span class="hr-self-service-kicker">Request timeline</span>
+                      <h2 class="section-heading h4 mb-1">My Leave History</h2>
+                      <p class="section-subtext mb-0">Track submitted requests, manager decisions, and decision comments.</p>
+                    </div>
                   </div>
-                  <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+                  <div class="hr-self-service-card-toolbar">
                     <button type="button" id="ssToggleLeaveHistoryCardBtn"
                       class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
                       aria-expanded="true" aria-controls="ssLeaveHistoryCardCollapse" title="Collapse leave history">
@@ -6160,8 +6389,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                      loading, refresh, empty state, and request rendering continue unchanged. -->
                   <div class="employee-leave-history-scroll-area" role="region"
                     aria-label="Self-service leave history records" tabindex="0">
-                    <div id="ssLeaveRequestsEmptyState" class="text-secondary">No leave requests submitted yet.</div>
-                    <div id="ssLeaveRequestsList" class="d-none"></div>
+                    <div id="ssLeaveRequestsEmptyState" class="text-secondary hr-self-service-empty-state">No leave requests submitted yet.</div>
+                    <div id="ssLeaveRequestsList" class="d-none hr-self-service-record-list"></div>
                   </div>
                 </div>
               </div>
@@ -6174,15 +6403,20 @@ Disable browser address autofill popup on HR employee address fields. -->
       <div id="ssPayrollSection" class="d-none">
 
         <!-- Current Payslip Summary -->
-        <section class="card dashboard-section-card mb-4">
+        <section class="card dashboard-section-card hr-self-service-card hr-self-service-current-payroll-card mb-4">
           <div class="card-body p-4 p-lg-5">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-              <div>
-                <h2 class="section-heading h4 mb-1">Current Payslip Summary</h2>
-                <p class="section-subtext mb-0">Your latest authorised payslip summary for the most recent pay cycle.
-                </p>
+            <div class="hr-card-heading hr-self-service-card-heading mb-4">
+              <div class="hr-card-heading-main">
+                <span class="hr-card-heading-icon hr-card-heading-icon--self-service-payroll" aria-hidden="true">
+                  <i class="bi bi-file-earmark-text"></i>
+                </span>
+                <div class="hr-card-heading-copy">
+                  <span class="hr-self-service-kicker">Latest authorised pay</span>
+                  <h2 class="section-heading h4 mb-1">Current Payslip Summary</h2>
+                  <p class="section-subtext mb-0">Your latest authorised payslip summary for the most recent pay cycle.</p>
+                </div>
               </div>
-              <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+              <div class="hr-self-service-card-toolbar">
                 <button type="button"
                   class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center"
                   id="ssTogglePayrollFiguresBtn" aria-pressed="false" aria-label="Hide payroll figures"
@@ -6207,9 +6441,9 @@ Disable browser address autofill popup on HR employee address fields. -->
                 </button>
               </div>
             </div>
-            <div id="ssCurrentPayrollEmptyState" class="text-secondary">No authorised payroll records available yet.
+            <div id="ssCurrentPayrollEmptyState" class="text-secondary hr-self-service-empty-state">No authorised payroll records available yet.
             </div>
-            <div class="row g-3 d-none" id="ssCurrentPayrollSummaryGrid">
+            <div class="row g-3 d-none hr-self-service-payroll-summary-grid" id="ssCurrentPayrollSummaryGrid">
               <div class="col-md-6 col-xl-3">
                 <div class="info-tile h-100">
                   <div class="d-flex justify-content-between align-items-start gap-3">
@@ -6259,12 +6493,18 @@ Disable browser address autofill popup on HR employee address fields. -->
         </section>
 
         <!-- Payroll History -->
-        <section class="card dashboard-section-card">
+        <section class="card dashboard-section-card hr-self-service-card hr-self-service-payroll-history-card">
           <div class="card-body p-4 p-lg-5">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-4">
-              <div>
-                <h2 class="section-heading h4 mb-1">Payroll History</h2>
-                <p class="section-subtext mb-0">Review authorised pay cycles and download payslip PDFs.</p>
+            <div class="hr-card-heading hr-self-service-card-heading mb-4">
+              <div class="hr-card-heading-main">
+                <span class="hr-card-heading-icon hr-card-heading-icon--self-service-history-payroll" aria-hidden="true">
+                  <i class="bi bi-receipt-cutoff"></i>
+                </span>
+                <div class="hr-card-heading-copy">
+                  <span class="hr-self-service-kicker">Authorised records</span>
+                  <h2 class="section-heading h4 mb-1">Payroll History</h2>
+                  <p class="section-subtext mb-0">Review authorised pay cycles and open or download payslip records.</p>
+                </div>
               </div>
               <button type="button" id="ssTogglePayrollHistoryCardBtn"
                 class="btn btn-outline-secondary dashboard-action-btn align-self-start text-nowrap"
@@ -6274,7 +6514,7 @@ Disable browser address autofill popup on HR employee address fields. -->
               </button>
             </div>
             <div id="ssPayrollHistoryCardCollapse" class="d-none">
-              <div class="border rounded-3 bg-light-subtle p-3 mb-4">
+              <div class="hr-self-service-filter-panel mb-4">
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
                   <div>
                     <div class="small fw-semibold">Filter payroll records</div>
@@ -6301,10 +6541,10 @@ Disable browser address autofill popup on HR employee address fields. -->
                   </div>
                 </div>
               </div>
-              <div id="ssPayrollHistoryEmptyState" class="text-secondary">No authorised payroll history available yet.
+              <div id="ssPayrollHistoryEmptyState" class="text-secondary hr-self-service-empty-state">No authorised payroll history available yet.
               </div>
-              <div class="dashboard-table-wrap table-responsive d-none" id="ssPayrollHistoryTableWrapper"
-                style="max-height: 420px; overflow: auto;">
+              <div class="dashboard-table-wrap table-responsive d-none hr-self-service-payroll-records" id="ssPayrollHistoryTableWrapper"
+                style="max-height: 460px; overflow: auto;">
                 <table class="table table-sm align-middle mb-0">
                   <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                     <tr>
@@ -6382,115 +6622,182 @@ Disable browser address autofill popup on HR employee address fields. -->
     </div>
   </div>
 
-  <!-- GUIDED HELP LAYER - STEP 1R-FIX
-       On-demand HR workflow guide.
-       Professional UX pattern:
-       - operational pages show work first;
-       - help is available when needed;
-       - no employee, payroll, leave, setup, tenant, or Supabase logic changes. -->
-  <div id="hrOperatingGuideModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
-    style="z-index: 1058; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
-    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
-      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 920px; max-height: 92vh; overflow: auto;">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
-          <div>
-            <h2 class="h4 mb-1">How this HR dashboard works</h2>
-            <p class="text-secondary mb-0">
-              A quick guide to where each HR task belongs.
-            </p>
+  <!-- HR HELP GUIDE MODERNISATION - STEP 2
+       Modern, on-demand HR workspace guide.
+       Safety boundary:
+       - cards reuse the existing hrTab* navigation buttons;
+       - no employee, payroll, leave, setup, tenant, role, or Supabase logic changes;
+       - tenant colour variables style the guide without hardcoding Alpatech branding. -->
+  <div id="hrOperatingGuideModal"
+    class="d-none position-fixed top-0 start-0 w-100 h-100 hr-operating-guide-modal"
+    role="dialog" aria-modal="true" aria-labelledby="hrOperatingGuideTitle"
+    aria-describedby="hrOperatingGuideSubtitle" aria-hidden="true">
+    <div class="hr-operating-guide-stage">
+      <div class="hr-operating-guide-shell" tabindex="-1">
+        <header class="hr-operating-guide-header">
+          <div class="hr-operating-guide-heading">
+            <span class="hr-operating-guide-heading-icon" aria-hidden="true">
+              <i class="bi bi-compass"></i>
+            </span>
+
+            <div>
+              <span class="hr-operating-guide-kicker">HR workspace guide</span>
+              <h2 id="hrOperatingGuideTitle">Find the right place for each task</h2>
+              <p id="hrOperatingGuideSubtitle">
+                Open a workspace below to continue directly from the guide.
+              </p>
+            </div>
           </div>
 
-          <button type="button" id="closeHrOperatingGuideBtn" class="btn btn-sm btn-outline-secondary"
-            aria-label="Close HR operating guide">
+          <button type="button" id="closeHrOperatingGuideBtn"
+            class="hr-operating-guide-close" aria-label="Close HR workspace guide">
             <i class="bi bi-x-lg"></i>
           </button>
-        </div>
+        </header>
 
-        <div class="card-body p-4">
-          <div class="row g-4">
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-person-circle me-2 text-primary"></i>Profile
-                </div>
-                <div class="small text-secondary">
-                  View your own HR profile and update allowed personal profile details.
-                </div>
-              </div>
-            </div>
+        <div class="hr-operating-guide-body">
+          <button type="button" class="hr-guide-featured-card"
+            data-hr-guide-target="hrTabDashboardBtn">
+            <span class="hr-guide-featured-icon" aria-hidden="true">
+              <i class="bi bi-grid-1x2"></i>
+            </span>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-people me-2 text-primary"></i>People
-                </div>
-                <div class="small text-secondary">
-                  Maintain employee master records, reporting lines, documents, and account readiness.
-                </div>
-              </div>
-            </div>
+            <span class="hr-guide-featured-copy">
+              <span class="hr-guide-card-kicker">Recommended starting point</span>
+              <strong>Dashboard</strong>
+              <small>
+                Review priority work, payroll readiness, department coverage, and recent activity before opening a detailed workspace.
+              </small>
+            </span>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-clipboard-check me-2 text-primary"></i>HR Review
-                </div>
-                <div class="small text-secondary">
-                  Review profile correction requests and manager leave decision visibility.
-                </div>
-              </div>
-            </div>
+            <span class="hr-guide-card-action">
+              Open Dashboard
+              <i class="bi bi-arrow-right"></i>
+            </span>
+          </button>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-sliders me-2 text-primary"></i>Setup
-                </div>
-                <div class="small text-secondary">
-                  Maintain organisation details, payroll rules, deductions, banks, and email validation settings.
-                </div>
-              </div>
-            </div>
+          <div class="hr-guide-workspace-grid" aria-label="HR workspaces">
+            <button type="button" class="hr-guide-workspace-card hr-guide-workspace-card--people"
+              data-hr-guide-target="hrTabEmployeesBtn">
+              <span class="hr-guide-workspace-icon" aria-hidden="true">
+                <i class="bi bi-people"></i>
+              </span>
+              <span class="hr-guide-workspace-copy">
+                <strong>People</strong>
+                <small>Maintain employee records, reporting lines, documents, login readiness, and employment details.</small>
+              </span>
+              <span class="hr-guide-workspace-link">Open workspace <i class="bi bi-arrow-up-right"></i></span>
+            </button>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-cash-coin me-2 text-primary"></i>Payroll
-                </div>
-                <div class="small text-secondary">
-                  Prepare payroll, finalise payroll records, preview payslips, export CSV files, and send payslip
-                  notifications.
-                </div>
-              </div>
-            </div>
+            <button type="button" class="hr-guide-workspace-card hr-guide-workspace-card--review"
+              data-hr-guide-target="hrTabReviewBtn">
+              <span class="hr-guide-workspace-icon" aria-hidden="true">
+                <i class="bi bi-clipboard-check"></i>
+              </span>
+              <span class="hr-guide-workspace-copy">
+                <strong>HR Review</strong>
+                <small>Review profile corrections, manager leave decisions, and HR governance activity.</small>
+              </span>
+              <span class="hr-guide-workspace-link">Open workspace <i class="bi bi-arrow-up-right"></i></span>
+            </button>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-person-badge me-2 text-primary"></i>Self-Service
-                </div>
-                <div class="small text-secondary">
-                  View your own leave, payroll history, payslips, and self-service profile information.
-                </div>
-              </div>
-            </div>
+            <button type="button" class="hr-guide-workspace-card hr-guide-workspace-card--payroll"
+              data-hr-guide-target="hrTabPayrollBtn">
+              <span class="hr-guide-workspace-icon" aria-hidden="true">
+                <i class="bi bi-cash-coin"></i>
+              </span>
+              <span class="hr-guide-workspace-copy">
+                <strong>Payroll</strong>
+                <small>Prepare and finalise payroll, preview payslips, export payment files, and review delivery status.</small>
+              </span>
+              <span class="hr-guide-workspace-link">Open workspace <i class="bi bi-arrow-up-right"></i></span>
+            </button>
+
+            <button type="button" class="hr-guide-workspace-card hr-guide-workspace-card--setup"
+              data-hr-guide-target="hrTabSetupBtn">
+              <span class="hr-guide-workspace-icon" aria-hidden="true">
+                <i class="bi bi-sliders"></i>
+              </span>
+              <span class="hr-guide-workspace-copy">
+                <strong>Setup</strong>
+                <small>Maintain organisation details, payroll rules, deductions, banks, and communication settings.</small>
+              </span>
+              <span class="hr-guide-workspace-link">Open workspace <i class="bi bi-arrow-up-right"></i></span>
+            </button>
+
+            <button type="button" class="hr-guide-workspace-card hr-guide-workspace-card--self-service"
+              data-hr-guide-target="hrTabSelfServiceBtn">
+              <span class="hr-guide-workspace-icon" aria-hidden="true">
+                <i class="bi bi-person-badge"></i>
+              </span>
+              <span class="hr-guide-workspace-copy">
+                <strong>Self-Service</strong>
+                <small>View your own leave, authorised payroll history, payslips, and personal employee information.</small>
+              </span>
+              <span class="hr-guide-workspace-link">Open workspace <i class="bi bi-arrow-up-right"></i></span>
+            </button>
+
+            <button type="button" class="hr-guide-workspace-card hr-guide-workspace-card--profile"
+              data-hr-guide-target="hrTabProfileBtn">
+              <span class="hr-guide-workspace-icon" aria-hidden="true">
+                <i class="bi bi-person-circle"></i>
+              </span>
+              <span class="hr-guide-workspace-copy">
+                <strong>My Profile</strong>
+                <small>Review your HR account and update the personal profile fields available to you.</small>
+              </span>
+              <span class="hr-guide-workspace-link">Open workspace <i class="bi bi-arrow-up-right"></i></span>
+            </button>
           </div>
 
-          <div class="alert alert-light border mt-4 mb-0">
-            <div class="fw-semibold mb-1">Operating rule</div>
-            <div class="small text-secondary">
-              Start with the workspace that matches the task: People for employee records, HR Review for review work,
-              Setup for configuration, and Payroll for payroll processing.
+          <section class="hr-guide-operating-flow" aria-labelledby="hrGuideOperatingFlowTitle">
+            <div class="hr-guide-operating-flow-heading">
+              <span class="hr-guide-operating-flow-icon" aria-hidden="true">
+                <i class="bi bi-signpost-split"></i>
+              </span>
+              <div>
+                <span class="hr-operating-guide-kicker">Suggested operating flow</span>
+                <h3 id="hrGuideOperatingFlowTitle">From review to payroll completion</h3>
+              </div>
+            </div>
+
+            <ol class="hr-guide-operating-steps">
+              <li>
+                <span>1</span>
+                <div><strong>Review</strong><small>Start on Dashboard and identify anything needing attention.</small></div>
+              </li>
+              <li>
+                <span>2</span>
+                <div><strong>Maintain</strong><small>Complete employee records and resolve HR review work.</small></div>
+              </li>
+              <li>
+                <span>3</span>
+                <div><strong>Configure</strong><small>Confirm organisation, payroll, deduction, and payment setup.</small></div>
+              </li>
+              <li>
+                <span>4</span>
+                <div><strong>Process</strong><small>Prepare, finalise, verify, and deliver payroll securely.</small></div>
+              </li>
+            </ol>
+          </section>
+
+          <div class="hr-guide-help-note">
+            <span aria-hidden="true"><i class="bi bi-lightbulb"></i></span>
+            <div>
+              <strong>Not sure where a task belongs?</strong>
+              <small>Open Dashboard first. Priority Attention and the overview cards will point you to the correct workspace.</small>
             </div>
           </div>
         </div>
 
-        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
+        <footer class="hr-operating-guide-footer">
+          <span><i class="bi bi-shield-check"></i> Workspace access still follows your assigned role.</span>
+
           <button type="button" id="closeHrOperatingGuideFooterBtn"
             class="btn btn-outline-secondary dashboard-action-btn">
             Close Guide
           </button>
-        </div>
+        </footer>
       </div>
     </div>
   </div>
@@ -6557,16 +6864,15 @@ Disable browser address autofill popup on HR employee address fields. -->
      HR uses this to review finalised payslip content before or after
      controlled payslip notification delivery. Employee secure viewing
      will be handled separately through a protected access route. -->
-  <div id="payslipPreviewModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
+  <div id="payslipPreviewModal" class="d-none position-fixed top-0 start-0 w-100 h-100 hr-payslip-modal bexhr-payslip-modal"
     style="z-index: 1060; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
-    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
-      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 880px; max-height: 92vh; overflow: auto;">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
+    <div class="container h-100 d-flex align-items-center justify-content-center py-4 hr-payslip-modal-container bexhr-payslip-modal-container">
+      <div class="card border-0 shadow-lg rounded-4 w-100 hr-payslip-modal-shell bexhr-payslip-modal-shell" style="max-width: 980px; max-height: 94vh; overflow: hidden;">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4 hr-payslip-modal-header bexhr-payslip-modal-header">
           <div>
             <h2 id="payslipPreviewTitle" class="h4 mb-1">Payslip Preview</h2>
             <p class="text-secondary mb-0">
-              Review the finalised payslip details. Email notifications are sent separately through Send Selected
-              Payslips.
+              Review the authorised payroll document before printing or saving a PDF copy.
             </p>
           </div>
 
@@ -6576,15 +6882,15 @@ Disable browser address autofill popup on HR employee address fields. -->
           </button>
         </div>
 
-        <div id="payslipPreviewContent" class="card-body p-4">
+        <div id="payslipPreviewContent" class="card-body p-4 hr-payslip-modal-content bexhr-payslip-modal-content">
           <div class="text-center text-secondary py-4">
             Select a finalised payroll record to preview a payslip.
           </div>
         </div>
 
-        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
-          <button type="button" id="printPayslipBtn" class="btn btn-outline-primary dashboard-action-btn">
-            <i class="bi bi-printer me-2"></i>Print
+        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4 hr-payslip-modal-footer bexhr-payslip-modal-footer">
+          <button type="button" id="printPayslipBtn" class="btn btn-primary dashboard-action-btn">
+            <i class="bi bi-printer me-2"></i>Print / Save PDF
           </button>
           <button type="button" id="closePayslipPreviewFooterBtn"
             class="btn btn-outline-secondary dashboard-action-btn">

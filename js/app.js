@@ -320,31 +320,34 @@ document.addEventListener("DOMContentLoaded", function () {
 
     loginForm?.classList.add("d-none");
     hrMfaPanel?.classList.remove("d-none");
+    document.body.classList.add("bexhr-mfa-active");
 
     if (hrMfaCodeInput) {
       hrMfaCodeInput.value = "";
       hrMfaCodeInput.focus();
     }
 
-    setHrMfaStatus(
-      "info",
-      mode === "enroll"
-        ? "Scan the QR code, then enter the 6-digit code from your authenticator app."
-        : "Enter the current 6-digit code from your authenticator app. The code changes regularly.",
-    );
+    if (mode === "enroll") {
+      setHrMfaStatus(
+        "info",
+        "Scan the QR code, then enter the current 6-digit code to complete setup.",
+      );
+    } else {
+      setHrMfaStatus("", "");
+    }
 
     if (hrMfaTitle) {
       hrMfaTitle.textContent =
         mode === "enroll"
-          ? "Set up HR two-factor authentication"
-          : "HR two-factor verification";
+          ? "Set up secure verification"
+          : "Secure verification";
     }
 
     if (hrMfaDescription) {
       hrMfaDescription.textContent =
         mode === "enroll"
-          ? "This HR account must set up an authenticator app before the HR Dashboard can open."
-          : "Enter the current 6-digit code from your authenticator app. The code refreshes regularly, so always use the latest code shown.";
+          ? "Scan the QR code once, then confirm setup with the latest authenticator code."
+          : "Step 2 of 2. Enter the latest code from your authenticator app.";
     }
 
     if (hrMfaRecoveryNote) {
@@ -374,6 +377,7 @@ document.addEventListener("DOMContentLoaded", function () {
     hrMfaPanel?.classList.add("d-none");
     hrMfaEnrollmentBox?.classList.add("d-none");
     loginForm?.classList.remove("d-none");
+    document.body.classList.remove("bexhr-mfa-active");
 
     if (hrMfaCodeInput) {
       hrMfaCodeInput.value = "";

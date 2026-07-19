@@ -47,16 +47,20 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       header.innerHTML = `
+    <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 3
+         Reuse the same icon-led heading pattern for Setup workspace groups.
+         Existing generated card IDs, titles, descriptions, and ordering stay unchanged. -->
     <div class="card-body p-4">
-      <div class="d-flex align-items-start gap-3">
-        <div class="rounded-circle bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
-          style="width: 40px; height: 40px;">
-          <i class="${iconClass} text-primary"></i>
-        </div>
+      <div class="hr-card-heading hr-card-heading--compact">
+        <div class="hr-card-heading-main">
+          <span class="hr-card-heading-icon hr-card-heading-icon--setup" aria-hidden="true">
+            <i class="${iconClass}"></i>
+          </span>
 
-        <div>
-          <h2 class="section-heading h5 mb-1">${title}</h2>
-          <p class="section-subtext mb-0">${description}</p>
+          <div class="hr-card-heading-copy">
+            <h2 class="section-heading h5 mb-1">${title}</h2>
+            <p class="section-subtext mb-0">${description}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -297,6 +301,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Load manager leave decisions after employees are loaded, so HR can see
     // employee names, departments, decision makers, comments, and decision dates.
     await refreshRecentManagerLeaveDecisionsWorkspace();
+
+    // HR REVIEW ROLE ACCESS + MODERNISATION - STEP 3
+    // Apply full-decision or review-only behaviour after both tenant-scoped
+    // review sources have loaded and the signed-in business role is resolved.
+    applyHrReviewAccessControls();
 
     // DYNAMIC EDUCATION SUGGESTIONS - STEP 1A
     // Load saved schools/courses into the Education datalists after HR access
@@ -2212,6 +2221,72 @@ function applyHrPeopleAccessControls() {
   }
 }
 
+// HR REVIEW ROLE ACCESS + MODERNISATION - STEP 2
+// HR Review remains visible to roles routed through the shared HR dashboard,
+// but only HR-style governance roles may change correction decisions or cancel leave.
+const HR_REVIEW_MAINTENANCE_ROLES = new Set([
+  "hr",
+  "hr_manager",
+  "admin",
+  "system_admin",
+]);
+
+function canCurrentUserMaintainHrReviewData() {
+  return HR_REVIEW_MAINTENANCE_ROLES.has(getCurrentHrBusinessRole());
+}
+
+function showHrReviewAccessDeniedMessage(actionLabel = "change HR review records") {
+  const businessRole = getCurrentHrBusinessRole() || "this role";
+  const roleLabel = formatEmployeeSystemRoleLabel(businessRole);
+
+  showPageAlert(
+    "warning",
+    `${actionLabel} is restricted for ${roleLabel}. This role can inspect tenant-scoped HR Review records but cannot change decisions or cancel approved leave.`,
+  );
+
+  showDashboardToast(
+    "warning",
+    "HR Review is view-only",
+    "Use an HR, HR Manager, Admin, or System Admin account for review decisions and approved-leave cancellation.",
+  );
+}
+
+function renderHrReviewAccessState() {
+  const canMaintain = canCurrentUserMaintainHrReviewData();
+  const businessRole = getCurrentHrBusinessRole() || "this role";
+  const roleLabel = formatEmployeeSystemRoleLabel(businessRole);
+
+  state.dom.hrReviewSection?.classList.toggle(
+    "hr-review-view-only",
+    !canMaintain,
+  );
+
+  if (state.dom.hrReviewAccessBadge) {
+    state.dom.hrReviewAccessBadge.className = canMaintain
+      ? "hr-review-access-badge hr-review-access-badge--full"
+      : "hr-review-access-badge hr-review-access-badge--view";
+
+    state.dom.hrReviewAccessBadge.innerHTML = canMaintain
+      ? '<i class="bi bi-shield-check" aria-hidden="true"></i> Decision access'
+      : '<i class="bi bi-eye" aria-hidden="true"></i> View-only access';
+  }
+
+  if (state.dom.hrReviewAccessDescription) {
+    state.dom.hrReviewAccessDescription.textContent = canMaintain
+      ? `${roleLabel}: decision actions and approved-leave cancellation are enabled.`
+      : `${roleLabel}: review history only; decision actions are locked.`;
+  }
+}
+
+function applyHrReviewAccessControls() {
+  renderHrReviewAccessState();
+
+  // Review tables can be rebuilt by refresh/filter actions, so render them
+  // again from the current tenant-scoped state using the latest role access.
+  renderProfileCorrectionRequests(state.profileCorrectionRequests);
+  renderRecentManagerLeaveDecisions(state.recentManagerLeaveDecisionRecords);
+}
+
 // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
 // Organization Setup covers company contact details, Departments, and Job Titles.
 // Payroll, Auditor, QA, and custom HR-routed roles may view these records,
@@ -3558,6 +3633,11 @@ function cacheDomElements() {
     hrReviewSection: document.getElementById("hrReviewSection"),
     hrReviewLandingCard: document.getElementById("hrReviewLandingCard"),
 
+    // HR REVIEW ROLE ACCESS + MODERNISATION - STEP 1
+    // Visible access state for full-decision versus review-only roles.
+    hrReviewAccessBadge: document.getElementById("hrReviewAccessBadge"),
+    hrReviewAccessDescription: document.getElementById("hrReviewAccessDescription"),
+
     // WORKSPACE REARRANGEMENT - STEP 1C
     // Setup section receives existing setup/master-data cards at runtime.
     hrSetupSection: document.getElementById("hrSetupSection"),
@@ -3992,6 +4072,11 @@ function cacheDomElements() {
     payrollFinalisedCountValue: document.getElementById("payrollFinalisedCountValue"),
     payrollGrossTotalValue: document.getElementById("payrollGrossTotalValue"),
     payrollNetTotalValue: document.getElementById("payrollNetTotalValue"),
+
+    // PAYROLL OVERVIEW FINANCIAL CARD CLARITY - STEP 1
+    // Explains which existing pay-cycle/status/search filters produced the
+    // displayed record count and financial totals.
+    payrollSummaryScope: document.getElementById("payrollSummaryScope"),
 
     payrollSearchInput: document.getElementById("payrollSearchInput"),
     payrollStatusFilter: document.getElementById("payrollStatusFilter"),
@@ -4669,6 +4754,44 @@ function scrollToDashboardTarget(target, offset = 96) {
     behavior: "smooth",
   });
 }
+
+// HR REVIEW STICKY HEADER OFFSET FIX - STEP 2
+// Calculate the real rendered application-header height instead of relying on
+// a guessed fixed scroll margin. On mobile the header is not sticky, so only
+// a small breathing-space offset is needed.
+function getHrReviewNavigationOffset() {
+  const applicationHeader = document.querySelector(".hr-modern-app-header");
+
+  if (!applicationHeader) {
+    return 24;
+  }
+
+  const computedStyle = window.getComputedStyle(applicationHeader);
+
+  if (computedStyle.position !== "sticky") {
+    return 24;
+  }
+
+  const stickyTop = Number.parseFloat(computedStyle.top) || 0;
+  const headerHeight = applicationHeader.getBoundingClientRect().height || 0;
+
+  return Math.ceil(stickyTop + headerHeight + 18);
+}
+
+// HR REVIEW STICKY HEADER OFFSET FIX - STEP 2
+// Review Overview navigation only. Existing card IDs, collapse state, refresh,
+// filters, tenant queries, role checks, decision saves, and leave RPC stay unchanged.
+function openHrReviewArea(targetId = "") {
+  const target = document.getElementById(String(targetId || "").trim());
+
+  if (!target) return;
+
+  window.requestAnimationFrame(() => {
+    scrollToDashboardTarget(target, getHrReviewNavigationOffset());
+  });
+}
+
+window.hrOpenReviewArea = openHrReviewArea;
 // BATCH PAYROLL DEFAULT - STEP 6D
 // Show the Back to Top button only after HR has scrolled down.
 // This keeps the page clean near the top but helpful on long HR/payroll screens.
@@ -8704,6 +8827,10 @@ function bindEvents() {
 
     await refreshProfileCorrectionRequestsWorkspace();
     await refreshRecentManagerLeaveDecisionsWorkspace();
+
+    // HR REVIEW ROLE ACCESS + MODERNISATION - STEP 4
+    // Re-apply access after refresh because both tables are dynamically rebuilt.
+    applyHrReviewAccessControls();
   });
 
   // WORKSPACE REARRANGEMENT - STEP 1G
@@ -9114,27 +9241,88 @@ function bindEvents() {
     });
   }
 
-  // GUIDED HELP LAYER - STEP 1R-FIX
-  // Help opens as an on-demand modal so operational workspace content stays first.
-  state.dom.openHrOperatingGuideBtn?.addEventListener("click", () => {
-    state.dom.hrOperatingGuideModal?.classList.remove("d-none");
-    state.dom.hrOperatingGuideModal?.setAttribute("aria-hidden", "false");
-  });
+  // HR HELP GUIDE MODERNISATION - STEP 2
+  // The guide remains an on-demand presentation layer. Workspace cards proxy
+  // to the existing hrTab* buttons so routing, permissions, and tenant logic
+  // continue through the established dashboard paths.
+  let hrOperatingGuideReturnFocus = null;
+
+  function openHrOperatingGuide() {
+    const modal = state.dom.hrOperatingGuideModal;
+    if (!modal) return;
+
+    hrOperatingGuideReturnFocus = document.activeElement;
+    modal.classList.remove("d-none");
+    modal.setAttribute("aria-hidden", "false");
+    document.body?.classList.add("hr-operating-guide-open");
+
+    window.requestAnimationFrame(() => {
+      modal.querySelector(".hr-operating-guide-shell")?.focus();
+    });
+  }
+
+  function closeHrOperatingGuide({ restoreFocus = true } = {}) {
+    const modal = state.dom.hrOperatingGuideModal;
+    if (!modal) return;
+
+    modal.classList.add("d-none");
+    modal.setAttribute("aria-hidden", "true");
+    document.body?.classList.remove("hr-operating-guide-open");
+
+    if (
+      restoreFocus &&
+      hrOperatingGuideReturnFocus instanceof HTMLElement &&
+      document.contains(hrOperatingGuideReturnFocus)
+    ) {
+      hrOperatingGuideReturnFocus.focus();
+    }
+  }
+
+  state.dom.openHrOperatingGuideBtn?.addEventListener("click", openHrOperatingGuide);
 
   state.dom.closeHrOperatingGuideBtn?.addEventListener("click", () => {
-    state.dom.hrOperatingGuideModal?.classList.add("d-none");
-    state.dom.hrOperatingGuideModal?.setAttribute("aria-hidden", "true");
+    closeHrOperatingGuide();
   });
 
   state.dom.closeHrOperatingGuideFooterBtn?.addEventListener("click", () => {
-    state.dom.hrOperatingGuideModal?.classList.add("d-none");
-    state.dom.hrOperatingGuideModal?.setAttribute("aria-hidden", "true");
+    closeHrOperatingGuide();
   });
 
   state.dom.hrOperatingGuideModal?.addEventListener("click", (event) => {
-    if (event.target === state.dom.hrOperatingGuideModal) {
-      state.dom.hrOperatingGuideModal.classList.add("d-none");
-      state.dom.hrOperatingGuideModal.setAttribute("aria-hidden", "true");
+    const clickTarget = event.target instanceof Element
+      ? event.target
+      : null;
+
+    const workspaceAction = clickTarget?.closest("[data-hr-guide-target]");
+
+    if (workspaceAction) {
+      const targetButtonId = String(
+        workspaceAction.getAttribute("data-hr-guide-target") || "",
+      ).trim();
+
+      const targetButton = targetButtonId
+        ? document.getElementById(targetButtonId)
+        : null;
+
+      closeHrOperatingGuide({ restoreFocus: false });
+      targetButton?.click();
+      return;
+    }
+
+    if (
+      clickTarget === state.dom.hrOperatingGuideModal ||
+      clickTarget?.classList.contains("hr-operating-guide-stage")
+    ) {
+      closeHrOperatingGuide();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (
+      event.key === "Escape" &&
+      !state.dom.hrOperatingGuideModal?.classList.contains("d-none")
+    ) {
+      closeHrOperatingGuide();
     }
   });
 
@@ -15058,6 +15246,11 @@ function renderProfileCorrectionRequests(records = []) {
 
     const status = request.status || "Pending";
 
+    // HR REVIEW QUEUE REFINEMENT - STEP 2
+    // Completed, Rejected, and legacy Closed requests are historical audit records.
+    // They must not present editable decision controls even to maintenance roles.
+    const isClosedAuditRequest = !isOpenProfileCorrectionRequest(request);
+
     // HR PROFILE CORRECTION REQUESTS UX - STEP 1G
     // HR must not edit directly from the employee name link.
     // The edit form is exposed only after the request is Approved, because
@@ -15111,10 +15304,80 @@ function renderProfileCorrectionRequests(records = []) {
     const profileCorrectionDecisionOptionsHtml =
       buildProfileCorrectionDecisionOptions(status);
 
+    // HR REVIEW ROLE ACCESS + MODERNISATION - STEP 5
+    // View-only roles keep the same tenant-scoped audit visibility but do not
+    // receive lifecycle controls. Full review roles retain the existing workflow.
+    const profileCorrectionActionHtml = isClosedAuditRequest
+      ? `
+        <div class="hr-review-closed-audit" role="note">
+          <span class="hr-review-closed-audit-icon" aria-hidden="true">
+            <i class="bi bi-shield-check"></i>
+          </span>
+          <div>
+            <span class="hr-review-closed-audit-label">Closed audit record</span>
+            <strong>${escapeHtml(formatProfileCorrectionDecisionDisplayLabel(status))}</strong>
+            <p>The saved decision and HR response are preserved as history. No further queue action is required.</p>
+          </div>
+        </div>
+      `
+      : canCurrentUserMaintainHrReviewData()
+      ? `
+        <label class="form-label small fw-semibold mb-1" for="profileCorrectionStatus-${escapeHtml(request.id)}">
+          HR Decision
+        </label>
+
+        <select id="profileCorrectionStatus-${escapeHtml(request.id)}"
+          class="form-select form-select-sm mb-1"
+          data-profile-correction-status>
+          ${profileCorrectionDecisionOptionsHtml}
+        </select>
+
+        <div class="form-text mb-2" data-profile-correction-decision-guidance>
+          ${escapeHtml(getProfileCorrectionDecisionGuidance(status))}
+        </div>
+
+        <label class="form-label small fw-semibold mb-1" for="profileCorrectionHrResponse-${escapeHtml(request.id)}">
+          New HR Response / Comment
+        </label>
+
+        <textarea id="profileCorrectionHrResponse-${escapeHtml(request.id)}"
+          class="form-control form-control-sm mb-1"
+          rows="2"
+          maxlength="500"
+          placeholder="Add a new HR note, rejection reason, or completion comment."
+          data-profile-correction-response></textarea>
+
+        <div class="form-text mb-2">
+          Leave blank to keep the existing HR response.
+        </div>
+
+        ${employeeEditButtonHtml}
+
+        <button type="button"
+          id="profileCorrectionSaveBtn-${escapeHtml(request.id)}"
+          class="btn btn-sm btn-secondary dashboard-action-btn w-100"
+          data-original-status="${escapeHtml(status)}"
+          data-profile-correction-save
+          disabled>
+          <i class="bi bi-check2-circle me-1"></i>
+          Save Decision
+        </button>
+      `
+      : `
+        <div class="hr-review-read-only-action" role="note">
+          <span class="hr-review-read-only-action-icon" aria-hidden="true">
+            <i class="bi bi-eye"></i>
+          </span>
+          <strong>Review only</strong>
+          <span>This role can inspect the request and saved HR response, but cannot change its lifecycle decision.</span>
+        </div>
+      `;
+
     const row = document.createElement("tr");
+    row.className = isClosedAuditRequest ? "hr-review-request-row hr-review-request-row--closed" : "hr-review-request-row";
 
     row.innerHTML = `
-<td class="align-top">
+<td class="align-top" data-label="Employee">
   <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1F
        Employee name is the HR drilldown point for the request.
        It opens the existing read-only employee profile modal only. -->
@@ -15123,12 +15386,12 @@ function renderProfileCorrectionRequests(records = []) {
   <div class="small text-secondary">Employee No: ${escapeHtml(employee.employeeNumber)}</div>
 </td>
 
-      <td class="align-top">
+      <td class="align-top" data-label="Field">
         <div class="fw-semibold">${escapeHtml(request.field_label || request.field_key || "--")}</div>
         <div class="small text-secondary">${escapeHtml(categoryLabel || "--")}</div>
       </td>
 
-      <td class="align-top">
+      <td class="align-top" data-label="Request details">
         <div class="small mb-2">
           <span class="fw-semibold">Current:</span>
           <span class="text-secondary">${escapeHtml(currentValue)}</span>
@@ -15147,60 +15410,18 @@ function renderProfileCorrectionRequests(records = []) {
 ${savedHrResponseHtml}
       </td>
 
-      <td class="align-top">
+      <td class="align-top" data-label="Status">
 <span class="badge ${getProfileCorrectionRequestStatusBadgeClass(status)}">
   ${escapeHtml(formatProfileCorrectionDecisionDisplayLabel(status))}
 </span>
       </td>
 
-      <td class="align-top text-nowrap">
+      <td class="align-top text-nowrap" data-label="Submitted">
         ${escapeHtml(submittedOn)}
       </td>
 
-      <td class="align-top" style="min-width: 260px;">
-        <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C
-             HR decision controls only update the request lifecycle record.
-             They must not auto-write to the employee master record. -->
-        <label class="form-label small fw-semibold mb-1" for="profileCorrectionStatus-${escapeHtml(request.id)}">
-          HR Decision
-        </label>
-
-<select id="profileCorrectionStatus-${escapeHtml(request.id)}"
-  class="form-select form-select-sm mb-1"
-  data-profile-correction-status>
-  ${profileCorrectionDecisionOptionsHtml}
-</select>
-
-<div class="form-text mb-2" data-profile-correction-decision-guidance>
-  ${escapeHtml(getProfileCorrectionDecisionGuidance(status))}
-</div>
-
-<label class="form-label small fw-semibold mb-1" for="profileCorrectionHrResponse-${escapeHtml(request.id)}">
-  New HR Response / Comment
-</label>
-
-<textarea id="profileCorrectionHrResponse-${escapeHtml(request.id)}"
-  class="form-control form-control-sm mb-1"
-  rows="2"
-  maxlength="500"
-  placeholder="Add a new HR note, rejection reason, or completion comment."
-  data-profile-correction-response></textarea>
-
-<div class="form-text mb-2">
-  Leave blank to keep the existing HR response.
-</div>
-
-${employeeEditButtonHtml}
-
-<button type="button"
-  id="profileCorrectionSaveBtn-${escapeHtml(request.id)}"
-  class="btn btn-sm btn-secondary dashboard-action-btn w-100"
-  data-original-status="${escapeHtml(status)}"
-  data-profile-correction-save
-  disabled>
-  <i class="bi bi-check2-circle me-1"></i>
-  Save Decision
-</button>
+      <td class="align-top hr-review-request-action-cell" data-label="Action">
+        ${profileCorrectionActionHtml}
       </td>
     `;
 
@@ -15299,6 +15520,14 @@ ${employeeEditButtonHtml}
 // Save the HR lifecycle decision only.
 // Critical HR behaviour: this does not overwrite employee master data.
 async function handleProfileCorrectionRequestDecisionSave(requestId) {
+  // HR REVIEW ROLE ACCESS + MODERNISATION - STEP 6
+  // UI controls are hidden for review-only roles, and this guard protects the
+  // action path if a disabled/hidden control is invoked programmatically.
+  if (!canCurrentUserMaintainHrReviewData()) {
+    showHrReviewAccessDeniedMessage("Saving an HR correction decision");
+    return;
+  }
+
   const cleanRequestId = String(requestId || "").trim();
 
   if (!cleanRequestId) {
@@ -15592,10 +15821,13 @@ function updateRecentManagerLeaveDecisionSummary(records = []) {
     (record) => normalizeText(record.status) === "approved",
   ).length;
 
+  // HR REVIEW QUEUE REFINEMENT - STEP 3
+  // Cancelled decisions are closed exceptions and must be represented in the
+  // four-tile summary instead of disappearing between Total and category counts.
   const exceptionCount = decisions.filter((record) =>
-    ["rejected", "returned", "returned for clarification"].includes(
+    ["cancelled", "canceled", "rejected", "returned", "returned for clarification"].includes(
       normalizeText(record.status),
-    ),
+    ) || Boolean(record.cancelled_at),
   ).length;
 
   if (state.dom.managerLeaveDecisionTotalCount) {
@@ -15638,9 +15870,25 @@ function isHrApprovedLeaveCancelable(decision = {}) {
 // The actual cancellation still requires modal confirmation and the backend RPC.
 function getHrApprovedLeaveCancellationActionHtml(decision = {}) {
   if (!isHrApprovedLeaveCancelable(decision)) {
+    const cleanStatus = normalizeText(decision.status);
+    const isClosedCancellation =
+      cleanStatus === "cancelled" ||
+      cleanStatus === "canceled" ||
+      Boolean(decision.cancelled_at);
+
     return `
-      <span class="badge bg-light text-secondary border">
-        No action
+      <span class="badge bg-light text-secondary border hr-review-closed-action-badge">
+        <i class="bi ${isClosedCancellation ? "bi-lock" : "bi-check2"} me-1" aria-hidden="true"></i>
+        ${isClosedCancellation ? "Closed" : "No further action"}
+      </span>
+    `;
+  }
+
+  if (!canCurrentUserMaintainHrReviewData()) {
+    return `
+      <span class="badge bg-light text-secondary border hr-review-view-only-badge">
+        <i class="bi bi-eye me-1" aria-hidden="true"></i>
+        View only
       </span>
     `;
   }
@@ -15839,6 +16087,13 @@ function syncHrApprovedLeaveCancellationConfirmState() {
 // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
 // Open the controlled HR cancellation modal for an Approved leave row only.
 function openHrApprovedLeaveCancellationModal(leaveRequestId) {
+  // HR REVIEW ROLE ACCESS + MODERNISATION - STEP 7
+  // Keep the modal inaccessible to Payroll, Auditor, QA, and unknown roles.
+  if (!canCurrentUserMaintainHrReviewData()) {
+    showHrReviewAccessDeniedMessage("Approved-leave cancellation");
+    return;
+  }
+
   const decision = (state.recentManagerLeaveDecisionRecords || []).find(
     (record) => String(record.id || "") === String(leaveRequestId || ""),
   );
@@ -15943,6 +16198,14 @@ function setHrApprovedLeaveCancellationLoading(isLoading) {
 // Call the HR-only cancellation RPC. The RPC restores balance once only and
 // writes cancellation audit fields. Frontend does not update balances directly.
 async function submitHrApprovedLeaveCancellation() {
+  // HR REVIEW ROLE ACCESS + MODERNISATION - STEP 8
+  // The database RPC remains the final authority. This frontend guard prevents
+  // review-only roles from initiating the destructive workflow at all.
+  if (!canCurrentUserMaintainHrReviewData()) {
+    showHrReviewAccessDeniedMessage("Approved-leave cancellation");
+    return;
+  }
+
   const target = state.currentHrApprovedLeaveCancellationTarget;
   const reason = String(state.dom.hrCancelApprovedLeaveReason?.value || "").trim();
 
@@ -16879,8 +17142,9 @@ function renderPayrollMasterRecords(records) {
       "Unknown Employee";
 
     const row = document.createElement("tr");
+    row.className = "hr-payroll-salary-record-row";
     row.innerHTML = `
-  <td>
+  <td data-label="Employee">
     <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 6
          Keep the employee identity compact and readable in one primary cell. -->
     <div class="fw-semibold">${escapeHtml(fullName)}</div>
@@ -16889,22 +17153,22 @@ function renderPayrollMasterRecords(records) {
     </div>
   </td>
 
-  <td class="text-nowrap">
+  <td class="text-nowrap" data-label="Grade / Level">
     <!-- DESCRIPTION ITEM 3 - STEP 2A-2
          Show the saved Payroll Grade / Level so HR can confirm
          which deduction rule group this payroll master record belongs to. -->
 ${escapeHtml(getPayrollMasterGradeDisplay(record))}
   </td>
 
-  <td class="text-nowrap">
+  <td class="text-nowrap" data-label="Salary">
     ${formatCurrency(record.basic_salary, "NGN")}
   </td>
 
-  <td class="text-nowrap">${formatDate(record.salary_effective_date)}</td>
+  <td class="text-nowrap" data-label="Effective">${formatDate(record.salary_effective_date)}</td>
 
-  <td>${escapeHtml(record.pay_cycle || "--")}</td>
+  <td data-label="Cycle">${escapeHtml(record.pay_cycle || "--")}</td>
 
-<td>
+<td data-label="Status">
   <div class="d-flex flex-wrap gap-1">
     <span class="badge ${getStatusBadgeClass(record.payroll_status)}">
       ${escapeHtml(formatStatusLabel(record.payroll_status))}
@@ -16916,14 +17180,14 @@ ${escapeHtml(getPayrollMasterGradeDisplay(record))}
   </div>
 </td>
 
-  <td class="text-nowrap">
+  <td class="text-nowrap" data-label="Updated">
   <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 6A
        Use date only in the payroll master list so the Updated column
        stays cleaner and does not crowd the row. -->
   ${formatDate(record.updated_at || record.created_at)}
 </td>
 
-  <td class="text-center">
+  <td class="text-center" data-label="Action">
     ${canCurrentUserMaintainPayrollMasterData()
         ? `<!-- DESCRIPTION ITEM 7 - STEP 7A
              Only authorised HR/payroll roles can create a new Payroll Master version. -->
@@ -22060,14 +22324,14 @@ function renderHrOverviewRecentActivityWithSalarySetups() {
     return buildActivity({
       type: "salary",
       title: "Employee salary setup updated",
-      subtitle: `${resolveEmployeeName(record)} â€” ${salaryStatus}${versionSuffix}`,
+      subtitle: `${resolveEmployeeName(record)} · ${salaryStatus}${versionSuffix}`,
       timestamp: record.updated_at || record.created_at,
     });
   });
 
   const payrollActivities = payrollRecords.map((record) => {
     const payCycle = String(record.pay_cycle || "").trim();
-    const cycleSuffix = payCycle ? ` â€” ${payCycle}` : "";
+    const cycleSuffix = payCycle ? ` · ${payCycle}` : "";
 
     return buildActivity({
       type: "payroll",
@@ -22205,6 +22469,11 @@ function renderHrModernOverview() {
     ? Math.round((payrollReadyEmployees.length / activeEmployees.length) * 100)
     : 0;
 
+  const missingPayrollSetupCount = Math.max(
+    activeEmployees.length - payrollReadyEmployees.length,
+    0,
+  );
+
   if (state.dom.hrOverviewTotalEmployees) {
     state.dom.hrOverviewTotalEmployees.textContent = String(employees.length);
   }
@@ -22246,14 +22515,9 @@ function renderHrModernOverview() {
   }
 
   if (state.dom.hrOverviewPayrollReadinessMessage) {
-    const missingPayrollSetup = Math.max(
-      activeEmployees.length - payrollReadyEmployees.length,
-      0,
-    );
-
     state.dom.hrOverviewPayrollReadinessMessage.textContent = activeEmployees.length
-      ? missingPayrollSetup
-        ? `${missingPayrollSetup} active employee(s) still need an active salary setup before payroll finalisation.`
+      ? missingPayrollSetupCount
+        ? `${missingPayrollSetupCount} active employee(s) still need an active salary setup before payroll finalisation.`
         : "All active employees currently have an active salary setup."
       : "No active employees are currently available for payroll preparation.";
   }
@@ -22303,6 +22567,14 @@ function renderHrModernOverview() {
         : null,
     ].filter(Boolean);
 
+    // DASHBOARD PRIORITY ATTENTION REFINEMENT - STEP 1
+    // Preserve every live trigger and destination, but let the empty state
+    // collapse into a concise status instead of stretching the dashboard row.
+    state.dom.hrOverviewPriorityList.classList.toggle(
+      "is-clear",
+      priorityItems.length === 0,
+    );
+
     state.dom.hrOverviewPriorityList.innerHTML = priorityItems.length
       ? priorityItems.slice(0, 4).map((item) => `
           <button type="button" class="hr-overview-priority-item tone-${escapeHtml(item.tone)}"
@@ -22316,12 +22588,54 @@ function renderHrModernOverview() {
           </button>
         `).join("")
       : `
-          <div class="hr-overview-clear-state">
-            <i class="bi bi-check2-circle"></i>
+          <div class="hr-overview-clear-state hr-overview-clear-state--compact" role="status">
+            <i class="bi bi-check2-circle" aria-hidden="true"></i>
             <div>
-              <strong>No urgent HR actions</strong>
-              <span>Employee, review, payroll, and delivery checks are currently clear.</span>
+              <strong>All clear</strong>
+              <span>No employee, review, payroll, or delivery actions need attention.</span>
             </div>
+          </div>
+
+          <div class="hr-overview-check-grid" aria-label="Priority queue checks">
+            <button type="button" class="hr-overview-check-card tone-people"
+              onclick="document.getElementById('hrTabEmployeesBtn')?.click()">
+              <span class="hr-overview-check-icon"><i class="bi bi-person-check"></i></span>
+              <span class="hr-overview-check-copy">
+                <small>Employee records</small>
+                <strong>${activeEmployees.length ? "Complete" : "No active staff"}</strong>
+              </span>
+              <i class="bi bi-chevron-right" aria-hidden="true"></i>
+            </button>
+
+            <button type="button" class="hr-overview-check-card tone-review"
+              onclick="document.getElementById('hrTabReviewBtn')?.click()">
+              <span class="hr-overview-check-icon"><i class="bi bi-clipboard2-check"></i></span>
+              <span class="hr-overview-check-copy">
+                <small>HR reviews</small>
+                <strong>No open reviews</strong>
+              </span>
+              <i class="bi bi-chevron-right" aria-hidden="true"></i>
+            </button>
+
+            <button type="button" class="hr-overview-check-card tone-payroll"
+              onclick="document.getElementById('hrTabPayrollBtn')?.click()">
+              <span class="hr-overview-check-icon"><i class="bi bi-cash-stack"></i></span>
+              <span class="hr-overview-check-copy">
+                <small>Payroll setup</small>
+                <strong>${activeEmployees.length ? `${payrollReadyEmployees.length}/${activeEmployees.length} ready` : "No active staff"}</strong>
+              </span>
+              <i class="bi bi-chevron-right" aria-hidden="true"></i>
+            </button>
+
+            <button type="button" class="hr-overview-check-card tone-delivery"
+              onclick="document.getElementById('hrTabPayrollBtn')?.click()">
+              <span class="hr-overview-check-icon"><i class="bi bi-envelope-check"></i></span>
+              <span class="hr-overview-check-copy">
+                <small>Payslip delivery</small>
+                <strong>No failed emails</strong>
+              </span>
+              <i class="bi bi-chevron-right" aria-hidden="true"></i>
+            </button>
           </div>
         `;
   }
@@ -24505,11 +24819,15 @@ async function refreshOrganizationSettingsWorkspace() {
     // Other tenants remain on the shared BexHR shell.
     applyTenantWorkspaceShellBranding();
 
-    const { data, error } = await supabase
-      .from("organization_settings")
-      .select("*")
-      .eq("singleton_key", true)
-      .maybeSingle();
+    // TENANT ORGANIZATION SETTINGS ISOLATION - RESTORE STEP 1
+    // Organization details belong to the active company workspace.
+    // Never load a legacy or another tenant's singleton row.
+    const { data, error } = await applyCurrentTenantFilter(
+      supabase
+        .from("organization_settings")
+        .select("*")
+        .eq("singleton_key", true),
+    ).maybeSingle();
 
     if (error) throw error;
 
@@ -24787,6 +25105,10 @@ function buildOrganizationSettingsPayload(isEditMode = false) {
   const payload = {
     singleton_key: true,
 
+    // TENANT ORGANIZATION SETTINGS ISOLATION - RESTORE STEP 2
+    // Persist the organization snapshot against the signed-in company only.
+    tenant_id: getRequiredTenantIdForHrEmployeeData(),
+
     // ADMIN COMPANY IDENTITY WIRING - STEP 1M-A
     // Store the Admin-controlled company name as the organization snapshot.
     // HR must not overwrite company identity from Manage Organization.
@@ -24864,6 +25186,11 @@ async function handleOrganizationSettingsSave() {
       "warning",
       "Please complete the required organization fields before saving.",
     );
+    showDashboardToast(
+      "warning",
+      "Organization details incomplete",
+      "Complete the required organization fields before saving.",
+    );
     return;
   }
 
@@ -24881,6 +25208,8 @@ async function handleOrganizationSettingsSave() {
         .from("organization_settings")
         .update(payload)
         .eq("id", existingId)
+        .eq("tenant_id", payload.tenant_id)
+        .eq("singleton_key", true)
         .select("*")
         .maybeSingle()
       : await supabase
@@ -24891,7 +25220,16 @@ async function handleOrganizationSettingsSave() {
 
     if (response.error) throw response.error;
 
-    state.organizationSettings = response.data || null;
+    // ORGANIZATION SETTINGS SAVE CONFIRMATION - STEP 1
+    // Supabase can return no row when an update filter matches nothing.
+    // Do not display a false success message in that case.
+    if (!response.data?.id) {
+      throw new Error(
+        "Organization details were not saved for this company workspace. Refresh and try again.",
+      );
+    }
+
+    state.organizationSettings = response.data;
 
     // MANAGE ORGANIZATION - HR/PAYROLL STANDARD STEP 1B
     // Refresh the saved summary and keep the single-organization form populated.
@@ -24904,6 +25242,15 @@ async function handleOrganizationSettingsSave() {
         ? "Organization details were updated successfully."
         : "Organization details were saved successfully.",
     );
+
+    // SETUP ORGANIZATION NOTIFICATION PARITY - STEP 1
+    // Reuse the existing floating dashboard notification so the result remains
+    // visible even after HR scrolls away from the page-level alert.
+    showDashboardToast(
+      "success",
+      isEditMode ? "Organization details updated" : "Organization details saved",
+      "The company-specific organization record was saved successfully.",
+    );
   } catch (error) {
     console.error("Error saving organization settings:", error);
 
@@ -24914,12 +25261,22 @@ async function handleOrganizationSettingsSave() {
         "warning",
         "Organization details already exist. Refresh the page and update the existing record instead.",
       );
+      showDashboardToast(
+        "warning",
+        "Organization record already exists",
+        "Refresh Setup and update the existing company record instead of creating another one.",
+      );
       return;
     }
 
     showPageAlert(
       "danger",
       error.message || "Organization details could not be saved.",
+    );
+    showDashboardToast(
+      "danger",
+      "Organization save failed",
+      escapeHtml(error.message || "Organization details could not be saved."),
     );
   } finally {
     setOrganizationSettingsSaveLoading(false, isEditMode);
@@ -26867,6 +27224,22 @@ function formatPayrollReferenceForDisplay(value) {
   return `${prefix.toUpperCase()}-${year}-${month}-${day}-${time}`;
 }
 
+// TENANT-SAFE REGULAR PAYROLL METADATA - CORRECTION
+// Alpatech Rev 2 is a tenant-specific salary schedule revision. Keep that
+// metadata only after the active tenant is verified as Alpatech. Other tenants
+// use the shared REGULAR payroll model without an invented version or layout.
+function getRegularPayrollStructureMetadata() {
+  const alpatechStructureIdentifier = isCurrentTenantAlpatechWorkspace()
+    ? "ALPATECH_REGULAR_REV2"
+    : null;
+
+  return {
+    payrollModelVersion: alpatechStructureIdentifier ? "rev2" : null,
+    structureVariant: alpatechStructureIdentifier,
+    payslipLayout: alpatechStructureIdentifier,
+  };
+}
+
 // BATCH PAYROLL DEFAULT - STEP 7
 // Converts one prepared batch preview row into a payroll_records payload.
 // This deliberately does not use the hidden individual payroll form fields.
@@ -26882,6 +27255,9 @@ function buildBatchPayrollRecordPayload(preparedRow, payrollReference = "") {
   const normalizedIncrementPercent =
     rawIncrementPercent > 1 ? rawIncrementPercent / 100 : rawIncrementPercent;
 
+  const regularPayrollStructureMetadata =
+    getRegularPayrollStructureMetadata();
+
   return {
     employee_id: preparedRow.employee_id,
     pay_cycle: payCycle,
@@ -26894,9 +27270,12 @@ function buildBatchPayrollRecordPayload(preparedRow, payrollReference = "") {
 
     employee_group: "REGULAR",
     payroll_model: "REGULAR",
-    payroll_model_version: "rev2",
-    structure_variant: "ALPATECH_REGULAR_REV2",
-    payslip_layout: "ALPATECH_REGULAR_REV2",
+    payroll_model_version:
+      regularPayrollStructureMetadata.payrollModelVersion,
+    structure_variant:
+      regularPayrollStructureMetadata.structureVariant,
+    payslip_layout:
+      regularPayrollStructureMetadata.payslipLayout,
 
     // BATCH PAYROLL CSV IMPORT - STEP 5
     // Save the actual increment from the prepared row.
@@ -30564,6 +30943,30 @@ async function refreshPayrollWorkspace() {
   populatePayrollEmployeeOptions();
 }
 
+// PAYROLL REFRESH FUNCTIONALITY - STEP 1
+// The toolbar listener already calls this handler. Keep one visible loading
+// state while the existing tenant-scoped payroll workspace reloads.
+async function handlePayrollRecordsRefresh() {
+  const button = state.dom.refreshPayrollRecordsBtn;
+  const startedAt = Date.now();
+
+  try {
+    setWorkspaceRefreshLoading(button, true, "Refreshing Payroll...");
+    await waitForNextPaint();
+
+    await refreshPayrollWorkspace();
+
+    // Re-apply the current business-role controls after payroll rows rebuild,
+    // then keep Dashboard payroll metrics aligned with the refreshed state.
+    applyHrPayrollOperationsAccessControls();
+    renderHrModernOverview();
+
+    await waitForMinimumLoadingFeedback(startedAt, 450);
+  } finally {
+    setWorkspaceRefreshLoading(button, false);
+  }
+}
+
 async function loadPayrollRecords() {
   const supabase = getSupabaseClient();
 
@@ -32224,9 +32627,12 @@ function renderPayslipEmailLogsLoadingState() {
   state.dom.payslipEmailLogsTableWrapper?.classList.remove("d-none");
 
   tbody.innerHTML = `
-    <tr>
-      <td colspan="5" class="text-center text-secondary py-4">
-        Loading payslip email status records.
+    <tr class="hr-payroll-email-log-loading-row">
+      <td colspan="5">
+        <div class="hr-payroll-email-log-loading" role="status" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+          <span>Loading payslip email status records...</span>
+        </div>
       </td>
     </tr>
   `;
@@ -32384,7 +32790,7 @@ function renderPayslipDuplicateProtectionNotice(tbody) {
   if (!alreadySentCount) return;
 
   const row = document.createElement("tr");
-  row.className = "table-light";
+  row.className = "hr-payroll-email-protection-row";
 
   row.innerHTML = `
     <td colspan="5">
@@ -32441,26 +32847,38 @@ function renderPayslipEmailLogs(records = []) {
       "Unknown Employee";
 
     const row = document.createElement("tr");
+    row.className = "hr-payroll-email-log-row";
 
     row.innerHTML = `
-      <td>
-        <div class="fw-semibold">${escapeHtml(employeeName)}</div>
-        <div class="text-secondary small text-break">
-          ${escapeHtml(record.recipient_email || "--")}
+      <td data-label="Employee / Recipient">
+        <div class="hr-payroll-email-recipient">
+          <span class="hr-payroll-email-recipient-icon" aria-hidden="true">
+            <i class="bi bi-person"></i>
+          </span>
+          <div>
+            <div class="fw-semibold">${escapeHtml(employeeName)}</div>
+            <div class="text-secondary small text-break">
+              ${escapeHtml(record.recipient_email || "--")}
+            </div>
+          </div>
         </div>
       </td>
 
-      <td>${escapeHtml(record.pay_cycle || "--")}</td>
+      <td data-label="Pay Cycle">
+        <span class="hr-payroll-email-cycle">${escapeHtml(record.pay_cycle || "--")}</span>
+      </td>
 
-      <td>
+      <td data-label="Status">
         <span class="badge ${getPayslipEmailLogStatusBadgeClass(record.status)}">
           ${escapeHtml(formatStatusLabel(record.status || "Pending"))}
         </span>
       </td>
 
-      <td>${record.sent_at ? formatDate(record.sent_at) : "--"}</td>
+      <td data-label="Sent At">
+        ${record.sent_at ? formatDate(record.sent_at) : "--"}
+      </td>
 
-      <td class="text-break small">
+      <td data-label="Delivery Note" class="text-break small hr-payroll-email-delivery-note">
         ${escapeHtml(getPayslipEmailLogDisplayNote(record))}
       </td>
     `;
@@ -32902,6 +33320,44 @@ async function handleSendPayslipsEmailRequest() {
   }
 }
 
+// PAYROLL OVERVIEW FINANCIAL CARD CLARITY - STEP 1
+// Resolve the user-facing label of an existing payroll filter. This reads the
+// current controls only; it does not change filtering or payroll behaviour.
+function getSelectedPayrollSummaryFilterLabel(selectElement, fallbackLabel) {
+  const selectedValue = String(selectElement?.value || "").trim();
+
+  if (!selectedValue) {
+    return fallbackLabel;
+  }
+
+  return (
+    String(selectElement?.selectedOptions?.[0]?.textContent || selectedValue).trim() ||
+    fallbackLabel
+  );
+}
+
+// PAYROLL OVERVIEW FINANCIAL CARD CLARITY - STEP 1
+// The summary totals are calculated from the filtered rows. Keep that scope
+// visible so users do not mistake a multi-cycle total for one payroll run.
+function getPayrollSummaryScopeText() {
+  const payCycleLabel = getSelectedPayrollSummaryFilterLabel(
+    state.dom.exportPayrollPayCycle,
+    "All pay cycles",
+  );
+  const statusLabel = getSelectedPayrollSummaryFilterLabel(
+    state.dom.payrollStatusFilter,
+    "All statuses",
+  );
+  const searchTerm = String(state.dom.payrollSearchInput?.value || "").trim();
+  const scopeParts = [payCycleLabel, statusLabel];
+
+  if (searchTerm) {
+    scopeParts.push(`Search: “${searchTerm}”`);
+  }
+
+  return `Scope: ${scopeParts.join(" • ")}`;
+}
+
 function renderPayrollSummary(records) {
   const finalisedCount = records.filter((record) => Boolean(record.is_finalised)).length;
   const grossTotal = records.reduce(
@@ -32912,6 +33368,10 @@ function renderPayrollSummary(records) {
     (total, record) => total + Number(record.net_pay || 0),
     0,
   );
+
+  if (state.dom.payrollSummaryScope) {
+    state.dom.payrollSummaryScope.textContent = getPayrollSummaryScopeText();
+  }
 
   if (state.dom.payrollRecordCountValue) {
     state.dom.payrollRecordCountValue.textContent = String(records.length);
@@ -33141,13 +33601,14 @@ function renderPayrollRecords(records) {
       Boolean(employeeOverrideAuditSummary) || employeeSalarySnapshotCount > 1;
 
     const row = document.createElement("tr");
+    row.className = "hr-payroll-record-row";
 
     row.innerHTML = `
-      <td class="text-center">
+      <td class="text-center" data-label="Send">
         ${payslipSelectionCell}
       </td>
 
-      <td>
+      <td data-label="Employee">
         <!-- MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A RECOVERY
              Payroll Records should show payroll record identity only.
              Employee List checkbox code does not belong here. -->
@@ -33166,7 +33627,7 @@ ${recentlyEditedPayrollBadgeHtml}
 </div>
       </td>
 
-      <td>
+      <td data-label="Cycle">
         <!-- PAYROLL RECORDS GROUP LABELS - STEP 12C
              Display payroll group labels consistently without changing
              the stored database values. -->
@@ -33178,7 +33639,7 @@ ${recentlyEditedPayrollBadgeHtml}
         </div>
       </td>
 
-      <td class="align-middle">
+      <td class="align-middle" data-label="Pay / Submit">
         <!-- PAYROLL RECORDS DATE CLARITY - STEP 12B
              Pay Date is the payroll/payment date.
              Submitted is the audit timestamp when HR created or updated the record. -->
@@ -33190,7 +33651,7 @@ ${recentlyEditedPayrollBadgeHtml}
         </div>
       </td>
 
-      <td>
+      <td data-label="Pay Summary">
         <!-- MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A RECOVERY
              Keep payroll money values grouped in Payroll Records.
              This is display-only and does not change saved payroll values. -->
@@ -33226,7 +33687,7 @@ ${recentlyEditedPayrollBadgeHtml}
 
       </td>
 
-      <td>
+      <td data-label="Status">
         <!-- MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A RECOVERY
              Status and finalisation remain compact in one Payroll Records cell. -->
         <div class="mb-1">
@@ -33244,24 +33705,24 @@ ${recentlyEditedPayrollBadgeHtml}
         </div>
       </td>
 
-      <td class="text-center">
+      <td class="text-center" data-label="Action">
         <!-- DESCRIPTION ITEM 4 - STEP 7
              Keep payslip preview beside edit.
              Preview is disabled until the payroll record is finalised. -->
         <div class="d-inline-flex justify-content-center gap-2">
           <button
             type="button"
-            class="btn btn-sm ${canPreviewPayslip ? "btn-outline-secondary" : "btn-outline-light border"}"
+            class="btn btn-sm hr-payroll-row-action hr-payroll-payslip-action ${canPreviewPayslip ? "btn-outline-secondary" : "btn-outline-light border"}"
             title="${canPreviewPayslip ? "Preview payslip" : "Preview available after payroll is finalised"}"
             aria-label="Preview payslip"
             ${canPreviewPayslip ? `onclick="window.hrPreviewPayslipRecord('${safePayrollRecordId}')"` : "disabled"}
           >
-            <i class="bi bi-receipt"></i>
+            <i class="bi bi-file-earmark-text"></i><span class="hr-payroll-action-label">Payslip</span>
           </button>
 
 <button
   type="button"
-  class="btn btn-sm ${canMaintainPayrollOperations ? "btn-outline-primary" : "btn-outline-secondary"}"
+  class="btn btn-sm hr-payroll-row-action ${canMaintainPayrollOperations ? "btn-outline-primary" : "btn-outline-secondary"}"
   title="${canMaintainPayrollOperations ? "Edit payroll record" : "Payroll record editing is read-only for this role"}"
   aria-label="${canMaintainPayrollOperations ? "Edit payroll record" : "Payroll record editing is read-only"}"
   ${canMaintainPayrollOperations ? "" : "disabled"}
@@ -33730,23 +34191,68 @@ function buildAlpatechDocumentBrandHeaderHtml({
   `;
 }
 
-// DESCRIPTION ITEM 4 - STEP 7
-// Render a simple list of payslip earning/deduction lines.
+// PAYSLIP DOCUMENT SYSTEM - STEP 1
+// Shared, presentation-only helpers for the HR Payroll preview and isolated
+// Print / Save PDF output. Payroll records, calculations, tenant filters,
+// authorisation, email delivery, and Supabase behaviour remain unchanged.
+function buildPayrollPayslipBrandHeaderHtml({
+  isAlpatech = false,
+  organizationName = "BexHR",
+  payCycle = "Payroll",
+  payDate = "--",
+  status = "Authorised",
+  payrollReference = "",
+} = {}) {
+  const brandName = isAlpatech ? "ALPATECH" : organizationName || "BexHR";
+  const brandMarkHtml = isAlpatech
+    ? `<span class="bexhr-payslip-brand-mark bexhr-payslip-brand-mark--image" aria-hidden="true">
+         <img src="assets/alpatech-flame.png" alt="" />
+       </span>`
+    : `<span class="bexhr-payslip-brand-mark" aria-hidden="true">B</span>`;
+
+  const referenceHtml = payrollReference
+    ? `<span class="bexhr-payslip-reference">Ref: ${escapeHtml(payrollReference)}</span>`
+    : "";
+
+  return `
+    <header class="bexhr-payslip-letterhead ${isAlpatech ? "bexhr-payslip-letterhead--alpatech" : ""}">
+      <div class="bexhr-payslip-brand-block">
+        <div class="bexhr-payslip-brand-line">
+          ${brandMarkHtml}
+          <span class="bexhr-payslip-brand-divider" aria-hidden="true"></span>
+          <div>
+            <div class="bexhr-payslip-brand-name">${escapeHtml(brandName)}</div>
+            <div class="bexhr-payslip-document-label">Confidential Payroll Payslip</div>
+          </div>
+        </div>
+        ${!isAlpatech && organizationName && normalizeText(organizationName) !== "bexhr"
+          ? `<div class="bexhr-payslip-platform-label">Prepared securely with BexHR</div>`
+          : ""}
+      </div>
+
+      <div class="bexhr-payslip-document-meta">
+        <span class="bexhr-payslip-status-badge">
+          <span aria-hidden="true"></span>${escapeHtml(status || "Authorised")}
+        </span>
+        <strong>${escapeHtml(payCycle || "Payroll")}</strong>
+        <span>Pay date: ${escapeHtml(payDate || "--")}</span>
+        ${referenceHtml}
+      </div>
+    </header>
+  `;
+}
+
 function renderPayslipPreviewLineItems(items = [], currency = "NGN", emptyText = "No items recorded.") {
   const visibleItems = items.filter((item) => Number(item.amount || 0) > 0);
 
   if (!visibleItems.length) {
-    return `
-      <div class="text-secondary small border rounded-3 p-3">
-        ${escapeHtml(emptyText)}
-      </div>
-    `;
+    return `<div class="bexhr-payslip-empty-line">${escapeHtml(emptyText)}</div>`;
   }
 
   return visibleItems
     .map(
       (item) => `
-        <div class="d-flex justify-content-between gap-3 border-bottom py-2">
+        <div class="bexhr-payslip-line-item">
           <span>${escapeHtml(item.label)}</span>
           <strong>${escapeHtml(formatCurrency(item.amount, currency))}</strong>
         </div>
@@ -33755,9 +34261,52 @@ function renderPayslipPreviewLineItems(items = [], currency = "NGN", emptyText =
     .join("");
 }
 
-// DESCRIPTION ITEM 4 - STEP 7
-// Builds the payslip preview content for a finalised payroll record.
-// This is review-only and does not send email.
+function renderPayslipStructureItems(items = []) {
+  const visibleItems = items.filter((item) => {
+    if (!item || !item.label) return false;
+    const value = String(item.value ?? "").trim();
+    return value && value !== "--" && value !== "0.0%" && value !== "0.00%" && value !== "NGN 0.00";
+  });
+
+  if (!visibleItems.length) return "";
+
+  return `
+    <section class="bexhr-payslip-structure-card">
+      <div class="bexhr-payslip-section-heading">
+        <span class="bexhr-payslip-section-icon" aria-hidden="true"><i class="bi bi-diagram-3"></i></span>
+        <div>
+          <span>Payroll basis</span>
+          <h3>Salary Structure</h3>
+        </div>
+      </div>
+
+      <div class="bexhr-payslip-structure-grid">
+        ${visibleItems
+          .map(
+            (item) => `
+              <div class="bexhr-payslip-structure-item ${item.emphasis ? "bexhr-payslip-structure-item--emphasis" : ""}">
+                <span>${escapeHtml(item.label)}</span>
+                <strong>${escapeHtml(item.value)}</strong>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function buildPayslipDetailLines(lines = []) {
+  const visibleLines = lines.filter(Boolean);
+  if (!visibleLines.length) return "";
+
+  return `<div class="bexhr-payslip-contact-lines">${visibleLines
+    .map((line) => `<span>${escapeHtml(line)}</span>`)
+    .join("")}</div>`;
+}
+
+// Builds the HR Payroll payslip preview from the already-authorised payroll
+// record and already-loaded employee/organization context.
 function renderPayslipPreview(payrollRecord) {
   const content = state.dom.payslipPreviewContent;
   if (!content) return;
@@ -33768,50 +34317,23 @@ function renderPayslipPreview(payrollRecord) {
     payrollRecord.work_email ||
     "Unknown Employee";
 
-  // MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A-2
-  // Payslip Preview may receive a payroll_records row that does not include
-  // Employee Number directly. Resolve it from the already-loaded HR employee list
-  // without changing payroll_records or saved payroll data.
   const linkedPayslipEmployee = (state.employees || []).find((employee) => {
     const sameEmployeeId =
       String(employee.id || "").trim() === String(payrollRecord.employee_id || "").trim();
-
     const sameWorkEmail =
       normalizeText(employee.work_email) === normalizeText(payrollRecord.work_email);
-
     return sameEmployeeId || sameWorkEmail;
   });
 
   const payslipEmployeeNumber =
-    payrollRecord.employee_number ||
-    linkedPayslipEmployee?.employee_number ||
-    "--";
-
-  // ASSIGN LINE MANAGER - STEP 1C
-  // Payslip Preview should show the latest HR employee department/job title
-  // when available. Payroll records may hold an older snapshot from when
-  // payroll was created, so the live employee record takes priority here.
-  // This is preview-only and does not rewrite saved payroll records.
+    payrollRecord.employee_number || linkedPayslipEmployee?.employee_number || "--";
   const payslipDepartment =
-    linkedPayslipEmployee?.department ||
-    payrollRecord.department ||
-    "--";
-
+    linkedPayslipEmployee?.department || payrollRecord.department || "--";
   const payslipJobTitle =
-    linkedPayslipEmployee?.job_title ||
-    payrollRecord.job_title ||
-    "--";
+    linkedPayslipEmployee?.job_title || payrollRecord.job_title || "--";
 
-  // MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A
-  // Pull saved Organization details into the payslip preview header.
-  // This is display-only and does not change payroll records or email sending.
   const organization = state.organizationSettings || {};
-
-  // ADMIN COMPANY IDENTITY WIRING - STEP 1M-B
-  // Payslip Preview must show the same Admin-controlled company name
-  // shown in HR Manage Organization.
   const organizationName = getAdminControlledOrganizationName();
-
   const organizationContactLines = [
     organization.organization_email,
     organization.phone_number,
@@ -33819,7 +34341,6 @@ function renderPayslipPreview(payrollRecord) {
       ? `Payroll: ${organization.payroll_contact_email}`
       : "",
   ].filter(Boolean);
-
   const organizationAddress = [
     organization.address_line,
     organization.city,
@@ -33827,7 +34348,6 @@ function renderPayslipPreview(payrollRecord) {
   ]
     .filter(Boolean)
     .join(", ");
-
   const organizationRegistrationLines = [
     organization.tax_identification_number
       ? `Tax ID / TIN: ${organization.tax_identification_number}`
@@ -33837,46 +34357,22 @@ function renderPayslipPreview(payrollRecord) {
       : "",
   ].filter(Boolean);
 
-  // ALPATECH PAYSLIP BRANDING - STEP 2A
-  // Apply Alpatech branding only when the signed-in tenant/company is Alpatech.
-  // This is display-only: it does not change payroll values, employee records,
-  // CSV export, email delivery, Supabase queries, or role/access behaviour.
   const isAlpatechPayslip =
     typeof isCurrentTenantAlpatechWorkspace === "function" &&
     isCurrentTenantAlpatechWorkspace();
 
-  const alpatechPayslipHeaderHtml = isAlpatechPayslip
-    ? buildAlpatechDocumentBrandHeaderHtml({
-      documentLabel: "Confidential Payroll Payslip",
-      rightTitle: "HR & Payroll",
-      rightLine1: payrollRecord.pay_cycle || "Payroll",
-      rightLine2: formatDate(payrollRecord.pay_date),
-    })
-    : "";
-
-  // EMPLOYEE FILLED FORM SLIP CLEANUP - STEP 1A
-  // Keep document wording consistent: use Company Details, not Employer Details.
-  const payslipOrganizationLabel = isAlpatechPayslip
-    ? "Company Details"
-    : "Organization";
-
-  const payslipOrganizationNameHtml = isAlpatechPayslip
-    ? ""
-    : `<div class="h4 mb-1">${escapeHtml(organizationName)}</div>`;
-
-  const payslipEmployerFallbackHtml =
-    isAlpatechPayslip &&
-      !organizationContactLines.length &&
-      !organizationAddress &&
-      !organizationRegistrationLines.length
-      ? `<div class="text-secondary small">Company details not yet completed in Organization Setup.</div>`
-      : "";
+  const brandHeaderHtml = buildPayrollPayslipBrandHeaderHtml({
+    isAlpatech: isAlpatechPayslip,
+    organizationName,
+    payCycle: payrollRecord.pay_cycle || "Payroll",
+    payDate: formatDate(payrollRecord.pay_date),
+    status: payrollRecord.status || "Authorised",
+    payrollReference:
+      payrollRecord.payroll_reference || payrollRecord.reference || "",
+  });
 
   const earningsHtml = renderPayslipPreviewLineItems(
     [
-      // MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A-2
-      // Basic Pay is the core earning component and must be visible on the payslip.
-      // Monthly Gross Salary/Base Salary remains represented by Gross Pay summary.
       { label: "Basic Pay", amount: payrollRecord.basic_pay },
       { label: "Housing Allowance", amount: payrollRecord.housing_allowance },
       { label: "Transport Allowance", amount: payrollRecord.transport_allowance },
@@ -33894,9 +34390,6 @@ function renderPayslipPreview(payrollRecord) {
 
   const deductionsHtml = renderPayslipPreviewLineItems(
     [
-      // MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A-2
-      // Employer Pension is not an employee deduction, so it is not shown here.
-      // This keeps the Deductions list aligned with Total Deductions and Net Pay.
       { label: "PAYE Tax", amount: payrollRecord.paye_tax },
       { label: "WHT Tax", amount: payrollRecord.wht_tax },
       { label: "Employee Pension", amount: payrollRecord.employee_pension },
@@ -33906,146 +34399,123 @@ function renderPayslipPreview(payrollRecord) {
     "No deduction breakdown recorded.",
   );
 
+  const percentValue = (value) => {
+    const numericValue = Number(value || 0);
+    if (!Number.isFinite(numericValue) || numericValue === 0) return "0.0%";
+    return `${(Math.abs(numericValue) <= 1 ? numericValue * 100 : numericValue).toFixed(1)}%`;
+  };
+
+  // EMPLOYEE-FACING PAYSLIP DATA MINIMISATION - STEP 1
+  // Keep internal model/version/variant/allocation identifiers in protected
+  // payroll records only. Employee-facing previews and print/PDF output show
+  // a clear pay basis, any real increment, and the agreed monthly gross.
+  const structureHtml = renderPayslipStructureItems([
+    {
+      label: "Pay Type",
+      value: payrollRecord.employee_group || payrollRecord.payroll_model || "Regular",
+    },
+    { label: "Increment", value: percentValue(payrollRecord.increment_percent) },
+    {
+      label: "Monthly Gross Salary",
+      value: formatCurrency(payrollRecord.gross_pay, currency),
+      emphasis: true,
+    },
+  ]);
+
   if (state.dom.payslipPreviewTitle) {
-    state.dom.payslipPreviewTitle.textContent = `Payslip Preview - ${payrollRecord.pay_cycle || "Payroll"}`;
+    state.dom.payslipPreviewTitle.textContent =
+      `Payslip Preview - ${payrollRecord.pay_cycle || "Payroll"}`;
   }
 
   content.innerHTML = `
-    ${alpatechPayslipHeaderHtml}
+    <article class="hr-payslip-document bexhr-payslip-document">
+      ${brandHeaderHtml}
 
-    <!-- MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A
-         Payslip preview now uses saved Manage Organization details.
-         This keeps the preview aligned with the organisation setup card
-         without touching Send Payslips email delivery. -->
-    <div class="border rounded-4 p-4 mb-4 bg-light-subtle">
-      <div class="d-flex flex-column flex-lg-row justify-content-between gap-4">
-        <div>
-          <!-- ALPATECH PAYSLIP BRANDING - STEP 2B
-               Non-Alpatech tenants keep the normal organization name.
-               Alpatech payslips avoid duplicating the brand name because
-               the ALPATECH letterhead is already shown above. -->
-          <div class="text-secondary small">${escapeHtml(payslipOrganizationLabel)}</div>
-          ${payslipOrganizationNameHtml}
-          ${payslipEmployerFallbackHtml}
+      <section class="bexhr-payslip-party-grid">
+        <article class="bexhr-payslip-party-card">
+          <div class="bexhr-payslip-party-label">Company</div>
+          <h3>${escapeHtml(organizationName || (isAlpatechPayslip ? "ALPATECH" : "BexHR"))}</h3>
+          ${buildPayslipDetailLines(organizationContactLines)}
+          ${organizationAddress ? `<div class="bexhr-payslip-address">${escapeHtml(organizationAddress)}</div>` : ""}
+          ${buildPayslipDetailLines(organizationRegistrationLines)}
+        </article>
 
-          ${organizationContactLines.length
-      ? `<div class="text-secondary small text-break">
-                  ${organizationContactLines.map((line) => escapeHtml(line)).join("<br>")}
-                </div>`
-      : ""
-    }
-
-          ${organizationAddress
-      ? `<div class="text-secondary small mt-2 text-break">
-                  ${escapeHtml(organizationAddress)}
-                </div>`
-      : ""
-    }
-
-          ${organizationRegistrationLines.length
-      ? `<div class="text-secondary small mt-2 text-break">
-                  ${organizationRegistrationLines.map((line) => escapeHtml(line)).join("<br>")}
-                </div>`
-      : ""
-    }
-        </div>
-
-        <div class="text-lg-end">
-          <div class="text-secondary small">Payslip</div>
-          <div class="fw-semibold">${escapeHtml(payrollRecord.pay_cycle || "Payroll")}</div>
-
-          <div class="text-secondary small mt-2">Pay Date</div>
-          <div class="fw-semibold">${formatDate(payrollRecord.pay_date)}</div>
-        </div>
-      </div>
-
-      <hr class="my-4" />
-
-      <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
-        <div>
-          <div class="text-secondary small">Employee</div>
-          <div class="h5 mb-1">${escapeHtml(employeeName)}</div>
-          <div class="text-secondary small text-break">
-            ${escapeHtml(payrollRecord.work_email || "--")}
+        <article class="bexhr-payslip-party-card bexhr-payslip-party-card--employee">
+          <div class="bexhr-payslip-party-label">Employee</div>
+          <h3>${escapeHtml(employeeName)}</h3>
+          <div class="bexhr-payslip-contact-lines">
+            <span>${escapeHtml(payrollRecord.work_email || "--")}</span>
+            <span>${escapeHtml(payslipDepartment)} · ${escapeHtml(payslipJobTitle)}</span>
           </div>
-
-          <!-- ASSIGN LINE MANAGER - STEP 1C
-               Keep employee department/job title in a proper text row.
-               This fixes the broken payslip preview markup. -->
-          <div class="text-secondary small">
-            ${escapeHtml(payslipDepartment)} • ${escapeHtml(payslipJobTitle)}
+          <div class="bexhr-payslip-employee-number">
+            <span>Employee No.</span>
+            <strong>${escapeHtml(payslipEmployeeNumber)}</strong>
           </div>
-        </div>
+        </article>
+      </section>
 
-        <div class="text-md-end">
-          <div class="text-secondary small">Employee No.</div>
-          <!-- MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A-2
-               Show Employee Number from the HR employee source when it is
-               not stored directly on the payroll_records row. -->
-          <div class="fw-semibold">${escapeHtml(payslipEmployeeNumber)}</div>
-        </div>
-      </div>
-    </div>
+      <section class="bexhr-payslip-summary-grid" aria-label="Payslip totals">
+        <article class="bexhr-payslip-summary-card bexhr-payslip-summary-card--gross">
+          <span class="bexhr-payslip-summary-icon" aria-hidden="true"><i class="bi bi-wallet2"></i></span>
+          <div><span>Gross Pay</span><strong>${escapeHtml(formatCurrency(payrollRecord.gross_pay, currency))}</strong></div>
+        </article>
+        <article class="bexhr-payslip-summary-card bexhr-payslip-summary-card--deductions">
+          <span class="bexhr-payslip-summary-icon" aria-hidden="true"><i class="bi bi-dash-circle"></i></span>
+          <div><span>Total Deductions</span><strong>${escapeHtml(formatCurrency(payrollRecord.total_deductions, currency))}</strong></div>
+        </article>
+        <article class="bexhr-payslip-summary-card bexhr-payslip-summary-card--net">
+          <span class="bexhr-payslip-summary-icon" aria-hidden="true"><i class="bi bi-check2-circle"></i></span>
+          <div><span>Net Pay</span><strong>${escapeHtml(formatCurrency(payrollRecord.net_pay, currency))}</strong></div>
+        </article>
+      </section>
 
-    <div class="row g-3 mb-4">
-      <div class="col-md-4">
-        <div class="border rounded-4 p-3 h-100">
-          <div class="text-secondary small">Gross Pay</div>
-          <div class="h5 mb-0">${escapeHtml(formatCurrency(payrollRecord.gross_pay, currency))}</div>
-        </div>
-      </div>
+      ${structureHtml}
 
-      <div class="col-md-4">
-        <div class="border rounded-4 p-3 h-100">
-          <div class="text-secondary small">Total Deductions</div>
-          <div class="h5 mb-0">${escapeHtml(formatCurrency(payrollRecord.total_deductions, currency))}</div>
-        </div>
-      </div>
-
-      <div class="col-md-4">
-        <div class="border rounded-4 p-3 h-100">
-          <div class="text-secondary small">Net Pay</div>
-          <div class="h5 mb-0">${escapeHtml(formatCurrency(payrollRecord.net_pay, currency))}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="row g-4">
-      <div class="col-lg-6">
-        <div class="border rounded-4 p-4 h-100">
-          <h3 class="h6 fw-bold mb-3">Earnings</h3>
-          ${earningsHtml}
-          <div class="d-flex justify-content-between gap-3 pt-3 mt-2">
-            <span class="fw-semibold">Gross Pay</span>
+      <section class="bexhr-payslip-breakdown-grid">
+        <article class="bexhr-payslip-breakdown-card bexhr-payslip-breakdown-card--earnings">
+          <div class="bexhr-payslip-section-heading">
+            <span class="bexhr-payslip-section-icon" aria-hidden="true"><i class="bi bi-plus-circle"></i></span>
+            <div><span>Income</span><h3>Earnings</h3></div>
+          </div>
+          <div class="bexhr-payslip-line-items">${earningsHtml}</div>
+          <div class="bexhr-payslip-section-total">
+            <span>Gross Pay</span>
             <strong>${escapeHtml(formatCurrency(payrollRecord.gross_pay, currency))}</strong>
           </div>
-        </div>
-      </div>
+        </article>
 
-      <div class="col-lg-6">
-        <div class="border rounded-4 p-4 h-100">
-          <h3 class="h6 fw-bold mb-3">Deductions</h3>
-          ${deductionsHtml}
-          <div class="d-flex justify-content-between gap-3 pt-3 mt-2">
-            <span class="fw-semibold">Total Deductions</span>
+        <article class="bexhr-payslip-breakdown-card bexhr-payslip-breakdown-card--deductions">
+          <div class="bexhr-payslip-section-heading">
+            <span class="bexhr-payslip-section-icon" aria-hidden="true"><i class="bi bi-dash-circle"></i></span>
+            <div><span>Withheld</span><h3>Deductions</h3></div>
+          </div>
+          <div class="bexhr-payslip-line-items">${deductionsHtml}</div>
+          <div class="bexhr-payslip-section-total">
+            <span>Total Deductions</span>
             <strong>${escapeHtml(formatCurrency(payrollRecord.total_deductions, currency))}</strong>
           </div>
-        </div>
-      </div>
-    </div>
+        </article>
+      </section>
 
-<div class="alert alert-light border mt-4 mb-0">
-  <!-- PAYSLIP PRINT RENDERING FIX - STEP 4
-       Use employee-facing confidentiality wording on the payslip output.
-       This is display-only: it does not send email, alter payroll records,
-       expose bank details, or change payslip delivery behaviour. -->
-  <div class="fw-semibold mb-1">Confidential Payslip</div>
-  <div class="small text-secondary">
-    This payslip is confidential and intended only for the named employee. Salary, deduction, and payroll details must be handled securely and shared only through approved company channels.
-  </div>
-</div>
+      <section class="bexhr-payslip-net-panel">
+        <div>
+          <span>Amount payable</span>
+          <strong>Net Pay</strong>
+        </div>
+        <div class="bexhr-payslip-net-amount">${escapeHtml(formatCurrency(payrollRecord.net_pay, currency))}</div>
+      </section>
+
+      <footer class="bexhr-payslip-footer-note">
+        <span class="bexhr-payslip-footer-icon" aria-hidden="true"><i class="bi bi-shield-lock"></i></span>
+        <div>
+          <strong>Confidential employee document</strong>
+          <p>This payslip is intended only for the named employee. Salary, deduction, and payroll information must be handled securely and shared only through approved company channels.</p>
+        </div>
+      </footer>
+    </article>
   `;
 }
+
 
 // PAYSLIP PRINT RENDERING FIX - STEP 1
 // Print the payslip from an isolated hidden document instead of printing the
@@ -34077,7 +34547,6 @@ function printCurrentPayslipPreview() {
   }
 
   const printFrame = document.createElement("iframe");
-
   printFrame.title = "Payslip print preview";
   printFrame.setAttribute("aria-hidden", "true");
 
@@ -34098,20 +34567,17 @@ function printCurrentPayslipPreview() {
 
   if (!frameDocument || !frameWindow) {
     printFrame.remove();
-
     showDashboardToast(
       "warning",
       "Print fallback",
       "The browser could not prepare an isolated payslip print view. Please try again.",
     );
-
     return;
   }
 
   const printTitle = escapeHtml(
     state.dom.payslipPreviewTitle?.textContent || "Payslip Preview",
   );
-
   const payslipMarkup = source.innerHTML;
 
   frameDocument.open();
@@ -34122,294 +34588,130 @@ function printCurrentPayslipPreview() {
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>${printTitle}</title>
-
         <style>
-@page {
-  size: A4;
-  margin: 6mm;
-}
-
-          *,
-          *::before,
-          *::after {
-            box-sizing: border-box;
-          }
-
-html,
-body {
-  margin: 0;
-  padding: 0;
-  background: #ffffff;
-  color: #111827;
-  font-family: Inter, "Segoe UI", Arial, sans-serif;
-  font-size: 15px;
-  line-height: 1.5;
-}
-
-          body {
+          @page { size: A4; margin: 8mm; }
+          *, *::before, *::after { box-sizing: border-box; }
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+            color: #10233f;
+            font-family: Inter, "Segoe UI", Arial, sans-serif;
+            font-size: 10.5px;
+            line-height: 1.42;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-
-.payslip-print-shell {
-  width: 100%;
-  max-width: 198mm;
-  margin: 0 auto;
-  background: #ffffff;
-}
-
-.payslip-print-shell * {
-  overflow: visible !important;
-}
-
-/* PAYSLIP PRINT RENDERING FIX - STEP 3
-   Make the printed payslip readable as a formal payroll document.
-   This only affects the isolated print iframe, not the dashboard modal,
-   payroll records, email delivery, or saved payroll data. */
-.payslip-print-shell {
-  font-size: 1rem;
-}
-
-.payslip-print-shell .small {
-  font-size: 0.9rem !important;
-  line-height: 1.45 !important;
-}
-
-.payslip-print-shell .h4 {
-  font-size: 1.65rem !important;
-}
-
-.payslip-print-shell .h5 {
-  font-size: 1.35rem !important;
-}
-
-.payslip-print-shell .h6 {
-  font-size: 1.08rem !important;
-}
-
-.payslip-print-shell strong,
-.payslip-print-shell .fw-semibold,
-.payslip-print-shell .fw-bold {
-  font-weight: 700 !important;
-}
-
-.payslip-print-shell .border-bottom {
-  padding-top: 0.6rem !important;
-  padding-bottom: 0.6rem !important;
-}
-
-.payslip-print-shell .border,
-.payslip-print-shell .alert {
-  border-color: #cbd5e1 !important;
-}
-
-          .row {
-            display: flex;
-            flex-wrap: wrap;
-            margin-left: -6px;
-            margin-right: -6px;
+          .payslip-print-shell { width: 100%; max-width: 194mm; margin: 0 auto; }
+          .bexhr-payslip-document { display: grid; gap: 12px; background: #fff; }
+          .bexhr-payslip-letterhead {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            gap: 16px; padding: 14px 16px; border-radius: 14px;
+            color: #fff; background: linear-gradient(135deg, #0b5f95 0%, #0f766e 100%);
           }
-
-          .row > * {
-            width: 100%;
-            padding-left: 6px;
-            padding-right: 6px;
+          .bexhr-payslip-brand-line { display: flex; align-items: center; gap: 9px; }
+          .bexhr-payslip-brand-mark {
+            width: 28px; height: 28px; border-radius: 9px; display: inline-flex;
+            align-items: center; justify-content: center; flex: 0 0 auto;
+            background: rgba(255,255,255,.96); color: #0b5f95; font-size: 14px; font-weight: 800;
           }
-
-          .col-md-4 {
-            flex: 0 0 33.333333%;
-            max-width: 33.333333%;
+          .bexhr-payslip-brand-mark img { width: 15px; height: 22px; object-fit: contain; }
+          .bexhr-payslip-brand-divider { width: 1px; height: 26px; background: rgba(255,255,255,.45); }
+          .bexhr-payslip-brand-name { font-size: 15px; font-weight: 800; letter-spacing: .08em; }
+          .bexhr-payslip-document-label, .bexhr-payslip-platform-label { font-size: 8px; opacity: .82; }
+          .bexhr-payslip-platform-label { margin: 4px 0 0 47px; }
+          .bexhr-payslip-document-meta { display: grid; justify-items: end; gap: 2px; text-align: right; font-size: 8.5px; }
+          .bexhr-payslip-document-meta strong { font-size: 12px; }
+          .bexhr-payslip-status-badge {
+            display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px;
+            border-radius: 999px; background: rgba(255,255,255,.16); font-weight: 700;
           }
-
-          .col-lg-6 {
-            flex: 0 0 50%;
-            max-width: 50%;
+          .bexhr-payslip-status-badge span { width: 5px; height: 5px; border-radius: 50%; background: #bbf7d0; }
+          .bexhr-payslip-reference { opacity: .85; }
+          .bexhr-payslip-party-grid, .bexhr-payslip-breakdown-grid {
+            display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
           }
-
-          .d-flex {
-            display: flex !important;
+          .bexhr-payslip-party-card, .bexhr-payslip-structure-card, .bexhr-payslip-breakdown-card,
+          .bexhr-payslip-summary-card, .bexhr-payslip-footer-note {
+            border: 1px solid #d9e3ec; border-radius: 12px; background: #fff;
+            break-inside: avoid; page-break-inside: avoid;
           }
-
-          .flex-column {
-            flex-direction: column !important;
+          .bexhr-payslip-party-card { padding: 12px; min-height: 74px; }
+          .bexhr-payslip-party-card--employee { background: #f8fbfd; }
+          .bexhr-payslip-party-label, .bexhr-payslip-section-heading span,
+          .bexhr-payslip-summary-card span, .bexhr-payslip-structure-item span,
+          .bexhr-payslip-net-panel span { color: #64748b; font-size: 7.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+          .bexhr-payslip-party-card h3 { margin: 3px 0 5px; font-size: 12px; }
+          .bexhr-payslip-contact-lines { display: grid; gap: 1px; color: #64748b; font-size: 8px; }
+          .bexhr-payslip-address { margin-top: 4px; color: #475569; font-size: 8px; }
+          .bexhr-payslip-employee-number { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; padding-top: 6px; border-top: 1px solid #e5edf3; }
+          .bexhr-payslip-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+          .bexhr-payslip-summary-card { display: flex; align-items: center; gap: 8px; padding: 10px; background: #f8fbfd; }
+          .bexhr-payslip-summary-card--net { border-color: #a7dcc4; background: #eefaf4; }
+          .bexhr-payslip-summary-icon { display: none; }
+          .bexhr-payslip-summary-card div { display: grid; gap: 2px; }
+          .bexhr-payslip-summary-card strong { font-size: 12px; white-space: nowrap; }
+          .bexhr-payslip-structure-card, .bexhr-payslip-breakdown-card { padding: 12px; }
+          .bexhr-payslip-section-heading { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+          .bexhr-payslip-section-icon { display: none; }
+          .bexhr-payslip-section-heading h3 { margin: 1px 0 0; font-size: 11px; }
+          .bexhr-payslip-structure-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; }
+          .bexhr-payslip-structure-item { display: grid; gap: 2px; padding: 7px; border-radius: 8px; background: #f8fafc; }
+          .bexhr-payslip-structure-item strong { font-size: 8.5px; overflow-wrap: anywhere; }
+          .bexhr-payslip-structure-item--emphasis { background: #eef9fc; }
+          .bexhr-payslip-breakdown-card--earnings { border-top: 3px solid #0ea5a4; }
+          .bexhr-payslip-breakdown-card--deductions { border-top: 3px solid #f59e0b; }
+          .bexhr-payslip-line-items { display: grid; }
+          .bexhr-payslip-line-item { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px solid #e5edf3; }
+          .bexhr-payslip-line-item strong { white-space: nowrap; }
+          .bexhr-payslip-empty-line { color: #64748b; padding: 8px; background: #f8fafc; border-radius: 8px; }
+          .bexhr-payslip-section-total { display: flex; justify-content: space-between; gap: 10px; padding-top: 8px; margin-top: 4px; font-weight: 800; }
+          .bexhr-payslip-net-panel {
+            display: flex; justify-content: space-between; align-items: center; gap: 16px;
+            padding: 12px 16px; border-radius: 12px; color: #fff;
+            background: linear-gradient(135deg, #0f766e 0%, #15803d 100%);
+            break-inside: avoid; page-break-inside: avoid;
           }
-
-          .flex-md-row,
-          .flex-lg-row {
-            flex-direction: row !important;
-          }
-
-          .justify-content-between {
-            justify-content: space-between !important;
-          }
-
-          .align-items-start {
-            align-items: flex-start !important;
-          }
-
-          .text-md-end,
-          .text-lg-end {
-            text-align: right !important;
-          }
-
-          .gap-3 {
-            gap: 0.75rem !important;
-          }
-
-          .gap-4 {
-            gap: 1rem !important;
-          }
-
-          .border {
-            border: 1px solid #d6dee8 !important;
-          }
-
-          .rounded-4 {
-            border-radius: 12px !important;
-          }
-
-          .bg-light-subtle,
-          .alert-light {
-            background: #f8fafc !important;
-          }
-
-          .p-3 {
-            padding: 0.75rem !important;
-          }
-
-          .p-4 {
-            padding: 1rem !important;
-          }
-
-          .py-2 {
-            padding-top: 0.45rem !important;
-            padding-bottom: 0.45rem !important;
-          }
-
-          .pt-3 {
-            padding-top: 0.75rem !important;
-          }
-
-          .mb-0 {
-            margin-bottom: 0 !important;
-          }
-
-          .mb-1 {
-            margin-bottom: 0.25rem !important;
-          }
-
-          .mb-3 {
-            margin-bottom: 0.75rem !important;
-          }
-
-          .mb-4 {
-            margin-bottom: 1rem !important;
-          }
-
-          .mt-2 {
-            margin-top: 0.5rem !important;
-          }
-
-          .mt-4 {
-            margin-top: 1rem !important;
-          }
-
-          .my-4 {
-            margin-top: 1rem !important;
-            margin-bottom: 1rem !important;
-          }
-
-          .h4 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            line-height: 1.2;
-          }
-
-          .h5 {
-            font-size: 1.05rem;
-            font-weight: 700;
-            line-height: 1.25;
-          }
-
-          .h6 {
-            font-size: 0.95rem;
-            font-weight: 700;
-            line-height: 1.25;
-          }
-
-          .fw-semibold {
-            font-weight: 600 !important;
-          }
-
-          .fw-bold,
-          strong {
-            font-weight: 700 !important;
-          }
-
-          .small {
-            font-size: 0.78rem;
-          }
-
-          .text-secondary {
-            color: #64748b !important;
-          }
-
-          .text-break {
-            overflow-wrap: anywhere;
-            word-break: break-word;
-          }
-
-          .border-bottom {
-            border-bottom: 1px solid #d6dee8 !important;
-          }
-
-          .alert {
-            padding: 0.8rem;
-            border: 1px solid #d6dee8;
-            border-radius: 12px;
-            background: #f8fafc;
-          }
-
-          hr {
-            border: 0;
-            border-top: 1px solid #d6dee8;
-          }
-
-          .border,
-          .alert,
-          .row.g-3,
-          .row.g-4 {
-            break-inside: avoid;
-            page-break-inside: avoid;
-          }
+          .bexhr-payslip-net-panel span { color: rgba(255,255,255,.75); }
+          .bexhr-payslip-net-panel strong { display: block; font-size: 13px; }
+          .bexhr-payslip-net-amount { font-size: 18px; font-weight: 800; white-space: nowrap; }
+          .bexhr-payslip-footer-note { display: flex; gap: 8px; padding: 10px 12px; background: #f8fafc; }
+          .bexhr-payslip-footer-icon { display: none; }
+          .bexhr-payslip-footer-note strong { font-size: 8.5px; }
+          .bexhr-payslip-footer-note p { margin: 2px 0 0; color: #64748b; font-size: 7.5px; }
         </style>
       </head>
-
       <body>
-        <main class="payslip-print-shell">
-          ${payslipMarkup}
-        </main>
+        <main class="payslip-print-shell">${payslipMarkup}</main>
       </body>
     </html>
   `);
   frameDocument.close();
 
   const cleanupPrintFrame = () => {
-    window.setTimeout(() => {
-      printFrame.remove();
-    }, 250);
+    window.setTimeout(() => printFrame.remove(), 250);
   };
 
-  frameWindow.addEventListener("afterprint", cleanupPrintFrame, { once: true });
-
-  window.setTimeout(() => {
+  const startPrint = () => {
+    frameWindow.addEventListener("afterprint", cleanupPrintFrame, { once: true });
     frameWindow.focus();
     frameWindow.print();
-
-    // Fallback cleanup for browsers that do not fire afterprint reliably.
     window.setTimeout(cleanupPrintFrame, 120000);
-  }, 250);
+  };
+
+  const imagePromises = Array.from(frameDocument.images || []).map((image) => {
+    if (image.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      image.addEventListener("load", resolve, { once: true });
+      image.addEventListener("error", resolve, { once: true });
+    });
+  });
+
+  Promise.all(imagePromises)
+    .catch(() => undefined)
+    .finally(() => window.setTimeout(startPrint, 180));
 }
+
 
 // DESCRIPTION ITEM 4 - STEP 7
 // Loads the full payroll record, merges it with the table row,
@@ -36464,11 +36766,17 @@ function renderPayrollStructurePreview() {
 }
 
 function buildRegularPayrollModelFields() {
+  const regularPayrollStructureMetadata =
+    getRegularPayrollStructureMetadata();
+
   return {
     payroll_model: "REGULAR",
-    payroll_model_version: "rev2",
-    structure_variant: "ALPATECH_REGULAR_REV2",
-    payslip_layout: "ALPATECH_REGULAR_REV2",
+    payroll_model_version:
+      regularPayrollStructureMetadata.payrollModelVersion,
+    structure_variant:
+      regularPayrollStructureMetadata.structureVariant,
+    payslip_layout:
+      regularPayrollStructureMetadata.payslipLayout,
 
     increment_percent: percentInputToDecimal(
       state.dom.regularIncrementPercent?.value,
@@ -37242,17 +37550,106 @@ function setPayrollSaveLoading(isLoading, isEditMode = false) {
   }
 }
 
+// HR SELF-SERVICE NOTIFICATION PARITY - STEP 1
+// employee-self-service.js already writes success, warning, and error feedback
+// into ssSelfServiceAlert. Mirror that existing source into the shared floating
+// dashboard toast without changing any leave, payroll, payslip, employee, or
+// tenant query in the self-service module.
+let _hrSelfServiceAlertObserver = null;
+let _hrSelfServiceAlertTimer = null;
+let _hrSelfServiceLastAlertSignature = "";
+
+function getHrSelfServiceAlertType(alertElement) {
+  if (alertElement?.classList.contains("alert-success")) return "success";
+  if (alertElement?.classList.contains("alert-warning")) return "warning";
+  if (alertElement?.classList.contains("alert-danger")) return "danger";
+  return "info";
+}
+
+function getHrSelfServiceToastTitle(type = "info") {
+  const titleMap = {
+    success: "Self-service updated",
+    warning: "Self-service needs attention",
+    danger: "Self-service action failed",
+    info: "Self-service information",
+  };
+
+  return titleMap[type] || titleMap.info;
+}
+
+function syncHrSelfServiceAlertToDashboardToast() {
+  const alertElement = document.getElementById("ssSelfServiceAlert");
+  if (!alertElement) return;
+
+  const isVisible = !alertElement.classList.contains("d-none");
+  const message = String(alertElement.textContent || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!isVisible || !message) {
+    _hrSelfServiceLastAlertSignature = "";
+    return;
+  }
+
+  const type = getHrSelfServiceAlertType(alertElement);
+  const signature = `${type}|${message}`;
+
+  if (signature === _hrSelfServiceLastAlertSignature) return;
+
+  _hrSelfServiceLastAlertSignature = signature;
+  showDashboardToast(
+    type,
+    getHrSelfServiceToastTitle(type),
+    escapeHtml(message),
+  );
+}
+
+function initHrSelfServiceNotificationBridge() {
+  if (_hrSelfServiceAlertObserver) return;
+
+  const alertElement = document.getElementById("ssSelfServiceAlert");
+  if (!alertElement) return;
+
+  _hrSelfServiceAlertObserver = new MutationObserver(() => {
+    window.clearTimeout(_hrSelfServiceAlertTimer);
+    _hrSelfServiceAlertTimer = window.setTimeout(
+      syncHrSelfServiceAlertToDashboardToast,
+      60,
+    );
+  });
+
+  _hrSelfServiceAlertObserver.observe(alertElement, {
+    attributes: true,
+    attributeFilter: ["class"],
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
+}
+
 let _hrSelfServiceInitialised = false;
 
 function initHrSelfServiceOnFirstOpen() {
+  initHrSelfServiceNotificationBridge();
+
   if (_hrSelfServiceInitialised) return;
   if (!window.EmployeeSelfService) {
     console.warn("EmployeeSelfService module is not loaded.");
+    showDashboardToast(
+      "danger",
+      "Self-service could not load",
+      "The employee self-service module is not available. Refresh the page and try again.",
+    );
     return;
   }
   _hrSelfServiceInitialised = true;
   window.EmployeeSelfService.init(state.currentUser, state.currentProfile).catch((err) => {
     console.error("Employee self-service init error:", err);
     _hrSelfServiceInitialised = false; // allow retry on next open
+    showDashboardToast(
+      "danger",
+      "Self-service could not load",
+      escapeHtml(err?.message || "Your leave and payroll records could not be loaded."),
+    );
   });
 }

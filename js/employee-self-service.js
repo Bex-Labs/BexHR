@@ -885,6 +885,23 @@
     return ssState.isPayrollFiguresHidden ? "•••••" : value;
   }
 
+  // PAYROLL SUMMARY FINANCIAL FIGURE CLARITY - STEP 1
+  // Mark only the three monetary summary values for non-breaking/tabular
+  // presentation. The underlying authorised payroll record is unchanged.
+  function setSsPayrollSummaryFinancialValue(element, formattedValue) {
+    if (!element) return;
+
+    element.classList.add("ss-payroll-financial-value");
+    element.textContent = getSsPayrollFigureDisplay(formattedValue);
+
+    if (ssState.isPayrollFiguresHidden) {
+      element.removeAttribute("title");
+      return;
+    }
+
+    element.setAttribute("title", formattedValue);
+  }
+
   function bindSsPayrollEvents() {
     // HR SELF-SERVICE LEAVE PARITY - STEP 1C-1
     // Payroll opens first, so provide a visible route back to Leave Management
@@ -2047,21 +2064,20 @@ ${isCancelledAudit
     if (ssState.dom.ssCurrentPayCycle) {
       ssState.dom.ssCurrentPayCycle.textContent = latest.pay_cycle || "--";
     }
-    if (ssState.dom.ssCurrentGrossPay) {
-      ssState.dom.ssCurrentGrossPay.textContent = getSsPayrollFigureDisplay(
-        ssFormatCurrency(latest.gross_pay, latest.currency || "NGN"),
-      );
-    }
-    if (ssState.dom.ssCurrentTotalDeductions) {
-      ssState.dom.ssCurrentTotalDeductions.textContent = getSsPayrollFigureDisplay(
-        ssFormatCurrency(latest.total_deductions, latest.currency || "NGN"),
-      );
-    }
-    if (ssState.dom.ssCurrentNetPay) {
-      ssState.dom.ssCurrentNetPay.textContent = getSsPayrollFigureDisplay(
-        ssFormatCurrency(latest.net_pay, latest.currency || "NGN"),
-      );
-    }
+    setSsPayrollSummaryFinancialValue(
+      ssState.dom.ssCurrentGrossPay,
+      ssFormatCurrency(latest.gross_pay, latest.currency || "NGN"),
+    );
+
+    setSsPayrollSummaryFinancialValue(
+      ssState.dom.ssCurrentTotalDeductions,
+      ssFormatCurrency(latest.total_deductions, latest.currency || "NGN"),
+    );
+
+    setSsPayrollSummaryFinancialValue(
+      ssState.dom.ssCurrentNetPay,
+      ssFormatCurrency(latest.net_pay, latest.currency || "NGN"),
+    );
   }
 
   // MANAGER SELF-SERVICE PAYSLIP VIEW - STEP 1E
@@ -2117,195 +2133,235 @@ ${isCancelledAudit
   // MANAGER SELF-SERVICE PAYSLIP VIEW - STEP 1E
   // Compact Alpatech letterhead matched to the HR/Employee payslip preview
   // format. Branding only; no payroll values or calculations are changed.
-  function buildSsAlpatechPayslipPreviewHeaderHtml(record = {}) {
+  // PAYSLIP DOCUMENT SYSTEM - STEP 2
+  // Shared Self-Service preview used by HR and Manager dashboards. This is
+  // presentation-only and keeps the existing authorised payroll query,
+  // employee identity resolution, filters, and PDF action unchanged.
+  function getSsPayslipCompanyName() {
+    const isAlpatech = isSsAlpatechWorkspace();
+
+    return (
+      ssState.currentProfile?.company_name ||
+      ssState.currentProfile?.organization_name ||
+      ssState.currentProfile?.tenant_name ||
+      ssState.employeeRecord?.company_name ||
+      ssState.employeeRecord?.organization_name ||
+      ssState.employeeRecord?.tenant_name ||
+      (isAlpatech ? "ALPATECH" : "BexHR")
+    );
+  }
+
+  function buildSsPayslipBrandHeaderHtml(record = {}) {
+    const isAlpatech = isSsAlpatechWorkspace();
+    const companyName = getSsPayslipCompanyName();
+    const brandName = isAlpatech ? "ALPATECH" : companyName;
+    const brandMarkHtml = isAlpatech
+      ? `<span class="bexhr-payslip-brand-mark bexhr-payslip-brand-mark--image" aria-hidden="true">
+           <img src="assets/alpatech-flame.png" alt="" />
+         </span>`
+      : `<span class="bexhr-payslip-brand-mark" aria-hidden="true">B</span>`;
+
     return `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px;padding:16px;border:1px solid #d8e5ee;border-radius:16px;background:linear-gradient(135deg,#f7fbfd 0%,#ffffff 100%);">
-        <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;">
-          <div style="display:flex;align-items:center;gap:4px;min-width:0;">
-            <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:28px;flex:0 0 auto;">
-              <img src="assets/alpatech-flame.png" alt="" style="display:block;width:18px;height:26px;object-fit:contain;" />
-            </span>
-
-            <!-- ALPATECH PAYSLIP VIEW LOGO REFINEMENT - STEP 1J
-                 Straight vertical divider only for HR/Manager self-service payslip preview.
-                 PDF output is intentionally not changed. -->
-            <span aria-hidden="true" style="display:inline-block;width:1px;height:26px;background:rgba(148,163,184,0.62);margin:0 7px 0 5px;"></span>
-
-            <span style="color:#0b5f95;font-size:1.18rem;font-weight:500;letter-spacing:0.16em;line-height:1;">
-              ALPATECH
-            </span>
+      <header class="bexhr-payslip-letterhead ${isAlpatech ? "bexhr-payslip-letterhead--alpatech" : ""}">
+        <div class="bexhr-payslip-brand-block">
+          <div class="bexhr-payslip-brand-line">
+            ${brandMarkHtml}
+            <span class="bexhr-payslip-brand-divider" aria-hidden="true"></span>
+            <div>
+              <div class="bexhr-payslip-brand-name">${ssEscapeHtml(brandName || "BexHR")}</div>
+              <div class="bexhr-payslip-document-label">Confidential Payroll Payslip</div>
+            </div>
           </div>
-
-          <div style="color:#667085;font-size:0.82rem;margin-top:4px;margin-left:40px;">
-            Confidential employee payslip
-          </div>
+          ${!isAlpatech && companyName && ssNormalizeText(companyName) !== "bexhr"
+            ? `<div class="bexhr-payslip-platform-label">Prepared securely with BexHR</div>`
+            : ""}
         </div>
 
-        <div style="text-align:right;color:#667085;font-size:0.82rem;line-height:1.45;">
-          <div style="color:#08446d;font-weight:700;font-size:0.95rem;">Payslip</div>
-          <div>${ssEscapeHtml(record.pay_cycle || "--")}</div>
-          <div>Pay Date: ${ssEscapeHtml(ssFormatDate(record.pay_date))}</div>
+        <div class="bexhr-payslip-document-meta">
+          <span class="bexhr-payslip-status-badge">
+            <span aria-hidden="true"></span>${ssEscapeHtml(record.status || "Authorised")}
+          </span>
+          <strong>${ssEscapeHtml(record.pay_cycle || "Payroll")}</strong>
+          <span>Pay date: ${ssEscapeHtml(ssFormatDate(record.pay_date))}</span>
         </div>
-      </div>
+      </header>
     `;
   }
 
-  // MANAGER SELF-SERVICE PAYSLIP VIEW - STEP 1E
-  // Reusable display rows for the read-only payslip preview.
-  function buildSsPayslipPreviewSectionHtml(title, rows = []) {
+  function buildSsPayslipPreviewRows(rows = [], emptyText = "No items recorded.") {
     const visibleRows = rows.filter((row) => row && row.label);
 
-    if (!visibleRows.length) return "";
+    if (!visibleRows.length) {
+      return `<div class="bexhr-payslip-empty-line">${ssEscapeHtml(emptyText)}</div>`;
+    }
+
+    return visibleRows
+      .map((row) => `
+        <div class="bexhr-payslip-line-item">
+          <span>${ssEscapeHtml(row.label)}</span>
+          <strong>${ssEscapeHtml(row.value)}</strong>
+        </div>
+      `)
+      .join("");
+  }
+
+  function buildSsPayslipStructureHtml(items = []) {
+    const visibleItems = items.filter((item) => {
+      if (!item || !item.label) return false;
+      const value = String(item.value ?? "").trim();
+      return value && value !== "--" && value !== "0.0%" && value !== "NGN 0.00";
+    });
+
+    if (!visibleItems.length) return "";
 
     return `
-      <div class="border rounded-4 p-3 p-lg-4 h-100">
-        <h3 class="h6 fw-bold mb-3">${ssEscapeHtml(title)}</h3>
-
-        <div class="d-grid gap-2">
-          ${visibleRows
-        .map((row) => `
-              <div class="d-flex justify-content-between gap-3 border-bottom pb-2">
-                <div class="${row.bold ? "fw-semibold" : ""}">
-                  ${ssEscapeHtml(row.label)}
-                </div>
-                <div class="text-end ${row.bold ? "fw-bold" : "fw-semibold"}">
-                  ${ssEscapeHtml(row.value)}
-                </div>
+      <section class="bexhr-payslip-structure-card">
+        <div class="bexhr-payslip-section-heading">
+          <span class="bexhr-payslip-section-icon" aria-hidden="true"><i class="bi bi-diagram-3"></i></span>
+          <div><span>Payroll basis</span><h3>Salary Structure</h3></div>
+        </div>
+        <div class="bexhr-payslip-structure-grid">
+          ${visibleItems
+            .map((item) => `
+              <div class="bexhr-payslip-structure-item ${item.emphasis ? "bexhr-payslip-structure-item--emphasis" : ""}">
+                <span>${ssEscapeHtml(item.label)}</span>
+                <strong>${ssEscapeHtml(item.value)}</strong>
               </div>
             `)
-        .join("")}
+            .join("")}
         </div>
-      </div>
+      </section>
     `;
   }
 
-  // MANAGER SELF-SERVICE PAYSLIP VIEW - STEP 1E
-  // Build the same practical payslip sections already used by self-service PDF:
-  // salary structure, earnings, deductions, and net pay.
   function buildSsPayslipPreviewContent(record = {}) {
     const currency = record.currency || "NGN";
     const employee = getSsPayslipEmployeeContext();
-
+    const companyName = getSsPayslipCompanyName();
     const money = (value) => ssFormatCurrency(value, currency);
-    const percent = (value) => `${Number(value || 0).toFixed(1)}%`;
+    const percent = (value) => {
+      const numericValue = Number(value || 0);
+      if (!Number.isFinite(numericValue) || numericValue === 0) return "0.0%";
+      return `${(Math.abs(numericValue) <= 1 ? numericValue * 100 : numericValue).toFixed(1)}%`;
+    };
 
-    const brandHeaderHtml = isSsAlpatechWorkspace()
-      ? buildSsAlpatechPayslipPreviewHeaderHtml(record)
-      : "";
+    const earningsRows = [
+      { label: "Basic Pay", value: money(record.basic_pay), amount: record.basic_pay },
+      { label: "Housing Allowance", value: money(record.housing_allowance), amount: record.housing_allowance },
+      { label: "Transport Allowance", value: money(record.transport_allowance), amount: record.transport_allowance },
+      { label: "Utility Allowance", value: money(record.utility_allowance), amount: record.utility_allowance },
+      { label: "Medical Allowance", value: money(record.medical_allowance), amount: record.medical_allowance },
+      { label: "Other Allowance", value: money(record.other_allowance), amount: record.other_allowance },
+      { label: "Bonus", value: money(record.bonus), amount: record.bonus },
+      { label: "Overtime", value: money(record.overtime), amount: record.overtime },
+      { label: "Logistics Allowance", value: money(record.logistics_allowance), amount: record.logistics_allowance },
+      { label: "Data / Airtime Allowance", value: money(record.data_airtime_allowance), amount: record.data_airtime_allowance },
+    ].filter((row) => Number(row.amount || 0) > 0);
 
-    const salaryStructureHtml = buildSsPayslipPreviewSectionHtml("Salary Structure", [
-      { label: "Employee Group", value: record.employee_group || "--" },
-      { label: "Payroll Model", value: record.payroll_model || "--" },
-      { label: "Payroll Model Version", value: record.payroll_model_version || "--" },
-      { label: "Structure Variant", value: record.structure_variant || "--" },
-      { label: "Monthly Gross Salary", value: money(record.gross_pay), bold: true },
-      { label: "Increment %", value: percent(record.increment_percent) },
-      { label: "Increment Amount", value: money(record.increment_amount) },
-      { label: "Revised Monthly Gross Salary", value: money(record.new_base_salary) },
-      { label: "Basic %", value: percent(record.basic_percent) },
-      { label: "Housing %", value: percent(record.housing_percent) },
-      { label: "Transport %", value: percent(record.transport_percent) },
-      { label: "Utility %", value: percent(record.utility_percent) },
-      { label: "Other Allowance %", value: percent(record.other_allowance_percent) },
-    ]);
+    const deductionRows = [
+      { label: "PAYE Tax", value: money(record.paye_tax), amount: record.paye_tax },
+      { label: "WHT Tax", value: money(record.wht_tax), amount: record.wht_tax },
+      { label: "Employee Pension", value: money(record.employee_pension), amount: record.employee_pension },
+      { label: "Other Deductions", value: money(record.other_deductions), amount: record.other_deductions },
+    ].filter((row) => Number(row.amount || 0) > 0);
 
-    const earningsHtml = buildSsPayslipPreviewSectionHtml("Earnings", [
-      { label: "Basic Pay", value: money(record.basic_pay) },
-      { label: "Housing Allowance", value: money(record.housing_allowance) },
-      { label: "Transport Allowance", value: money(record.transport_allowance) },
-      { label: "Utility Allowance", value: money(record.utility_allowance) },
-      { label: "Medical Allowance", value: money(record.medical_allowance) },
-      { label: "Other Allowance", value: money(record.other_allowance) },
-      { label: "Bonus", value: money(record.bonus) },
-      { label: "Overtime", value: money(record.overtime) },
-      { label: "Logistics Allowance", value: money(record.logistics_allowance) },
-      { label: "Data / Airtime Allowance", value: money(record.data_airtime_allowance) },
-      { label: "Gross Pay", value: money(record.gross_pay), bold: true },
-    ].filter((row) => row.bold || !row.value.includes("0.00")));
-
-    const deductionsHtml = buildSsPayslipPreviewSectionHtml("Deductions", [
-      { label: "PAYE Tax", value: money(record.paye_tax) },
-      { label: "WHT Tax", value: money(record.wht_tax) },
-      { label: "Employee Pension", value: money(record.employee_pension) },
-      { label: "Other Deductions", value: money(record.other_deductions) },
-      { label: "Total Deductions", value: money(record.total_deductions), bold: true },
-    ].filter((row) => row.bold || !row.value.includes("0.00")));
-
-    const netPayHtml = buildSsPayslipPreviewSectionHtml("Net Pay", [
-      { label: "Net Pay", value: money(record.net_pay), bold: true },
+    // EMPLOYEE-FACING PAYSLIP DATA MINIMISATION - STEP 2
+    // Do not expose internal payroll model versions, structure variants,
+    // layout identifiers, or allocation configuration to employees.
+    const structureHtml = buildSsPayslipStructureHtml([
+      {
+        label: "Pay Type",
+        value: record.employee_group || record.payroll_model || "Regular",
+      },
+      { label: "Increment", value: percent(record.increment_percent) },
+      { label: "Monthly Gross Salary", value: money(record.gross_pay), emphasis: true },
     ]);
 
     return `
-      ${brandHeaderHtml}
+      <article class="bexhr-payslip-document bexhr-payslip-document--self-service">
+        ${buildSsPayslipBrandHeaderHtml(record)}
 
-      <div class="border rounded-4 p-3 p-lg-4 mb-4">
-        <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
-          <div>
-            <div class="text-secondary small">Employee</div>
-            <div class="fw-bold">${ssEscapeHtml(employee.employeeName)}</div>
-            <div class="small text-secondary">${ssEscapeHtml(employee.employeeEmail)}</div>
-            <div class="small text-secondary">
-              ${ssEscapeHtml(employee.department)} • ${ssEscapeHtml(employee.jobTitle)}
+        <section class="bexhr-payslip-party-grid">
+          <article class="bexhr-payslip-party-card">
+            <div class="bexhr-payslip-party-label">Company</div>
+            <h3>${ssEscapeHtml(companyName || "BexHR")}</h3>
+            <div class="bexhr-payslip-contact-lines">
+              <span>Authorised payroll record</span>
+              <span>${ssEscapeHtml(record.pay_cycle || "Payroll")} payroll cycle</span>
             </div>
+          </article>
+
+          <article class="bexhr-payslip-party-card bexhr-payslip-party-card--employee">
+            <div class="bexhr-payslip-party-label">Employee</div>
+            <h3>${ssEscapeHtml(employee.employeeName)}</h3>
+            <div class="bexhr-payslip-contact-lines">
+              <span>${ssEscapeHtml(employee.employeeEmail)}</span>
+              <span>${ssEscapeHtml(employee.department)} · ${ssEscapeHtml(employee.jobTitle)}</span>
+            </div>
+            <div class="bexhr-payslip-employee-number">
+              <span>Employee No.</span>
+              <strong>${ssEscapeHtml(employee.employeeId)}</strong>
+            </div>
+          </article>
+        </section>
+
+        <section class="bexhr-payslip-summary-grid" aria-label="Payslip totals">
+          <article class="bexhr-payslip-summary-card bexhr-payslip-summary-card--gross">
+            <span class="bexhr-payslip-summary-icon" aria-hidden="true"><i class="bi bi-wallet2"></i></span>
+            <div><span>Gross Pay</span><strong>${ssEscapeHtml(money(record.gross_pay))}</strong></div>
+          </article>
+          <article class="bexhr-payslip-summary-card bexhr-payslip-summary-card--deductions">
+            <span class="bexhr-payslip-summary-icon" aria-hidden="true"><i class="bi bi-dash-circle"></i></span>
+            <div><span>Total Deductions</span><strong>${ssEscapeHtml(money(record.total_deductions))}</strong></div>
+          </article>
+          <article class="bexhr-payslip-summary-card bexhr-payslip-summary-card--net">
+            <span class="bexhr-payslip-summary-icon" aria-hidden="true"><i class="bi bi-check2-circle"></i></span>
+            <div><span>Net Pay</span><strong>${ssEscapeHtml(money(record.net_pay))}</strong></div>
+          </article>
+        </section>
+
+        ${structureHtml}
+
+        <section class="bexhr-payslip-breakdown-grid">
+          <article class="bexhr-payslip-breakdown-card bexhr-payslip-breakdown-card--earnings">
+            <div class="bexhr-payslip-section-heading">
+              <span class="bexhr-payslip-section-icon" aria-hidden="true"><i class="bi bi-plus-circle"></i></span>
+              <div><span>Income</span><h3>Earnings</h3></div>
+            </div>
+            <div class="bexhr-payslip-line-items">
+              ${buildSsPayslipPreviewRows(earningsRows, "No earnings breakdown recorded.")}
+            </div>
+            <div class="bexhr-payslip-section-total"><span>Gross Pay</span><strong>${ssEscapeHtml(money(record.gross_pay))}</strong></div>
+          </article>
+
+          <article class="bexhr-payslip-breakdown-card bexhr-payslip-breakdown-card--deductions">
+            <div class="bexhr-payslip-section-heading">
+              <span class="bexhr-payslip-section-icon" aria-hidden="true"><i class="bi bi-dash-circle"></i></span>
+              <div><span>Withheld</span><h3>Deductions</h3></div>
+            </div>
+            <div class="bexhr-payslip-line-items">
+              ${buildSsPayslipPreviewRows(deductionRows, "No deductions recorded.")}
+            </div>
+            <div class="bexhr-payslip-section-total"><span>Total Deductions</span><strong>${ssEscapeHtml(money(record.total_deductions))}</strong></div>
+          </article>
+        </section>
+
+        <section class="bexhr-payslip-net-panel">
+          <div><span>Amount payable</span><strong>Net Pay</strong></div>
+          <div class="bexhr-payslip-net-amount">${ssEscapeHtml(money(record.net_pay))}</div>
+        </section>
+
+        <footer class="bexhr-payslip-footer-note">
+          <span class="bexhr-payslip-footer-icon" aria-hidden="true"><i class="bi bi-shield-lock"></i></span>
+          <div>
+            <strong>Confidential employee document</strong>
+            <p>This read-only payslip is intended only for the named employee. Use the Download PDF action to keep an authorised copy.</p>
           </div>
-
-          <div class="text-md-end">
-            <div class="text-secondary small">Employee No.</div>
-            <div class="fw-bold mb-3">${ssEscapeHtml(employee.employeeId)}</div>
-
-            <div class="text-secondary small">Pay Cycle</div>
-            <div class="fw-bold mb-3">${ssEscapeHtml(record.pay_cycle || "--")}</div>
-
-            <div class="text-secondary small">Pay Date</div>
-            <div class="fw-bold">${ssEscapeHtml(ssFormatDate(record.pay_date))}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="row g-3 mb-4">
-        <div class="col-md-4">
-          <div class="border rounded-4 p-3 h-100">
-            <div class="text-secondary small">Gross Pay</div>
-            <div class="h5 mb-0">${ssEscapeHtml(money(record.gross_pay))}</div>
-          </div>
-        </div>
-
-        <div class="col-md-4">
-          <div class="border rounded-4 p-3 h-100">
-            <div class="text-secondary small">Total Deductions</div>
-            <div class="h5 mb-0">${ssEscapeHtml(money(record.total_deductions))}</div>
-          </div>
-        </div>
-
-        <div class="col-md-4">
-          <div class="border rounded-4 p-3 h-100">
-            <div class="text-secondary small">Net Pay</div>
-            <div class="h5 mb-0">${ssEscapeHtml(money(record.net_pay))}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="d-grid gap-4">
-        ${salaryStructureHtml}
-        <div class="row g-4">
-          <div class="col-12 col-lg-6">${earningsHtml}</div>
-          <div class="col-12 col-lg-6">${deductionsHtml}</div>
-        </div>
-        ${netPayHtml}
-      </div>
-
-      <div class="alert alert-light border mt-4 mb-0">
-        <div class="fw-semibold mb-1">Authorised payslip details</div>
-        <div class="small text-secondary">
-          This is a read-only view of your authorised payslip details. Use the PDF action in Payroll History to download a payslip copy.
-        </div>
-      </div>
+        </footer>
+      </article>
     `;
   }
 
-  // MANAGER SELF-SERVICE PAYSLIP VIEW - STEP 1E
-  // Create the self-service payslip preview modal from JavaScript so Manager
-  // HTML does not need another modal block. This is read-only display only.
   function ensureSsPayslipPreviewModal() {
     let modal = document.getElementById("ssPayslipPreviewModal");
 
@@ -2313,61 +2369,53 @@ ${isCancelledAudit
 
     modal = document.createElement("div");
     modal.id = "ssPayslipPreviewModal";
-    modal.className = "d-none position-fixed top-0 start-0 w-100 h-100";
+    modal.className = "d-none position-fixed top-0 start-0 w-100 h-100 bexhr-payslip-modal ss-payslip-preview-modal";
     modal.style.zIndex = "1060";
-    modal.style.background = "rgba(15, 23, 42, 0.45)";
     modal.setAttribute("aria-hidden", "true");
 
     modal.innerHTML = `
-      <div class="container h-100 d-flex align-items-center justify-content-center py-4">
-        <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 920px; max-height: 92vh; overflow: auto;">
-          <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
+      <div class="container h-100 d-flex align-items-center justify-content-center py-4 bexhr-payslip-modal-container">
+        <section class="card border-0 shadow-lg rounded-4 w-100 bexhr-payslip-modal-shell"
+          role="dialog" aria-modal="true" aria-labelledby="ssPayslipPreviewTitle">
+          <header class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4 bexhr-payslip-modal-header">
             <div>
-              <h2 id="ssPayslipPreviewTitle" class="h4 mb-1">
-                Payslip Preview
-              </h2>
-              <p class="text-secondary mb-0">
-                Review your authorised payslip details for this pay cycle.
-              </p>
+              <h2 id="ssPayslipPreviewTitle" class="h4 mb-1">Payslip Preview</h2>
+              <p class="text-secondary mb-0">Review your authorised payroll document or download a PDF copy.</p>
             </div>
+            <button type="button" id="closeSsPayslipPreviewBtn" class="btn btn-sm btn-outline-secondary"
+              aria-label="Close payslip preview"><i class="bi bi-x-lg"></i></button>
+          </header>
 
-            <button type="button" id="closeSsPayslipPreviewBtn"
-              class="btn btn-sm btn-outline-secondary"
-              aria-label="Close payslip preview">
-              <i class="bi bi-x-lg"></i>
+          <div id="ssPayslipPreviewContent" class="card-body p-4 bexhr-payslip-modal-content">
+            <div class="text-center text-secondary py-4">Select a payroll record to view payslip details.</div>
+          </div>
+
+          <footer class="card-footer bg-light border-0 d-flex flex-wrap justify-content-end gap-2 p-4 bexhr-payslip-modal-footer">
+            <button type="button" id="downloadSsPayslipPreviewBtn" class="btn btn-primary dashboard-action-btn">
+              <i class="bi bi-file-earmark-pdf me-2"></i>Download PDF
             </button>
-          </div>
-
-          <div id="ssPayslipPreviewContent" class="card-body p-4">
-            <div class="text-center text-secondary py-4">
-              Select a payroll record to view payslip details.
-            </div>
-          </div>
-
-          <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
-            <button type="button" id="closeSsPayslipPreviewFooterBtn"
-              class="btn btn-outline-secondary dashboard-action-btn">
-              Close
-            </button>
-          </div>
-        </div>
+            <button type="button" id="closeSsPayslipPreviewFooterBtn" class="btn btn-outline-secondary dashboard-action-btn">Close Preview</button>
+          </footer>
+        </section>
       </div>
     `;
 
     document.body.appendChild(modal);
 
-    modal
-      .querySelector("#closeSsPayslipPreviewBtn")
-      ?.addEventListener("click", closeSsPayslipPreviewModal);
-
-    modal
-      .querySelector("#closeSsPayslipPreviewFooterBtn")
-      ?.addEventListener("click", closeSsPayslipPreviewModal);
+    modal.querySelector("#closeSsPayslipPreviewBtn")?.addEventListener("click", closeSsPayslipPreviewModal);
+    modal.querySelector("#closeSsPayslipPreviewFooterBtn")?.addEventListener("click", closeSsPayslipPreviewModal);
+    modal.querySelector("#downloadSsPayslipPreviewBtn")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      const payrollId = button?.dataset?.payrollId || "";
+      if (!payrollId) {
+        showSsAlert("warning", "Select an authorised payroll record before downloading a payslip PDF.");
+        return;
+      }
+      await downloadSsPayslipPdf(payrollId, button);
+    });
 
     modal.addEventListener("click", (event) => {
-      if (event.target === modal) {
-        closeSsPayslipPreviewModal();
-      }
+      if (event.target === modal) closeSsPayslipPreviewModal();
     });
 
     document.addEventListener("keydown", (event) => {
@@ -2381,9 +2429,7 @@ ${isCancelledAudit
 
   function closeSsPayslipPreviewModal() {
     const modal = document.getElementById("ssPayslipPreviewModal");
-
     if (!modal) return;
-
     modal.classList.add("d-none");
     modal.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
@@ -2393,7 +2439,6 @@ ${isCancelledAudit
     clearSsAlert();
 
     const record = getSsPayrollRecordById(payrollId);
-
     if (!record) {
       showSsAlert("danger", "Payroll record not found.");
       return;
@@ -2402,19 +2447,17 @@ ${isCancelledAudit
     const modal = ensureSsPayslipPreviewModal();
     const title = modal.querySelector("#ssPayslipPreviewTitle");
     const content = modal.querySelector("#ssPayslipPreviewContent");
+    const downloadButton = modal.querySelector("#downloadSsPayslipPreviewBtn");
 
-    if (title) {
-      title.textContent = `Payslip Preview - ${record.pay_cycle || "Payroll"}`;
-    }
-
-    if (content) {
-      content.innerHTML = buildSsPayslipPreviewContent(record);
-    }
+    if (title) title.textContent = `Payslip Preview - ${record.pay_cycle || "Payroll"}`;
+    if (content) content.innerHTML = buildSsPayslipPreviewContent(record);
+    if (downloadButton) downloadButton.dataset.payrollId = String(record.id || payrollId);
 
     modal.classList.remove("d-none");
     modal.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
   }
+
 
   function renderSsPayrollHistory(records) {
     const tbody = ssState.dom.ssPayrollHistoryTableBody;
@@ -2541,66 +2584,48 @@ ${isCancelledAudit
   // ALPATECH PDF BRANDING - STEP 4A
   // Central PDF brand settings. Non-Alpatech values intentionally match the
   // existing BexHR PDF output so shared product behaviour is preserved.
+  // PAYSLIP DOCUMENT SYSTEM - STEP 3
+  // Tenant-safe A4 PDF presentation for Self-Service. The PDF is generated
+  // from the already-loaded authorised payroll record; no payroll values,
+  // calculations, status rules, queries, or permissions are changed.
   function getSsPayslipPdfBranding(record = {}) {
     const isAlpatech = isSsAlpatechWorkspace();
-
-    if (isAlpatech) {
-      return {
-        isAlpatech: true,
-        brandName: "ALPATECH",
-        documentLabel: "Confidential Payroll Payslip",
-        rightTitle: "HR & Payroll",
-        rightLine1: record.pay_cycle || "Payroll",
-        rightLine2: ssFormatDate(record.pay_date),
-        footerText:
-          "This payslip was generated from an authorised Alpatech payroll record.",
-        filePrefix: "Alpatech",
-        headerFillRgb: [11, 95, 149],
-      };
-    }
+    const companyName = getSsPayslipCompanyName();
 
     return {
-      isAlpatech: false,
-      brandName: "BexHR",
-      documentLabel: "Official Employee Payslip",
-      rightTitle: "",
-      rightLine1: "",
-      rightLine2: "",
-      footerText:
-        "This payslip was generated from an authorised payroll record in BexHR.",
-      filePrefix: "",
-      headerFillRgb: [185, 106, 16],
+      isAlpatech,
+      brandName: isAlpatech ? "ALPATECH" : companyName || "BexHR",
+      companyName: companyName || (isAlpatech ? "ALPATECH" : "BexHR"),
+      documentLabel: "Confidential Payroll Payslip",
+      footerText: isAlpatech
+        ? "Generated from an authorised Alpatech payroll record in BexHR."
+        : "Generated from an authorised payroll record in BexHR.",
+      filePrefix: isAlpatech ? "Alpatech" : "",
+      primaryRgb: isAlpatech ? [11, 95, 149] : [15, 118, 110],
+      primaryDarkRgb: isAlpatech ? [8, 68, 109] : [17, 94, 89],
+      accentRgb: isAlpatech ? [54, 185, 207] : [45, 212, 191],
+      successRgb: [21, 128, 61],
+      warningRgb: [217, 119, 6],
+      textRgb: [16, 35, 63],
+      mutedRgb: [100, 116, 139],
+      borderRgb: [217, 227, 236],
+      softRgb: isAlpatech ? [244, 250, 252] : [242, 251, 249],
+      payCycle: record.pay_cycle || "Payroll",
+      payDate: ssFormatDate(record.pay_date),
+      status: record.status || "Authorised",
     };
   }
 
-  // ALPATECH PDF BRANDING - STEP 4A
-  // Lightweight vector flame for PDF output.
-  // This avoids loading image assets into jsPDF and keeps the mark close to
-  // the ALPATECH wordmark without affecting browser UI images.
   async function loadSsImageAsDataUrl(assetPath) {
-    // ALPATECH PDF BRANDING - STEP 4C
-    // Load the real Alpatech image asset for jsPDF instead of drawing a fake
-    // vector flame. This keeps the PDF logo close to the official Alpatech mark.
     try {
       const response = await fetch(assetPath, { cache: "force-cache" });
-
-      if (!response.ok) {
-        throw new Error(`Image request failed with status ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`Image request failed with status ${response.status}`);
       const blob = await response.blob();
 
       return await new Promise((resolve) => {
         const reader = new FileReader();
-
-        reader.onloadend = () => {
-          resolve(String(reader.result || ""));
-        };
-
-        reader.onerror = () => {
-          resolve("");
-        };
-
+        reader.onloadend = () => resolve(String(reader.result || ""));
+        reader.onerror = () => resolve("");
         reader.readAsDataURL(blob);
       });
     } catch (error) {
@@ -2609,82 +2634,239 @@ ${isCancelledAudit
     }
   }
 
-  // ALPATECH PDF BRANDING - STEP 4A
-  // Draw the payslip PDF header in one place so future PDF sections can reuse
-  // the same tenant-safe Alpatech/BexHR behaviour.
+  function drawSsPdfRoundedRect(doc, x, y, width, height, radius = 3, style = "S") {
+    if (typeof doc.roundedRect === "function") {
+      doc.roundedRect(x, y, width, height, radius, radius, style);
+    } else {
+      doc.rect(x, y, width, height, style);
+    }
+  }
+
   function drawSsPayslipPdfHeader(doc, branding = {}, alpatechLogoDataUrl = "") {
-    const headerFill = Array.isArray(branding.headerFillRgb)
-      ? branding.headerFillRgb
-      : [185, 106, 16];
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 12;
+    const width = pageWidth - margin * 2;
+    const primary = branding.primaryRgb || [15, 118, 110];
 
-    doc.setFillColor(headerFill[0], headerFill[1], headerFill[2]);
-    doc.rect(0, 0, 210, 28, "F");
+    doc.setFillColor(primary[0], primary[1], primary[2]);
+    drawSsPdfRoundedRect(doc, margin, 10, width, 28, 4, "F");
 
-    doc.setTextColor(255, 255, 255);
+    doc.setFillColor(255, 255, 255);
+    drawSsPdfRoundedRect(doc, margin + 5, 15, 17, 18, 3, "F");
 
-    if (branding.isAlpatech) {
-      // ALPATECH PDF BRANDING - STEP 4D
-      // Polished PDF header matched to the EmailJS payslip notification:
-      // - keep the blue Alpatech header
-      // - use only a compact white tile behind the flame for contrast
-      // - keep the ALPATECH wordmark in white, not inside a large white banner
-      // - preserve tenant safety by running only in the Alpatech branch
-      doc.setFillColor(255, 255, 255);
-
-      if (typeof doc.roundedRect === "function") {
-        doc.roundedRect(14, 6, 11, 16, 2, 2, "F");
-      } else {
-        doc.rect(14, 6, 11, 16, "F");
+    if (branding.isAlpatech && alpatechLogoDataUrl) {
+      try {
+        doc.addImage(alpatechLogoDataUrl, "PNG", margin + 10, 17.5, 7, 13);
+      } catch (error) {
+        console.warn("[SS] Alpatech PDF logo could not be added.", error);
       }
-
-      if (alpatechLogoDataUrl) {
-        try {
-          doc.addImage(alpatechLogoDataUrl, "PNG", 16.2, 8, 5.8, 12);
-        } catch (error) {
-          console.warn("[SS] Alpatech PDF logo could not be added.", error);
-        }
-      } else {
-        doc.setTextColor(11, 95, 149);
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(7);
-        doc.text("A", 19.5, 15.8, { align: "center" });
-      }
-
-      doc.setTextColor(255, 255, 255);
+    } else {
+      doc.setTextColor(primary[0], primary[1], primary[2]);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(14.5);
-      doc.text("A L P A T E C H", 29, 13.2);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.8);
-      doc.text(branding.documentLabel || "Confidential Payroll Payslip", 29, 20);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8.5);
-      doc.text(branding.rightTitle || "HR & Payroll", 196, 10, { align: "right" });
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.text(branding.rightLine1 || "Payroll", 196, 16, { align: "right" });
-      doc.text(branding.rightLine2 || "--", 196, 21.5, { align: "right" });
-
-      return;
+      doc.setFontSize(13);
+      doc.text(branding.isAlpatech ? "A" : "B", margin + 13.5, 26.8, { align: "center" });
     }
 
+    doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.text(branding.brandName || "BexHR", 14, 14);
+    doc.setFontSize(14);
+    doc.text(String(branding.brandName || "BexHR"), margin + 27, 20.5);
 
-    doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text(branding.documentLabel || "Official Employee Payslip", 14, 21);
+    doc.setFontSize(8);
+    doc.text(String(branding.documentLabel || "Confidential Payroll Payslip"), margin + 27, 27);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text(String(branding.payCycle || "Payroll"), pageWidth - margin - 5, 19, { align: "right" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text(`Pay date: ${branding.payDate || "--"}`, pageWidth - margin - 5, 24.5, { align: "right" });
+    doc.text(`Status: ${branding.status || "Authorised"}`, pageWidth - margin - 5, 29.5, { align: "right" });
+  }
+
+  function drawSsPayslipPdfInfoCard(doc, x, y, width, height, title, rows, branding, options = {}) {
+    const border = branding.borderRgb;
+    const soft = options.softRgb || branding.softRgb;
+
+    doc.setFillColor(soft[0], soft[1], soft[2]);
+    doc.setDrawColor(border[0], border[1], border[2]);
+    drawSsPdfRoundedRect(doc, x, y, width, height, 3, "FD");
+
+    doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.text(String(title || "Details").toUpperCase(), x + 5, y + 7);
+
+    let rowY = y + 13;
+    rows.filter(Boolean).forEach((row) => {
+      const label = String(row.label || "");
+      const value = String(row.value || "--");
+
+      doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.2);
+      doc.text(label, x + 5, rowY);
+
+      doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
+      doc.setFont("helvetica", row.bold ? "bold" : "normal");
+      doc.setFontSize(row.bold ? 9 : 8);
+      const valueLines = doc.splitTextToSize(value, width - 35);
+      doc.text(valueLines, x + width - 5, rowY, { align: "right" });
+      rowY += Math.max(5.2, valueLines.length * 4.1);
+    });
+  }
+
+  function drawSsPayslipPdfSummaryCard(doc, x, y, width, label, value, branding, type = "default") {
+    const fills = {
+      default: branding.softRgb,
+      warning: [255, 248, 235],
+      success: [238, 250, 244],
+    };
+    const borders = {
+      default: branding.borderRgb,
+      warning: [245, 205, 138],
+      success: [167, 220, 196],
+    };
+    const fill = fills[type] || fills.default;
+    const border = borders[type] || borders.default;
+
+    doc.setFillColor(fill[0], fill[1], fill[2]);
+    doc.setDrawColor(border[0], border[1], border[2]);
+    drawSsPdfRoundedRect(doc, x, y, width, 22, 3, "FD");
+
+    doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.2);
+    doc.text(String(label || "").toUpperCase(), x + 5, y + 7);
+
+    doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.5);
+    doc.text(String(value || "--"), x + 5, y + 16);
+  }
+
+  function drawSsPayslipPdfStructureCard(doc, x, y, width, items, allocationText, branding) {
+    const visible = items.filter((item) => item && item.label);
+    const rowCount = Math.ceil(visible.length / 2);
+    const height = 16 + rowCount * 7 + (allocationText ? 10 : 0);
+
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+    drawSsPdfRoundedRect(doc, x, y, width, height, 3, "FD");
+
+    doc.setTextColor(branding.primaryDarkRgb[0], branding.primaryDarkRgb[1], branding.primaryDarkRgb[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.text("Salary Structure", x + 5, y + 9);
+
+    const columnWidth = (width - 15) / 2;
+    visible.forEach((item, index) => {
+      const column = index % 2;
+      const row = Math.floor(index / 2);
+      const itemX = x + 5 + column * (columnWidth + 5);
+      const itemY = y + 17 + row * 7;
+
+      doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.8);
+      doc.text(String(item.label), itemX, itemY);
+
+      doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.8);
+      const value = doc.splitTextToSize(String(item.value || "--"), columnWidth - 2);
+      doc.text(value, itemX, itemY + 3.6);
+    });
+
+    if (allocationText) {
+      const allocationY = y + 17 + rowCount * 7;
+      doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+      doc.line(x + 5, allocationY - 2.5, x + width - 5, allocationY - 2.5);
+      doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.7);
+      doc.text("ALLOCATION SPLIT", x + 5, allocationY + 1.5);
+      doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
+      doc.setFont("helvetica", "normal");
+      doc.text(String(allocationText), x + 5, allocationY + 5.3);
+    }
+
+    return height;
+  }
+
+  function drawSsPayslipPdfBreakdownCard(doc, x, y, width, title, rows, totalLabel, totalValue, branding, accentRgb) {
+    const visibleRows = rows.length ? rows : [{ label: "No items recorded", value: "--", muted: true }];
+    const rowHeight = 5.2;
+    const height = 18 + visibleRows.length * rowHeight + 10;
+
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+    drawSsPdfRoundedRect(doc, x, y, width, height, 3, "FD");
+    doc.setFillColor(accentRgb[0], accentRgb[1], accentRgb[2]);
+    drawSsPdfRoundedRect(doc, x, y, width, 3, 3, "F");
+
+    doc.setTextColor(branding.primaryDarkRgb[0], branding.primaryDarkRgb[1], branding.primaryDarkRgb[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.text(String(title), x + 5, y + 11);
+
+    let rowY = y + 18;
+    visibleRows.forEach((row, index) => {
+      doc.setTextColor(
+        row.muted ? branding.mutedRgb[0] : branding.textRgb[0],
+        row.muted ? branding.mutedRgb[1] : branding.textRgb[1],
+        row.muted ? branding.mutedRgb[2] : branding.textRgb[2],
+      );
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.4);
+      doc.text(String(row.label || ""), x + 5, rowY);
+      doc.setFont("helvetica", "bold");
+      doc.text(String(row.value || "--"), x + width - 5, rowY, { align: "right" });
+
+      if (index < visibleRows.length - 1) {
+        doc.setDrawColor(234, 240, 245);
+        doc.line(x + 5, rowY + 1.7, x + width - 5, rowY + 1.7);
+      }
+      rowY += rowHeight;
+    });
+
+    doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+    doc.line(x + 5, rowY - 1.5, x + width - 5, rowY - 1.5);
+    doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text(String(totalLabel), x + 5, rowY + 3.5);
+    doc.text(String(totalValue), x + width - 5, rowY + 3.5, { align: "right" });
+
+    return height;
+  }
+
+  function drawSsPayslipPdfPageFooter(doc, branding, employeeName) {
+    const pageCount = doc.getNumberOfPages();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    for (let page = 1; page <= pageCount; page += 1) {
+      doc.setPage(page);
+      doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+      doc.line(12, pageHeight - 12, pageWidth - 12, pageHeight - 12);
+      doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.8);
+      doc.text(`${branding.footerText} Employee: ${employeeName}.`, 12, pageHeight - 7);
+      doc.text(`Page ${page} of ${pageCount}`, pageWidth - 12, pageHeight - 7, { align: "right" });
+    }
   }
 
   async function downloadSsPayslipPdf(payrollId, buttonElement) {
+    const originalButtonHtml = buttonElement?.innerHTML || "";
+
     try {
       clearSsAlert();
 
-      const record = ssState.payrollRecords.find((r) => r.id === payrollId);
+      const record = ssState.payrollRecords.find((row) => String(row.id) === String(payrollId));
       if (!record) {
         showSsAlert("danger", "Payroll record not found.");
         return;
@@ -2697,175 +2879,194 @@ ${isCancelledAudit
 
       if (buttonElement) {
         buttonElement.disabled = true;
-        buttonElement.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+        buttonElement.innerHTML = `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Preparing PDF...`;
       }
 
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF("p", "mm", "a4");
-
-      const employeeName =
-        `${ssState.employeeRecord?.first_name || ""} ${ssState.employeeRecord?.last_name || ""}`.trim() ||
-        ssState.currentProfile?.full_name ||
-        "Staff Member";
-
-      const employeeEmail =
-        ssState.employeeRecord?.work_email ||
-        ssState.currentProfile?.email ||
-        ssState.currentUser?.email ||
-        "--";
-
-      const employeeId =
-        ssState.employeeRecord?.employee_id ||
-        ssState.employeeRecord?.staff_id ||
-        ssState.employeeRecord?.employee_number ||
-        "--";
-
-      const department = ssState.employeeRecord?.department || "--";
+      const employee = getSsPayslipEmployeeContext();
       const currency = (record.currency || "NGN").toUpperCase();
-
-      // ALPATECH PDF BRANDING - STEP 4A
-      // Use tenant-safe PDF branding for HR/Manager My Self-Service downloads.
-      // Alpatech gets its own header; all other tenants retain the BexHR header.
-      const pdfBranding = getSsPayslipPdfBranding(record);
-
-      // ALPATECH PDF BRANDING - STEP 4C
-      // Load the real Alpatech flame only for the Alpatech workspace.
-      // Non-Alpatech tenants do not fetch or render this asset.
-      const alpatechLogoDataUrl = pdfBranding.isAlpatech
+      const money = (value) => ssFormatCurrency(value, currency);
+      const branding = getSsPayslipPdfBranding(record);
+      const logoDataUrl = branding.isAlpatech
         ? await loadSsImageAsDataUrl("assets/alpatech-flame.png")
         : "";
 
-      drawSsPayslipPdfHeader(doc, pdfBranding, alpatechLogoDataUrl);
+      drawSsPayslipPdfHeader(doc, branding, logoDataUrl);
 
-      doc.setTextColor(17, 24, 39);
+      const margin = 12;
+      const usableWidth = 186;
+      const gap = 4;
+      const halfWidth = (usableWidth - gap) / 2;
 
-      // Employee details
-      let y = 40;
+      drawSsPayslipPdfInfoCard(
+        doc,
+        margin,
+        44,
+        halfWidth,
+        38,
+        "Employee",
+        [
+          { label: "Name", value: employee.employeeName, bold: true },
+          { label: "Employee No.", value: employee.employeeId },
+          { label: "Department", value: employee.department },
+          { label: "Job Title", value: employee.jobTitle },
+        ],
+        branding,
+      );
+
+      drawSsPayslipPdfInfoCard(
+        doc,
+        margin + halfWidth + gap,
+        44,
+        halfWidth,
+        38,
+        "Pay Details",
+        [
+          { label: "Pay Cycle", value: record.pay_cycle || "--", bold: true },
+          { label: "Pay Date", value: ssFormatDate(record.pay_date) },
+          { label: "Status", value: record.status || "Authorised" },
+          { label: "Currency", value: currency },
+        ],
+        branding,
+        { softRgb: [248, 250, 252] },
+      );
+
+      const summaryWidth = (usableWidth - gap * 2) / 3;
+      drawSsPayslipPdfSummaryCard(doc, margin, 87, summaryWidth, "Gross Pay", money(record.gross_pay), branding, "default");
+      drawSsPayslipPdfSummaryCard(doc, margin + summaryWidth + gap, 87, summaryWidth, "Total Deductions", money(record.total_deductions), branding, "warning");
+      drawSsPayslipPdfSummaryCard(doc, margin + (summaryWidth + gap) * 2, 87, summaryWidth, "Net Pay", money(record.net_pay), branding, "success");
+
+      const percent = (value) => {
+        const numericValue = Number(value || 0);
+        if (!Number.isFinite(numericValue) || numericValue === 0) return "0.0%";
+        return `${(Math.abs(numericValue) <= 1 ? numericValue * 100 : numericValue).toFixed(1)}%`;
+      };
+
+      // EMPLOYEE-FACING PAYSLIP DATA MINIMISATION - STEP 3
+      // Keep the PDF business-readable and exclude technical model/version,
+      // structure-variant, layout, and allocation-configuration identifiers.
+      const structureHeight = drawSsPayslipPdfStructureCard(
+        doc,
+        margin,
+        114,
+        usableWidth,
+        [
+          {
+            label: "Pay Type",
+            value: record.employee_group || record.payroll_model || "Regular",
+          },
+          { label: "Increment", value: percent(record.increment_percent) },
+          { label: "Monthly Gross", value: money(record.gross_pay) },
+        ],
+        "",
+        branding,
+      );
+
+      const earningsRows = [
+        ["Basic Pay", record.basic_pay],
+        ["Housing Allowance", record.housing_allowance],
+        ["Transport Allowance", record.transport_allowance],
+        ["Utility Allowance", record.utility_allowance],
+        ["Medical Allowance", record.medical_allowance],
+        ["Other Allowance", record.other_allowance],
+        ["Bonus", record.bonus],
+        ["Overtime", record.overtime],
+        ["Logistics Allowance", record.logistics_allowance],
+        ["Data / Airtime", record.data_airtime_allowance],
+      ]
+        .filter(([, value]) => Number(value || 0) > 0)
+        .map(([label, value]) => ({ label, value: money(value) }));
+
+      const deductionRows = [
+        ["PAYE Tax", record.paye_tax],
+        ["WHT Tax", record.wht_tax],
+        ["Employee Pension", record.employee_pension],
+        ["Other Deductions", record.other_deductions],
+      ]
+        .filter(([, value]) => Number(value || 0) > 0)
+        .map(([label, value]) => ({ label, value: money(value) }));
+
+      const breakdownY = 114 + structureHeight + 5;
+      const earningsHeight = 18 + Math.max(earningsRows.length, 1) * 5.2 + 10;
+      const deductionsHeight = 18 + Math.max(deductionRows.length, 1) * 5.2 + 10;
+      const breakdownHeight = Math.max(earningsHeight, deductionsHeight);
+
+      drawSsPayslipPdfBreakdownCard(
+        doc,
+        margin,
+        breakdownY,
+        halfWidth,
+        "Earnings",
+        earningsRows,
+        "Gross Pay",
+        money(record.gross_pay),
+        branding,
+        branding.accentRgb,
+      );
+
+      drawSsPayslipPdfBreakdownCard(
+        doc,
+        margin + halfWidth + gap,
+        breakdownY,
+        halfWidth,
+        "Deductions",
+        deductionRows,
+        "Total Deductions",
+        money(record.total_deductions),
+        branding,
+        branding.warningRgb,
+      );
+
+      const netY = breakdownY + breakdownHeight + 5;
+      doc.setFillColor(branding.successRgb[0], branding.successRgb[1], branding.successRgb[2]);
+      drawSsPdfRoundedRect(doc, margin, netY, usableWidth, 18, 3, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.text("AMOUNT PAYABLE", margin + 6, netY + 6.5);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text("Employee Details", 14, y);
-      y += 8;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10.5);
-      doc.text(`Name: ${employeeName}`, 14, y); y += 6;
-      doc.text(`Email: ${employeeEmail}`, 14, y); y += 6;
-      doc.text(`Employee ID: ${employeeId}`, 14, y); y += 6;
-      doc.text(`Department: ${department}`, 14, y);
+      doc.setFontSize(11);
+      doc.text("Net Pay", margin + 6, netY + 13);
+      doc.setFontSize(15);
+      doc.text(money(record.net_pay), margin + usableWidth - 6, netY + 11.5, { align: "right" });
 
-      // Pay details
+      const noteY = netY + 23;
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+      drawSsPdfRoundedRect(doc, margin, noteY, usableWidth, 14, 3, "FD");
+      doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text("Pay Details", 120, 40);
+      doc.setFontSize(7.3);
+      doc.text("Confidential employee document", margin + 5, noteY + 5.5);
+      doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(10.5);
-      let rightY = 48;
-      doc.text(`Pay Cycle: ${record.pay_cycle || "--"}`, 120, rightY); rightY += 6;
-      doc.text(`Pay Date: ${ssFormatDate(record.pay_date)}`, 120, rightY); rightY += 6;
-      doc.text(`Status: ${record.status || "--"}`, 120, rightY); rightY += 6;
-      doc.text(`Currency: ${currency}`, 120, rightY);
+      doc.setFontSize(6.7);
+      doc.text(
+        "This payslip is intended only for the named employee and must be shared through approved company channels.",
+        margin + 5,
+        noteY + 10.2,
+      );
 
-      // Divider
-      y = 86;
-      doc.setDrawColor(209, 213, 219);
-      doc.line(14, y, 196, y);
-      y += 10;
+      drawSsPayslipPdfPageFooter(doc, branding, employee.employeeName);
 
-      // Pay breakdown sections
-      const sections = [
-        {
-          title: "Earnings",
-          rows: [
-            { label: "Basic Pay", value: record.basic_pay },
-            { label: "Housing Allowance", value: record.housing_allowance },
-            { label: "Transport Allowance", value: record.transport_allowance },
-            { label: "Utility Allowance", value: record.utility_allowance },
-            { label: "Medical Allowance", value: record.medical_allowance },
-            { label: "Other Allowance", value: record.other_allowance },
-            { label: "Bonus", value: record.bonus },
-            { label: "Overtime", value: record.overtime },
-            { label: "Logistics Allowance", value: record.logistics_allowance },
-            { label: "Data / Airtime Allowance", value: record.data_airtime_allowance },
-            { label: "Gross Pay", value: record.gross_pay, bold: true },
-          ].filter((r) => r.bold || Number(r.value || 0) > 0),
-        },
-        {
-          title: "Deductions",
-          rows: [
-            { label: "PAYE Tax", value: record.paye_tax },
-            { label: "WHT Tax", value: record.wht_tax },
-            { label: "Employee Pension", value: record.employee_pension },
-            { label: "Other Deductions", value: record.other_deductions },
-            { label: "Total Deductions", value: record.total_deductions, bold: true },
-          ].filter((r) => r.bold || Number(r.value || 0) > 0),
-        },
-        {
-          title: "Net Pay",
-          rows: [
-            { label: "Net Pay", value: record.net_pay, bold: true },
-          ],
-        },
-      ];
+      const safePayCycle = (record.pay_cycle || "Payslip").replace(/\s+/g, "-").replace(/[^\w-]/g, "");
+      const safeName = employee.employeeName.replace(/\s+/g, "-").replace(/[^\w-]/g, "") || "Staff";
+      const prefix = branding.filePrefix ? `${branding.filePrefix}-` : "";
 
-      sections.forEach((section) => {
-        if (y > 270) {
-          doc.addPage();
-          y = 20;
-        }
-
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(11);
-        doc.setTextColor(17, 24, 39);
-        doc.text(section.title, 14, y);
-        y += 6;
-
-        doc.setFontSize(10);
-
-        section.rows.forEach((row) => {
-          if (y > 275) {
-            doc.addPage();
-            y = 20;
-          }
-
-          doc.setFont("helvetica", row.bold ? "bold" : "normal");
-          doc.text(String(row.label), 14, y);
-          doc.text(ssFormatCurrency(row.value, currency), 140, y, { align: "right" });
-          y += 6;
-        });
-
-        y += 6;
-      });
-
-      // Footer
-      if (y > 270) { doc.addPage(); y = 20; }
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(107, 114, 128);
-      doc.text(pdfBranding.footerText, 14, y);
-
-      const safePayCycle = (record.pay_cycle || "Payslip")
-        .replace(/\s+/g, "-")
-        .replace(/[^\w-]/g, "");
-      const safeName =
-        employeeName.replace(/\s+/g, "-").replace(/[^\w-]/g, "") || "Staff";
-
-      // ALPATECH PDF BRANDING - STEP 4A
-      // Prefix only Alpatech PDF filenames. Non-Alpatech tenants keep the
-      // existing filename format exactly as before.
-      const pdfFilePrefix = pdfBranding.isAlpatech
-        ? `${pdfBranding.filePrefix}-`
-        : "";
-
-      doc.save(`${pdfFilePrefix}${safeName}-Payslip-${safePayCycle}.pdf`);
+      doc.save(`${prefix}${safeName}-Payslip-${safePayCycle}.pdf`);
+      showSsAlert("success", "Payslip PDF downloaded successfully.");
     } catch (error) {
       console.error("[SS] PDF generation error:", error);
       showSsAlert("danger", "Payslip PDF could not be generated.");
     } finally {
       if (buttonElement) {
         buttonElement.disabled = false;
-        buttonElement.innerHTML = `<i class="bi bi-file-earmark-pdf"></i>`;
+        buttonElement.innerHTML = originalButtonHtml || `<i class="bi bi-file-earmark-pdf"></i>`;
       }
     }
   }
+
 
   // -----------------------------------------------------------------------
   // Public init
