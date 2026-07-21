@@ -22926,14 +22926,7 @@ async function refreshOrganizationHrSetupValues() {
 
       supabase
         .from("organization_job_titles")
-        .select(`
-          *,
-          organization_departments (
-            id,
-            department_name,
-            status
-          )
-        `)
+        .select("*")
         .order("job_title", { ascending: true }),
     ]);
 
