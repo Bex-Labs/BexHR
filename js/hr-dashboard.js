@@ -30233,61 +30233,23 @@ async function toggleEmployeeManagerRole(employeeId) {
       newRole,
     );
 
-    // Find the matching auth profile.
-    // Try the in-memory cache first; if it misses (e.g. the employee activated
-    // their account after the People tab was last loaded) fall back to a fresh
-    // database query so a stale cache never blocks the role toggle.
-    const employeeUserId = String(employee?.auth_user_id || employee?.user_id || "").trim();
-    const workEmail = normalizeText(employee?.work_email || "");
+    // HR ROLE SYNCHRONISATION SECURITY - PHASE 1C
+    // The protected RPC is the single authoritative write path for both:
+    // - employees.system_role
+    // - profiles.role
+    //
+    // Do not directly read or update another user's profile from the browser.
+    // The RPC response already confirms whether a linked login profile was found
+    // and which dashboard role was applied.
+    await loadAuthProfilesForLinkage();
+    await loadEmployees();
 
-    let profile = employeeUserId
-      ? (state.authProfiles || []).find((p) => String(p.id || "").trim() === employeeUserId)
-      : (state.authProfiles || []).find((p) => normalizeText(p.email || "") === workEmail);
-
-    if (!profile) {
-      // Cache miss — query the profiles table directly with the current session.
-      try {
-        let freshQuery = supabase
-          .from("profiles")
-          .select("id, email, full_name, role");
-
-        if (employeeUserId) {
-          freshQuery = freshQuery.eq("id", employeeUserId);
-        } else if (workEmail) {
-          freshQuery = freshQuery.eq("email", employee?.work_email?.trim() || "");
-        }
-
-        const { data: freshProfiles } = await freshQuery.maybeSingle();
-
-        if (freshProfiles) {
-          profile = freshProfiles;
-          // Merge into cache so other UI elements reflect the fresh data.
-          const idx = (state.authProfiles || []).findIndex(
-            (p) => String(p.id || "").trim() === String(freshProfiles.id || "").trim(),
-          );
-          if (idx >= 0) {
-            state.authProfiles[idx] = freshProfiles;
-          } else {
-            state.authProfiles = [...(state.authProfiles || []), freshProfiles];
-          }
-        }
-      } catch (lookupError) {
-        console.warn("Fresh profile lookup failed:", lookupError);
-      }
-    }
-
-    if (!profile) {
-      // MANAGER ROLE ASSIGNMENT UX - STEP 1K
-      // No login profile means the employee cannot be routed to Manager
-      // Dashboard yet. Refresh the People list automatically and show the same
-      // floating toast pattern used by successful role updates, so HR does not
-      // have to manually refresh to understand the outcome.
+    if (!roleSyncResult?.profile_found) {
+      // No login profile means the employee record was updated, but dashboard
+      // routing cannot apply until the employee has a linked login account.
       const missingLoginMessage =
         roleSyncResult?.message ||
         `No login account found for ${fullName}. Send a login invite first, or ask the employee to activate their account before trying again.`;
-
-      await loadAuthProfilesForLinkage();
-      await loadEmployees();
 
       showPageAlert("warning", missingLoginMessage);
 
@@ -30299,25 +30261,6 @@ async function toggleEmployeeManagerRole(employeeId) {
 
       return;
     }
-
-    // Update profiles.role — this controls which dashboard they land on at login.
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({ role: newRole })
-      .eq("id", profile.id);
-
-    if (profileError) throw profileError;
-
-    // Update employees.system_role — keeps the badge in the employee list in sync.
-    await supabase
-      .from("employees")
-      .update({ system_role: newRole })
-      .eq("id", employeeId);
-
-    // Reload both lists so the button and badge reflect the new state immediately.
-    await loadAuthProfilesForLinkage();
-    await loadEmployees();
-
     const alertType = roleSyncResult.profile_found ? "success" : "warning";
 
     const roleSyncMessage =
