@@ -2309,8 +2309,20 @@ const HR_COMMUNICATION_SETUP_MAINTENANCE_ROLES = new Set([
 ]);
 
 function canCurrentUserMaintainOrganizationSetupData() {
-  return HR_ORGANIZATION_SETUP_MAINTENANCE_ROLES.has(
-    getCurrentHrBusinessRole(),
+  const profileRole = normaliseHrBusinessRole(
+    state.currentProfile?.role || "",
+  );
+
+  const accessLevel = normaliseHrBusinessRole(
+    state.currentProfile?.hr_access_level || "standard",
+  );
+
+  return Boolean(
+    state.currentUser?.id &&
+    state.currentProfile?.is_active === true &&
+    profileRole === "hr" &&
+    accessLevel === "tenant_admin" &&
+    String(state.currentProfile?.tenant_id || "").trim(),
   );
 }
 
@@ -2323,13 +2335,13 @@ function canCurrentUserMaintainCommunicationSetupData() {
 function showHrSetupAccessDeniedMessage(areaLabel = "this setup area") {
   showPageAlert(
     "warning",
-    `${areaLabel} is read-only for this role. Use an HR or HR Manager account to maintain setup records.`,
+    `${areaLabel} is read-only. A Tenant Administrator account is required to maintain Company Administration records.`,
   );
 
   showDashboardToast(
     "warning",
-    "Setup access is view-only",
-    `${areaLabel} can be reviewed, but not changed by this role.`,
+    "Tenant Administrator required",
+    `${areaLabel} can be reviewed, but only a Tenant Administrator can change it.`,
   );
 }
 
@@ -2405,31 +2417,85 @@ function removeHrSetupCardReadOnlyBadge(badgeId) {
 // Lock Organization Setup maintenance for Payroll, Auditor, QA, and custom roles.
 // This is UI-level protection; backend/RLS still remains the authority.
 function applyHrOrganizationSetupAccessControls() {
-  if (canCurrentUserMaintainOrganizationSetupData()) return;
+  const canMaintain = canCurrentUserMaintainOrganizationSetupData();
 
-  setHrControlsDisabled(
-    [
-      state.dom.organizationEmail,
-      state.dom.organizationPhoneNumber,
-      state.dom.organizationPayrollContactEmail,
-      state.dom.organizationAddressLine,
-      state.dom.organizationCity,
-      state.dom.organizationTin,
-      state.dom.organizationRegistrationNumber,
-      state.dom.saveOrganizationSettingsBtn,
+  const controls = [
+    state.dom.organizationEmail,
+    state.dom.organizationPhoneNumber,
+    state.dom.organizationPayrollContactEmail,
+    state.dom.organizationAddressLine,
+    state.dom.organizationCity,
+    state.dom.organizationTin,
+    state.dom.organizationRegistrationNumber,
+    state.dom.organizationNotes,
+    state.dom.saveOrganizationSettingsBtn,
 
-      state.dom.organizationDepartmentName,
-      state.dom.organizationDepartmentStatus,
-      state.dom.saveOrganizationDepartmentBtn,
-      state.dom.cancelOrganizationDepartmentEditBtn,
+    state.dom.organizationDepartmentName,
+    state.dom.organizationDepartmentStatus,
+    state.dom.organizationDepartmentNotes,
+    state.dom.saveOrganizationDepartmentBtn,
+    state.dom.cancelOrganizationDepartmentEditBtn,
 
-      state.dom.organizationJobTitleDepartmentId,
-      state.dom.organizationJobTitleName,
-      state.dom.organizationJobTitleStatus,
-      state.dom.saveOrganizationJobTitleBtn,
-      state.dom.cancelOrganizationJobTitleEditBtn,
-    ],
-    true,
+    state.dom.organizationJobTitleDepartmentId,
+    state.dom.organizationJobTitleName,
+    state.dom.organizationJobTitleStatus,
+    state.dom.organizationJobTitleNotes,
+    state.dom.saveOrganizationJobTitleBtn,
+    state.dom.cancelOrganizationJobTitleEditBtn,
+  ];
+
+  setHrControlsDisabled(controls, !canMaintain);
+
+  document
+    .querySelectorAll(
+      [
+        '[onclick^="window.hrEditOrganizationDepartmentRecord"]',
+        '[onclick^="window.hrEditOrganizationJobTitleRecord"]',
+      ].join(","),
+    )
+    .forEach((button) => {
+      button.disabled = !canMaintain;
+      button.setAttribute("aria-disabled", String(!canMaintain));
+
+      if (!canMaintain) {
+        button.title = "Tenant Administrator required";
+      }
+    });
+
+  if (canMaintain) {
+    removeHrSetupCardReadOnlyBadge("organizationSetupTenantAdminBadge");
+
+    if (state.dom.organizationSettingsSubmitLabel) {
+      state.dom.organizationSettingsSubmitLabel.textContent =
+        state.organizationSettings?.id
+          ? "Update Organization Details"
+          : "Save Organization Details";
+    }
+
+    if (state.dom.organizationDepartmentSubmitLabel) {
+      state.dom.organizationDepartmentSubmitLabel.textContent =
+        state.currentEditingOrganizationDepartment
+          ? "Update Department"
+          : "Create Department";
+    }
+
+    if (state.dom.organizationJobTitleSubmitLabel) {
+      state.dom.organizationJobTitleSubmitLabel.textContent =
+        state.currentEditingOrganizationJobTitle
+          ? "Update Job Title"
+          : "Create Job Title";
+    }
+
+    updateOrganizationSettingsSaveButtonState();
+    updateOrganizationDepartmentSaveButtonState();
+    updateOrganizationJobTitleSaveButtonState();
+    return;
+  }
+
+  setHrSetupCardReadOnlyBadge(
+    state.dom.organizationSettingsCardCollapse,
+    "organizationSetupTenantAdminBadge",
+    "Tenant Administrator Required",
   );
 
   if (state.dom.saveOrganizationSettingsBtn) {
@@ -2437,22 +2503,22 @@ function applyHrOrganizationSetupAccessControls() {
       <i class="bi bi-lock me-2"></i>
       <span id="organizationSettingsSubmitLabel">Organization Setup Read Only</span>
     `;
+
     state.dom.organizationSettingsSubmitLabel =
       document.getElementById("organizationSettingsSubmitLabel");
   }
 
   if (state.dom.organizationDepartmentSubmitLabel) {
-    state.dom.organizationDepartmentSubmitLabel.textContent = "Departments Read Only";
+    state.dom.organizationDepartmentSubmitLabel.textContent =
+      "Departments Read Only";
   }
 
   if (state.dom.organizationJobTitleSubmitLabel) {
-    state.dom.organizationJobTitleSubmitLabel.textContent = "Job Titles Read Only";
+    state.dom.organizationJobTitleSubmitLabel.textContent =
+      "Job Titles Read Only";
   }
 }
 
-// HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
-// Lock Email / Communication test-send actions for non-HR maintenance roles.
-// Refresh and review remain allowed.
 function applyHrCommunicationSetupAccessControls() {
   if (canCurrentUserMaintainCommunicationSetupData()) return;
 
@@ -23355,7 +23421,6 @@ async function ensureHrProfileDepartment(supabase, profileData) {
   const HR_DEPT_NAME = "Human Resources";
 
   try {
-    // Check whether "Human Resources" already exists in the controlled list.
     const { data: existingDepts, error: fetchError } = await supabase
       .from("organization_departments")
       .select("id, department_name, status")
@@ -23363,32 +23428,27 @@ async function ensureHrProfileDepartment(supabase, profileData) {
       .limit(1);
 
     if (fetchError) {
-      console.warn("HR department seed: could not query organization_departments:", fetchError);
+      console.warn(
+        "HR department lookup could not query organization_departments:",
+        fetchError,
+      );
       return profileData;
     }
 
-    const alreadyExists = Array.isArray(existingDepts) && existingDepts.length > 0;
+    const alreadyExists =
+      Array.isArray(existingDepts) && existingDepts.length > 0;
 
+    // Phase 2F1 already seeded a tenant-scoped Human Resources department.
+    // Do not silently create Company Administration records during profile load.
     if (!alreadyExists) {
-      // Seed "Human Resources" as an active, controlled department.
-      const { error: insertError } = await supabase
-        .from("organization_departments")
-        .insert([{
-          department_name: HR_DEPT_NAME,
-          status: "Active",
-          notes: "Default department for HR staff.",
-          created_by: state.currentUser?.id || null,
-          updated_by: state.currentUser?.id || null,
-        }]);
-
-      if (insertError) {
-        console.warn("HR department seed: insert failed:", insertError);
-      }
+      console.warn(
+        "Human Resources is missing from this tenant's controlled department catalogue. A Tenant Administrator must create it from Setup.",
+      );
+      return profileData;
     }
 
-    // If the profile has no department assigned, set it to "Human Resources"
-    // and persist that back to the profiles row.
     const currentDept = String(profileData.department || "").trim();
+
     if (!currentDept) {
       const { data: updatedProfile, error: updateError } = await supabase
         .from("profiles")
@@ -23398,13 +23458,19 @@ async function ensureHrProfileDepartment(supabase, profileData) {
         .maybeSingle();
 
       if (updateError) {
-        console.warn("HR department seed: profile update failed:", updateError);
+        console.warn(
+          "HR department profile update failed:",
+          updateError,
+        );
       } else if (updatedProfile) {
         return updatedProfile;
       }
     }
-  } catch (err) {
-    console.error("ensureHrProfileDepartment unexpected error:", err);
+  } catch (error) {
+    console.error(
+      "ensureHrProfileDepartment unexpected error:",
+      error,
+    );
   }
 
   return profileData;
@@ -23995,12 +24061,11 @@ function isOrganizationDepartmentFormReadyForSubmit() {
 function updateOrganizationDepartmentSaveButtonState() {
   setPrimaryActionButtonReadyState(
     state.dom.saveOrganizationDepartmentBtn,
-    isOrganizationDepartmentFormReadyForSubmit(),
+    canCurrentUserMaintainOrganizationSetupData() &&
+      isOrganizationDepartmentFormReadyForSubmit(),
   );
 }
 
-// ORGANIZATION HR SETUP VALUES - STEP 4A
-// Validate Department fields only.
 function validateOrganizationDepartmentForm() {
   let isValid = true;
   let firstInvalidField = null;
@@ -24032,22 +24097,22 @@ function validateOrganizationDepartmentForm() {
 // ORGANIZATION HR SETUP VALUES - STEP 4A
 // Build a clean Department payload without touching employee records.
 function buildOrganizationDepartmentPayload(isEditMode = false) {
-  const payload = {
-    department_name: String(state.dom.organizationDepartmentName?.value || "").trim(),
-    status: String(state.dom.organizationDepartmentStatus?.value || "Active").trim(),
-    notes: String(state.dom.organizationDepartmentNotes?.value || "").trim() || null,
-    updated_by: state.currentUser?.id || null,
+  return {
+    p_department_id: isEditMode
+      ? String(state.dom.editingOrganizationDepartmentId?.value || "").trim()
+      : null,
+    p_department_name: String(
+      state.dom.organizationDepartmentName?.value || "",
+    ).trim(),
+    p_status: String(
+      state.dom.organizationDepartmentStatus?.value || "Active",
+    ).trim(),
+    p_notes:
+      String(state.dom.organizationDepartmentNotes?.value || "").trim() ||
+      null,
   };
-
-  if (!isEditMode) {
-    payload.created_by = state.currentUser?.id || null;
-  }
-
-  return payload;
 }
 
-// ORGANIZATION HR SETUP VALUES - STEP 4A
-// Show visible feedback while Department is saving/updating.
 function setOrganizationDepartmentSaveLoading(isLoading, isEditMode = false) {
   const button = state.dom.saveOrganizationDepartmentBtn;
   if (!button) return;
@@ -24103,12 +24168,11 @@ function resetOrganizationDepartmentForm() {
 // ORGANIZATION HR SETUP VALUES - STEP 4A
 // Save or update one Department record.
 async function handleOrganizationDepartmentSave() {
-  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
-  // Departments are controlled HR setup values.
   if (!canCurrentUserMaintainOrganizationSetupData()) {
     showHrSetupAccessDeniedMessage("Department Setup");
     return;
   }
+
   clearPageAlert();
 
   if (!validateOrganizationDepartmentForm()) {
@@ -24119,13 +24183,19 @@ async function handleOrganizationDepartmentSave() {
     return;
   }
 
-  const editingId = String(state.dom.editingOrganizationDepartmentId?.value || "").trim();
+  const editingId = String(
+    state.dom.editingOrganizationDepartmentId?.value || "",
+  ).trim();
+
   const isEditMode = Boolean(editingId);
   const payload = buildOrganizationDepartmentPayload(isEditMode);
 
-  const duplicateDepartment = (state.organizationDepartments || []).find((department) => {
+  const duplicateDepartment = (
+    state.organizationDepartments || []
+  ).find((department) => {
     const isSameName =
-      normalizeText(department.department_name) === normalizeText(payload.department_name);
+      normalizeText(department.department_name) ===
+      normalizeText(payload.p_department_name);
 
     const isDifferentRecord =
       String(department.id || "").trim() !== editingId;
@@ -24134,12 +24204,15 @@ async function handleOrganizationDepartmentSave() {
   });
 
   if (duplicateDepartment) {
-    // ORGANIZATION HR SETUP VALUES - STEP 4B-4B
-    // Duplicate Department should show both the page alert and popup.
-    const message = `Department <strong>${escapeHtml(payload.department_name)}</strong> already exists.`;
+    const message =
+      `Department <strong>${escapeHtml(payload.p_department_name)}</strong> already exists.`;
 
     showPageAlert("warning", message);
-    showDashboardToast("warning", "Duplicate Department", message);
+    showDashboardToast(
+      "warning",
+      "Duplicate Department",
+      message,
+    );
     redirectToOrganizationDepartmentRecordsAfterSave();
     return;
   }
@@ -24148,54 +24221,60 @@ async function handleOrganizationDepartmentSave() {
     setOrganizationDepartmentSaveLoading(true, isEditMode);
 
     const supabase = getSupabaseClient();
-
-    const response = isEditMode
-      ? await supabase
-        .from("organization_departments")
-        .update(payload)
-        .eq("id", editingId)
-        .select("*")
-        .maybeSingle()
-      : await supabase
-        .from("organization_departments")
-        .insert([payload])
-        .select("*")
-        .maybeSingle();
+    const response = await supabase.rpc(
+      "hr_tenant_admin_save_organization_department",
+      payload,
+    );
 
     if (response.error) throw response.error;
 
-    state.lastSavedOrganizationDepartmentKey = buildOrganizationDepartmentSortKey(
-      response.data || {
-        id: editingId,
-        department_name: payload.department_name,
-      },
-    );
+    const savedRecord = Array.isArray(response.data)
+      ? response.data[0]
+      : response.data;
+
+    if (!savedRecord?.id) {
+      throw new Error(
+        "Department was not saved for this company workspace.",
+      );
+    }
+
+    state.lastSavedOrganizationDepartmentKey =
+      buildOrganizationDepartmentSortKey(savedRecord);
 
     resetOrganizationDepartmentForm();
     await refreshOrganizationHrSetupValues();
-
-    // ORGANIZATION HR SETUP VALUES - STEP 4B-4B
-    // After Department save/update, land on Department Records.
     redirectToOrganizationDepartmentRecordsAfterSave();
 
     const successMessage = isEditMode
-      ? `Department <strong>${escapeHtml(payload.department_name)}</strong> was updated successfully.`
-      : `Department <strong>${escapeHtml(payload.department_name)}</strong> was created successfully.`;
+      ? `Department <strong>${escapeHtml(payload.p_department_name)}</strong> was updated successfully.`
+      : `Department <strong>${escapeHtml(payload.p_department_name)}</strong> was created successfully.`;
 
     showPageAlert("success", successMessage);
-    showDashboardToast("success", "Department Saved", successMessage);
+    showDashboardToast(
+      "success",
+      "Department Saved",
+      successMessage,
+    );
   } catch (error) {
-    console.error("Error saving organization department:", error);
+    console.error(
+      "Error saving organization department:",
+      error,
+    );
 
     if (
-      String(error.message || "").toLowerCase().includes("duplicate key value")
+      String(error.message || "")
+        .toLowerCase()
+        .includes("duplicate key value")
     ) {
-      // ORGANIZATION HR SETUP VALUES - STEP 4B-4A
-      // Duplicate caught from database constraint.
-      const message = `Department <strong>${escapeHtml(payload.department_name)}</strong> already exists.`;
+      const message =
+        `Department <strong>${escapeHtml(payload.p_department_name)}</strong> already exists.`;
 
       showPageAlert("warning", message);
-      showDashboardToast("warning", "Duplicate Department", message);
+      showDashboardToast(
+        "warning",
+        "Duplicate Department",
+        message,
+      );
       redirectToOrganizationDepartmentRecordsAfterSave();
       return;
     }
@@ -24206,11 +24285,10 @@ async function handleOrganizationDepartmentSave() {
     );
   } finally {
     setOrganizationDepartmentSaveLoading(false, isEditMode);
+    applyHrOrganizationSetupAccessControls();
   }
 }
 
-// ORGANIZATION HR SETUP VALUES - STEP 4A
-// Render Department records inside Manage Organization.
 function renderOrganizationDepartmentsTable() {
   const tbody = state.dom.organizationDepartmentsTableBody;
   if (!tbody) return;
@@ -24395,13 +24473,11 @@ function isOrganizationJobTitleFormReadyForSubmit() {
 function updateOrganizationJobTitleSaveButtonState() {
   setPrimaryActionButtonReadyState(
     state.dom.saveOrganizationJobTitleBtn,
-    isOrganizationJobTitleFormReadyForSubmit(),
+    canCurrentUserMaintainOrganizationSetupData() &&
+      isOrganizationJobTitleFormReadyForSubmit(),
   );
 }
 
-// ORGANIZATION HR SETUP VALUES - STEP 4B-2
-// Reset Job Title form to clean create mode.
-// Save/edit behaviour will be added in the next step.
 function resetOrganizationJobTitleForm() {
   state.dom.organizationJobTitleForm?.reset();
 
@@ -24578,23 +24654,25 @@ function validateOrganizationJobTitleForm() {
 // Build one clean Job Title payload for insert/update.
 // This only affects organization_job_titles.
 function buildOrganizationJobTitlePayload(isEditMode = false) {
-  const payload = {
-    department_id: String(state.dom.organizationJobTitleDepartmentId?.value || "").trim(),
-    job_title: String(state.dom.organizationJobTitleName?.value || "").trim(),
-    status: String(state.dom.organizationJobTitleStatus?.value || "Active").trim(),
-    notes: String(state.dom.organizationJobTitleNotes?.value || "").trim() || null,
-    updated_by: state.currentUser?.id || null,
+  return {
+    p_job_title_id: isEditMode
+      ? String(state.dom.editingOrganizationJobTitleId?.value || "").trim()
+      : null,
+    p_department_id: String(
+      state.dom.organizationJobTitleDepartmentId?.value || "",
+    ).trim(),
+    p_job_title: String(
+      state.dom.organizationJobTitleName?.value || "",
+    ).trim(),
+    p_status: String(
+      state.dom.organizationJobTitleStatus?.value || "Active",
+    ).trim(),
+    p_notes:
+      String(state.dom.organizationJobTitleNotes?.value || "").trim() ||
+      null,
   };
-
-  if (!isEditMode) {
-    payload.created_by = state.currentUser?.id || null;
-  }
-
-  return payload;
 }
 
-// ORGANIZATION HR SETUP VALUES - STEP 4B-4
-// Show a small spinner while Job Title is saving/updating.
 function setOrganizationJobTitleSaveLoading(isLoading, isEditMode = false) {
   const button = state.dom.saveOrganizationJobTitleBtn;
   if (!button) return;
@@ -24624,12 +24702,11 @@ function setOrganizationJobTitleSaveLoading(isLoading, isEditMode = false) {
 // Save or update one Job Title record.
 // Duplicate protection is scoped to Department + Job Title.
 async function handleOrganizationJobTitleSave() {
-  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
-  // Job Titles are controlled HR setup values.
   if (!canCurrentUserMaintainOrganizationSetupData()) {
     showHrSetupAccessDeniedMessage("Job Title Setup");
     return;
   }
+
   clearPageAlert();
 
   if (!validateOrganizationJobTitleForm()) {
@@ -24640,34 +24717,44 @@ async function handleOrganizationJobTitleSave() {
     return;
   }
 
-  const editingId = String(state.dom.editingOrganizationJobTitleId?.value || "").trim();
+  const editingId = String(
+    state.dom.editingOrganizationJobTitleId?.value || "",
+  ).trim();
+
   const isEditMode = Boolean(editingId);
   const payload = buildOrganizationJobTitlePayload(isEditMode);
 
-  const duplicateJobTitle = (state.organizationJobTitles || []).find((jobTitle) => {
+  const duplicateJobTitle = (
+    state.organizationJobTitles || []
+  ).find((jobTitle) => {
     const isSameDepartment =
-      String(jobTitle.department_id || "").trim() === payload.department_id;
+      String(jobTitle.department_id || "").trim() ===
+      payload.p_department_id;
 
     const isSameTitle =
-      normalizeText(jobTitle.job_title) === normalizeText(payload.job_title);
+      normalizeText(jobTitle.job_title) ===
+      normalizeText(payload.p_job_title);
 
     const isDifferentRecord =
       String(jobTitle.id || "").trim() !== editingId;
 
-    return isSameDepartment && isSameTitle && isDifferentRecord;
+    return (
+      isSameDepartment &&
+      isSameTitle &&
+      isDifferentRecord
+    );
   });
 
   if (duplicateJobTitle) {
-    // ORGANIZATION HR SETUP VALUES - STEP 4B-4C
-    // Duplicate Job Title should show both the normal page alert
-    // and the floating popup so HR sees the block immediately.
-    const message = `Job Title <strong>${escapeHtml(payload.job_title)}</strong> already exists under the selected department.`;
+    const message =
+      `Job Title <strong>${escapeHtml(payload.p_job_title)}</strong> already exists under the selected department.`;
 
     showPageAlert("warning", message);
-    showDashboardToast("warning", "Duplicate Job Title", message);
-
-    // ORGANIZATION HR SETUP VALUES - STEP 4B-4C
-    // Keep HR around the Job Title Records area after the duplicate block.
+    showDashboardToast(
+      "warning",
+      "Duplicate Job Title",
+      message,
+    );
     redirectToOrganizationJobTitleRecordsAfterSave();
     return;
   }
@@ -24676,57 +24763,60 @@ async function handleOrganizationJobTitleSave() {
     setOrganizationJobTitleSaveLoading(true, isEditMode);
 
     const supabase = getSupabaseClient();
-
-    const response = isEditMode
-      ? await supabase
-        .from("organization_job_titles")
-        .update(payload)
-        .eq("id", editingId)
-        .select("*")
-        .maybeSingle()
-      : await supabase
-        .from("organization_job_titles")
-        .insert([payload])
-        .select("*")
-        .maybeSingle();
+    const response = await supabase.rpc(
+      "hr_tenant_admin_save_organization_job_title",
+      payload,
+    );
 
     if (response.error) throw response.error;
 
-    state.lastSavedOrganizationJobTitleKey = buildOrganizationJobTitleSortKey(
-      response.data || {
-        id: editingId,
-        department_id: payload.department_id,
-        job_title: payload.job_title,
-      },
-    );
+    const savedRecord = Array.isArray(response.data)
+      ? response.data[0]
+      : response.data;
+
+    if (!savedRecord?.id) {
+      throw new Error(
+        "Job Title was not saved for this company workspace.",
+      );
+    }
+
+    state.lastSavedOrganizationJobTitleKey =
+      buildOrganizationJobTitleSortKey(savedRecord);
 
     resetOrganizationJobTitleForm();
     await refreshOrganizationHrSetupValues();
-
-    // ORGANIZATION HR SETUP VALUES - STEP 4B-4B
-    // Keep HR around the Job Title Records area and show popup feedback.
     redirectToOrganizationJobTitleRecordsAfterSave();
 
     const successMessage = isEditMode
-      ? `Job Title <strong>${escapeHtml(payload.job_title)}</strong> was updated successfully.`
-      : `Job Title <strong>${escapeHtml(payload.job_title)}</strong> was created successfully.`;
+      ? `Job Title <strong>${escapeHtml(payload.p_job_title)}</strong> was updated successfully.`
+      : `Job Title <strong>${escapeHtml(payload.p_job_title)}</strong> was created successfully.`;
 
     showPageAlert("success", successMessage);
-    showDashboardToast("success", "Job Title Saved", successMessage);
+    showDashboardToast(
+      "success",
+      "Job Title Saved",
+      successMessage,
+    );
   } catch (error) {
-    console.error("Error saving organization job title:", error);
+    console.error(
+      "Error saving organization job title:",
+      error,
+    );
 
     if (
-      String(error.message || "").toLowerCase().includes("duplicate key value")
+      String(error.message || "")
+        .toLowerCase()
+        .includes("duplicate key value")
     ) {
-      // ORGANIZATION HR SETUP VALUES - STEP 4B-4A
-      // Duplicate caught from database constraint.
-      const message = `Job Title <strong>${escapeHtml(payload.job_title)}</strong> already exists under the selected department.`;
+      const message =
+        `Job Title <strong>${escapeHtml(payload.p_job_title)}</strong> already exists under the selected department.`;
 
       showPageAlert("warning", message);
-      showDashboardToast("warning", "Duplicate Job Title", message);
-      // ORGANIZATION HR SETUP VALUES - STEP 4B-4B
-      // After Job Title save/update, land on Job Title Records.
+      showDashboardToast(
+        "warning",
+        "Duplicate Job Title",
+        message,
+      );
       redirectToOrganizationJobTitleRecordsAfterSave();
       return;
     }
@@ -24737,11 +24827,10 @@ async function handleOrganizationJobTitleSave() {
     );
   } finally {
     setOrganizationJobTitleSaveLoading(false, isEditMode);
+    applyHrOrganizationSetupAccessControls();
   }
 }
 
-// ORGANIZATION HR SETUP VALUES - STEP 4B-4
-// Load a Job Title into the form for editing.
 function startOrganizationJobTitleEdit(jobTitleId) {
   // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
   // View-only setup roles cannot load Job Title records into edit mode.
@@ -25009,13 +25098,11 @@ function isOrganizationSettingsFormReadyForSubmit() {
 function updateOrganizationSettingsSaveButtonState() {
   setPrimaryActionButtonReadyState(
     state.dom.saveOrganizationSettingsBtn,
-    isOrganizationSettingsFormReadyForSubmit(),
+    canCurrentUserMaintainOrganizationSetupData() &&
+      isOrganizationSettingsFormReadyForSubmit(),
   );
 }
 
-// MANAGE ORGANIZATION CARD - STEP 4B-1 FIX
-// Clear the editable Organization form after save/update while keeping
-// the saved summary values visible at the top of the card.
 function resetOrganizationSettingsFormAfterSave() {
   state.dom.organizationSettingsForm?.reset();
 
@@ -25094,46 +25181,34 @@ function validateOrganizationSettingsForm() {
 
 // MANAGE ORGANIZATION CARD - STEP 3
 // Build one clean payload for insert/update without touching other tables.
-function buildOrganizationSettingsPayload(isEditMode = false) {
-  const payload = {
-    singleton_key: true,
-
-    // TENANT ORGANIZATION SETTINGS ISOLATION - RESTORE STEP 2
-    // Persist the organization snapshot against the signed-in company only.
-    tenant_id: getRequiredTenantIdForHrEmployeeData(),
-
-    // ADMIN COMPANY IDENTITY WIRING - STEP 1M-A
-    // Store the Admin-controlled company name as the organization snapshot.
-    // HR must not overwrite company identity from Manage Organization.
-    organization_name: getAdminControlledOrganizationName(),
-
-    organization_email: String(state.dom.organizationEmail?.value || "").trim() || null,
-    phone_number: String(state.dom.organizationPhoneNumber?.value || "").trim() || null,
-    payroll_contact_email: String(state.dom.organizationPayrollContactEmail?.value || "").trim() || null,
-    address_line: String(state.dom.organizationAddressLine?.value || "").trim() || null,
-    city: String(state.dom.organizationCity?.value || "").trim() || null,
-    country: String(state.dom.organizationCountry?.value || "").trim() || "Nigeria",
-    tax_identification_number: String(state.dom.organizationTin?.value || "").trim() || null,
-    registration_number: String(state.dom.organizationRegistrationNumber?.value || "").trim() || null,
-    default_currency: String(state.dom.organizationDefaultCurrency?.value || "NGN").trim(),
-    // MANAGE ORGANIZATION CARD - STEP 3A
-    // The HR & Payroll System currently supports monthly payroll only.
-    // Save Monthly explicitly so unsupported cycles cannot be stored from the UI.
-    default_pay_cycle: "Monthly",
-    status: String(state.dom.organizationStatus?.value || "Active").trim(),
-    notes: String(state.dom.organizationNotes?.value || "").trim() || null,
-    updated_by: state.currentUser?.id || null,
+function buildOrganizationSettingsPayload() {
+  return {
+    p_organization_email:
+      String(state.dom.organizationEmail?.value || "").trim() ||
+      null,
+    p_phone_number:
+      String(state.dom.organizationPhoneNumber?.value || "").trim() ||
+      null,
+    p_payroll_contact_email:
+      String(
+        state.dom.organizationPayrollContactEmail?.value || "",
+      ).trim() || null,
+    p_address_line:
+      String(state.dom.organizationAddressLine?.value || "").trim() ||
+      null,
+    p_city:
+      String(state.dom.organizationCity?.value || "").trim() ||
+      null,
+    p_tax_identification_number:
+      String(state.dom.organizationTin?.value || "").trim() ||
+      null,
+    p_registration_number:
+      String(
+        state.dom.organizationRegistrationNumber?.value || "",
+      ).trim() || null,
   };
-
-  if (!isEditMode) {
-    payload.created_by = state.currentUser?.id || null;
-  }
-
-  return payload;
 }
 
-// MANAGE ORGANIZATION CARD - STEP 3
-// Show a small spinner while saving organization details.
 function setOrganizationSettingsSaveLoading(isLoading, isEditMode = false) {
   const button = state.dom.saveOrganizationSettingsBtn;
   if (!button) return;
@@ -25166,9 +25241,6 @@ function setOrganizationSettingsSaveLoading(isLoading, isEditMode = false) {
 async function handleOrganizationSettingsSave() {
   clearPageAlert();
 
-  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
-  // Only HR/HR Manager/Admin can maintain organization setup.
-  // Payroll, Auditor, QA, and custom HR-routed roles can review only.
   if (!canCurrentUserMaintainOrganizationSetupData()) {
     showHrSetupAccessDeniedMessage("Organization Setup");
     return;
@@ -25179,6 +25251,7 @@ async function handleOrganizationSettingsSave() {
       "warning",
       "Please complete the required organization fields before saving.",
     );
+
     showDashboardToast(
       "warning",
       "Organization details incomplete",
@@ -25187,46 +25260,31 @@ async function handleOrganizationSettingsSave() {
     return;
   }
 
-  const existingId = String(state.organizationSettings?.id || "").trim();
-  const isEditMode = Boolean(existingId);
-  const payload = buildOrganizationSettingsPayload(isEditMode);
+  const isEditMode = Boolean(state.organizationSettings?.id);
+  const payload = buildOrganizationSettingsPayload();
 
   try {
     setOrganizationSettingsSaveLoading(true, isEditMode);
 
     const supabase = getSupabaseClient();
-
-    const response = isEditMode
-      ? await supabase
-        .from("organization_settings")
-        .update(payload)
-        .eq("id", existingId)
-        .eq("tenant_id", payload.tenant_id)
-        .eq("singleton_key", true)
-        .select("*")
-        .maybeSingle()
-      : await supabase
-        .from("organization_settings")
-        .insert([payload])
-        .select("*")
-        .maybeSingle();
+    const response = await supabase.rpc(
+      "hr_tenant_admin_save_organization_settings",
+      payload,
+    );
 
     if (response.error) throw response.error;
 
-    // ORGANIZATION SETTINGS SAVE CONFIRMATION - STEP 1
-    // Supabase can return no row when an update filter matches nothing.
-    // Do not display a false success message in that case.
-    if (!response.data?.id) {
+    const savedRecord = Array.isArray(response.data)
+      ? response.data[0]
+      : response.data;
+
+    if (!savedRecord?.id) {
       throw new Error(
-        "Organization details were not saved for this company workspace. Refresh and try again.",
+        "Organization details were not saved for this company workspace.",
       );
     }
 
-    state.organizationSettings = response.data;
-
-    // MANAGE ORGANIZATION - HR/PAYROLL STANDARD STEP 1B
-    // Refresh the saved summary and keep the single-organization form populated.
-    // This is not a create-another-organization form, so it should not clear after save.
+    state.organizationSettings = savedRecord;
     renderOrganizationSettingsCard();
 
     showPageAlert(
@@ -25236,43 +25294,36 @@ async function handleOrganizationSettingsSave() {
         : "Organization details were saved successfully.",
     );
 
-    // SETUP ORGANIZATION NOTIFICATION PARITY - STEP 1
-    // Reuse the existing floating dashboard notification so the result remains
-    // visible even after HR scrolls away from the page-level alert.
     showDashboardToast(
       "success",
-      isEditMode ? "Organization details updated" : "Organization details saved",
+      isEditMode
+        ? "Organization details updated"
+        : "Organization details saved",
       "The company-specific organization record was saved successfully.",
     );
   } catch (error) {
-    console.error("Error saving organization settings:", error);
-
-    if (
-      String(error.message || "").toLowerCase().includes("duplicate key value")
-    ) {
-      showPageAlert(
-        "warning",
-        "Organization details already exist. Refresh the page and update the existing record instead.",
-      );
-      showDashboardToast(
-        "warning",
-        "Organization record already exists",
-        "Refresh Setup and update the existing company record instead of creating another one.",
-      );
-      return;
-    }
+    console.error(
+      "Error saving organization settings:",
+      error,
+    );
 
     showPageAlert(
       "danger",
-      error.message || "Organization details could not be saved.",
+      error.message ||
+        "Organization details could not be saved.",
     );
+
     showDashboardToast(
       "danger",
       "Organization save failed",
-      escapeHtml(error.message || "Organization details could not be saved."),
+      escapeHtml(
+        error.message ||
+          "Organization details could not be saved.",
+      ),
     );
   } finally {
     setOrganizationSettingsSaveLoading(false, isEditMode);
+    applyHrOrganizationSetupAccessControls();
   }
 }
 
