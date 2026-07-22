@@ -2288,7 +2288,7 @@
                     <option value="">Select role (optional)</option>
                     <option value="employee">Employee</option>
                     <option value="manager">Manager</option>
-                    <option value="hr">HR</option>
+                    <!-- HR Officer is injected by JavaScript only for Company Admins. -->
                     <!-- <option value="custom">Other / Add new role</option> -->
                   </select>
 
@@ -2296,8 +2296,20 @@
                     placeholder="Enter new system role" autocomplete="off" />
 
                   <div class="form-text">
-                    Use Employee, Manager, or HR for standard dashboard access. Use Other only for a controlled custom
-                    business role.
+                    Employee and Manager are standard dashboard roles. Company Admins can also assign HR Officer access.
+                  </div>
+
+                  <div id="employeeCompanyAdminAccess" class="d-none mt-3" aria-live="polite">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                      <span class="small text-secondary fw-semibold">Access Level</span>
+                      <span class="badge rounded-pill text-bg-success">
+                        <i class="bi bi-shield-check me-1" aria-hidden="true"></i>
+                        Company Admin
+                      </span>
+                    </div>
+                    <div class="form-text mt-1">
+                      Managed by Platform Admin.
+                    </div>
                   </div>
 
                   <div id="hrSelfRoleProtectionNotice" class="alert alert-warning border d-none mt-3 mb-0" role="alert"
@@ -2307,8 +2319,8 @@
                       <div>
                         <div class="fw-bold mb-1">HR access protected</div>
                         <div class="small">
-                          HR dashboard access cannot be changed from the employee list.
-                          Ask Admin to update this employee's dashboard access.
+                          You cannot change your own dashboard access.
+                          HR Officer access can only be changed by a Company Admin.
                         </div>
                       </div>
                     </div>

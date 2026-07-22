@@ -14593,16 +14593,183 @@ function isEditingCurrentSignedInEmployeeRecord() {
 //
 // This keeps normal biodata maintenance available, but prevents HR-to-HR
 // access changes from the employee list. HR access must be managed by Admin.
+function canCurrentUserAssignHrOfficerAccess() {
+  const profileRole = normaliseHrBusinessRole(
+    state.currentProfile?.role || "",
+  );
+
+  const accessLevel = normaliseHrBusinessRole(
+    state.currentProfile?.hr_access_level || "standard",
+  );
+
+  return Boolean(
+    state.currentUser?.id &&
+    state.currentProfile?.is_active === true &&
+    profileRole === "hr" &&
+    accessLevel === "tenant_admin" &&
+    String(state.currentProfile?.tenant_id || "").trim(),
+  );
+}
+
+function isHrAccessBusinessRole(roleValue = "") {
+  const role = normaliseHrBusinessRole(roleValue);
+  return role === "hr" || role === "hr_manager";
+}
+
+function getEmployeeLinkedAuthProfile(employee = {}) {
+  const employeeUserId = String(
+    employee?.auth_user_id ||
+    employee?.user_id ||
+    "",
+  ).trim();
+
+  const workEmail = normalizeText(
+    employee?.work_email ||
+    "",
+  );
+
+  if (employeeUserId) {
+    return (
+      (state.authProfiles || []).find(
+        (profile) =>
+          String(profile?.id || "").trim() === employeeUserId,
+      ) ||
+      null
+    );
+  }
+
+  if (!workEmail) {
+    return null;
+  }
+
+  return (
+    (state.authProfiles || []).find(
+      (profile) =>
+        normalizeText(profile?.email || "") === workEmail,
+    ) ||
+    null
+  );
+}
+
+function syncEmployeeCompanyAdminAccessBadge(
+  employee = state.currentEditingEmployee,
+) {
+  const accessIndicator = document.getElementById(
+    "employeeCompanyAdminAccess",
+  );
+
+  if (!accessIndicator) return;
+
+  const linkedProfile = employee
+    ? getEmployeeLinkedAuthProfile(employee)
+    : null;
+
+  const employeeTenantId = String(
+    employee?.tenant_id || "",
+  ).trim();
+
+  const profileTenantId = String(
+    linkedProfile?.tenant_id || "",
+  ).trim();
+
+  const isSameTenant =
+    !employeeTenantId ||
+    !profileTenantId ||
+    employeeTenantId === profileTenantId;
+
+  const isCompanyAdmin = Boolean(
+    linkedProfile &&
+    linkedProfile.is_active === true &&
+    normaliseHrBusinessRole(linkedProfile.role) === "hr" &&
+    normaliseHrBusinessRole(linkedProfile.hr_access_level) ===
+      "tenant_admin" &&
+    isSameTenant,
+  );
+
+  accessIndicator.classList.toggle(
+    "d-none",
+    !isCompanyAdmin,
+  );
+}
+
+function syncEmployeeSystemRoleOptions(roleValue = "") {
+  const select = state.dom.systemRole;
+  if (!select) return;
+
+  const normalizedRole = normaliseHrBusinessRole(
+    roleValue ||
+    select.value ||
+    state.currentEditingEmployee?.system_role ||
+    "",
+  );
+
+  const shouldIncludeHrOfficer =
+    canCurrentUserAssignHrOfficerAccess() ||
+    isHrAccessBusinessRole(normalizedRole);
+
+  let hrOfficerOption = Array.from(select.options).find(
+    (option) => option.value === "hr",
+  );
+
+  if (shouldIncludeHrOfficer) {
+    if (!hrOfficerOption) {
+      hrOfficerOption = document.createElement("option");
+      hrOfficerOption.value = "hr";
+
+      const managerOption = Array.from(select.options).find(
+        (option) => option.value === "manager",
+      );
+
+      if (managerOption) {
+        managerOption.insertAdjacentElement(
+          "afterend",
+          hrOfficerOption,
+        );
+      } else {
+        select.appendChild(hrOfficerOption);
+      }
+    }
+
+    hrOfficerOption.textContent = "HR Officer";
+    hrOfficerOption.hidden = false;
+    hrOfficerOption.disabled = false;
+    hrOfficerOption.dataset.companyAdminOnly = "true";
+    return;
+  }
+
+  hrOfficerOption?.remove();
+}
+
+// HR SELF-ROLE / PEER HR PROTECTION
+// - Everyone is blocked from changing their own dashboard role.
+// - HR Officers cannot grant or remove HR access.
+// - Company Admins may grant or remove standard HR Officer access.
+// - Company Admin tier remains controlled only from Platform Admin.
 function syncHrSelfRoleProtectionState() {
   const savedRole = normaliseHrBusinessRole(
     state.currentEditingEmployee?.system_role || "",
   );
 
-  const isOwnEmployeeRecord = isEditingCurrentSignedInEmployeeRecord();
-  const isSavedHrEmployeeRecord = savedRole === "hr";
+  syncEmployeeSystemRoleOptions(savedRole);
+  syncEmployeeCompanyAdminAccessBadge(
+    state.currentEditingEmployee,
+  );
+
+  const isOwnEmployeeRecord =
+    isEditingCurrentSignedInEmployeeRecord();
+
+  const isSavedHrEmployeeRecord =
+    isHrAccessBusinessRole(savedRole);
+
   const shouldProtectSystemRole =
     Boolean(state.currentEditingEmployee) &&
-    (isOwnEmployeeRecord || isSavedHrEmployeeRecord);
+    (
+      isOwnEmployeeRecord ||
+      (
+        isSavedHrEmployeeRecord &&
+        !canCurrentUserAssignHrOfficerAccess()
+      )
+    );
 
   state.dom.hrSelfRoleProtectionNotice?.classList.toggle(
     "d-none",
@@ -14610,27 +14777,40 @@ function syncHrSelfRoleProtectionState() {
   );
 
   if (shouldProtectSystemRole) {
-    setEmployeeSystemRoleFieldValue(state.currentEditingEmployee?.system_role || "");
+    setEmployeeSystemRoleFieldValue(
+      state.currentEditingEmployee?.system_role || "",
+    );
   }
 
   if (state.dom.systemRole) {
     state.dom.systemRole.disabled = shouldProtectSystemRole;
-    state.dom.systemRole.setAttribute("aria-disabled", String(shouldProtectSystemRole));
-    state.dom.systemRole.classList.toggle("bg-light", shouldProtectSystemRole);
+    state.dom.systemRole.setAttribute(
+      "aria-disabled",
+      String(shouldProtectSystemRole),
+    );
+    state.dom.systemRole.classList.toggle(
+      "bg-light",
+      shouldProtectSystemRole,
+    );
   }
 
   if (state.dom.customSystemRole) {
     state.dom.customSystemRole.disabled = shouldProtectSystemRole;
-    state.dom.customSystemRole.setAttribute("aria-disabled", String(shouldProtectSystemRole));
-    state.dom.customSystemRole.classList.toggle("bg-light", shouldProtectSystemRole);
+    state.dom.customSystemRole.setAttribute(
+      "aria-disabled",
+      String(shouldProtectSystemRole),
+    );
+    state.dom.customSystemRole.classList.toggle(
+      "bg-light",
+      shouldProtectSystemRole,
+    );
   }
 }
 
-// HR SELF-ROLE / PEER HR PROTECTION - STEP 2
 // Defensive save guard:
-// - HR cannot change their own System Role.
-// - HR cannot change another saved HR employee's System Role.
-// This catches browser-tool manipulation even when the dropdown is disabled.
+// - no HR user may change their own dashboard role;
+// - HR Officers cannot grant, remove, or alter HR access;
+// - Company Admins may perform those same-tenant HR Officer changes.
 function isOwnSystemRoleChangeBlockedForSubmit() {
   const savedRole = normaliseHrBusinessRole(
     state.currentEditingEmployee?.system_role || "",
@@ -14640,48 +14820,70 @@ function isOwnSystemRoleChangeBlockedForSubmit() {
     getSelectedEmployeeSystemRoleValue(),
   );
 
-  const isOwnEmployeeRecord = isEditingCurrentSignedInEmployeeRecord();
-  const isSavedHrEmployeeRecord = savedRole === "hr";
+  const roleChanged = selectedRole !== savedRole;
 
-  return (
-    Boolean(state.currentEditingEmployee) &&
-    (isOwnEmployeeRecord || isSavedHrEmployeeRecord) &&
-    selectedRole !== savedRole
+  if (!roleChanged) {
+    return false;
+  }
+
+  const isOwnEmployeeRecord =
+    isEditingCurrentSignedInEmployeeRecord();
+
+  const involvesHrAccess =
+    isHrAccessBusinessRole(savedRole) ||
+    isHrAccessBusinessRole(selectedRole);
+
+  return Boolean(
+    (
+      state.currentEditingEmployee &&
+      isOwnEmployeeRecord
+    ) ||
+    (
+      involvesHrAccess &&
+      !canCurrentUserAssignHrOfficerAccess()
+    ),
   );
 }
 
-// HR SELF-ROLE / PEER HR PROTECTION - STEP 2
-// Show one clear message for protected HR access, whether HR is editing
-// their own row or another employee row already saved as HR.
 function showOwnSystemRoleChangeBlockedMessage() {
-  setEmployeeSystemRoleFieldValue(state.currentEditingEmployee?.system_role || "");
+  const isOwnEmployeeRecord =
+    isEditingCurrentSignedInEmployeeRecord();
+
+  setEmployeeSystemRoleFieldValue(
+    state.currentEditingEmployee?.system_role || "",
+  );
+
   syncHrSelfRoleProtectionState();
 
-  showPageAlert(
-    "warning",
-    "HR dashboard access is protected. Ask Admin to update HR access for this employee.",
-  );
+  const message = isOwnEmployeeRecord
+    ? "You cannot change your own dashboard access."
+    : "Only a Company Admin can grant or remove HR Officer access.";
+
+  showPageAlert("warning", message);
 
   showDashboardToast(
     "warning",
     "HR access protected",
-    "System Role cannot be changed for an HR employee from the employee list.",
+    message,
   );
 }
-// HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
-// Require confirmation only when HR access is newly being assigned.
-// Existing HR employees can still be edited without repeatedly confirming
-// the same already-saved HR role.
-function isHrRoleAssignmentConfirmationRequired() {
-  const selectedRole = normaliseHrBusinessRole(state.dom.systemRole?.value || "");
-  const savedRole = normaliseHrBusinessRole(state.currentEditingEmployee?.system_role || "");
 
-  return selectedRole === "hr" && savedRole !== "hr";
+function isHrRoleAssignmentConfirmationRequired() {
+  const selectedRole = normaliseHrBusinessRole(
+    state.dom.systemRole?.value || "",
+  );
+
+  const savedRole = normaliseHrBusinessRole(
+    state.currentEditingEmployee?.system_role || "",
+  );
+
+  return Boolean(
+    canCurrentUserAssignHrOfficerAccess() &&
+    isHrAccessBusinessRole(selectedRole) &&
+    !isHrAccessBusinessRole(savedRole),
+  );
 }
 
-// HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
-// Show the amber warning only when HR is being newly assigned.
-// Hide and clear it when HR changes back to Employee, Manager, blank, or custom.
 function syncHrRoleAssignmentWarning() {
   const isRequired = isHrRoleAssignmentConfirmationRequired();
 
@@ -14713,13 +14915,13 @@ function showHrRoleAssignmentConfirmationWarning() {
 
   showPageAlert(
     "warning",
-    "Please confirm that this employee is authorised to perform HR administration before saving the HR role.",
+    "Please confirm that this employee is authorised to work as an HR Officer before saving.",
   );
 
   showDashboardToast(
     "warning",
     "HR access confirmation required",
-    "Tick the HR authorisation confirmation box before saving this employee as HR.",
+    "Tick the HR authorisation confirmation box before saving this employee as an HR Officer.",
   );
 }
 
@@ -14728,31 +14930,41 @@ function showHrRoleAssignmentConfirmationWarning() {
 // Standard roles select the dropdown option.
 // Unknown/custom saved roles show in the custom role input.
 function setEmployeeSystemRoleFieldValue(roleValue = "") {
-  // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1A-FIX 1
-  // System Role is stored as a dashboard-access value. Batch imports may
-  // provide "Employee", "Manager", or "HR", while the form option values are
-  // lowercase. Normalise before matching so edit mode reflects saved data.
   const rawRole = String(roleValue || "").trim();
   const role = normaliseEmployeeSystemRoleForForm(rawRole);
 
   if (!state.dom.systemRole) return;
 
+  syncEmployeeSystemRoleOptions(role);
+
   if (!role) {
     state.dom.systemRole.value = "";
-    if (state.dom.customSystemRole) state.dom.customSystemRole.value = "";
+
+    if (state.dom.customSystemRole) {
+      state.dom.customSystemRole.value = "";
+    }
+
     syncCustomSystemRoleVisibility();
     syncHrRoleAssignmentWarning();
     return;
   }
 
-  const standardRoles = getStandardEmployeeSystemRoleValues();
+  const standardRoles =
+    getStandardEmployeeSystemRoleValues();
 
   if (standardRoles.has(role)) {
     state.dom.systemRole.value = role;
-    if (state.dom.customSystemRole) state.dom.customSystemRole.value = "";
+
+    if (state.dom.customSystemRole) {
+      state.dom.customSystemRole.value = "";
+    }
   } else {
     state.dom.systemRole.value = "custom";
-    if (state.dom.customSystemRole) state.dom.customSystemRole.value = rawRole || role;
+
+    if (state.dom.customSystemRole) {
+      state.dom.customSystemRole.value =
+        rawRole || role;
+    }
   }
 
   syncCustomSystemRoleVisibility();
@@ -25382,13 +25594,21 @@ async function loadAuthProfilesForLinkage() {
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, full_name, role");
+      .select(
+        "id, email, full_name, role, hr_access_level, tenant_id, is_active",
+      );
 
     if (error) throw error;
     state.authProfiles = Array.isArray(data) ? data : [];
+    syncEmployeeCompanyAdminAccessBadge(
+      state.currentEditingEmployee,
+    );
   } catch (error) {
     console.error("Error loading auth profiles for linkage:", error);
     state.authProfiles = [];
+    syncEmployeeCompanyAdminAccessBadge(
+      state.currentEditingEmployee,
+    );
   }
 }
 
@@ -28291,6 +28511,7 @@ function resetEmployeeForm() {
 
   state.dom.employeeCreateForm.reset();
   state.currentEditingEmployee = null;
+  syncEmployeeCompanyAdminAccessBadge(null);
 
   const fieldsToReset = [
     state.dom.firstName,
