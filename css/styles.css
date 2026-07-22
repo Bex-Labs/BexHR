@@ -11979,3 +11979,199 @@ body.bexhr-reset-password-page a:focus {
 body.bexhr-reset-password-page .alert {
   border-color: rgba(11, 31, 56, 0.1);
 }
+/* =========================================================
+   EMPLOYEE DIRECTORY COMPACT STATUS AND WIDTH - STEP 1
+   ========================================================= */
+
+.hr-employee-status-cell {
+  vertical-align: middle !important;
+  text-align: center !important;
+}
+
+.hr-employee-status-stack {
+  width: 100%;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.38rem;
+}
+
+.hr-employee-status-pill {
+  min-width: 78px;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.38rem;
+  padding: 0.28rem 0.58rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.69rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.hr-employee-status-pill > i {
+  width: 0.78rem;
+  height: 0.78rem;
+  flex: 0 0 0.78rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.hr-employee-status-pill > span {
+  line-height: 1;
+}
+
+.hr-employee-status-pill--success {
+  border-color: #cceedd;
+  background: #edf9f3;
+  color: #087443;
+}
+
+.hr-employee-status-pill--warning {
+  border-color: #f4df9d;
+  background: #fff9e8;
+  color: #8a6100;
+}
+
+.hr-employee-status-pill--neutral {
+  border-color: #dbe4ed;
+  background: #f5f8fb;
+  color: #526579;
+}
+
+@media (min-width: 992px) {
+  body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-table {
+    width: 100%;
+    min-width: 0 !important;
+    table-layout: fixed;
+  }
+
+  .hr-employee-directory-table th:nth-child(1),
+  .hr-employee-directory-table td:nth-child(1) {
+    width: 5%;
+  }
+
+  .hr-employee-directory-table th:nth-child(2),
+  .hr-employee-directory-table td:nth-child(2) {
+    width: 18%;
+  }
+
+  .hr-employee-directory-table th:nth-child(3),
+  .hr-employee-directory-table td:nth-child(3) {
+    width: 20%;
+  }
+
+  .hr-employee-directory-table th:nth-child(4),
+  .hr-employee-directory-table td:nth-child(4) {
+    width: 18%;
+  }
+
+  .hr-employee-directory-table th:nth-child(5),
+  .hr-employee-directory-table td:nth-child(5) {
+    width: 14%;
+  }
+
+  .hr-employee-directory-table th:nth-child(6),
+  .hr-employee-directory-table td:nth-child(6) {
+    width: 9%;
+  }
+
+  .hr-employee-directory-table th:nth-child(7),
+  .hr-employee-directory-table td:nth-child(7) {
+    width: 16%;
+  }
+
+  .hr-employee-directory-table .hr-employee-actions-cell {
+    white-space: nowrap;
+  }
+
+  .hr-employee-directory-table .hr-employee-row-actions {
+    width: auto;
+    flex-wrap: nowrap;
+  }
+}
+/* =========================================================
+   BEXHR SHARED STATUS PILLS - PHASE 1
+
+   Presentation only:
+   - Reuses the Employee List visual model.
+   - Stacks only where one Status cell has two status dimensions.
+   - Does not modify generic Bootstrap badges, role chips, counts,
+     access labels, form-mode labels, or business state.
+   ========================================================= */
+
+.bexhr-status-cell {
+  vertical-align: middle !important;
+  text-align: center !important;
+}
+
+.bexhr-status-stack {
+  width: 100%;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.38rem;
+}
+
+.bexhr-status-pill {
+  min-width: 78px;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.38rem;
+  padding: 0.28rem 0.58rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.69rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.bexhr-status-pill > i {
+  width: 0.78rem;
+  height: 0.78rem;
+  flex: 0 0 0.78rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.bexhr-status-pill > span {
+  line-height: 1;
+}
+
+.bexhr-status-pill--success {
+  border-color: #cceedd;
+  background: #edf9f3;
+  color: #087443;
+}
+
+.bexhr-status-pill--warning {
+  border-color: #f4df9d;
+  background: #fff9e8;
+  color: #8a6100;
+}
+
+.bexhr-status-pill--danger {
+  border-color: #f4c7c3;
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.bexhr-status-pill--neutral {
+  border-color: #dbe4ed;
+  background: #f5f8fb;
+  color: #526579;
+}

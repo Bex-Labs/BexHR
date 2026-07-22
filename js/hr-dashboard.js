@@ -5095,9 +5095,7 @@ function renderHrp85TestRecipients() {
                   </div>
                 </div>
 
-                <span class="badge rounded-pill text-bg-success align-self-start">
-                  Approved
-                </span>
+                ${renderBexhrStatusPill("Approved")}
               </div>
             </div>
           </td>
@@ -6797,10 +6795,8 @@ function renderPayrollOtherDeductionRecords(records = []) {
 
       <td class="text-nowrap">${formatDate(record.start_date)}</td>
 
-      <td>
-        <span class="badge ${getStatusBadgeClass(record.status)}">
-          ${escapeHtml(formatStatusLabel(record.status))}
-        </span>
+      <td class="bexhr-status-cell">
+        ${renderBexhrStatusPill(formatStatusLabel(record.status))}
       </td>
 
       <td class="text-nowrap">${formatDate(record.updated_at || record.created_at)}</td>
@@ -8122,10 +8118,8 @@ function renderPayrollEmployeeOverrideRecords(records = []) {
         </div>
       </td>
 
-      <td>
-        <span class="badge ${getStatusBadgeClass(record.status)}">
-          ${escapeHtml(formatStatusLabel(record.status))}
-        </span>
+      <td class="bexhr-status-cell">
+        ${renderBexhrStatusPill(formatStatusLabel(record.status))}
       </td>
 
       <td class="text-nowrap">${formatDate(record.updated_at || record.created_at)}</td>
@@ -17446,17 +17440,12 @@ ${escapeHtml(getPayrollMasterGradeDisplay(record))}
 
   <td data-label="Cycle">${escapeHtml(record.pay_cycle || "--")}</td>
 
-<td data-label="Status">
-  <div class="d-flex flex-wrap gap-1">
-    <span class="badge ${getStatusBadgeClass(record.payroll_status)}">
-      ${escapeHtml(formatStatusLabel(record.payroll_status))}
-    </span>
-
-    <span class="badge bg-light text-dark border">
-      ${escapeHtml(getPayrollMasterVersionLabel(record))}
-    </span>
-  </div>
-</td>
+<td class="bexhr-status-cell" data-label="Status">
+        <div class="bexhr-status-stack">
+          ${renderBexhrStatusPill(formatStatusLabel(record.payroll_status))}
+          ${renderBexhrStatusPill(getPayrollMasterVersionLabel(record))}
+        </div>
+      </td>
 
   <td class="text-nowrap" data-label="Updated">
   <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 6A
@@ -17592,6 +17581,102 @@ function startPayrollMasterEdit(payrollMasterId) {
 // - Scheduled: active version with a future effective date.
 // - Historical: older active version.
 // - Inactive: record is not active.
+// BEXHR SHARED STATUS PRESENTATION - PHASE 1
+// Presentation only. Stored values and payroll business rules remain unchanged.
+function getBexhrStatusPresentation(status = "") {
+  const normalizedStatus = normalizeText(status);
+
+  const successStates = new Set([
+    "active",
+    "approved",
+    "authorised",
+    "authorized",
+    "completed",
+    "current",
+    "delivered",
+    "finalised",
+    "finalized",
+    "linked",
+    "paid",
+    "ready",
+    "sent",
+  ]);
+
+  const warningStates = new Set([
+    "draft",
+    "in review",
+    "not finalised",
+    "not finalized",
+    "pending",
+    "pending approval",
+    "profile found",
+    "returned",
+    "scheduled",
+  ]);
+
+  const dangerStates = new Set([
+    "blocked",
+    "failed",
+    "rejected",
+  ]);
+
+  const iconByStatus = {
+    active: "bi-circle-fill",
+    approved: "bi-check-circle-fill",
+    authorised: "bi-shield-check",
+    authorized: "bi-shield-check",
+    blocked: "bi-slash-circle-fill",
+    completed: "bi-check-circle-fill",
+    current: "bi-check-circle-fill",
+    delivered: "bi-envelope-check-fill",
+    draft: "bi-pencil-fill",
+    failed: "bi-exclamation-circle-fill",
+    finalised: "bi-check-circle-fill",
+    finalized: "bi-check-circle-fill",
+    historical: "bi-clock-history",
+    inactive: "bi-pause-circle-fill",
+    linked: "bi-link-45deg",
+    "not finalised": "bi-hourglass-split",
+    "not finalized": "bi-hourglass-split",
+    paid: "bi-cash-coin",
+    pending: "bi-clock-fill",
+    "pending approval": "bi-clock-fill",
+    "profile found": "bi-person-check-fill",
+    ready: "bi-check-circle-fill",
+    rejected: "bi-x-circle-fill",
+    returned: "bi-arrow-return-left",
+    scheduled: "bi-calendar-event-fill",
+    sent: "bi-envelope-check-fill",
+  };
+
+  let toneClass = "bexhr-status-pill--neutral";
+
+  if (successStates.has(normalizedStatus)) {
+    toneClass = "bexhr-status-pill--success";
+  } else if (warningStates.has(normalizedStatus)) {
+    toneClass = "bexhr-status-pill--warning";
+  } else if (dangerStates.has(normalizedStatus)) {
+    toneClass = "bexhr-status-pill--danger";
+  }
+
+  return {
+    iconClass: iconByStatus[normalizedStatus] || "bi-circle-fill",
+    toneClass,
+  };
+}
+
+function renderBexhrStatusPill(status = "") {
+  const label = String(status || "--").trim() || "--";
+  const presentation = getBexhrStatusPresentation(label);
+
+  return `
+    <span class="bexhr-status-pill ${presentation.toneClass}">
+      <i class="bi ${presentation.iconClass}" aria-hidden="true"></i>
+      <span>${escapeHtml(label)}</span>
+    </span>
+  `;
+}
+
 function getPayrollMasterVersionLabel(record = {}) {
   const employeeId = String(record.employee_id || "").trim();
   const effectiveDate = String(
@@ -18768,10 +18853,8 @@ function renderPayrollStatutoryRecords(records = []) {
 
       <td class="text-nowrap">${formatDate(record.effective_date)}</td>
 
-      <td>
-        <span class="badge ${getStatusBadgeClass(record.status)}">
-          ${escapeHtml(formatStatusLabel(record.status))}
-        </span>
+      <td class="bexhr-status-cell">
+        ${renderBexhrStatusPill(formatStatusLabel(record.status))}
       </td>
 
 <td class="text-nowrap">
@@ -19712,11 +19795,11 @@ function renderPayrollAllowanceRecords(records) {
 
   <td class="text-nowrap">${formatDate(record.effective_date)}</td>
 
-  <td>
-    <span class="badge ${getStatusBadgeClass(record.allowance_status)}">
-      ${escapeHtml(formatStatusLabel(record.allowance_status))}
-    </span>
-  </td>
+  <td class="bexhr-status-cell" data-label="Status">
+        ${renderBexhrStatusPill(
+          formatStatusLabel(record.allowance_status)
+        )}
+      </td>
 
   <td class="text-nowrap">
     <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 7
@@ -20398,11 +20481,10 @@ function renderBankDirectoryTable() {
     row.innerHTML = `
       <td>${escapeHtml(bank.bank_name)}</td>
       <td>${escapeHtml(bank.bank_code)}</td>
-      <td>
-        <span class="badge ${bank.status === "Active" ? "bg-success" : "bg-secondary"
-      }">
-          ${bank.status}
-        </span>
+      <td class="bexhr-status-cell" data-label="Status">
+        ${renderBexhrStatusPill(
+          formatStatusLabel(bank.status || "Inactive")
+        )}
       </td>
 <td class="text-center">
   <!-- BANK DIRECTORY - STEP 8A
@@ -27712,7 +27794,7 @@ function renderEmployeeRecordsLoadingState() {
 
   state.dom.employeeRecordsTableBody.innerHTML = `
     <tr class="hr-employee-directory-loading-row">
-      <td colspan="9">
+      <td colspan="7">
         <div class="hr-employee-directory-loading" role="status" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
           <span>Loading employee directory...</span>
@@ -27776,7 +27858,7 @@ function renderEmployeeFilledFormField(label, value, options = {}) {
 // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
 // Section wrapper for the read-only filled form.
 // EMPLOYEE DETAILS MODAL MODERNISATION - STEP 2
-// Shared section styling for the employee-name link and View action.
+// Shared section styling for the employee-name profile link.
 function renderEmployeeFilledFormSection(title, fieldsHtml, helperText = "") {
   const sectionIconByTitle = {
     "Core Details": "bi-person-vcard",
@@ -28268,6 +28350,65 @@ function closeEmployeeFilledFormModal() {
   document.body?.classList.remove("hr-employee-details-modal-open");
 }
 
+// EMPLOYEE DIRECTORY COMPACT STATUS - STEP 1
+function getEmployeeDirectoryEmploymentStatusPresentation(status = "") {
+  const normalizedStatus = normalizeText(status);
+
+  if (normalizedStatus === "active") {
+    return {
+      iconClass: "bi-circle-fill",
+      toneClass: "hr-employee-status-pill--success",
+    };
+  }
+
+  if (normalizedStatus === "pending") {
+    return {
+      iconClass: "bi-clock-fill",
+      toneClass: "hr-employee-status-pill--warning",
+    };
+  }
+
+  if (normalizedStatus === "inactive") {
+    return {
+      iconClass: "bi-pause-circle-fill",
+      toneClass: "hr-employee-status-pill--neutral",
+    };
+  }
+
+  if (normalizedStatus === "exited") {
+    return {
+      iconClass: "bi-box-arrow-right",
+      toneClass: "hr-employee-status-pill--neutral",
+    };
+  }
+
+  return {
+    iconClass: "bi-circle-fill",
+    toneClass: "hr-employee-status-pill--neutral",
+  };
+}
+
+function getEmployeeDirectoryAccountStatusPresentation(accountLinkage = {}) {
+  if (accountLinkage.code === "linked") {
+    return {
+      iconClass: "bi-link-45deg",
+      toneClass: "hr-employee-status-pill--success",
+    };
+  }
+
+  if (accountLinkage.code === "matched") {
+    return {
+      iconClass: "bi-person-check-fill",
+      toneClass: "hr-employee-status-pill--warning",
+    };
+  }
+
+  return {
+    iconClass: "bi-person-x-fill",
+    toneClass: "hr-employee-status-pill--neutral",
+  };
+}
+
 function renderEmployeeRecords(employees) {
   const tbody = state.dom.employeeRecordsTableBody;
   if (!tbody) return;
@@ -28295,7 +28436,6 @@ function renderEmployeeRecords(employees) {
     state.dom.employeeRecordsTableWrapper.classList.remove("d-none");
   }
 
-  const documentCountMap = buildEmployeeDocumentCountMap();
   const employeesToRender = sortEmployeeRecordsByEmployeeNumber(employees);
   const isPayrollSelectionMode = Boolean(state.isRunPayrollSelectionMode);
 
@@ -28311,8 +28451,11 @@ function renderEmployeeRecords(employees) {
 
     const employeeDisplayName = fullName || "Unnamed Employee";
     const employeeInitials = getInitials(employeeDisplayName, "E");
-    const documentCount = documentCountMap.get(String(employee.id)) || 0;
     const accountLinkage = getEmployeeAccountLinkage(employee);
+    const employmentStatusPresentation =
+      getEmployeeDirectoryEmploymentStatusPresentation(employee.status);
+    const accountStatusPresentation =
+      getEmployeeDirectoryAccountStatusPresentation(accountLinkage);
     const rawEmployeeId = String(employee.id || "").trim();
     const safeEmployeeId = rawEmployeeId.replaceAll("'", "\\'");
     const isRecentlySavedEmployee =
@@ -28414,23 +28557,18 @@ function renderEmployeeRecords(employees) {
         </span>
       </td>
 
-      <td class="text-center" data-label="Status">
-        <span class="badge rounded-pill ${getStatusBadgeClass(employee.status)}">
-          ${escapeHtml(formatStatusLabel(employee.status))}
-        </span>
-      </td>
+      <td class="hr-employee-status-cell" data-label="Status">
+        <div class="hr-employee-status-stack">
+          <span class="hr-employee-status-pill ${employmentStatusPresentation.toneClass}">
+            <i class="bi ${employmentStatusPresentation.iconClass}" aria-hidden="true"></i>
+            <span>${escapeHtml(formatStatusLabel(employee.status))}</span>
+          </span>
 
-      <td class="text-center" data-label="Account">
-        <span class="badge rounded-pill ${accountLinkage.badgeClass}">
-          ${escapeHtml(accountLinkage.label)}
-        </span>
-      </td>
-
-      <td class="text-center" data-label="Documents">
-        <span class="hr-employee-documents-badge ${documentCount > 0 ? "has-documents" : ""}">
-          <i class="bi bi-paperclip" aria-hidden="true"></i>
-          <span>${documentCount}</span>
-        </span>
+          <span class="hr-employee-status-pill ${accountStatusPresentation.toneClass}">
+            <i class="bi ${accountStatusPresentation.iconClass}" aria-hidden="true"></i>
+            <span>${escapeHtml(accountLinkage.label)}</span>
+          </span>
+        </div>
       </td>
 
       <td class="text-nowrap" data-label="Start Date">
@@ -28441,16 +28579,6 @@ function renderEmployeeRecords(employees) {
 
       <td class="hr-employee-actions-cell" data-label="Actions">
         <div class="hr-employee-row-actions">
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-secondary hr-employee-action-btn"
-            title="View employee filled form"
-            aria-label="View employee filled form"
-            onclick="window.hrViewEmployeeFilledForm('${safeEmployeeId}')"
-          >
-            <i class="bi bi-eye" aria-hidden="true"></i>
-            <span>View</span>
-          </button>
 
           <button
             type="button"
@@ -32038,10 +32166,8 @@ function renderEmployeeBankDetailsTable(records) {
 
       <td>${escapeHtml(record.account_name || "--")}</td>
 
-      <td>
-        <span class="badge ${getStatusBadgeClass(record.status)}">
-          ${escapeHtml(formatStatusLabel(record.status))}
-        </span>
+      <td class="bexhr-status-cell">
+        ${renderBexhrStatusPill(formatStatusLabel(record.status))}
       </td>
 
       <td class="text-center">
@@ -33895,21 +34021,12 @@ ${recentlyEditedPayrollBadgeHtml}
 
       </td>
 
-      <td data-label="Status">
-        <!-- MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A RECOVERY
-             Status and finalisation remain compact in one Payroll Records cell. -->
-        <div class="mb-1">
-          <span class="badge ${getPayrollStatusBadgeClass(record.status)}">
-            ${escapeHtml(formatStatusLabel(record.status))}
-          </span>
-        </div>
-        <div>
-          <span class="badge ${record.is_finalised
-        ? "text-bg-success"
-        : "text-bg-light border text-dark"
-      }">
-            ${record.is_finalised ? "Finalised" : "Not Finalised"}
-          </span>
+      <td class="bexhr-status-cell" data-label="Status">
+        <div class="bexhr-status-stack">
+          ${renderBexhrStatusPill(formatStatusLabel(record.status))}
+          ${renderBexhrStatusPill(
+            record.is_finalised ? "Finalised" : "Not Finalised"
+          )}
         </div>
       </td>
 
