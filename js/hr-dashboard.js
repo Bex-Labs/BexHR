@@ -2335,13 +2335,13 @@ function canCurrentUserMaintainCommunicationSetupData() {
 function showHrSetupAccessDeniedMessage(areaLabel = "this setup area") {
   showPageAlert(
     "warning",
-    `${areaLabel} is read-only. A Tenant Administrator account is required to maintain Company Administration records.`,
+    `${areaLabel} is read-only. A Company Admin account is required to maintain Company Administration records.`,
   );
 
   showDashboardToast(
     "warning",
-    "Tenant Administrator required",
-    `${areaLabel} can be reviewed, but only a Tenant Administrator can change it.`,
+    "Company Admin required",
+    `${areaLabel} can be reviewed, but only a Company Admin can change it.`,
   );
 }
 
@@ -2458,7 +2458,7 @@ function applyHrOrganizationSetupAccessControls() {
       button.setAttribute("aria-disabled", String(!canMaintain));
 
       if (!canMaintain) {
-        button.title = "Tenant Administrator required";
+        button.title = "Company Admin required";
       }
     });
 
@@ -2495,7 +2495,7 @@ function applyHrOrganizationSetupAccessControls() {
   setHrSetupCardReadOnlyBadge(
     state.dom.organizationSettingsCardCollapse,
     "organizationSetupTenantAdminBadge",
-    "Tenant Administrator Required",
+    "Company Admin Only",
   );
 
   if (state.dom.saveOrganizationSettingsBtn) {
@@ -23442,7 +23442,7 @@ async function ensureHrProfileDepartment(supabase, profileData) {
     // Do not silently create Company Administration records during profile load.
     if (!alreadyExists) {
       console.warn(
-        "Human Resources is missing from this tenant's controlled department catalogue. A Tenant Administrator must create it from Setup.",
+        "Human Resources is missing from this company's controlled department list. A Company Admin must create it from Setup.",
       );
       return profileData;
     }

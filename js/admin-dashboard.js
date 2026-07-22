@@ -3430,7 +3430,7 @@ function renderProfileTenantLinks(records = []) {
         ).trim().toLowerCase();
         const isTenantAdministrator = hrAccessLevel === "tenant_admin";
         const hrAccessLabel = isTenantAdministrator
-          ? "Tenant Administrator"
+          ? "Company Admin"
           : "HR Officer";
         const hrAccessBadgeHtml =
           normalizedRole === "hr"
@@ -3475,7 +3475,7 @@ function renderProfileTenantLinks(records = []) {
                     isTenantAdministrator
                       ? "Return to standard HR Officer access"
                       : canChangeHrAccess
-                        ? "Promote to Tenant Administrator"
+                        ? "Make Company Admin"
                         : "Inactive HR profiles cannot be promoted"
                   }"
                   ${canChangeHrAccess ? "" : "disabled"}
@@ -3723,7 +3723,7 @@ async function setHrAccessLevel(
   ) {
     showPageAlert(
       "warning",
-      "An inactive HR profile cannot be promoted to Tenant Administrator.",
+      "An inactive HR profile cannot be made a Company Admin.",
     );
     return;
   }
@@ -3731,7 +3731,7 @@ async function setHrAccessLevel(
   const displayName = getProfileDisplayName(profile);
   const isPromotion = normalizedTarget === "tenant_admin";
   const confirmationMessage = isPromotion
-    ? `Promote ${displayName} to Tenant Administrator?`
+    ? `Make ${displayName} a Company Admin?`
     : `Return ${displayName} to standard HR Officer access?`;
 
   if (!window.confirm(confirmationMessage)) {
@@ -3770,7 +3770,7 @@ async function setHrAccessLevel(
     await refreshProfileTenantLinkingWorkspace();
 
     const successMessage = isPromotion
-      ? `${displayName} is now a Tenant Administrator.`
+      ? `${displayName} is now a Company Admin.`
       : `${displayName} now has standard HR Officer access.`;
 
     showPageAlert("success", successMessage);
