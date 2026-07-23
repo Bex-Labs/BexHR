@@ -99,6 +99,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.adminResetUserMfa = (profileId) => {
       openResetMfaModal(profileId);
     };
+
+    // HR TENANT ADMIN ACCESS - PHASE 2D
+    // The browser only requests the change. The protected RPC performs the
+    // Platform Admin authorization and writes the access level server-side.
+    window.adminSetHrAccessLevel = async (
+      profileId,
+      targetAccessLevel,
+      actionButton = null,
+    ) => {
+      await setHrAccessLevel(profileId, targetAccessLevel, actionButton);
+    };
   } catch (error) {
     console.error("Error initialising admin dashboard:", error);
     showPageAlert(
@@ -144,6 +155,11 @@ const state = {
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
   // Holds user profiles for Admin access setup.
   profilesForTenantLinking: [],
+
+  // HR TENANT ADMIN ACCESS - PHASE 2D
+  // Dedicated protected-RPC result used only to display and change the
+  // standard / tenant_admin tier for HR Dashboard profiles.
+  hrAccessProfiles: [],
 
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
   // Tracks the profile currently being edited for company access.
@@ -3404,6 +3420,79 @@ function renderProfileTenantLinks(records = []) {
     const companyRowsHtml = companyGroup.profiles
       .map((profile) => {
         const tenant = getTenantByTenantId(profile.tenant_id);
+        const normalizedRole = String(profile.role || "").trim().toLowerCase();
+        const hrAccessRecord =
+          normalizedRole === "hr"
+            ? getHrAccessProfileById(profile.id)
+            : null;
+        const hrAccessLevel = String(
+          hrAccessRecord?.hr_access_level || "",
+        ).trim().toLowerCase();
+        const isTenantAdministrator = hrAccessLevel === "tenant_admin";
+        const hrAccessLabel = isTenantAdministrator
+          ? "Company Admin"
+          : "HR Officer";
+        const hrAccessBadgeHtml =
+          normalizedRole === "hr"
+            ? hrAccessRecord
+              ? `
+                  <div class="mt-1">
+                    <span class="badge rounded-pill ${
+                      isTenantAdministrator
+                        ? "text-bg-success"
+                        : "text-bg-light border text-secondary"
+                    }">
+                      ${escapeHtml(hrAccessLabel)}
+                    </span>
+                  </div>
+                `
+              : `
+                  <div class="small text-danger mt-1">
+                    Access level unavailable
+                  </div>
+                `
+            : "";
+        const targetHrAccessLevel = isTenantAdministrator
+          ? "standard"
+          : "tenant_admin";
+        const canChangeHrAccess =
+          Boolean(hrAccessRecord) &&
+          (
+            isTenantAdministrator ||
+            hrAccessRecord.is_active === true
+          );
+        const hrAccessActionButtonHtml =
+          normalizedRole === "hr" && hrAccessRecord
+            ? `
+                <button
+                  type="button"
+                  class="btn btn-sm ${
+                    isTenantAdministrator
+                      ? "btn-outline-secondary"
+                      : "btn-outline-success"
+                  }"
+                  title="${
+                    isTenantAdministrator
+                      ? "Return to standard HR Officer access"
+                      : canChangeHrAccess
+                        ? "Make Company Admin"
+                        : "Inactive HR profiles cannot be promoted"
+                  }"
+                  ${canChangeHrAccess ? "" : "disabled"}
+                  onclick="window.adminSetHrAccessLevel(
+                    '${escapeHtml(profile.id)}',
+                    '${escapeHtml(targetHrAccessLevel)}',
+                    this
+                  )"
+                >
+                  <i class="bi ${
+                    isTenantAdministrator
+                      ? "bi-person-dash"
+                      : "bi-person-badge"
+                  }"></i>
+                </button>
+              `
+            : "";
 
         return `
           <tr>
@@ -3416,6 +3505,7 @@ function renderProfileTenantLinks(records = []) {
               <span class="admin-access-role-pill">
                 ${escapeHtml(profile.role || "--")}
               </span>
+              ${hrAccessBadgeHtml}
             </td>
 
             <td>
@@ -3491,6 +3581,8 @@ function renderProfileTenantLinks(records = []) {
                   `
             : ""
           }
+
+                ${hrAccessActionButtonHtml}
               </div>
             </td>
           </tr>
@@ -3534,16 +3626,26 @@ async function refreshProfileTenantLinkingWorkspace() {
   try {
     const supabase = getSupabaseClient();
 
-    // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2B
-    // Use the safe Admin RPC instead of selecting directly from profiles.
-    // This avoids adding risky profiles RLS policies that previously broke login.
-    const { data, error } = await supabase.rpc(
-      "admin_list_profiles_for_tenant_linking",
-    );
+    // HR TENANT ADMIN ACCESS - PHASE 2D
+    // Keep existing company-link data and the dedicated HR access list behind
+    // separate protected RPC contracts. The browser does not query profiles directly.
+    const [
+      { data: profileData, error: profileError },
+      { data: hrAccessData, error: hrAccessError },
+    ] = await Promise.all([
+      supabase.rpc("admin_list_profiles_for_tenant_linking"),
+      supabase.rpc("admin_list_hr_access_profiles"),
+    ]);
 
-    if (error) throw error;
+    if (profileError) throw profileError;
+    if (hrAccessError) throw hrAccessError;
 
-    state.profilesForTenantLinking = Array.isArray(data) ? data : [];
+    state.profilesForTenantLinking = Array.isArray(profileData)
+      ? profileData
+      : [];
+    state.hrAccessProfiles = Array.isArray(hrAccessData)
+      ? hrAccessData
+      : [];
 
     populateProfileTenantProfileOptions();
     populateProfileTenantTenantOptions();
@@ -3556,6 +3658,7 @@ async function refreshProfileTenantLinkingWorkspace() {
     console.error("Error loading profiles for tenant linking:", error);
 
     state.profilesForTenantLinking = [];
+    state.hrAccessProfiles = [];
     renderProfileTenantLinks([]);
 
     showPageAlert(
@@ -3573,6 +3676,122 @@ function getProfileForTenantLinkById(profileId = "") {
   return (state.profilesForTenantLinking || []).find(
     (profile) => String(profile.id || "").trim() === id,
   ) || null;
+}
+
+// HR TENANT ADMIN ACCESS - PHASE 2D
+// Match the dedicated access-management record returned by the protected RPC.
+function getHrAccessProfileById(profileId = "") {
+  const id = String(profileId || "").trim();
+
+  if (!id) return null;
+
+  return (state.hrAccessProfiles || []).find(
+    (profile) => String(profile.profile_id || "").trim() === id,
+  ) || null;
+}
+
+// HR TENANT ADMIN ACCESS - PHASE 2D
+// Platform Admin may promote an active HR Officer to Tenant Administrator or
+// return a Tenant Administrator to standard HR access. Authorization and the
+// actual write remain inside admin_set_hr_access_level.
+async function setHrAccessLevel(
+  profileId,
+  targetAccessLevel,
+  actionButton = null,
+) {
+  const profile = getProfileForTenantLinkById(profileId);
+  const accessRecord = getHrAccessProfileById(profileId);
+  const normalizedRole = String(profile?.role || "").trim().toLowerCase();
+  const normalizedTarget = String(targetAccessLevel || "").trim().toLowerCase();
+
+  if (!profile || normalizedRole !== "hr" || !accessRecord) {
+    showPageAlert(
+      "warning",
+      "The selected HR access record could not be found. Refresh the access records and try again.",
+    );
+    return;
+  }
+
+  if (!["standard", "tenant_admin"].includes(normalizedTarget)) {
+    showPageAlert("warning", "The requested HR access level is not valid.");
+    return;
+  }
+
+  if (
+    normalizedTarget === "tenant_admin" &&
+    accessRecord.is_active !== true
+  ) {
+    showPageAlert(
+      "warning",
+      "An inactive HR profile cannot be made a Company Admin.",
+    );
+    return;
+  }
+
+  const displayName = getProfileDisplayName(profile);
+  const isPromotion = normalizedTarget === "tenant_admin";
+  const confirmationMessage = isPromotion
+    ? `Make ${displayName} a Company Admin?`
+    : `Return ${displayName} to standard HR Officer access?`;
+
+  if (!window.confirm(confirmationMessage)) {
+    return;
+  }
+
+  const originalHtml = actionButton?.innerHTML || "";
+  const originalDisabled = actionButton?.disabled === true;
+
+  try {
+    if (actionButton) {
+      actionButton.disabled = true;
+      actionButton.innerHTML = `
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      `;
+    }
+
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "admin_set_hr_access_level",
+      {
+        target_profile_id: profileId,
+        target_hr_access_level: normalizedTarget,
+      },
+    );
+
+    if (error) throw error;
+
+    const result = Array.isArray(data) ? data[0] : data;
+    const expectedAccessLevel = result?.hr_access_level || normalizedTarget;
+
+    if (expectedAccessLevel !== normalizedTarget) {
+      throw new Error("The HR access level response did not match the requested change.");
+    }
+
+    await refreshProfileTenantLinkingWorkspace();
+
+    const successMessage = isPromotion
+      ? `${displayName} is now a Company Admin.`
+      : `${displayName} now has standard HR Officer access.`;
+
+    showPageAlert("success", successMessage);
+    showDashboardToast(
+      "success",
+      "HR access updated",
+      successMessage,
+    );
+  } catch (error) {
+    console.error("Error changing HR access level:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "The HR access level could not be changed.",
+    );
+  } finally {
+    if (actionButton?.isConnected) {
+      actionButton.disabled = originalDisabled;
+      actionButton.innerHTML = originalHtml;
+    }
+  }
 }
 
 function startProfileTenantLinkEdit(profileId) {

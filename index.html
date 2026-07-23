@@ -12,10 +12,10 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
   <link rel="stylesheet" href="css/styles.css" />
-  <link rel="icon" type="image/x-icon" href="assets/favicon.png">
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
 </head>
 
-<body>
+<body class="bexhr-landing-page">
   <!--
     ==============================================================
     NAVBAR
@@ -80,9 +80,9 @@
 
         <!-- Right: inline sign-in form -->
         <div class="col-lg-6 landing-animate-in landing-animate-delay-2">
-          <div class="bg-white rounded-4 border p-4 p-md-5">
-            <h2 class="fw-bold mb-1">Sign In</h2>
-            <p class="text-secondary mb-3">
+          <div class="bg-white rounded-4 border p-4 p-md-5 bexhr-login-card">
+            <h2 class="fw-bold mb-1 bexhr-login-heading">Sign In</h2>
+            <p class="text-secondary mb-3 bexhr-login-subtitle">
               Enter your company ID and credentials to continue.
             </p>
 
@@ -160,45 +160,54 @@
      HR users must complete Supabase-backed TOTP verification before
      the HR Dashboard is opened. This is not a frontend-only OTP.
      Supabase verifies the authenticator code and promotes the session to AAL2. -->
-            <div id="hrMfaPanel" class="border rounded-4 p-3 mt-3 d-none">
-              <div class="d-flex align-items-start gap-3 mb-3">
-                <div
-                  class="rounded-circle bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
-                  style="width: 40px; height: 40px;">
-                  <i class="bi bi-shield-check text-primary"></i>
-                </div>
+            <div id="hrMfaPanel" class="bexhr-mfa-panel d-none" aria-labelledby="hrMfaTitle">
+              <div class="bexhr-mfa-step-row">
+                <span class="bexhr-mfa-security-label">
+                  <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                  Secure access
+                </span>
+                <span class="bexhr-mfa-step-badge">Step 2 of 2</span>
+              </div>
 
-                <div>
-                  <div class="fw-bold" id="hrMfaTitle">HR two-factor verification</div>
-                  <div class="small text-secondary" id="hrMfaDescription">
-                    Enter the 6-digit code from your authenticator app to continue to the HR Dashboard.
+              <div class="bexhr-mfa-heading">
+                <span class="bexhr-mfa-heading-icon" aria-hidden="true">
+                  <i class="bi bi-shield-check"></i>
+                </span>
+                <div class="bexhr-mfa-heading-copy">
+                  <div class="bexhr-mfa-title" id="hrMfaTitle">Secure verification</div>
+                  <div class="bexhr-mfa-description" id="hrMfaDescription">
+                    Enter the latest code from your authenticator app.
                   </div>
                 </div>
               </div>
 
-              <div id="hrMfaEnrollmentBox" class="alert alert-light border d-none mb-3">
-                <div class="fw-semibold mb-2">Set up your authenticator app</div>
-                <div class="small text-secondary mb-3">
-                  Scan the QR code below using Microsoft Authenticator, Google Authenticator, or another TOTP
-                  authenticator app.
+              <div id="hrMfaEnrollmentBox" class="bexhr-mfa-enrollment d-none">
+                <div class="bexhr-mfa-enrollment-title">Set up your authenticator app</div>
+                <div class="bexhr-mfa-enrollment-copy">
+                  Scan the QR code with Microsoft Authenticator, Google Authenticator, or another TOTP app.
                 </div>
 
-                <div class="text-center mb-3">
+                <div class="bexhr-mfa-qr-stage">
                   <img id="hrMfaQrCodeImage" src="" alt="HR MFA QR code"
-                    class="img-fluid border rounded-3 p-2 bg-white d-none" style="max-width: 220px;" />
+                    class="bexhr-mfa-qr-image d-none" />
                 </div>
 
-                <div class="small text-secondary">
-                  Manual setup secret:
+                <div class="bexhr-mfa-secret-row">
+                  <span>Manual setup secret</span>
                   <code id="hrMfaSecretValue">--</code>
                 </div>
               </div>
 
-              <label for="hrMfaCodeInput" class="form-label fw-semibold">
-                Authenticator Code <span class="text-danger">*</span>
-              </label>
-              <input type="text" id="hrMfaCodeInput" class="form-control" inputmode="numeric" maxlength="6"
-                autocomplete="one-time-code" placeholder="Enter 6-digit code" />
+              <div class="bexhr-mfa-code-field">
+                <label for="hrMfaCodeInput" class="form-label fw-semibold">
+                  Authenticator code <span class="text-danger">*</span>
+                </label>
+                <input type="text" id="hrMfaCodeInput" class="form-control" inputmode="numeric" pattern="[0-9]*"
+                  maxlength="6" autocomplete="one-time-code" placeholder="000000" aria-describedby="hrMfaCodeHint" />
+                <div id="hrMfaCodeHint" class="bexhr-mfa-code-hint">
+                  Enter the six digits currently shown in your authenticator app.
+                </div>
+              </div>
 
               <div id="hrMfaStatus" class="alert d-none mt-3 mb-0" role="status"></div>
 
@@ -206,27 +215,30 @@
      HR support note for lost authenticator devices.
      This keeps the process operationally supportable without creating
      insecure frontend recovery codes. -->
-              <div id="hrMfaRecoveryNote" class="alert alert-light border mt-3 mb-0 small">
-                <div class="fw-semibold mb-1">Lost access to your authenticator?</div>
-                <div class="text-secondary">
-                  Contact your system administrator to reset your HR two-factor setup. For security, this page cannot
-                  bypass MFA or generate recovery codes.
+              <details id="hrMfaRecoveryNote" class="bexhr-mfa-recovery">
+                <summary>
+                  <span><i class="bi bi-life-preserver" aria-hidden="true"></i>Having trouble?</span>
+                  <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                </summary>
+                <div class="bexhr-mfa-recovery-copy">
+                  Contact your system administrator to reset your HR two-factor setup. This page cannot bypass MFA or
+                  generate recovery codes.
                 </div>
-              </div>
+              </details>
 
-              <div class="d-flex flex-wrap gap-2 mt-3">
+              <div class="bexhr-mfa-actions">
                 <button type="button" id="verifyHrMfaBtn" class="btn btn-primary dashboard-action-btn" disabled>
                   <i class="bi bi-shield-check me-2"></i>
                   Verify and Continue
                 </button>
 
                 <button type="button" id="cancelHrMfaBtn" class="btn btn-outline-secondary dashboard-action-btn">
-                  Cancel
+                  Cancel sign-in
                 </button>
               </div>
             </div>
 
-            <div class="hr-dev-note p-3 mt-2 small text-secondary">
+            <div class="hr-dev-note p-3 mt-2 small text-secondary bexhr-access-note">
               <strong>Access note:</strong> Your dashboard is determined by
               your authenticated profile and assigned role. Contact your
               administrator if your workspace or permissions look incorrect.
