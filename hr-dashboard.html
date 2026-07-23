@@ -1505,6 +1505,113 @@
                 </table>
               </div>
             </div>
+
+              <!-- COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
+                   Hidden by default. JavaScript reveals and loads it only for an
+                   active HR profile with hr_access_level = tenant_admin.
+                   The protected RPC remains the tenant-isolation authority. -->
+              <hr class="my-5" />
+
+              <section id="companyAdminAuditHistorySection"
+                class="company-admin-audit-panel d-none"
+                aria-labelledby="companyAdminAuditHistoryTitle">
+                <div class="hr-card-heading company-admin-audit-heading mb-4">
+                  <div class="hr-card-heading-main">
+                    <span class="hr-card-heading-icon company-admin-audit-heading-icon"
+                      aria-hidden="true">
+                      <i class="bi bi-shield-lock"></i>
+                    </span>
+
+                    <div class="hr-card-heading-copy">
+                      <span class="hr-setup-card-kicker">Company governance</span>
+                      <h3 id="companyAdminAuditHistoryTitle"
+                        class="section-heading h5 mb-1">
+                        Administrative Audit History
+                      </h3>
+                      <p class="section-subtext mb-0">
+                        Review read-only Company Administration and HR-access changes
+                        recorded for this company.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="company-admin-audit-heading-actions">
+                    <span class="company-admin-audit-readonly-chip">
+                      <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                      Read only
+                    </span>
+
+                    <button type="button" id="refreshCompanyAdminAuditHistoryBtn"
+                      class="btn btn-outline-primary dashboard-action-btn">
+                      <i class="bi bi-arrow-clockwise me-2"></i>
+                      Refresh
+                    </button>
+
+                    <button type="button" id="toggleCompanyAdminAuditHistoryBtn"
+                      class="btn btn-outline-secondary dashboard-action-btn"
+                      aria-expanded="true"
+                      aria-controls="companyAdminAuditHistoryCollapse">
+                      <i class="bi bi-chevron-up me-2"></i>
+                      <span>Collapse</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div id="companyAdminAuditHistoryCollapse">
+                  <div class="company-admin-audit-toolbar mb-3">
+                    <div class="company-admin-audit-search">
+                      <label for="companyAdminAuditHistorySearch"
+                        class="form-label fw-semibold mb-2">
+                        Search history
+                      </label>
+
+                      <div class="input-group">
+                        <span class="input-group-text" aria-hidden="true">
+                          <i class="bi bi-search"></i>
+                        </span>
+                        <input type="search" id="companyAdminAuditHistorySearch"
+                          class="form-control"
+                          placeholder="Search actor, action, target, or changed field..." />
+                      </div>
+                    </div>
+
+                    <div class="company-admin-audit-count" aria-live="polite">
+                      <span>Events shown</span>
+                      <strong id="companyAdminAuditHistoryCount">0</strong>
+                    </div>
+                  </div>
+
+                  <div id="companyAdminAuditHistoryLoading"
+                    class="company-admin-audit-state d-none"
+                    role="status" aria-live="polite">
+                    <span class="spinner-border spinner-border-sm"
+                      aria-hidden="true"></span>
+                    Loading administrative history...
+                  </div>
+
+                  <div id="companyAdminAuditHistoryEmpty"
+                    class="company-admin-audit-state d-none">
+                    No administrative audit events were found for this company.
+                  </div>
+
+                  <div id="companyAdminAuditHistoryTableWrapper"
+                    class="table-responsive company-admin-audit-table-wrapper d-none">
+                    <table class="table align-middle mb-0 company-admin-audit-table">
+                      <thead>
+                        <tr>
+                          <th>Actor</th>
+                          <th>Action</th>
+                          <th>Target</th>
+                          <th>Changes</th>
+                          <th class="text-center">Status</th>
+                          <th>Date &amp; Time</th>
+                        </tr>
+                      </thead>
+                      <tbody id="companyAdminAuditHistoryTableBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
           </div>
         </div>
       </section>
@@ -3287,8 +3394,9 @@ Disable browser address autofill popup on HR employee address fields. -->
             </div>
 
             <div class="d-flex flex-wrap align-items-center gap-2">
-              <span class="badge rounded-pill text-bg-success border px-3 py-2">
-                Configured
+              <span class="bexhr-status-pill bexhr-status-pill--success hrp85-configured-status-pill">
+                <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+                <span>Configured</span>
               </span>
 
               <button type="button" id="toggleHrp85EmailIntegrationCardBtn"

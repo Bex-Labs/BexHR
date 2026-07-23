@@ -336,6 +336,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Organization Setup restrictions after the setup tables are rebuilt.
     applyHrOrganizationSetupAccessControls();
 
+    // COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
+    // Standard HR profiles are hidden and return before the protected RPC is called.
+    await refreshCompanyAdminAuditHistory();
+
     // DESCRIPTION ITEM 3 - STEP 2A-4
     // Load controlled Payroll Grade / Level values before Payroll Master Data,
     // so the Payroll Master dropdown and edit mode can use real setup records.
@@ -1825,6 +1829,12 @@ const state = {
   // These will later replace the hardcoded employee Department/Job Title lists.
   organizationDepartments: [],
   organizationJobTitles: [],
+
+  // COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
+  // The protected RPC is the source of truth. Standard HR never loads this data.
+  companyAdminAuditEvents: [],
+  companyAdminAuditTotalCount: 0,
+  companyAdminAuditSearchTerm: "",
 
   // ORGANIZATION HR SETUP VALUES - STEP 4A
   // Tracks the Department currently being edited inside Manage Organization.
@@ -3826,6 +3836,38 @@ function cacheDomElements() {
     organizationJobTitlesEmptyState: document.getElementById("organizationJobTitlesEmptyState"),
     organizationJobTitlesTableWrapper: document.getElementById("organizationJobTitlesTableWrapper"),
     organizationJobTitlesTableBody: document.getElementById("organizationJobTitlesTableBody"),
+
+    // COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
+    companyAdminAuditHistorySection: document.getElementById(
+      "companyAdminAuditHistorySection",
+    ),
+    toggleCompanyAdminAuditHistoryBtn: document.getElementById(
+      "toggleCompanyAdminAuditHistoryBtn",
+    ),
+    companyAdminAuditHistoryCollapse: document.getElementById(
+      "companyAdminAuditHistoryCollapse",
+    ),
+    refreshCompanyAdminAuditHistoryBtn: document.getElementById(
+      "refreshCompanyAdminAuditHistoryBtn",
+    ),
+    companyAdminAuditHistorySearch: document.getElementById(
+      "companyAdminAuditHistorySearch",
+    ),
+    companyAdminAuditHistoryCount: document.getElementById(
+      "companyAdminAuditHistoryCount",
+    ),
+    companyAdminAuditHistoryLoading: document.getElementById(
+      "companyAdminAuditHistoryLoading",
+    ),
+    companyAdminAuditHistoryEmpty: document.getElementById(
+      "companyAdminAuditHistoryEmpty",
+    ),
+    companyAdminAuditHistoryTableWrapper: document.getElementById(
+      "companyAdminAuditHistoryTableWrapper",
+    ),
+    companyAdminAuditHistoryTableBody: document.getElementById(
+      "companyAdminAuditHistoryTableBody",
+    ),
 
     employeeCreateForm: document.getElementById("employeeCreateForm"),
     saveEmployeeBtn: document.getElementById("saveEmployeeBtn"),
@@ -8912,6 +8954,10 @@ function bindEvents() {
     applyHrOrganizationSetupAccessControls();
     applyHrPayrollSetupAccessControls();
 
+    // COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
+    // Re-evaluate visibility when Setup opens in case the profile was refreshed.
+    void refreshCompanyAdminAuditHistory();
+
     // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
     // Re-apply Payment Setup restrictions when the Setup workspace opens because
     // table refreshes and form reset helpers can rebuild buttons.
@@ -9424,6 +9470,29 @@ function bindEvents() {
   bindCardCollapseToggle(
     state.dom.toggleOrganizationSettingsCardBtn,
     state.dom.organizationSettingsCardCollapse,
+  );
+
+  // COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
+  bindCardCollapseToggle(
+    state.dom.toggleCompanyAdminAuditHistoryBtn,
+    state.dom.companyAdminAuditHistoryCollapse,
+  );
+
+  state.dom.refreshCompanyAdminAuditHistoryBtn?.addEventListener(
+    "click",
+    async () => {
+      await refreshCompanyAdminAuditHistory({ showFeedback: true });
+    },
+  );
+
+  state.dom.companyAdminAuditHistorySearch?.addEventListener(
+    "input",
+    (event) => {
+      state.companyAdminAuditSearchTerm = String(
+        event.target?.value || "",
+      );
+      renderCompanyAdminAuditHistory();
+    },
   );
 
   state.dom.organizationSettingsForm?.addEventListener("submit", async (event) => {
@@ -24264,6 +24333,524 @@ async function refreshOrganizationHrSetupValues() {
 // ORGANIZATION HR SETUP VALUES - STEP 4B-4B
 // After Department create/update, return HR to Department Records,
 // not the form. Offset keeps the records heading visible.
+// COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
+// The backend RPC is the authority for both role access and tenant isolation.
+function canCurrentUserViewCompanyAdminAuditHistory() {
+  const role = String(state.currentProfile?.role || "")
+    .trim()
+    .toLowerCase();
+
+  const accessLevel = String(
+    state.currentProfile?.hr_access_level || "standard",
+  )
+    .trim()
+    .toLowerCase();
+
+  return (
+    role === "hr" &&
+    accessLevel === "tenant_admin" &&
+    state.currentProfile?.is_active !== false
+  );
+}
+
+function setCompanyAdminAuditLoading(isLoading) {
+  state.dom.companyAdminAuditHistoryLoading?.classList.toggle(
+    "d-none",
+    !isLoading,
+  );
+
+  if (state.dom.refreshCompanyAdminAuditHistoryBtn) {
+    state.dom.refreshCompanyAdminAuditHistoryBtn.disabled = isLoading;
+    state.dom.refreshCompanyAdminAuditHistoryBtn.innerHTML = isLoading
+      ? `
+        <span class="spinner-border spinner-border-sm me-2"
+          aria-hidden="true"></span>
+        Loading
+      `
+      : `
+        <i class="bi bi-arrow-clockwise me-2"></i>
+        Refresh
+      `;
+  }
+}
+
+// AUDIT RECORD PRESENTATION CLEANUP - PHASE 2I-C1
+// Audit action state uses the same soft status language as refreshed HR tables.
+function renderCompanyAdminAuditStatusPill(status = "success") {
+  const label = formatStatusLabel(status || "Success");
+  const normalizedStatus = String(status || "")
+    .trim()
+    .toLowerCase();
+
+  let tone = "neutral";
+  let icon = "bi-info-circle-fill";
+
+  if (["success", "succeeded", "completed"].includes(normalizedStatus)) {
+    tone = "success";
+    icon = "bi-check-circle-fill";
+  } else if (["failed", "failure", "error"].includes(normalizedStatus)) {
+    tone = "danger";
+    icon = "bi-x-circle-fill";
+  } else if (["pending", "processing", "in progress"].includes(normalizedStatus)) {
+    tone = "warning";
+    icon = "bi-clock-fill";
+  }
+
+  return `
+    <span class="bexhr-status-pill bexhr-status-pill--${tone}">
+      <i class="bi ${icon}" aria-hidden="true"></i>
+      <span>${escapeHtml(label)}</span>
+    </span>
+  `;
+}
+
+function formatCompanyAdminAuditEventLabel(eventType = "") {
+  const labels = {
+    profile_access_changed: "HR access changed",
+    organization_settings_created: "Organization details created",
+    organization_settings_updated: "Organization details updated",
+    organization_settings_deleted: "Organization details deleted",
+    organization_department_created: "Department created",
+    organization_department_updated: "Department updated",
+    organization_department_deleted: "Department deleted",
+    organization_job_title_created: "Job title created",
+    organization_job_title_updated: "Job title updated",
+    organization_job_title_deleted: "Job title deleted",
+  };
+
+  const key = String(eventType || "").trim().toLowerCase();
+
+  return (
+    labels[key] ||
+    key
+      .split("_")
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ") ||
+    "Administrative change"
+  );
+}
+
+function formatCompanyAdminAuditFieldLabel(fieldName = "") {
+  const labels = {
+    role: "System role",
+    hr_access_level: "HR access",
+    tenant_id: "Company",
+    is_active: "Account status",
+    organization_name: "Organization name",
+    organization_email: "Organization email",
+    payroll_contact_email: "Payroll contact email",
+    phone_number: "Phone number",
+    address_line: "Address",
+    city: "City",
+    country: "Country",
+    tax_identification_number: "Tax ID / TIN",
+    registration_number: "Registration number",
+    default_currency: "Default currency",
+    default_pay_cycle: "Default pay cycle",
+    department_name: "Department",
+    job_title: "Job title",
+    department_id: "Department",
+    status: "Status",
+    notes: "Notes",
+  };
+
+  const key = String(fieldName || "").trim();
+
+  return (
+    labels[key] ||
+    key
+      .split("_")
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ") ||
+    "Field"
+  );
+}
+
+function formatCompanyAdminAuditValue(fieldName = "", value = null) {
+  if (value === null || value === undefined || value === "") {
+    return "Not set";
+  }
+
+  const normalizedField = String(fieldName || "").trim().toLowerCase();
+  const normalizedValue = String(value).trim().toLowerCase();
+
+  if (normalizedField === "hr_access_level") {
+    if (normalizedValue === "tenant_admin") return "Company Admin";
+    if (normalizedValue === "standard") return "HR Officer";
+  }
+
+  if (normalizedField === "role") {
+    const roleLabels = {
+      admin: "BexHR Platform Admin",
+      hr: "HR",
+      manager: "Manager",
+      employee: "Employee",
+    };
+
+    return roleLabels[normalizedValue] || String(value);
+  }
+
+  if (normalizedField === "is_active") {
+    return value === true || normalizedValue === "true"
+      ? "Active"
+      : "Inactive";
+  }
+
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "Updated";
+    }
+  }
+
+  return String(value);
+}
+
+function getCompanyAdminAuditEntityLabel(record = {}) {
+  const currentValues =
+    record.new_values && typeof record.new_values === "object"
+      ? record.new_values
+      : {};
+
+  const previousValues =
+    record.previous_values && typeof record.previous_values === "object"
+      ? record.previous_values
+      : {};
+
+  return (
+    record.target_name ||
+    record.target_email ||
+    currentValues.department_name ||
+    previousValues.department_name ||
+    currentValues.job_title ||
+    previousValues.job_title ||
+    currentValues.organization_name ||
+    previousValues.organization_name ||
+    formatCompanyAdminAuditEventLabel(record.event_type)
+  );
+}
+
+function renderCompanyAdminAuditChanges(record = {}) {
+  const previousValues =
+    record.previous_values && typeof record.previous_values === "object"
+      ? record.previous_values
+      : {};
+
+  const newValues =
+    record.new_values && typeof record.new_values === "object"
+      ? record.new_values
+      : {};
+
+  const changedFields = Array.isArray(record.changed_fields)
+    ? record.changed_fields.filter(Boolean)
+    : [];
+
+  if (!changedFields.length) {
+    return '<span class="text-secondary">Recorded change</span>';
+  }
+
+  return changedFields
+    .slice(0, 4)
+    .map((fieldName) => {
+      const oldValue = formatCompanyAdminAuditValue(
+        fieldName,
+        previousValues[fieldName],
+      );
+
+      const newValue = formatCompanyAdminAuditValue(
+        fieldName,
+        newValues[fieldName],
+      );
+
+      return `
+        <div class="company-admin-audit-change">
+          <span class="company-admin-audit-change-field">
+            ${escapeHtml(formatCompanyAdminAuditFieldLabel(fieldName))}
+          </span>
+          <span class="company-admin-audit-change-values">
+            <span>${escapeHtml(oldValue)}</span>
+            <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            <strong>${escapeHtml(newValue)}</strong>
+          </span>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function formatCompanyAdminAuditDateTime(value) {
+  if (!value) return "--";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function getCompanyAdminAuditSearchText(record = {}) {
+  return [
+    record.actor_name,
+    record.actor_email,
+    record.actor_role,
+    record.actor_access_level_label,
+    record.target_name,
+    record.target_email,
+    record.event_type,
+    record.entity_type,
+    record.action_status,
+    ...(Array.isArray(record.changed_fields) ? record.changed_fields : []),
+    JSON.stringify(record.previous_values || {}),
+    JSON.stringify(record.new_values || {}),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function renderCompanyAdminAuditHistory() {
+  const canView = canCurrentUserViewCompanyAdminAuditHistory();
+  const section = state.dom.companyAdminAuditHistorySection;
+
+  section?.classList.toggle("d-none", !canView);
+
+  if (!canView) {
+    state.companyAdminAuditEvents = [];
+    state.companyAdminAuditTotalCount = 0;
+
+    if (state.dom.companyAdminAuditHistoryTableBody) {
+      state.dom.companyAdminAuditHistoryTableBody.innerHTML = "";
+    }
+
+    return;
+  }
+
+  const searchTerm = String(
+    state.companyAdminAuditSearchTerm || "",
+  )
+    .trim()
+    .toLowerCase();
+
+  const filteredRecords = (state.companyAdminAuditEvents || []).filter(
+    (record) =>
+      !searchTerm ||
+      getCompanyAdminAuditSearchText(record).includes(searchTerm),
+  );
+
+  if (state.dom.companyAdminAuditHistoryCount) {
+    state.dom.companyAdminAuditHistoryCount.textContent = String(
+      filteredRecords.length,
+    );
+  }
+
+  const hasRecords = filteredRecords.length > 0;
+
+  state.dom.companyAdminAuditHistoryEmpty?.classList.toggle(
+    "d-none",
+    hasRecords,
+  );
+
+  state.dom.companyAdminAuditHistoryTableWrapper?.classList.toggle(
+    "d-none",
+    !hasRecords,
+  );
+
+  if (!state.dom.companyAdminAuditHistoryTableBody) return;
+
+  state.dom.companyAdminAuditHistoryTableBody.innerHTML = filteredRecords
+    .map((record) => {
+      const actorName =
+        record.actor_name || record.actor_email || "System actor";
+
+      const actorEmail =
+        record.actor_email && record.actor_email !== actorName
+          ? record.actor_email
+          : "";
+
+      const actorAccessLabel =
+        record.actor_access_level_label || "Not applicable";
+
+      const normalizedActorRole = String(record.actor_role || "")
+        .trim()
+        .toLowerCase();
+
+      const actorRoleLabel =
+        normalizedActorRole === "admin"
+          ? "BexHR Platform Admin"
+          : normalizedActorRole === "hr"
+            ? actorAccessLabel
+            : formatStatusLabel(record.actor_role || "System actor");
+
+      const targetLabel = getCompanyAdminAuditEntityLabel(record);
+      const targetEmail =
+        record.target_email && record.target_email !== targetLabel
+          ? record.target_email
+          : "";
+
+      return `
+        <tr>
+          <td colspan="6">
+            <article class="company-admin-audit-event-card">
+              <header class="company-admin-audit-event-header">
+                <div class="company-admin-audit-event-title">
+                  <span class="company-admin-audit-event-icon" aria-hidden="true">
+                    <i class="bi bi-shield-check"></i>
+                  </span>
+
+                  <div>
+                    <strong>
+                      ${escapeHtml(
+                        formatCompanyAdminAuditEventLabel(record.event_type),
+                      )}
+                    </strong>
+                    <span>
+                      ${escapeHtml(record.entity_type || "administration")}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="company-admin-audit-event-state">
+                  ${renderCompanyAdminAuditStatusPill(
+                    record.action_status || "Success",
+                  )}
+                  <time datetime="${escapeHtml(record.occurred_at || "")}">
+                    ${escapeHtml(
+                      formatCompanyAdminAuditDateTime(record.occurred_at),
+                    )}
+                  </time>
+                </div>
+              </header>
+
+              <div class="company-admin-audit-event-route">
+                <div class="company-admin-audit-party">
+                  <span class="company-admin-audit-party-label">Actor</span>
+                  <strong>${escapeHtml(actorName)}</strong>
+                  ${
+                    actorEmail
+                      ? `<span class="company-admin-audit-party-detail">${escapeHtml(actorEmail)}</span>`
+                      : ""
+                  }
+                  <span class="company-admin-audit-role">
+                    ${escapeHtml(actorRoleLabel)}
+                  </span>
+                </div>
+
+                <span class="company-admin-audit-route-arrow" aria-hidden="true">
+                  <i class="bi bi-arrow-right"></i>
+                </span>
+
+                <div class="company-admin-audit-party">
+                  <span class="company-admin-audit-party-label">Target</span>
+                  <strong>${escapeHtml(targetLabel)}</strong>
+                  ${
+                    targetEmail
+                      ? `<span class="company-admin-audit-party-detail">${escapeHtml(targetEmail)}</span>`
+                      : ""
+                  }
+                </div>
+              </div>
+
+              <div class="company-admin-audit-event-changes">
+                <span class="company-admin-audit-party-label">
+                  Recorded changes
+                </span>
+                ${renderCompanyAdminAuditChanges(record)}
+              </div>
+            </article>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+async function refreshCompanyAdminAuditHistory({
+  showFeedback = false,
+} = {}) {
+  const canView = canCurrentUserViewCompanyAdminAuditHistory();
+
+  state.dom.companyAdminAuditHistorySection?.classList.toggle(
+    "d-none",
+    !canView,
+  );
+
+  if (!canView) {
+    renderCompanyAdminAuditHistory();
+    return;
+  }
+
+  setCompanyAdminAuditLoading(true);
+
+  try {
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.rpc(
+      "list_administrative_audit_events",
+      {
+        p_limit: 100,
+        p_offset: 0,
+      },
+    );
+
+    if (error) throw error;
+
+    state.companyAdminAuditEvents = Array.isArray(data) ? data : [];
+    state.companyAdminAuditTotalCount = Number(
+      state.companyAdminAuditEvents[0]?.total_count ||
+        state.companyAdminAuditEvents.length ||
+        0,
+    );
+
+    renderCompanyAdminAuditHistory();
+
+    if (showFeedback) {
+      showDashboardToast(
+        "success",
+        "Audit history refreshed",
+        `${state.companyAdminAuditEvents.length} company administrative event(s) loaded.`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Error loading Company Admin administrative audit history:",
+      error,
+    );
+
+    state.companyAdminAuditEvents = [];
+    state.companyAdminAuditTotalCount = 0;
+    renderCompanyAdminAuditHistory();
+
+    showPageAlert(
+      "danger",
+      escapeHtml(
+        error?.message ||
+          "Administrative audit history could not be loaded.",
+      ),
+    );
+
+    showDashboardToast(
+      "danger",
+      "Audit history unavailable",
+      escapeHtml(
+        error?.message ||
+          "Administrative audit history could not be loaded.",
+      ),
+    );
+  } finally {
+    setCompanyAdminAuditLoading(false);
+  }
+}
 function redirectToOrganizationDepartmentRecordsAfterSave() {
   setDashboardCardExpanded(
     state.dom.toggleOrganizationSettingsCardBtn,
@@ -24583,6 +25170,27 @@ async function handleOrganizationDepartmentSave() {
   }
 }
 
+// AUDIT RECORD PRESENTATION CLEANUP - PHASE 2I-C1
+// Internal migration provenance remains stored for traceability but is not
+// useful in daily Company Administration tables. Preserve user-entered notes.
+function getVisibleOrganizationSetupNote(note = "") {
+  const cleanNote = String(note || "").trim();
+
+  if (!cleanNote) return "";
+
+  const normalizedNote = cleanNote
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const internalSetupNotes = new Set([
+    "backfilled from an existing employee record during phase 2f1 tenant isolation.",
+    "seeded from existing employee department dropdown.",
+  ]);
+
+  return internalSetupNotes.has(normalizedNote) ? "" : cleanNote;
+}
+
 function renderOrganizationDepartmentsTable() {
   const tbody = state.dom.organizationDepartmentsTableBody;
   if (!tbody) return;
@@ -24609,13 +25217,19 @@ function renderOrganizationDepartmentsTable() {
     row.innerHTML = `
       <td>
         <div class="fw-semibold">${escapeHtml(department.department_name || "--")}</div>
-        <div class="text-secondary small">${escapeHtml(department.notes || "")}</div>
+        ${
+          getVisibleOrganizationSetupNote(department.notes)
+            ? `<div class="text-secondary small">${escapeHtml(
+                getVisibleOrganizationSetupNote(department.notes),
+              )}</div>`
+            : ""
+        }
       </td>
 
-      <td>
-        <span class="badge ${getStatusBadgeClass(department.status)}">
-          ${escapeHtml(formatStatusLabel(department.status))}
-        </span>
+      <td class="bexhr-status-cell" data-label="Status">
+        ${renderBexhrStatusPill(
+          formatStatusLabel(department.status),
+        )}
       </td>
 
       <td class="text-nowrap">
@@ -24879,15 +25493,21 @@ function renderOrganizationJobTitlesTable() {
         <!-- ORGANIZATION HR SETUP VALUES - STEP 4B-3
              Show seeded or manually created Job Title name with optional note. -->
         <div class="fw-semibold">${escapeHtml(jobTitle.job_title || "--")}</div>
-        <div class="text-secondary small">${escapeHtml(jobTitle.notes || "")}</div>
+        ${
+          getVisibleOrganizationSetupNote(jobTitle.notes)
+            ? `<div class="text-secondary small">${escapeHtml(
+                getVisibleOrganizationSetupNote(jobTitle.notes),
+              )}</div>`
+            : ""
+        }
       </td>
 
       <td>${escapeHtml(departmentName)}</td>
 
-      <td>
-        <span class="badge ${getStatusBadgeClass(jobTitle.status)}">
-          ${escapeHtml(formatStatusLabel(jobTitle.status))}
-        </span>
+      <td class="bexhr-status-cell" data-label="Status">
+        ${renderBexhrStatusPill(
+          formatStatusLabel(jobTitle.status),
+        )}
       </td>
 
       <td class="text-nowrap">
