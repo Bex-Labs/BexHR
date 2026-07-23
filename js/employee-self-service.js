@@ -1169,7 +1169,7 @@
               <div class="info-tile-label mb-1">Leave Type</div>
               <div class="fw-bold">${ssEscapeHtml(leaveTypeName)}</div>
             </div>
-            <span class="badge ${statusClass}">${statusLabel}</span>
+            ${renderSsModernStatusPill(statusLabel)}
           </div>
 
           <div class="row g-3 mb-3">
@@ -1268,6 +1268,77 @@
     renderSsLeaveRequests(requests);
     renderSsLatestDecision(requests);
     updateSsLeaveRequestBlockNotice();
+  }
+
+  // POST-REGRESSION STATUS POLISH - STEP 1
+  // Presentation only. Status values, queries, permissions, leave decisions,
+  // payroll authorisation, and tenant isolation remain unchanged.
+  function renderSsModernStatusPill(status = "") {
+    const label = String(status || "--").trim() || "--";
+    const normalized = ssNormalizeText(label);
+
+    const successStates = new Set([
+      "active",
+      "approved",
+      "authorised",
+      "available",
+      "completed",
+      "finalised",
+      "paid",
+    ]);
+
+    const warningStates = new Set([
+      "low balance",
+      "pending",
+      "pending approval",
+      "returned",
+      "returned for clarification",
+    ]);
+
+    const dangerStates = new Set([
+      "cancelled",
+      "declined",
+      "failed",
+      "fully used",
+      "rejected",
+    ]);
+
+    const iconByStatus = {
+      active: "bi-check-circle-fill",
+      approved: "bi-check-circle-fill",
+      authorised: "bi-check-circle-fill",
+      available: "bi-check-circle-fill",
+      cancelled: "bi-x-circle-fill",
+      completed: "bi-check-circle-fill",
+      declined: "bi-x-circle-fill",
+      failed: "bi-x-circle-fill",
+      finalised: "bi-lock-fill",
+      "fully used": "bi-x-circle-fill",
+      "low balance": "bi-exclamation-circle-fill",
+      paid: "bi-cash-coin",
+      pending: "bi-clock-fill",
+      "pending approval": "bi-clock-fill",
+      rejected: "bi-x-circle-fill",
+      returned: "bi-arrow-return-left",
+      "returned for clarification": "bi-arrow-return-left",
+    };
+
+    let toneClass = "bexhr-status-pill--neutral";
+
+    if (successStates.has(normalized)) {
+      toneClass = "bexhr-status-pill--success";
+    } else if (warningStates.has(normalized)) {
+      toneClass = "bexhr-status-pill--warning";
+    } else if (dangerStates.has(normalized)) {
+      toneClass = "bexhr-status-pill--danger";
+    }
+
+    return `
+      <span class="bexhr-status-pill ${toneClass}">
+        <i class="bi ${iconByStatus[normalized] || "bi-circle-fill"}" aria-hidden="true"></i>
+        <span>${ssEscapeHtml(label)}</span>
+      </span>
+    `;
   }
 
   function getSsLeaveStatusBadgeClass(status) {
@@ -1423,7 +1494,7 @@
       card.innerHTML = `
         <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
           <div class="fw-semibold">${ssEscapeHtml(leaveTypeName)}</div>
-          <span class="badge ${badgeClass} text-nowrap">${ssEscapeHtml(status)}</span>
+          ${renderSsModernStatusPill(status)}
         </div>
         <div class="small text-secondary mb-1">
           ${ssEscapeHtml(startDate)} to ${ssEscapeHtml(endDate)} • ${totalDays} day(s)
@@ -1540,7 +1611,7 @@
           <div>
             <div class="info-tile-label">${isCancelledAudit ? "Latest Leave Update" : "Latest Decision"}</div>
             <div class="d-flex flex-wrap align-items-center gap-2">
-              <span class="badge ${getSsLeaveStatusBadgeClass(status)}">${ssEscapeHtml(status)}</span>
+              ${renderSsModernStatusPill(status)}
               <span class="fw-semibold">${ssEscapeHtml(leaveTypeName)}</span>
             </div>
           </div>
@@ -2500,7 +2571,7 @@ ${isCancelledAudit
         <td class="text-nowrap">${ssFormatCurrency(record.total_deductions, currency)}</td>
         <td class="text-nowrap"><div class="fw-semibold">${ssFormatCurrency(record.net_pay, currency)}</div></td>
         <td class="text-center text-nowrap">
-          <span class="badge text-bg-success">${ssEscapeHtml(record.status || "Authorised")}</span>
+          ${renderSsModernStatusPill(record.status || "Authorised")}
         </td>
         ${shouldShowViewAction ? `
           <td class="text-center text-nowrap">
