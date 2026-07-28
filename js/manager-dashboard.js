@@ -31,9 +31,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderManagerProfile(state.currentProfile, access.session.user);
 
     // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
-    // Fresh login opens Profile because logout clears memory.
+    // Fresh login opens Dashboard because logout clears workspace memory.
     // Browser refresh restores the last Manager workspace and lands at the top.
     restoreManagerWorkspaceAfterRefresh();
+
+    // MANAGER WORKSPACE FIRST PAINT FINALISATION - v1.0.2
+    // Match the HR dashboard first-paint gate: reveal the exact remembered
+    // Manager workspace as soon as profile, tenant branding, navigation,
+    // title, and subtitle are restored. Longer team/leave loads continue progressively.
+    revealRestoredManagerWorkspace();
 
     initialiseDecisionModal();
 
@@ -41,9 +47,20 @@ document.addEventListener("DOMContentLoaded", async () => {
       openDecisionModal(leaveId, action, button);
     };
 
+    window.managerOpenEmployeeDetails = function (employeeId) {
+      openManagerEmployeeDetails(employeeId);
+    };
+
     await refreshManagerWorkspace();
   } catch (error) {
     console.error("Error initialising manager dashboard:", error);
+
+    // MANAGER WORKSPACE FIRST PAINT FINALISATION - v1.0.2
+    // Never leave the Manager application hidden if startup fails after the
+    // first-paint gate has been applied.
+    document.body?.classList.remove("manager-workspace-booting");
+    document.body?.setAttribute("aria-busy", "false");
+
     showPageAlert(
       "danger",
       error.message ||
@@ -110,7 +127,7 @@ const state = {
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Only these top-level Manager workspaces are safe to restore after refresh.
 function isValidManagerWorkspaceKey(workspace = "") {
-  return ["profile", "team", "selfservice"].includes(String(workspace || "").trim());
+  return ["dashboard", "profile", "team", "selfservice"].includes(String(workspace || "").trim());
 }
 
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
@@ -183,13 +200,82 @@ function applyManagerTenantFaviconBranding() {
   if (!favicon) return;
 
   if (isCurrentManagerTenantAlpatechWorkspace()) {
-    favicon.type = "image/png";
-    favicon.href = "assets/alpatech-favicon-large.png";
+    favicon.type = "image/x-icon";
+    favicon.href = "assets/favicon.ico?v=20260725-1";
     return;
   }
 
   favicon.type = "image/x-icon";
   favicon.href = "assets/favicon.png";
+}
+
+// MANAGER DASHBOARD VISUAL REFRESH - STEP 1
+// Resolve only the display name used by the compact manager app header.
+// This reads the existing validated tenant/profile context and does not change
+// authentication, roles, reporting lines, leave visibility, or Supabase access.
+function getManagerModernWorkspaceCompanyName() {
+  if (isCurrentManagerTenantAlpatechWorkspace()) return "ALPATECH";
+
+  const tenantContext = getManagerTenantContextForBranding();
+
+  return String(
+    tenantContext?.companyName ||
+    state.currentProfile?.company_name ||
+    "BexHR Workspace",
+  ).trim() || "BexHR Workspace";
+}
+
+// MANAGER DASHBOARD VISUAL REFRESH - STEP 1
+// Presentation-only workspace copy for the compact app header.
+function getManagerModernWorkspaceHeaderContent(workspace = "dashboard") {
+  if (workspace === "profile") {
+    return {
+      title: "My Profile",
+      subtitle: "Review your account details and keep your manager profile up to date.",
+    };
+  }
+
+  if (workspace === "team") {
+    return {
+      title: "Team Management",
+      subtitle: "Review assigned employees, leave activity, approvals, and team coverage.",
+    };
+  }
+
+  if (workspace === "selfservice") {
+    return {
+      title: "My Self-Service",
+      subtitle: "Manage your own leave requests, payslips, and payroll history.",
+    };
+  }
+
+  return {
+    title: "Manager Overview",
+    subtitle: "See team priorities, leave activity, and manager readiness at a glance.",
+  };
+}
+
+// MANAGER DASHBOARD VISUAL REFRESH - STEP 1
+// Keep the visible manager header aligned with the existing workspace state.
+function renderManagerModernWorkspaceHeader(workspace = "dashboard") {
+  const content = getManagerModernWorkspaceHeaderContent(workspace);
+  const fullName = String(state.currentProfile?.full_name || "Manager").trim();
+
+  if (state.dom.managerModernCompanyName) {
+    state.dom.managerModernCompanyName.textContent = getManagerModernWorkspaceCompanyName();
+  }
+
+  if (state.dom.managerModernPageTitle) {
+    state.dom.managerModernPageTitle.textContent = content.title;
+  }
+
+  if (state.dom.managerModernPageSubtitle) {
+    state.dom.managerModernPageSubtitle.textContent = content.subtitle;
+  }
+
+  if (state.dom.managerModernUserName) {
+    state.dom.managerModernUserName.textContent = fullName || "Manager";
+  }
 }
 
 // ALPATECH TENANT BRANDING - MANAGER STEP 1D
@@ -245,6 +331,7 @@ function applyManagerTenantWorkspaceShellBranding() {
       `;
     }
 
+    renderManagerModernWorkspaceHeader(getRememberedManagerWorkspace());
     document.body?.classList.remove("alpatech-branding-resolving");
     return;
   }
@@ -274,6 +361,8 @@ function applyManagerTenantWorkspaceShellBranding() {
       </p>
     `;
   }
+
+  renderManagerModernWorkspaceHeader(getRememberedManagerWorkspace());
 }
 
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
@@ -288,7 +377,7 @@ function getManagerWorkspaceMemoryKey() {
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Save only the active workspace key. Do not store leave, employee, team,
 // decision, comment, or manager-sensitive data in browser storage.
-// In-memory fallback — survives the page session even when
+// In-memory fallback ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â survives the page session even when
 // sessionStorage is blocked by browser tracking prevention.
 let _managerWorkspaceInMemory = null;
 
@@ -346,7 +435,7 @@ function getRequestedManagerWorkspaceFromUrl() {
 
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Read the remembered workspace for this manager session.
-// Fresh login naturally falls back to Profile after logout clears the keys.
+// Fresh login naturally falls back to Dashboard after logout clears the keys.
 function getRememberedManagerWorkspace() {
   // MANAGER PAYSLIP EMAIL DEEP LINK ROUTING - STEP 3A
   // URL request wins over remembered workspace so a payslip email link can
@@ -363,17 +452,17 @@ function getRememberedManagerWorkspace() {
   try {
     const scopedWorkspace = sessionStorage.getItem(getManagerWorkspaceMemoryKey());
     const bootWorkspace = sessionStorage.getItem(MANAGER_DASHBOARD_WORKSPACE_BOOT_KEY);
-    const workspace = scopedWorkspace || bootWorkspace || "profile";
+    const workspace = scopedWorkspace || bootWorkspace || "dashboard";
 
-    return isValidManagerWorkspaceKey(workspace) ? workspace : "profile";
+    return isValidManagerWorkspaceKey(workspace) ? workspace : "dashboard";
   } catch (error) {
     console.warn("Manager workspace memory could not be read.", error);
-    return "profile";
+    return "dashboard";
   }
 }
 
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
-// Logout must reset the next Manager session to Profile.
+// Logout must reset the next Manager session to Dashboard.
 function clearRememberedManagerWorkspace() {
   try {
     sessionStorage.removeItem(getManagerWorkspaceMemoryKey());
@@ -396,11 +485,30 @@ function forceManagerDashboardToTopAfterRefresh() {
   document.body.scrollTop = 0;
 
   updateManagerBackToTopButtonVisibility();
+
+  // MANAGER HELP GUIDE CONTEXTUAL NAVIGATION - v1.0.2
+  bindManagerGuideContextualNavigation();
 }
 
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Restore the remembered Manager workspace and force the page to the top.
 // Multiple calls protect against browser scroll restoration on long pages.
+// MANAGER WORKSPACE FIRST PAINT FINALISATION - v1.0.2
+// Release the shared branded loader only after the exact Manager workspace,
+// tenant branding, profile, navigation, title, and subtitle are restored.
+// Longer team, leave, schedule, and self-service data loads continue progressively.
+function revealRestoredManagerWorkspace() {
+  document.body?.classList.remove("manager-workspace-booting");
+  document.body?.setAttribute("aria-busy", "false");
+
+  window.scrollTo({
+    top: 0,
+    left: 0,
+    behavior: "auto",
+  });
+
+  updateManagerBackToTopButtonVisibility();
+}
 function restoreManagerWorkspaceAfterRefresh() {
   const workspace = getRememberedManagerWorkspace();
 
@@ -447,12 +555,14 @@ function cacheDomElements() {
     teamSearchInput: document.getElementById("teamSearchInput"),
 
     managerTabProfileBtn: document.getElementById("managerTabProfileBtn"),
+    managerTabDashboardBtn: document.getElementById("managerTabDashboardBtn"),
     managerTabTeamBtn: document.getElementById("managerTabTeamBtn"),
 
     // EMPLOYEE SELF-SERVICE - MANAGER
     // Self-Service workspace tab and section for Managers to manage their own
     // leave and payroll as if they were using the employee dashboard.
     managerTabSelfServiceBtn: document.getElementById("managerTabSelfServiceBtn"),
+    managerDashboardSection: document.getElementById("managerDashboardSection"),
     managerProfileSection: document.getElementById("managerProfileSection"),
     managerTeamSection: document.getElementById("managerTeamSection"),
 
@@ -464,6 +574,13 @@ function cacheDomElements() {
     managerModuleValue: document.getElementById("managerModuleValue"),
     managerInitials: document.getElementById("managerInitials"),
     managerHeroImage: document.getElementById("managerHeroImage"),
+
+    // MANAGER DASHBOARD VISUAL REFRESH - STEP 1
+    // Compact app-header presentation hooks only.
+    managerModernCompanyName: document.getElementById("managerModernCompanyName"),
+    managerModernPageTitle: document.getElementById("managerModernPageTitle"),
+    managerModernPageSubtitle: document.getElementById("managerModernPageSubtitle"),
+    managerModernUserName: document.getElementById("managerModernUserName"),
 
     managerFullName: document.getElementById("managerFullName"),
     managerEmailTile: document.getElementById("managerEmailTile"),
@@ -507,6 +624,15 @@ function cacheDomElements() {
     decisionCommentRequiredMarker: document.getElementById("decisionCommentRequiredMarker"),
     closeDecisionModalBtn: document.getElementById("closeDecisionModalBtn"),
     confirmDecisionBtn: document.getElementById("confirmDecisionBtn"),
+
+    // MANAGER TEAM WORKSPACE SHELL MODERNISATION - v1.0.1
+    // Presentation-only summary hooks for the existing Manager Team state.
+    managerTeamWorkspaceStatusText: document.getElementById("managerTeamWorkspaceStatusText"),
+    managerTeamPrimaryPendingCount: document.getElementById("managerTeamPrimaryPendingCount"),
+    managerTeamSecondaryPendingCount: document.getElementById("managerTeamSecondaryPendingCount"),
+    managerTeamProcessedCount: document.getElementById("managerTeamProcessedCount"),
+    managerTeamScheduleCount: document.getElementById("managerTeamScheduleCount"),
+    managerTeamAssignedCount: document.getElementById("managerTeamAssignedCount"),
 
     teamCountValue: document.getElementById("teamCountValue"),
     activeCountValue: document.getElementById("activeCountValue"),
@@ -613,6 +739,110 @@ function cacheDomElements() {
 // Reusable card collapse behaviour for manager dashboard cards.
 // Mirrors the HR dashboard pattern but keeps the implementation local
 // to this file so no shared approval or RLS logic is disturbed.
+// MANAGER TEAM WORKSPACE SHELL MODERNISATION - v1.0.1
+// Render a concise summary from manager-scoped state already loaded by the
+// existing reporting-line, leave visibility, and portal-access workflows.
+// No new query or access path is introduced.
+function renderManagerTeamWorkspaceSummary() {
+  const teamMembers = Array.isArray(state.teamMembers) ? state.teamMembers : [];
+  const pendingRequests = Array.isArray(state.pendingLeaveRequests)
+    ? state.pendingLeaveRequests
+    : [];
+  const processedRequests = Array.isArray(state.processedLeaveRequests)
+    ? state.processedLeaveRequests
+    : [];
+  const scheduleItems = Array.isArray(state.teamLeaveSchedule)
+    ? state.teamLeaveSchedule
+    : [];
+
+  const primaryPendingCount = pendingRequests.filter((request) =>
+    isPrimaryReportingManagerRelationship(request.managerRelationshipLabel),
+  ).length;
+  const secondaryPendingCount = Math.max(
+    pendingRequests.length - primaryPendingCount,
+    0,
+  );
+  const conflictCount = [...pendingRequests, ...scheduleItems].filter(
+    (item) => item?.hasOverlap,
+  ).length;
+  const missingAccessCount = teamMembers.filter(
+    (member) => member.teamStatusLabel === "Employees Missing Login",
+  ).length;
+
+  if (state.dom.managerTeamPrimaryPendingCount) {
+    state.dom.managerTeamPrimaryPendingCount.textContent = String(primaryPendingCount);
+  }
+  if (state.dom.managerTeamSecondaryPendingCount) {
+    state.dom.managerTeamSecondaryPendingCount.textContent = String(secondaryPendingCount);
+  }
+  if (state.dom.managerTeamProcessedCount) {
+    state.dom.managerTeamProcessedCount.textContent = String(processedRequests.length);
+  }
+  if (state.dom.managerTeamScheduleCount) {
+    state.dom.managerTeamScheduleCount.textContent = String(scheduleItems.length);
+  }
+  if (state.dom.managerTeamAssignedCount) {
+    state.dom.managerTeamAssignedCount.textContent = String(teamMembers.length);
+  }
+
+  if (state.dom.managerTeamWorkspaceStatusText) {
+    if (primaryPendingCount > 0) {
+      state.dom.managerTeamWorkspaceStatusText.textContent =
+        `${primaryPendingCount} primary leave decision${primaryPendingCount === 1 ? "" : "s"} require your review.`;
+    } else if (conflictCount > 0) {
+      state.dom.managerTeamWorkspaceStatusText.textContent =
+        `${conflictCount} leave conflict${conflictCount === 1 ? "" : "s"} require coverage attention.`;
+    } else if (missingAccessCount > 0) {
+      state.dom.managerTeamWorkspaceStatusText.textContent =
+        `${missingAccessCount} assigned employee${missingAccessCount === 1 ? "" : "s"} do not have linked portal access.`;
+    } else {
+      state.dom.managerTeamWorkspaceStatusText.textContent =
+        "No immediate Manager Team actions are outstanding.";
+    }
+  }
+}
+
+// MANAGER TEAM WORKSPACE SHELL MODERNISATION - v1.0.1
+// Open one existing Team card and place its heading near the top of the viewport.
+// Existing collapse helpers and panel IDs remain the source of truth.
+function openManagerTeamWorkspacePanel(panelKey = "") {
+  const panelMap = {
+    pending: {
+      button: state.dom.togglePendingRequestsCardBtn,
+      panel: state.dom.pendingRequestsCardCollapse,
+      header: state.dom.pendingRequestsCardHeader,
+    },
+    processed: {
+      button: state.dom.toggleProcessedRequestsCardBtn,
+      panel: state.dom.processedRequestsCardCollapse,
+      header: state.dom.processedRequestsCardHeader,
+    },
+    schedule: {
+      button: state.dom.toggleTeamScheduleCardBtn,
+      panel: state.dom.teamScheduleCardCollapse,
+      header: state.dom.teamScheduleCardHeader,
+    },
+    employees: {
+      button: state.dom.toggleAssignedEmployeeRecordsCardBtn,
+      panel: state.dom.assignedEmployeeRecordsCardCollapse,
+      header: state.dom.assignedEmployeeRecordsCardHeader,
+    },
+  };
+
+  const target = panelMap[String(panelKey || "").trim().toLowerCase()];
+  if (!target?.button || !target?.panel || !target?.header) return;
+
+  setManagerCardExpanded(target.button, target.panel, true);
+
+  window.requestAnimationFrame(() => {
+    const card = target.header.closest(".dashboard-section-card") || target.header;
+    const top = card.getBoundingClientRect().top + window.scrollY - 20;
+    window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+  });
+}
+
+window.managerOpenTeamWorkspacePanel = openManagerTeamWorkspacePanel;
+
 function setManagerCardExpanded(button, panel, shouldExpand) {
   if (!button || !panel) return;
 
@@ -1053,13 +1283,80 @@ function getLeaveDecisionToastTitle(status = "") {
   return "Leave decision saved";
 }
 
+// MANAGER OPERATING GUIDE FOCUS MANAGEMENT - v1.0.1
+// Move focus outside the Bootstrap modal before it becomes aria-hidden,
+// then return focus to the exact desktop/mobile Help Guide trigger.
+// Accessibility only: no guide content, navigation, session, role,
+// reporting-line, leave, payroll, Supabase, or tenant behaviour changes.
+let managerOperatingGuideTriggerElement = null;
+
+function bindManagerOperatingGuideFocusManagement() {
+  const modal = document.getElementById("managerOperatingGuideModal");
+
+  if (!modal || modal.dataset.focusManagementBound === "true") return;
+
+  modal.dataset.focusManagementBound = "true";
+
+  modal.addEventListener("show.bs.modal", (event) => {
+    const relatedTrigger = event.relatedTarget;
+
+    managerOperatingGuideTriggerElement =
+      relatedTrigger instanceof HTMLElement
+        ? relatedTrigger
+        : document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+  });
+
+  modal.addEventListener("hide.bs.modal", () => {
+    const activeElement = document.activeElement;
+    const trigger = managerOperatingGuideTriggerElement;
+
+    if (!(activeElement instanceof HTMLElement) || !modal.contains(activeElement)) {
+      return;
+    }
+
+    if (
+      trigger instanceof HTMLElement &&
+      trigger.isConnected &&
+      !trigger.hasAttribute("disabled")
+    ) {
+      trigger.focus({ preventScroll: true });
+      return;
+    }
+
+    activeElement.blur();
+  });
+
+  modal.addEventListener("hidden.bs.modal", () => {
+    const trigger = managerOperatingGuideTriggerElement;
+    managerOperatingGuideTriggerElement = null;
+
+    if (
+      trigger instanceof HTMLElement &&
+      trigger.isConnected &&
+      !trigger.hasAttribute("disabled")
+    ) {
+      window.requestAnimationFrame(() => {
+        trigger.focus({ preventScroll: true });
+      });
+    }
+  });
+}
+
 function bindEvents() {
+  bindManagerOperatingGuideFocusManagement();
   state.dom.logoutBtn?.addEventListener("click", async () => {
     // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
-    // Logout must reset the next Manager session to Profile.
+    // Logout must reset the next Manager session to Dashboard.
     clearRememberedManagerWorkspace();
 
     await window.SessionManager.logoutUser("logout");
+  });
+
+  state.dom.managerTabDashboardBtn?.addEventListener("click", () => {
+    rememberManagerWorkspace("dashboard");
+    switchManagerWorkspace("dashboard");
   });
 
   state.dom.managerTabProfileBtn?.addEventListener("click", () => {
@@ -1200,6 +1497,93 @@ function bindEvents() {
   );
 }
 
+// =========================================================
+// MANAGER HELP GUIDE CONTEXTUAL NAVIGATION - v1.0.2
+// Close the guide, reuse existing workspace controls, and open the requested
+// Manager panel. No data query, role, authority, session, or persistence change.
+// =========================================================
+function openManagerGuideDestinationPanel(toggleButton, collapsePanel) {
+  if (!toggleButton || !collapsePanel) return;
+
+  if (collapsePanel.classList.contains("d-none")) {
+    toggleButton.click();
+  }
+}
+
+function navigateFromManagerGuide(target = "dashboard") {
+  const guideModalElement = document.getElementById("managerOperatingGuideModal");
+  const guideModal = guideModalElement && window.bootstrap?.Modal
+    ? window.bootstrap.Modal.getOrCreateInstance(guideModalElement)
+    : null;
+
+  guideModal?.hide();
+
+  window.setTimeout(() => {
+    if (target === "dashboard") {
+      state.dom.managerTabDashboardBtn?.click();
+      return;
+    }
+
+    if (target === "profile") {
+      state.dom.managerTabProfileBtn?.click();
+      return;
+    }
+
+    if (target === "selfservice") {
+      state.dom.managerTabSelfServiceBtn?.click();
+      return;
+    }
+
+    state.dom.managerTabTeamBtn?.click();
+
+    const destinationMap = {
+      pending: {
+        toggle: state.dom.togglePendingRequestsCardBtn,
+        panel: state.dom.pendingRequestsCardCollapse,
+        header: state.dom.pendingRequestsCardHeader,
+      },
+      processed: {
+        toggle: state.dom.toggleProcessedRequestsCardBtn,
+        panel: state.dom.processedRequestsCardCollapse,
+        header: state.dom.processedRequestsCardHeader,
+      },
+      schedule: {
+        toggle: state.dom.toggleTeamScheduleCardBtn,
+        panel: state.dom.teamScheduleCardCollapse,
+        header: state.dom.teamScheduleCardHeader,
+      },
+      employees: {
+        toggle: state.dom.toggleAssignedEmployeeRecordsCardBtn,
+        panel: state.dom.assignedEmployeeRecordsCardCollapse,
+        header: state.dom.assignedEmployeeRecordsCardHeader,
+      },
+    };
+
+    const destination = destinationMap[target];
+    if (!destination) return;
+
+    openManagerGuideDestinationPanel(destination.toggle, destination.panel);
+
+    window.requestAnimationFrame(() => {
+      const card = destination.header?.closest(".dashboard-section-card") || destination.header;
+      card?.scrollIntoView({ behavior: "smooth", block: "start" });
+      destination.toggle?.focus({ preventScroll: true });
+    });
+  }, 220);
+}
+
+function bindManagerGuideContextualNavigation() {
+  document
+    .querySelectorAll("[data-manager-guide-target]")
+    .forEach((button) => {
+      if (button.dataset.managerGuideBound === "true") return;
+
+      button.dataset.managerGuideBound = "true";
+      button.addEventListener("click", () => {
+        navigateFromManagerGuide(button.dataset.managerGuideTarget || "dashboard");
+      });
+    });
+}
 function initialiseDecisionModal() {
   if (!state.dom.leaveDecisionModal || !window.bootstrap?.Modal) return;
   state.leaveDecisionModal = new window.bootstrap.Modal(state.dom.leaveDecisionModal);
@@ -1282,6 +1666,17 @@ function openDecisionModal(leaveId, action, buttonElement) {
     return;
   }
 
+  // SECONDARY MANAGER PENDING LEAVE VISIBILITY - STEP 1
+  // Defence in depth: do not open a decision workflow for a Secondary Manager,
+  // even if a stale element or manual browser call reaches this function.
+  if (!isPrimaryReportingManagerRelationship(request.managerRelationshipLabel)) {
+    showPageAlert(
+      "info",
+      "This request is visible for team planning. Only the Primary Manager can make a decision unless delegated approval is granted in a future release.",
+    );
+    return;
+  }
+
   const config = getDecisionActionConfig(action);
   state.pendingDecisionAction = action;
   state.pendingDecisionRequest = request;
@@ -1354,6 +1749,17 @@ async function submitLeaveDecisionFromModal() {
 
   if (!request || !action) {
     showPageAlert("warning", "No leave decision is currently selected.");
+    return;
+  }
+
+  // SECONDARY MANAGER PENDING LEAVE VISIBILITY - STEP 1
+  // Submission remains Primary-Manager-only in the browser as well as in the
+  // existing database decision RPC.
+  if (!isPrimaryReportingManagerRelationship(request.managerRelationshipLabel)) {
+    showPageAlert(
+      "warning",
+      "Only the Primary Manager can make this leave decision.",
+    );
     return;
   }
 
@@ -1442,21 +1848,27 @@ ${errorMessage}`);
 }
 
 function switchManagerWorkspace(workspace) {
+  const isDashboard = workspace === "dashboard";
   const isProfile = workspace === "profile";
   const isTeam = workspace === "team";
   const isSelfService = workspace === "selfservice";
 
+  state.dom.managerDashboardSection?.classList.toggle("d-none", !isDashboard);
   state.dom.managerProfileSection?.classList.toggle("d-none", !isProfile);
   state.dom.managerTeamSection?.classList.toggle("d-none", !isTeam);
   state.dom.managerSelfServiceSection?.classList.toggle("d-none", !isSelfService);
 
-  state.dom.managerTabProfileBtn.className = isProfile
-    ? "btn btn-primary dashboard-action-btn"
-    : "btn btn-outline-primary dashboard-action-btn";
+  if (state.dom.managerTabDashboardBtn) {
+    state.dom.managerTabDashboardBtn.className = isDashboard
+      ? "btn btn-primary dashboard-action-btn text-nowrap"
+      : "btn btn-outline-primary dashboard-action-btn text-nowrap";
+  }
 
-  state.dom.managerTabTeamBtn.className = isTeam
-    ? "btn btn-primary dashboard-action-btn"
-    : "btn btn-outline-primary dashboard-action-btn";
+  if (state.dom.managerTabTeamBtn) {
+    state.dom.managerTabTeamBtn.className = isTeam
+      ? "btn btn-primary dashboard-action-btn text-nowrap"
+      : "btn btn-outline-primary dashboard-action-btn text-nowrap";
+  }
 
   if (state.dom.managerTabSelfServiceBtn) {
     state.dom.managerTabSelfServiceBtn.className = isSelfService
@@ -1467,17 +1879,18 @@ function switchManagerWorkspace(workspace) {
   if (state.dom.managerModuleValue) {
     state.dom.managerModuleValue.textContent = isProfile
       ? "Profile"
-      : isSelfService
-        ? "My Self-Service"
-        : "Team Management";
+      : isTeam
+        ? "Team Management"
+        : isSelfService
+          ? "My Self-Service"
+          : "Dashboard";
   }
 
-  // CROSS-DASHBOARD SIDEBAR REPLICATION - MANAGER STEP 1C-2
-  // Keep the Manager desktop sidebar active state aligned with the existing
-  // Manager workspace tabs. This does not change routing, leave approval,
-  // reporting-line visibility, or workspace memory logic.
+  renderManagerModernWorkspaceHeader(workspace);
+
+  // Profile is opened from the account control, not the desktop sidebar.
   [
-    { id: "sidebarManagerProfileBtn", active: isProfile },
+    { id: "sidebarManagerDashboardBtn", active: isDashboard },
     { id: "sidebarManagerTeamBtn", active: isTeam },
     { id: "sidebarManagerSelfServiceBtn", active: isSelfService },
   ].forEach(({ id, active }) => {
@@ -1627,7 +2040,7 @@ function getInitials(fullName, fallback = "MG") {
 // Resolves the manager's department from their employees record (set by HR
 // from the controlled organization_departments list). Syncs the value into
 // profiles.department if the profile department is blank or out of date.
-// Does not insert into organization_departments — department setup is owned
+// Does not insert into organization_departments ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â department setup is owned
 // by HR/Admin through Manage Organization.
 async function ensureManagerProfileDepartment(supabase, profileData) {
   if (!profileData) return profileData;
@@ -1770,6 +2183,8 @@ function renderManagerProfile(profile, user) {
   if (state.dom.managerDepartment) {
     state.dom.managerDepartment.textContent = department || "--";
   }
+
+  renderManagerModernWorkspaceHeader(getRememberedManagerWorkspace());
 
   if (state.dom.managerProfileAvatar) {
     state.dom.managerProfileAvatar.textContent = initials;
@@ -2547,9 +2962,9 @@ function getTeamStatusLabel(profile) {
 }
 
 function getTeamStatusBadgeClass(profile) {
-  if (!profile) return "text-bg-warning";
-  if (profile.is_active === false) return "text-bg-secondary";
-  return "text-bg-success";
+  if (!profile) return "bexhr-status-pill--warning";
+  if (profile.is_active === false) return "bexhr-status-pill--neutral";
+  return "bexhr-status-pill--success";
 }
 
 // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-F
@@ -2599,14 +3014,14 @@ function getTeamStatusBadgeClassFromPortalAccess(portalAccessRow, fallbackProfil
   }
 
   if (portalAccessRow.has_portal_access && portalAccessRow.portal_is_active) {
-    return "text-bg-success";
+    return "bexhr-status-pill--success";
   }
 
   if (portalAccessRow.has_portal_access && !portalAccessRow.portal_is_active) {
-    return "text-bg-secondary";
+    return "bexhr-status-pill--neutral";
   }
 
-  return "text-bg-warning";
+  return "bexhr-status-pill--warning";
 }
 
 function getLeaveIdentityCandidatesForMember(member) {
@@ -2897,16 +3312,32 @@ async function assertNoOverlappingApprovedLeaveForEmployee(request = {}) {
 function getStatusBadgeClass(status) {
   switch (normalizeText(status)) {
     case "approved":
-      return "text-bg-success";
+      return "bexhr-status-pill--success";
     case "cancelled":
-      return "text-bg-secondary";
+      return "bexhr-status-pill--neutral";
     case "rejected":
-      return "text-bg-danger";
+      return "bexhr-status-pill--danger";
     case "returned":
     case "returned for clarification":
-      return "text-bg-warning";
+      return "bexhr-status-pill--warning";
     default:
-      return "text-bg-secondary";
+      return "bexhr-status-pill--neutral";
+  }
+}
+
+function getStatusPillIconClass(status) {
+  switch (normalizeText(status)) {
+    case "approved":
+      return "bi-check-circle-fill";
+    case "cancelled":
+      return "bi-x-circle-fill";
+    case "rejected":
+      return "bi-slash-circle-fill";
+    case "returned":
+    case "returned for clarification":
+      return "bi-arrow-return-left";
+    default:
+      return "bi-dash-circle-fill";
   }
 }
 
@@ -2963,20 +3394,343 @@ function getSameEmployeePendingRequestCount(request = {}, requests = []) {
   }).length;
 }
 
-// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1C
-// Compact employee identity block for the pending approval queue.
+// MANAGER PENDING REQUEST EMPLOYEE IDENTITY - v1.0.1
+// Displays a compact employee identity and opens a restricted,
+// read-only Manager Employee Details view.
+//
+// Security:
+// - no new Supabase query;
+// - no arbitrary employee lookup;
+// - employee must already exist in state.teamMembers;
+// - no salary, bank, tax, personal-address, document, or medical fields.
 function buildPendingRequestIdentityHtml(request = {}) {
+  const employeeName = String(
+    request.employeeName || "Unknown Employee",
+  ).trim();
+
+  const employeeRecordId = String(
+    request.employeeRecordId || "",
+  ).trim();
+
+  const employeeInitials =
+    employeeName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((namePart) => namePart.charAt(0).toUpperCase())
+      .join("") || "TM";
+
+  const employeeNameControl = employeeRecordId
+    ? `
+      <button type="button"
+        class="manager-pending-employee-name-link"
+        data-manager-employee-id="${escapeHtml(employeeRecordId)}"
+        onclick="window.managerOpenEmployeeDetails?.(
+          this.dataset.managerEmployeeId
+        )"
+        aria-label="View work details for ${escapeHtml(employeeName)}">
+        ${escapeHtml(employeeName)}
+      </button>
+    `
+    : `
+      <strong class="manager-pending-employee-name">
+        ${escapeHtml(employeeName)}
+      </strong>
+    `;
+
   return `
-    <div class="fw-semibold lh-sm">
-      ${escapeHtml(request.employeeName || "Unknown Employee")}
-    </div>
-    <div class="text-secondary small text-break mt-1">
-      ${escapeHtml(request.employeeEmail || "--")}
-    </div>
-    <div class="text-secondary small mt-1">
-      ${escapeHtml(request.employeeDepartment || "--")}
+    <div class="manager-pending-employee">
+      <span class="manager-pending-employee-avatar"
+        aria-hidden="true">
+        ${escapeHtml(employeeInitials)}
+      </span>
+
+      <span class="manager-pending-employee-copy">
+        ${employeeNameControl}
+
+        <span class="manager-pending-employee-department">
+          <i class="bi bi-building"
+            aria-hidden="true"></i>
+          ${escapeHtml(request.employeeDepartment || "--")}
+        </span>
+      </span>
     </div>
   `;
+}
+
+// MANAGER-SAFE EMPLOYEE DETAILS - v1.0.0
+// The selected employee must already be present in the active manager's
+// reporting-line-scoped state.teamMembers collection.
+function getManagerVisibleEmployeeById(employeeId = "") {
+  const normalizedEmployeeId = String(employeeId || "").trim();
+
+  if (!normalizedEmployeeId) return null;
+
+  const visibleTeamMembers = Array.isArray(state.teamMembers)
+    ? state.teamMembers
+    : [];
+
+  return (
+    visibleTeamMembers.find(
+      (member) =>
+        String(member?.id || "").trim() === normalizedEmployeeId,
+    ) || null
+  );
+}
+
+function setManagerEmployeeDetailsText(elementId, value) {
+  const element = document.getElementById(elementId);
+
+  if (element) {
+    element.textContent = String(value || "--");
+  }
+}
+
+function ensureManagerEmployeeDetailsModal() {
+  let modalElement = document.getElementById(
+    "managerEmployeeDetailsModal",
+  );
+
+  if (modalElement) return modalElement;
+
+  const modalContainer = document.createElement("div");
+
+  modalContainer.innerHTML = `
+    <div class="modal fade manager-employee-details-modal"
+      id="managerEmployeeDetailsModal"
+      tabindex="-1"
+      aria-labelledby="managerEmployeeDetailsTitle"
+      aria-hidden="true">
+
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content manager-employee-details-panel">
+
+          <div class="manager-employee-details-header">
+            <div>
+              <span class="manager-employee-details-kicker">
+                Manager read-only view
+              </span>
+
+              <h2 id="managerEmployeeDetailsTitle">
+                Employee work details
+              </h2>
+
+              <p>
+                Role-appropriate employment information for an employee
+                currently assigned to your reporting scope.
+              </p>
+            </div>
+
+            <button type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close">
+            </button>
+          </div>
+
+          <div class="manager-employee-details-body">
+            <section class="manager-employee-details-hero">
+              <span id="managerEmployeeDetailsAvatar"
+                class="manager-employee-details-avatar"
+                aria-hidden="true">
+                TM
+              </span>
+
+              <div class="manager-employee-details-identity">
+                <h3 id="managerEmployeeDetailsName">
+                  Employee
+                </h3>
+
+                <p id="managerEmployeeDetailsRoleDepartment">
+                  Role and department
+                </p>
+              </div>
+
+              <span id="managerEmployeeDetailsRelationship"
+                class="manager-employee-details-relationship">
+                Reporting relationship
+              </span>
+            </section>
+
+            <div class="manager-employee-details-grid">
+              <article class="manager-employee-details-field">
+                <span>Work email</span>
+                <strong id="managerEmployeeDetailsWorkEmail">--</strong>
+              </article>
+
+              <article class="manager-employee-details-field">
+                <span>Job title</span>
+                <strong id="managerEmployeeDetailsJobTitle">--</strong>
+              </article>
+
+              <article class="manager-employee-details-field">
+                <span>Department</span>
+                <strong id="managerEmployeeDetailsDepartment">--</strong>
+              </article>
+
+              <article class="manager-employee-details-field">
+                <span>Employment date</span>
+                <strong id="managerEmployeeDetailsEmploymentDate">--</strong>
+              </article>
+
+              <article class="manager-employee-details-field">
+                <span>Portal access</span>
+                <strong id="managerEmployeeDetailsPortalAccess">--</strong>
+              </article>
+
+              <article class="manager-employee-details-field">
+                <span>Manager relationship</span>
+                <strong id="managerEmployeeDetailsManagerRelationship">--</strong>
+              </article>
+            </div>
+
+            <div class="manager-employee-details-privacy-note">
+              <i class="bi bi-shield-lock"
+                aria-hidden="true"></i>
+
+              <span>
+                This view intentionally excludes private personal,
+                payroll, banking, tax, document and sensitive HR data.
+              </span>
+            </div>
+          </div>
+
+          <div class="manager-employee-details-footer">
+            <button type="button"
+              class="btn btn-outline-secondary dashboard-action-btn"
+              data-bs-dismiss="modal">
+              Close
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  `.trim();
+
+  modalElement = modalContainer.firstElementChild;
+
+  if (!modalElement) {
+    throw new Error(
+      "Manager employee details modal could not be created.",
+    );
+  }
+
+  document.body.appendChild(modalElement);
+
+  return modalElement;
+}
+
+function openManagerEmployeeDetails(employeeId = "") {
+  const employee = getManagerVisibleEmployeeById(employeeId);
+
+  if (!employee) {
+    showPageAlert(
+      "warning",
+      "This employee is no longer in your active reporting scope.",
+    );
+
+    return;
+  }
+
+  const employeeName = String(
+    employee.employeeFullName || "Employee",
+  ).trim();
+
+  const employeeInitials =
+    employeeName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((namePart) => namePart.charAt(0).toUpperCase())
+      .join("") || "TM";
+
+  const jobTitle = String(employee.job_title || "--").trim();
+  const department = String(employee.department || "--").trim();
+  const relationship = String(
+    employee.relationshipLabel || "Reporting relationship",
+  ).trim();
+
+  const modalElement = ensureManagerEmployeeDetailsModal();
+
+  setManagerEmployeeDetailsText(
+    "managerEmployeeDetailsAvatar",
+    employeeInitials,
+  );
+
+  setManagerEmployeeDetailsText(
+    "managerEmployeeDetailsName",
+    employeeName,
+  );
+
+  setManagerEmployeeDetailsText(
+    "managerEmployeeDetailsRoleDepartment",
+    `${jobTitle} Â· ${department}`,
+  );
+
+  setManagerEmployeeDetailsText(
+    "managerEmployeeDetailsWorkEmail",
+    employee.work_email || "--",
+  );
+
+  setManagerEmployeeDetailsText(
+    "managerEmployeeDetailsJobTitle",
+    jobTitle,
+  );
+
+  setManagerEmployeeDetailsText(
+    "managerEmployeeDetailsDepartment",
+    department,
+  );
+
+  setManagerEmployeeDetailsText(
+    "managerEmployeeDetailsEmploymentDate",
+    formatDate(employee.employment_date),
+  );
+
+  setManagerEmployeeDetailsText(
+    "managerEmployeeDetailsPortalAccess",
+    employee.teamStatusLabel || "--",
+  );
+
+  setManagerEmployeeDetailsText(
+    "managerEmployeeDetailsManagerRelationship",
+    relationship,
+  );
+
+  const relationshipElement = document.getElementById(
+    "managerEmployeeDetailsRelationship",
+  );
+
+  if (relationshipElement) {
+    relationshipElement.textContent = relationship;
+
+    relationshipElement.className =
+      "manager-employee-details-relationship";
+
+    const normalizedRelationship = normalizeText(relationship);
+
+    if (normalizedRelationship.includes("primary")) {
+      relationshipElement.classList.add(
+        "manager-employee-details-relationship--primary",
+      );
+    } else if (normalizedRelationship.includes("secondary")) {
+      relationshipElement.classList.add(
+        "manager-employee-details-relationship--secondary",
+      );
+    }
+  }
+
+  const modalController =
+    window.bootstrap?.Modal?.getOrCreateInstance(modalElement);
+
+  if (!modalController) {
+    throw new Error(
+      "Bootstrap Modal is unavailable for Manager Employee Details.",
+    );
+  }
+
+  modalController.show();
 }
 
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1C
@@ -3142,6 +3896,21 @@ function buildPendingRequestReviewSignalsHtml(request = {}, requests = []) {
 // Keep the existing window.managerHandleLeaveAction wiring intact.
 // This only groups the decision buttons into a cleaner manager action area.
 function buildPendingRequestDecisionActionsHtml(request = {}) {
+  // SECONDARY MANAGER PENDING LEAVE VISIBILITY - STEP 1
+  // Every active reporting manager may see a pending request, but only the
+  // Primary Manager may decide it until delegated approval is implemented.
+  if (!isPrimaryReportingManagerRelationship(request.managerRelationshipLabel)) {
+    return `
+      <div class="d-inline-flex flex-column align-items-end gap-1">
+        <span class="bexhr-status-pill bexhr-status-pill--warning"
+          title="Only the Primary Manager can make this leave decision.">
+          <i class="bi bi-eye-fill" aria-hidden="true"></i>
+          <span>Awaiting Primary Manager</span>
+        </span>
+        <span class="small text-secondary">View only</span>
+      </div>
+    `;
+  }
   // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1D
   // Keep action buttons inline and icon-only, but preserve title/aria-label
   // so the controls remain understandable and accessible.
@@ -3328,16 +4097,58 @@ function buildProcessedDecisionCommentHtml(request = {}) {
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
 // Team schedule is a coverage-planning view. These helpers format existing
 // approved leave records only; they do not change approval or RLS logic.
+// MANAGER TEAM SCHEDULE EMPLOYEE IDENTITY - v1.0.0
+// Reuse the approved pending-request employee identity pattern for the
+// Team Leave Schedule. This is presentation-only and performs no new query.
 function buildTeamScheduleIdentityHtml(item = {}) {
+  const employeeName = String(
+    item.employeeName || "Unknown Employee",
+  ).trim();
+
+  const employeeRecordId = String(
+    item.employeeRecordId || "",
+  ).trim();
+
+  const employeeInitials =
+    employeeName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((namePart) => namePart.charAt(0).toUpperCase())
+      .join("") || "TM";
+
+  const employeeNameControl = employeeRecordId
+    ? `
+      <button type="button"
+        class="manager-pending-employee-name-link"
+        data-manager-employee-id="${escapeHtml(employeeRecordId)}"
+        onclick="window.managerOpenEmployeeDetails?.(this.dataset.managerEmployeeId)"
+        aria-label="View work details for ${escapeHtml(employeeName)}">
+        ${escapeHtml(employeeName)}
+      </button>
+    `
+    : `
+      <strong class="manager-pending-employee-name">
+        ${escapeHtml(employeeName)}
+      </strong>
+    `;
+
   return `
-    <div class="fw-semibold lh-sm">
-      ${escapeHtml(item.employeeName || "Unknown Employee")}
-    </div>
-    <div class="text-secondary small text-break mt-1">
-      ${escapeHtml(item.employeeEmail || "--")}
-    </div>
-    <div class="text-secondary small mt-1">
-      ${escapeHtml(item.employeeDepartment || "--")}
+    <div class="manager-pending-employee manager-schedule-employee">
+      <span class="manager-pending-employee-avatar"
+        aria-hidden="true">
+        ${escapeHtml(employeeInitials)}
+      </span>
+
+      <span class="manager-pending-employee-copy">
+        ${employeeNameControl}
+
+        <span class="manager-pending-employee-department">
+          <i class="bi bi-building"
+            aria-hidden="true"></i>
+          ${escapeHtml(item.employeeDepartment || "--")}
+        </span>
+      </span>
     </div>
   `;
 }
@@ -3558,12 +4369,20 @@ function buildAssignedEmployeeStatusHtml(member = {}) {
       ? "No linked user login"
       : "";
 
+  const normalizedStatus = normalizeText(statusLabel);
+  const iconClass = normalizedStatus === "active"
+    ? "bi-check-circle-fill"
+    : normalizedStatus === "inactive"
+      ? "bi-pause-circle-fill"
+      : "bi-exclamation-triangle-fill";
+
   return `
     <div class="d-flex flex-column gap-1">
-      <span class="badge ${member.teamStatusBadgeClass || "text-bg-secondary"} align-self-start"
+      <span class="bexhr-status-pill ${member.teamStatusBadgeClass || "bexhr-status-pill--neutral"} align-self-start"
         title="${escapeHtml(statusLabel)}"
         aria-label="${escapeHtml(statusLabel)}">
-        ${escapeHtml(compactLabel)}
+        <i class="bi ${iconClass}" aria-hidden="true"></i>
+        <span>${escapeHtml(compactLabel)}</span>
       </span>
       ${helpText
       ? `<span class="small text-secondary">${escapeHtml(helpText)}</span>`
@@ -3896,6 +4715,369 @@ function applyTeamFilter() {
   renderTeamTable(state.filteredTeamMembers);
 }
 
+// MANAGER ACTION AND COVERAGE CENTRE - v1.0.0
+// Presentation-only aggregation of data already loaded for this manager.
+// No new Supabase query, permission, session, or decision path is introduced.
+function setManagerActionCentreText(elementId, value) {
+  const element = document.getElementById(elementId);
+
+  if (element) {
+    element.textContent = String(value ?? "");
+  }
+}
+
+function formatManagerActionCentreDate(value) {
+  const normalisedValue = String(value || "").trim();
+
+  if (!normalisedValue) return "";
+
+  const date = new Date(`${normalisedValue}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return normalisedValue;
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function renderManagerActionCoverageCentre() {
+  const teamMembers = Array.isArray(state.teamMembers)
+    ? state.teamMembers
+    : [];
+
+  const pendingRequests = Array.isArray(state.pendingLeaveRequests)
+    ? state.pendingLeaveRequests
+    : [];
+
+  const scheduleItems = Array.isArray(state.teamLeaveSchedule)
+    ? state.teamLeaveSchedule
+    : [];
+
+  const primaryRelationshipCount = teamMembers.filter((member) =>
+    isPrimaryReportingManagerRelationship(member.relationshipLabel),
+  ).length;
+
+  const secondaryRelationshipCount = teamMembers.filter((member) =>
+    normalizeText(member.relationshipLabel).includes("secondary"),
+  ).length;
+
+  const primaryPendingCount = pendingRequests.filter((request) =>
+    isPrimaryReportingManagerRelationship(
+      request.managerRelationshipLabel,
+    ),
+  ).length;
+
+  const secondaryPendingCount = pendingRequests.filter(
+    (request) =>
+      !isPrimaryReportingManagerRelationship(
+        request.managerRelationshipLabel,
+      ),
+  ).length;
+
+  const conflictCount = [
+    ...pendingRequests,
+    ...scheduleItems,
+  ].filter((item) => Boolean(item.hasOverlap)).length;
+
+  const accessAttentionCount = teamMembers.filter(
+    (member) =>
+      member.teamStatusLabel === "Employees Missing Login",
+  ).length;
+
+  let coverageMode = "Manager";
+  let coverageModeKey = "default";
+  let coverageDescription =
+    "Review team activity and reporting-line responsibilities.";
+  let decisionAuthority = "Reporting-line rules apply";
+
+  if (
+    primaryRelationshipCount > 0 &&
+    secondaryRelationshipCount > 0
+  ) {
+    coverageMode = "Mixed Manager Coverage";
+    coverageModeKey = "mixed";
+    coverageDescription =
+      "Your scope contains Primary and Secondary reporting lines. Decision rights apply only to employees assigned to you as Primary Manager.";
+    decisionAuthority = "Primary assignments only";
+  } else if (secondaryRelationshipCount > 0) {
+    coverageMode = "Secondary Manager";
+    coverageModeKey = "secondary";
+    coverageDescription =
+      "You can monitor leave activity and team coverage. Pending decisions remain with each employeeâ€™s Primary Manager.";
+    decisionAuthority = "Primary Manager action required";
+  } else if (primaryRelationshipCount > 0) {
+    coverageMode = "Primary Manager";
+    coverageModeKey = "primary";
+    coverageDescription =
+      "You can review team coverage and decide pending requests for employees assigned to you as Primary Manager.";
+    decisionAuthority = "You can review and decide";
+  }
+
+  const modeBadge = document.getElementById(
+    "managerCoverageModeBadge",
+  );
+
+  if (modeBadge) {
+    modeBadge.textContent = coverageMode;
+    modeBadge.className =
+      `manager-coverage-mode-badge ` +
+      `manager-coverage-mode-badge--${coverageModeKey}`;
+  }
+
+  setManagerActionCentreText(
+    "managerCoverageModeDescription",
+    coverageDescription,
+  );
+
+  setManagerActionCentreText(
+    "managerDecisionAuthority",
+    decisionAuthority,
+  );
+
+  setManagerActionCentreText(
+    "managerPrimaryActionCount",
+    primaryPendingCount,
+  );
+
+  setManagerActionCentreText(
+    "managerSecondaryVisibilityCount",
+    secondaryPendingCount,
+  );
+
+  setManagerActionCentreText(
+    "managerActionConflictCount",
+    conflictCount,
+  );
+
+  setManagerActionCentreText(
+    "managerActionAccessCount",
+    accessAttentionCount,
+  );
+
+  const nextAbsence = [...scheduleItems]
+    .filter((item) => String(item.start_date || "").trim())
+    .sort((left, right) =>
+      String(left.start_date || "").localeCompare(
+        String(right.start_date || ""),
+      ),
+    )[0];
+
+  if (!nextAbsence) {
+    setManagerActionCentreText(
+      "managerNextAbsenceName",
+      "No upcoming approved leave",
+    );
+
+    setManagerActionCentreText(
+      "managerNextAbsencePeriod",
+      "Your team schedule is currently clear.",
+    );
+
+    return;
+  }
+
+  const startDate = formatManagerActionCentreDate(
+    nextAbsence.start_date,
+  );
+
+  const endDate = formatManagerActionCentreDate(
+    nextAbsence.end_date,
+  );
+
+  const period =
+    startDate && endDate && startDate !== endDate
+      ? `${startDate} â€“ ${endDate}`
+      : startDate || endDate || "Date unavailable";
+
+  setManagerActionCentreText(
+    "managerNextAbsenceName",
+    nextAbsence.employeeName || "Team member",
+  );
+
+  setManagerActionCentreText(
+    "managerNextAbsencePeriod",
+    `${period} Â· ${nextAbsence.leaveTypeName || "Approved leave"}`,
+  );
+}
+
+// =========================================================
+// MANAGER ACTION CENTRE TARGET LINKS - v1.0.1
+// Routes each Overview operational card to the exact existing Manager panel.
+// Uses data already held in state and existing expand/collapse controls.
+// No Supabase query, authority, decision, reporting-line, or session change.
+// =========================================================
+let managerActionCentreFocusTimeoutId = null;
+
+function clearManagerActionCentreDestinationFocus() {
+  document
+    .querySelectorAll(
+      ".manager-action-destination-focus, .manager-action-row-focus",
+    )
+    .forEach((element) => {
+      element.classList.remove(
+        "manager-action-destination-focus",
+        "manager-action-row-focus",
+      );
+    });
+
+  if (managerActionCentreFocusTimeoutId) {
+    window.clearTimeout(managerActionCentreFocusTimeoutId);
+    managerActionCentreFocusTimeoutId = null;
+  }
+}
+
+function expandManagerActionCentreDestination({ collapseId, toggleId }) {
+  const collapseElement = document.getElementById(collapseId);
+  const toggleButton = document.getElementById(toggleId);
+
+  if (!collapseElement || !toggleButton) return false;
+
+  if (collapseElement.classList.contains("d-none")) {
+    toggleButton.click();
+  }
+
+  return true;
+}
+
+function getManagerActionCentrePendingMatches(targetKey) {
+  const pendingRequests = Array.isArray(state.pendingLeaveRequests)
+    ? state.pendingLeaveRequests
+    : [];
+
+  return pendingRequests.map((request) => {
+    if (targetKey === "primary") {
+      return isPrimaryReportingManagerRelationship(
+        request.managerRelationshipLabel,
+      );
+    }
+
+    if (targetKey === "secondary") {
+      return !isPrimaryReportingManagerRelationship(
+        request.managerRelationshipLabel,
+      );
+    }
+
+    if (targetKey === "conflicts") {
+      return Boolean(request.hasOverlap);
+    }
+
+    return false;
+  });
+}
+
+function focusManagerActionCentreRows({
+  cardHeaderId,
+  wrapperId,
+  tableBodyId,
+  rowMatches,
+}) {
+  const cardHeader = document.getElementById(cardHeaderId);
+  const wrapper = document.getElementById(wrapperId);
+  const tableBody = document.getElementById(tableBodyId);
+  const card = cardHeader?.closest("section.card") || cardHeader;
+
+  if (card) {
+    card.classList.add("manager-action-destination-focus");
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  const rows = Array.from(tableBody?.querySelectorAll("tr") || []);
+  const matchingRows = rows.filter((row, index) => Boolean(rowMatches[index]));
+
+  matchingRows.forEach((row) => {
+    row.classList.add("manager-action-row-focus");
+  });
+
+  const firstMatch = matchingRows[0];
+
+  if (firstMatch && wrapper) {
+    const headerHeight =
+      wrapper.querySelector("thead")?.getBoundingClientRect().height || 44;
+
+    wrapper.scrollTop = Math.max(
+      0,
+      firstMatch.offsetTop - headerHeight - 8,
+    );
+  }
+
+  managerActionCentreFocusTimeoutId = window.setTimeout(() => {
+    clearManagerActionCentreDestinationFocus();
+  }, 4200);
+}
+
+function navigateManagerActionCentre(targetKey = "") {
+  const normalizedTarget = String(targetKey || "")
+    .trim()
+    .toLowerCase();
+
+  const supportedTargets = [
+    "primary",
+    "secondary",
+    "conflicts",
+    "access",
+  ];
+
+  if (!supportedTargets.includes(normalizedTarget)) return;
+
+  clearManagerActionCentreDestinationFocus();
+
+  document.getElementById("managerTabTeamBtn")?.click();
+
+  window.setTimeout(() => {
+    if (normalizedTarget === "access") {
+      const searchInput = document.getElementById("teamSearchInput");
+
+      if (searchInput && searchInput.value) {
+        searchInput.value = "";
+        applyTeamFilter();
+      }
+
+      expandManagerActionCentreDestination({
+        collapseId: "assignedEmployeeRecordsCardCollapse",
+        toggleId: "toggleAssignedEmployeeRecordsCardBtn",
+      });
+
+      window.setTimeout(() => {
+        const visibleTeamMembers = Array.isArray(state.filteredTeamMembers)
+          ? state.filteredTeamMembers
+          : [];
+
+        focusManagerActionCentreRows({
+          cardHeaderId: "assignedEmployeeRecordsCardHeader",
+          wrapperId: "teamTableWrapper",
+          tableBodyId: "teamTableBody",
+          rowMatches: visibleTeamMembers.map(
+            (member) =>
+              member.teamStatusLabel === "Employees Missing Login",
+          ),
+        });
+      }, 120);
+
+      return;
+    }
+
+    expandManagerActionCentreDestination({
+      collapseId: "pendingRequestsCardCollapse",
+      toggleId: "togglePendingRequestsCardBtn",
+    });
+
+    window.setTimeout(() => {
+      focusManagerActionCentreRows({
+        cardHeaderId: "pendingRequestsCardHeader",
+        wrapperId: "pendingRequestsTableWrapper",
+        tableBodyId: "pendingRequestsTableBody",
+        rowMatches:
+          getManagerActionCentrePendingMatches(normalizedTarget),
+      });
+    }, 120);
+  }, 80);
+}
+
+window.managerNavigateActionCentre = navigateManagerActionCentre;
 function renderSummaryTiles(teamMembers) {
   const activeCount = teamMembers.filter(
     (member) => member.teamStatusLabel === "Active",
@@ -3926,19 +5108,26 @@ function renderSummaryTiles(teamMembers) {
   if (state.dom.departmentCountValue) {
     state.dom.departmentCountValue.textContent = String(uniqueDepartments.size);
   }
+  renderManagerActionCoverageCentre();
+  renderManagerTeamWorkspaceSummary();
 }
 
+// MANAGER ASSIGNED EMPLOYEE RECORDS COMPACT CARDS - v1.0.0
+// Presentation-only rendering of the manager-scoped team already loaded into
+// state.teamMembers. Search, refresh, RLS, reporting lines and session logic
+// remain unchanged.
 function renderTeamLoadingState() {
   if (!state.dom.teamTableBody) return;
 
   state.dom.teamEmptyState.classList.add("d-none");
   state.dom.teamTableWrapper.classList.remove("d-none");
   state.dom.teamTableBody.innerHTML = `
-    <tr>
-      <!-- MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-D
-           Assigned employee records now render in four manager-facing columns. -->
-      <td colspan="4" class="text-center text-secondary py-4">
-        Loading assigned team records...
+    <tr class="manager-assigned-employee-card-row">
+      <td colspan="4" class="manager-assigned-employee-card-cell">
+        <div class="manager-assigned-employee-loading" role="status">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+          <span>Loading assigned employee records...</span>
+        </div>
       </td>
     </tr>
   `;
@@ -3961,36 +5150,98 @@ function renderTeamTable(teamMembers) {
 
   teamMembers.forEach((member) => {
     const row = document.createElement("tr");
+    row.className = "manager-assigned-employee-card-row";
 
-    // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K
-    // Render assigned employees as grouped HR-facing records while keeping
-    // the underlying RLS-scoped employee data unchanged.
+    const employeeName = String(
+      member.employeeFullName || "Unnamed Employee",
+    ).trim();
+
+    const employeeRecordId = String(member.id || "").trim();
+
+    const employeeInitials =
+      employeeName
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((namePart) => namePart.charAt(0).toUpperCase())
+        .join("") || "TM";
+
+    const employeeNameControl = employeeRecordId
+      ? `
+        <button type="button"
+          class="manager-assigned-employee-name-link"
+          data-manager-employee-id="${escapeHtml(employeeRecordId)}"
+          onclick="window.managerOpenEmployeeDetails?.(this.dataset.managerEmployeeId)"
+          title="View employee work details"
+          aria-label="View work details for ${escapeHtml(employeeName)}">
+          ${escapeHtml(employeeName)}
+        </button>
+      `
+      : `
+        <strong class="manager-assigned-employee-name">
+          ${escapeHtml(employeeName)}
+        </strong>
+      `;
+
+    const workEmail = String(member.work_email || "--").trim();
+    const jobTitle = String(member.job_title || "--").trim();
+    const department = String(member.department || "--").trim();
+    const statusKey = normalizeText(member.teamStatusLabel || "");
+
+    row.dataset.managerEmployeeId = employeeRecordId;
+    row.dataset.managerTeamStatus = statusKey;
+
     row.innerHTML = `
-      <td class="px-3 py-3 align-top">
-        ${buildAssignedEmployeeIdentityHtml(member)}
-      </td>
+      <td colspan="4" class="manager-assigned-employee-card-cell">
+        <article class="manager-assigned-employee-card"
+          aria-label="${escapeHtml(employeeName)} employee record">
 
-      <td class="px-3 py-3 align-top">
-        ${buildAssignedEmployeeRoleDepartmentHtml(member)}
-      </td>
+          <header class="manager-assigned-employee-card-header">
+            <div class="manager-assigned-employee-identity">
+              <span class="manager-assigned-employee-avatar"
+                aria-hidden="true">
+                ${escapeHtml(employeeInitials)}
+              </span>
 
-      <td class="px-3 py-3 align-top">
-        ${buildAssignedEmployeeStatusHtml(member)}
-      </td>
+              <div class="manager-assigned-employee-copy">
+                ${employeeNameControl}
+                <span class="manager-assigned-employee-role">
+                  ${escapeHtml(jobTitle)}
+                </span>
+              </div>
+            </div>
 
-      <td class="px-3 py-3 align-top text-nowrap">
-        <!-- MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-D
-             Manager assignment/scope labels are intentionally not shown here.
-             If the employee is visible, reporting-line/RLS has already scoped
-             the record to this manager. -->
-        ${formatDate(member.employment_date)}
+            <div class="manager-assigned-employee-access">
+              <span class="manager-assigned-employee-access-label">
+                Portal access
+              </span>
+              ${buildAssignedEmployeeStatusHtml(member)}
+            </div>
+          </header>
+
+          <div class="manager-assigned-employee-meta-band">
+            <div class="manager-assigned-employee-meta-item">
+              <span>Work email</span>
+              <strong>${escapeHtml(workEmail)}</strong>
+            </div>
+
+            <div class="manager-assigned-employee-meta-item">
+              <span>Department</span>
+              <strong>${escapeHtml(department)}</strong>
+            </div>
+
+            <div class="manager-assigned-employee-meta-item">
+              <span>Start date</span>
+              <strong>${escapeHtml(formatDate(member.employment_date))}</strong>
+            </div>
+          </div>
+        </article>
       </td>
     `;
 
     tbody.appendChild(row);
   });
 }
-
 async function loadTeamLeaveVisibility() {
   const supabase = getSupabaseClient();
 
@@ -4258,7 +5509,9 @@ async function loadTeamLeaveVisibility() {
 }
 
 function renderLeaveSummaryTiles(pendingRequests, scheduleItems) {
-  const overlapCount = scheduleItems.filter((item) => item.hasOverlap).length;
+  const overlapCount = [...pendingRequests, ...scheduleItems].filter(
+    (item) => item.hasOverlap,
+  ).length;
 
   const uniqueLeaveTypes = new Set(
     [...pendingRequests, ...scheduleItems]
@@ -4281,6 +5534,8 @@ function renderLeaveSummaryTiles(pendingRequests, scheduleItems) {
   if (state.dom.leaveTypeCountValue) {
     state.dom.leaveTypeCountValue.textContent = String(uniqueLeaveTypes.size);
   }
+  renderManagerActionCoverageCentre();
+  renderManagerTeamWorkspaceSummary();
 }
 
 function renderPendingRequestsLoadingState() {
@@ -4299,57 +5554,104 @@ function renderPendingRequestsLoadingState() {
   `;
 }
 
+// MANAGER PENDING LEAVE REQUEST MODERN CARDS - v1.0.1
+// Direct renderer replacement for the already loaded, manager-scoped queue.
+// No query, RLS, reporting-line, balance, authority, modal, or session change.
 function renderPendingLeaveRequests(requests) {
   const tbody = state.dom.pendingRequestsTableBody;
   if (!tbody) return;
 
+  const visibleRequests = Array.isArray(requests) ? requests : [];
   tbody.innerHTML = "";
 
-  if (!requests.length) {
-    state.dom.pendingRequestsEmptyState.classList.remove("d-none");
-    state.dom.pendingRequestsTableWrapper.classList.add("d-none");
+  if (!visibleRequests.length) {
+    state.dom.pendingRequestsEmptyState?.classList.remove("d-none");
+    state.dom.pendingRequestsTableWrapper?.classList.add("d-none");
     return;
   }
 
-  state.dom.pendingRequestsEmptyState.classList.add("d-none");
-  state.dom.pendingRequestsTableWrapper.classList.remove("d-none");
+  state.dom.pendingRequestsEmptyState?.classList.add("d-none");
+  state.dom.pendingRequestsTableWrapper?.classList.remove("d-none");
 
-  requests.forEach((request) => {
+  visibleRequests.forEach((request) => {
     const row = document.createElement("tr");
+    row.className = "manager-pending-modern-row";
 
-    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1C
-    // Render each pending leave request as a compact manager review row.
-    // Existing IDs, status values, modal launch, and approval persistence
-    // remain unchanged.
+    const startDate = getDashboardDisplayDate(request.start_date);
+    const endDate = getDashboardDisplayDate(request.end_date);
+    const startLabel = startDate
+      ? formatShortMonthDayFromDate(startDate)
+      : formatDate(request.start_date);
+    const endLabel = endDate
+      ? formatShortMonthDayFromDate(endDate)
+      : formatDate(request.end_date);
+    const startYear = startDate ? String(startDate.getFullYear()) : "";
+    const endYear = endDate ? String(endDate.getFullYear()) : "";
+
+    const periodLabel =
+      startYear && endYear && startYear === endYear
+        ? `${startLabel} - ${endLabel}, ${endYear}`
+        : `${startLabel}${startYear ? `, ${startYear}` : ""} - ${endLabel}${endYear ? `, ${endYear}` : ""}`;
+
+    const numericDays = Number(request.total_days || 0);
+    const durationLabel = numericDays > 0
+      ? `${numericDays} day${numericDays === 1 ? "" : "s"}`
+      : "--";
+
+    const employeeName = String(
+      request.employeeName || "Unknown Employee",
+    ).trim();
+
     row.innerHTML = `
-      <td class="px-3 py-3 align-top">
-        ${buildPendingRequestIdentityHtml(request)}
-      </td>
+      <td colspan="6" class="manager-pending-modern-cell">
+        <article class="manager-pending-modern-card"
+          aria-label="Pending leave request for ${escapeHtml(employeeName)}">
 
-      <td class="px-3 py-3 align-top">
-        ${buildPendingRequestPeriodHtml(request)}
-      </td>
+          <header class="manager-pending-modern-header">
+            <div class="manager-pending-modern-identity">
+              ${buildPendingRequestIdentityHtml(request)}
+            </div>
 
-      <td class="px-3 py-3 align-top text-center">
-        <span class="badge rounded-pill text-bg-light border text-dark px-3 py-2">
-          ${escapeHtml(request.total_days || "--")}
-        </span>
-      </td>
+            <div class="manager-pending-modern-header-side">
+              <div class="manager-pending-modern-submitted">
+                <span class="manager-pending-modern-label">Submitted</span>
+                ${buildPendingRequestSubmittedHtml(request.submitted_at)}
+              </div>
 
-      <td class="px-3 py-3 align-top text-nowrap">
-        <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1D
-             Stack submitted date and time for easier manager review. -->
-        ${buildPendingRequestSubmittedHtml(request.submitted_at)}
-      </td>
+              <div class="manager-pending-modern-actions">
+                <span class="manager-pending-modern-label">Decision actions</span>
+                ${buildPendingRequestDecisionActionsHtml(request)}
+              </div>
+            </div>
+          </header>
 
-      <td class="px-3 py-3 align-top">
-        ${buildPendingRequestReviewSignalsHtml(request, requests)}
-      </td>
+          <div class="manager-pending-modern-meta-grid">
+            <div class="manager-pending-modern-meta-item">
+              <span>Leave type</span>
+              <strong>${escapeHtml(request.leaveTypeName || "--")}</strong>
+            </div>
 
-      <td class="px-3 py-3 align-top text-end">
-        ${buildPendingRequestDecisionActionsHtml(request)}
+            <div class="manager-pending-modern-meta-item manager-pending-modern-meta-item--period">
+              <span>Leave period</span>
+              <strong>${escapeHtml(periodLabel)}</strong>
+            </div>
+
+            <div class="manager-pending-modern-meta-item">
+              <span>Duration</span>
+              <strong>${escapeHtml(durationLabel)}</strong>
+            </div>
+          </div>
+
+          <section class="manager-pending-modern-readiness">
+            <span class="manager-pending-modern-label">Decision readiness</span>
+            <div class="manager-pending-modern-readiness-content">
+              ${buildPendingRequestReviewSignalsHtml(request, visibleRequests)}
+            </div>
+          </section>
+        </article>
       </td>
     `;
+
     tbody.appendChild(row);
   });
 }
@@ -4370,6 +5672,228 @@ function renderProcessedRequestsLoadingState() {
   `;
 }
 
+// MANAGER PROCESSED DECISION AUDIT CARDS - v1.0.1
+// Presentation-only helpers for the existing processed leave data.
+// No query, RLS, reporting-line, authority, decision, balance, or session logic changes.
+function getProcessedDecisionAuditCardTone(request = {}) {
+  const status = normalizeText(request.status);
+
+  if (status === "approved") return "approved";
+  if (status === "rejected") return "rejected";
+  if (status === "returned" || status === "returned for clarification") {
+    return "returned";
+  }
+  if (status === "cancelled" || request.cancelled_at) return "cancelled";
+
+  return "neutral";
+}
+
+function getProcessedDecisionAuditCardInitials(employeeName = "") {
+  return (
+    String(employeeName || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "TM"
+  );
+}
+
+function getProcessedDecisionAuditCardPeriod(request = {}) {
+  const startDate = getDashboardDisplayDate(request.start_date);
+  const endDate = getDashboardDisplayDate(request.end_date);
+
+  if (!startDate || !endDate) {
+    return `${formatDate(request.start_date)} - ${formatDate(request.end_date)}`;
+  }
+
+  const startLabel = formatShortMonthDayFromDate(startDate);
+  const endLabel = formatShortMonthDayFromDate(endDate);
+  const startYear = startDate.getFullYear();
+  const endYear = endDate.getFullYear();
+
+  if (startYear === endYear) {
+    return `${startLabel} - ${endLabel}, ${startYear}`;
+  }
+
+  return `${startLabel}, ${startYear} - ${endLabel}, ${endYear}`;
+}
+
+function buildProcessedDecisionAuditCardCommentHtml(request = {}) {
+  const isCancelled =
+    normalizeText(request.status) === "cancelled" ||
+    Boolean(request.cancelled_at);
+
+  const comment = String(
+    isCancelled
+      ? request.cancellation_reason || "No cancellation reason recorded."
+      : request.decision_comment || "No comment recorded.",
+  ).trim();
+
+  if (comment.length <= 180) {
+    return `
+      <div class="manager-processed-card-comment-text">
+        ${escapeHtml(comment)}
+      </div>
+    `;
+  }
+
+  const preview = `${comment.slice(0, 177).trimEnd()}...`;
+
+  return `
+    <div class="manager-processed-card-comment-text manager-processed-card-comment-preview">
+      ${escapeHtml(preview)}
+    </div>
+    <details class="manager-processed-card-comment-details">
+      <summary>Show full comment</summary>
+      <div>${escapeHtml(comment)}</div>
+    </details>
+  `;
+}
+
+function buildProcessedDecisionAuditCardHtml(request = {}) {
+  const employeeName = String(
+    request.employeeName || "Unknown Employee",
+  ).trim();
+  const employeeRecordId = String(request.employeeRecordId || "").trim();
+  const initials = getProcessedDecisionAuditCardInitials(employeeName);
+  const tone = getProcessedDecisionAuditCardTone(request);
+  const isCancelled = tone === "cancelled";
+  const statusLabel = isCancelled
+    ? "Cancelled by HR"
+    : getCompactDecisionStatusLabel(request.status);
+  const eventValue = isCancelled
+    ? request.cancelled_at || request.decision_at
+    : request.decision_at;
+  const { dateLabel, timeLabel } = formatSubmittedDateTimeParts(eventValue);
+  const actor = String(
+    isCancelled
+      ? request.cancelled_by_name || request.cancelled_by || "HR"
+      : request.decision_by_name || "Decision owner unavailable",
+  ).trim();
+  const actionVerb = isCancelled
+    ? "cancelled"
+    : getProcessedDecisionVerb(request.status);
+  const restoredDays = Number(request.balance_restored_days || 0);
+  const hasRestoredDays = Number.isFinite(restoredDays) && restoredDays > 0;
+  const employeeNameHtml = employeeRecordId
+    ? `
+      <button type="button"
+        class="manager-processed-card-name-link"
+        data-manager-employee-id="${escapeHtml(employeeRecordId)}"
+        onclick="window.managerOpenEmployeeDetails?.(this.dataset.managerEmployeeId)"
+        aria-label="View work details for ${escapeHtml(employeeName)}">
+        ${escapeHtml(employeeName)}
+      </button>
+    `
+    : `<strong class="manager-processed-card-name">${escapeHtml(employeeName)}</strong>`;
+
+  const originalDecisionHtml = isCancelled
+    ? `
+      <span class="manager-processed-card-audit-chip">
+        <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+        Original decision: ${escapeHtml(request.cancelled_from_status || "Approved")}
+        ${request.decision_by_name ? ` by ${escapeHtml(request.decision_by_name)}` : ""}
+      </span>
+    `
+    : "";
+
+  const restoredBalanceHtml = isCancelled
+    ? `
+      <span class="manager-processed-card-audit-chip">
+        <i class="bi bi-calendar2-check" aria-hidden="true"></i>
+        ${escapeHtml(
+          hasRestoredDays
+            ? `${restoredDays} day(s) restored`
+            : "Balance restoration not recorded",
+        )}
+      </span>
+    `
+    : "";
+
+  const relationshipHtml = request.managerRelationshipLabel
+    ? `
+      <span class="manager-processed-card-relationship">
+        ${escapeHtml(request.managerRelationshipLabel)}
+      </span>
+    `
+    : "";
+
+  return `
+    <article class="manager-processed-audit-card manager-processed-audit-card--${escapeHtml(tone)}">
+      <header class="manager-processed-card-header">
+        <div class="manager-processed-card-identity">
+          <span class="manager-processed-card-avatar" aria-hidden="true">
+            ${escapeHtml(initials)}
+          </span>
+
+          <div class="manager-processed-card-person">
+            ${employeeNameHtml}
+            <span class="manager-processed-card-department">
+              <i class="bi bi-building" aria-hidden="true"></i>
+              ${escapeHtml(request.employeeDepartment || "Department unavailable")}
+            </span>
+          </div>
+        </div>
+
+        <div class="manager-processed-card-status-area">
+          ${relationshipHtml}
+          <span class="manager-processed-card-status manager-processed-card-status--${escapeHtml(tone)}">
+            ${escapeHtml(statusLabel || request.status || "Updated")}
+          </span>
+        </div>
+      </header>
+
+      <div class="manager-processed-card-meta" role="list" aria-label="Leave decision summary">
+        <div class="manager-processed-card-meta-item" role="listitem">
+          <span>Leave type</span>
+          <strong>${escapeHtml(request.leaveTypeName || "Unknown")}</strong>
+        </div>
+
+        <div class="manager-processed-card-meta-item" role="listitem">
+          <span>Leave period</span>
+          <strong>${escapeHtml(getProcessedDecisionAuditCardPeriod(request))}</strong>
+        </div>
+
+        <div class="manager-processed-card-meta-item" role="listitem">
+          <span>Duration</span>
+          <strong>${escapeHtml(request.total_days || "--")} day(s)</strong>
+        </div>
+
+        <div class="manager-processed-card-meta-item" role="listitem">
+          <span>Decision date</span>
+          <strong>${escapeHtml(dateLabel)}</strong>
+        </div>
+      </div>
+
+      <div class="manager-processed-card-audit-line">
+        <span class="manager-processed-card-audit-icon" aria-hidden="true">
+          <i class="bi bi-shield-check"></i>
+        </span>
+        <div>
+          <strong>${escapeHtml(actor)} ${escapeHtml(actionVerb)} this leave request</strong>
+          <span>${escapeHtml(dateLabel)} at ${escapeHtml(timeLabel)}</span>
+        </div>
+      </div>
+
+      ${isCancelled
+        ? `
+          <div class="manager-processed-card-audit-chips">
+            ${originalDecisionHtml}
+            ${restoredBalanceHtml}
+          </div>
+        `
+        : ""}
+
+      <section class="manager-processed-card-comment" aria-label="Decision comment">
+        <span class="manager-processed-card-comment-label">Comment</span>
+        ${buildProcessedDecisionAuditCardCommentHtml(request)}
+      </section>
+    </article>
+  `;
+}
+
 function renderProcessedLeaveRequests(requests) {
   const tbody = state.dom.processedRequestsTableBody;
   if (!tbody) return;
@@ -4387,49 +5911,16 @@ function renderProcessedLeaveRequests(requests) {
 
   requests.forEach((request) => {
     const row = document.createElement("tr");
-
-    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1G
-    // Render processed leave decisions as audit history:
-    // request identity, leave period, days, final decision, audit, and comment.
+    row.className = "manager-processed-audit-row";
     row.innerHTML = `
-      <td class="px-3 py-3 align-top">
-        ${buildProcessedRequestIdentityHtml(request)}
-      </td>
-
-      <td class="px-3 py-3 align-top">
-        ${buildProcessedRequestPeriodHtml(request)}
-      </td>
-
-      <td class="px-3 py-3 align-top text-center">
-        <span class="badge rounded-pill text-bg-light border text-dark px-3 py-2">
-          ${escapeHtml(request.total_days || "--")}
-        </span>
-      </td>
-
-      <td class="px-3 py-3 align-top">
-        <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1H
-             Show a compact badge label while preserving the full saved
-             status in title/aria-label for clarity and accessibility. -->
-        <span class="badge ${getStatusBadgeClass(request.status)}"
-          title="${escapeHtml(request.status || "--")}"
-          aria-label="${escapeHtml(request.status || "--")}">
-          ${escapeHtml(getCompactDecisionStatusLabel(request.status))}
-        </span>
-      </td>
-
-      <td class="px-3 py-3 align-top">
-        ${buildProcessedDecisionAuditHtml(request)}
-      </td>
-
-      <td class="px-3 py-3 align-top">
-        ${buildProcessedDecisionCommentHtml(request)}
+      <td colspan="6" class="manager-processed-audit-cell">
+        ${buildProcessedDecisionAuditCardHtml(request)}
       </td>
     `;
 
     tbody.appendChild(row);
   });
 }
-
 function renderTeamScheduleLoadingState() {
   if (!state.dom.teamScheduleTableBody) return;
 
@@ -4446,6 +5937,10 @@ function renderTeamScheduleLoadingState() {
   `;
 }
 
+// MANAGER TEAM LEAVE SCHEDULE FULL-WIDTH RECORDS - v1.0.2
+// Presentation-only replacement of the previous compact-card renderer.
+// Existing manager-scoped data, timing, overlap, employee-details links,
+// leave status rules, RLS, permissions, queries, and session behaviour remain unchanged.
 function renderTeamLeaveSchedule(scheduleItems) {
   const tbody = state.dom.teamScheduleTableBody;
   if (!tbody) return;
@@ -4463,34 +5958,85 @@ function renderTeamLeaveSchedule(scheduleItems) {
 
   scheduleItems.forEach((item) => {
     const row = document.createElement("tr");
+    row.className = "manager-team-schedule-record-row";
 
-    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
-    // Render approved/current/upcoming leave as a coverage-planning view.
-    // Status is intentionally not repeated because this card only shows
-    // approved schedule items.
+    const startDate = getDashboardDisplayDate(item.start_date);
+    const endDate = getDashboardDisplayDate(item.end_date);
+    const startLabel = formatShortMonthDayFromDate(startDate);
+    const endLabel = formatShortMonthDayFromDate(endDate);
+
+    const startYear = startDate ? String(startDate.getFullYear()) : "";
+    const endYear = endDate ? String(endDate.getFullYear()) : "";
+    const yearLabel =
+      startYear && endYear && startYear !== endYear
+        ? `${startYear} - ${endYear}`
+        : startYear || endYear || "";
+
+    const periodLabel =
+      startLabel && endLabel
+        ? `${startLabel} - ${endLabel}${yearLabel ? `, ${yearLabel}` : ""}`
+        : `${formatDate(item.start_date)} - ${formatDate(item.end_date)}`;
+
+    const durationValue = Number(item.total_days || 0);
+    const durationLabel =
+      Number.isFinite(durationValue) && durationValue > 0
+        ? `${durationValue} day${durationValue === 1 ? "" : "s"}`
+        : "--";
+
+    const employeeName = String(
+      item.employeeName || "Unknown Employee",
+    ).trim();
+
     row.innerHTML = `
-      <td class="px-3 py-3 align-top">
-        ${buildTeamScheduleIdentityHtml(item)}
-      </td>
+      <td colspan="5" class="manager-team-schedule-record-cell">
+        <article class="manager-team-schedule-record"
+          aria-label="${escapeHtml(employeeName)} team leave schedule item">
 
-      <td class="px-3 py-3 align-top">
-        ${buildTeamSchedulePeriodHtml(item)}
-      </td>
+          <div class="manager-team-schedule-record-main">
+            <div class="manager-team-schedule-record-identity">
+              ${buildTeamScheduleIdentityHtml(item)}
+            </div>
 
-      <td class="px-3 py-3 align-top text-center">
-        <span class="badge rounded-pill text-bg-light border text-dark px-3 py-2">
-          ${escapeHtml(item.total_days || "--")}
-        </span>
-      </td>
+            <div class="manager-team-schedule-record-signals">
+              <section class="manager-team-schedule-signal"
+                aria-label="Leave timing">
+                <span class="manager-team-schedule-signal-label">
+                  Timing
+                </span>
+                <div class="manager-team-schedule-signal-value">
+                  ${buildTeamScheduleTimingHtml(item)}
+                </div>
+              </section>
 
-      <td class="px-3 py-3 align-top">
-        <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J-C
-             Timing is display-only and helps managers plan upcoming absence. -->
-        ${buildTeamScheduleTimingHtml(item)}
-      </td>
+              <section class="manager-team-schedule-signal"
+                aria-label="Team overlap">
+                <span class="manager-team-schedule-signal-label">
+                  Team overlap
+                </span>
+                <div class="manager-team-schedule-signal-value">
+                  ${buildTeamScheduleCoverageHtml(item)}
+                </div>
+              </section>
+            </div>
+          </div>
 
-      <td class="px-3 py-3 align-top">
-        ${buildTeamScheduleCoverageHtml(item)}
+          <dl class="manager-team-schedule-record-meta">
+            <div>
+              <dt>Leave type</dt>
+              <dd>${escapeHtml(item.leaveTypeName || "--")}</dd>
+            </div>
+
+            <div>
+              <dt>Leave period</dt>
+              <dd>${escapeHtml(periodLabel)}</dd>
+            </div>
+
+            <div>
+              <dt>Duration</dt>
+              <dd>${escapeHtml(durationLabel)}</dd>
+            </div>
+          </dl>
+        </article>
       </td>
     `;
 
@@ -4651,3 +6197,70 @@ async function persistLeaveDecision(leaveRequestId, status, comment) {
 
   return savedDecision;
 }
+// MANAGER PROFILE SIDEBAR ACCESS BRIDGE - v1.0.1
+// Adds one isolated desktop-sidebar proxy for the existing Profile workspace.
+// This deliberately avoids replacing the dashboard's current workspace map,
+// routing, profile form, save logic, self-service logic, or session behaviour.
+(function initialiseManagerProfileSidebarAccess() {
+  const bindProfileSidebarAccess = () => {
+    const sidebarProfileButton = document.getElementById(
+      "sidebarManagerProfileBtn",
+    );
+    const profileWorkspaceButton = document.getElementById(
+      "managerTabProfileBtn",
+    );
+    const profileSection = document.getElementById("managerProfileSection");
+
+    if (
+      !sidebarProfileButton ||
+      !profileWorkspaceButton ||
+      !profileSection
+    ) {
+      return;
+    }
+
+    if (sidebarProfileButton.dataset.profileAccessBound === "true") {
+      return;
+    }
+
+    sidebarProfileButton.dataset.profileAccessBound = "true";
+
+    const syncProfileSidebarState = () => {
+      const isProfileActive = !profileSection.classList.contains("d-none");
+
+      sidebarProfileButton.classList.toggle("active", isProfileActive);
+
+      if (isProfileActive) {
+        sidebarProfileButton.setAttribute("aria-current", "page");
+      } else {
+        sidebarProfileButton.removeAttribute("aria-current");
+      }
+    };
+
+    sidebarProfileButton.addEventListener("click", () => {
+      profileWorkspaceButton.click();
+      window.requestAnimationFrame(syncProfileSidebarState);
+    });
+
+    const profileSectionObserver = new MutationObserver(
+      syncProfileSidebarState,
+    );
+
+    profileSectionObserver.observe(profileSection, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    syncProfileSidebarState();
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      bindProfileSidebarAccess,
+      { once: true },
+    );
+  } else {
+    bindProfileSidebarAccess();
+  }
+})();

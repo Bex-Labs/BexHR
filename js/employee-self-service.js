@@ -2530,13 +2530,18 @@ ${isCancelledAudit
   }
 
 
+  // SYSTEM-WIDE SELF-SERVICE PAYROLL HISTORY CARDS - v1.0.0
+  // Shared by HR and Manager My Self-Service. Presentation only: existing
+  // payroll filtering, preview, PDF, tenant branding, and authorised-record
+  // access rules remain unchanged.
   function renderSsPayrollHistory(records) {
     const tbody = ssState.dom.ssPayrollHistoryTableBody;
     if (!tbody) return;
 
+    const payrollRecords = Array.isArray(records) ? records : [];
     tbody.innerHTML = "";
 
-    if (!records.length) {
+    if (!payrollRecords.length) {
       ssState.dom.ssPayrollHistoryEmptyState?.classList.remove("d-none");
       ssState.dom.ssPayrollHistoryTableWrapper?.classList.add("d-none");
       return;
@@ -2545,70 +2550,141 @@ ${isCancelledAudit
     ssState.dom.ssPayrollHistoryEmptyState?.classList.add("d-none");
     ssState.dom.ssPayrollHistoryTableWrapper?.classList.remove("d-none");
 
-    // MANAGER SELF-SERVICE PAYSLIP VIEW - STEP 1E
-    // Keep the shared renderer safe: View action appears only when the host
-    // dashboard table has the matching View column.
+    // Preserve the existing host-aware View column behaviour. HR and Manager
+    // currently expose View + PDF, while any older host without View remains safe.
     const shouldShowViewAction = shouldRenderSsPayslipViewColumn();
 
-    records.forEach((record) => {
+    payrollRecords.forEach((record) => {
       const currency = record.currency || "NGN";
-      const taxValue = Number(record.paye_tax || record.wht_tax || 0);
+      const payeTax = Number(record.paye_tax || 0);
+      const whtTax = Number(record.wht_tax || 0);
+      const taxValue = payeTax || whtTax;
+      const taxLabel = payeTax > 0 ? "PAYE Tax" : whtTax > 0 ? "WHT Tax" : "Tax";
       const employeePension = Number(record.employee_pension || 0);
+      const statusLabel = String(record.status || "Authorised").trim() || "Authorised";
+      const normalizedStatus = ssNormalizeText(statusLabel);
+      const statusTone =
+        normalizedStatus.includes("author") || normalizedStatus.includes("final")
+          ? "is-success"
+          : normalizedStatus.includes("pending")
+            ? "is-warning"
+            : "is-neutral";
+      const statusIcon =
+        statusTone === "is-success"
+          ? "bi-check-circle-fill"
+          : statusTone === "is-warning"
+            ? "bi-clock-fill"
+            : "bi-circle-fill";
+      const employeeGroup = String(record.employee_group || "Regular").trim() || "Regular";
 
       const row = document.createElement("tr");
-      row.className = "payroll-summary-row";
+      row.className = "payroll-summary-row bexhr-self-service-payroll-row";
       row.dataset.payrollId = record.id;
 
       row.innerHTML = `
-        <td class="text-nowrap">
-          <div class="fw-semibold">${ssEscapeHtml(record.pay_cycle || "--")}</div>
-          <div class="small text-secondary">${ssEscapeHtml(record.employee_group || "")}</div>
-        </td>
-        <td class="text-nowrap">${ssFormatDate(record.pay_date)}</td>
-        <td class="text-nowrap">${ssFormatCurrency(record.gross_pay, currency)}</td>
-        <td class="text-nowrap">${taxValue > 0 ? ssFormatCurrency(taxValue, currency) : '<span class="small text-secondary">No Tax</span>'}</td>
-        <td class="text-nowrap">${ssFormatCurrency(employeePension, currency)}</td>
-        <td class="text-nowrap">${ssFormatCurrency(record.total_deductions, currency)}</td>
-        <td class="text-nowrap"><div class="fw-semibold">${ssFormatCurrency(record.net_pay, currency)}</div></td>
-        <td class="text-center text-nowrap">
-          ${renderSsModernStatusPill(record.status || "Authorised")}
-        </td>
-        ${shouldShowViewAction ? `
-          <td class="text-center text-nowrap">
-            <button type="button"
-              class="btn btn-sm btn-outline-secondary ss-view-payslip-btn d-inline-flex align-items-center justify-content-center"
-              data-payroll-id="${ssEscapeHtml(record.id)}"
-              title="View payslip details"
-              aria-label="View payslip details"
-              style="width:36px;height:32px;">
-              <i class="bi bi-eye"></i>
-            </button>
-          </td>
-        ` : ""}
-        <td class="text-center text-nowrap">
-          <button type="button"
-            class="btn btn-sm btn-outline-primary ss-download-payslip-btn d-inline-flex align-items-center justify-content-center"
-            data-payroll-id="${ssEscapeHtml(record.id)}"
-            title="Download payslip PDF"
-            aria-label="Download payslip PDF"
-            style="width:36px;height:32px;">
-            <i class="bi bi-file-earmark-pdf"></i>
-          </button>
+        <td colspan="${shouldShowViewAction ? 10 : 9}" class="bexhr-self-service-payroll-cell">
+          <article class="bexhr-self-service-payroll-card">
+            <header class="bexhr-self-service-payroll-header">
+              <div class="bexhr-self-service-payroll-identity">
+                <span class="bexhr-self-service-payroll-icon" aria-hidden="true">
+                  <i class="bi bi-receipt-cutoff"></i>
+                </span>
+
+                <div class="bexhr-self-service-payroll-title-group">
+                  <span class="bexhr-self-service-payroll-eyebrow">Authorised pay cycle</span>
+                  <strong class="bexhr-self-service-payroll-cycle">
+                    ${ssEscapeHtml(record.pay_cycle || "--")}
+                  </strong>
+                  <span class="bexhr-self-service-payroll-group">
+                    ${ssEscapeHtml(employeeGroup)}
+                  </span>
+                </div>
+              </div>
+
+              <div class="bexhr-self-service-payroll-date">
+                <span>Pay date</span>
+                <strong>${ssEscapeHtml(ssFormatDate(record.pay_date))}</strong>
+              </div>
+
+              <span class="bexhr-self-service-payroll-status ${statusTone}">
+                <i class="bi ${statusIcon}" aria-hidden="true"></i>
+                ${ssEscapeHtml(statusLabel)}
+              </span>
+            </header>
+
+            <section class="bexhr-self-service-payroll-metrics" aria-label="Payroll summary">
+              <div class="bexhr-self-service-payroll-metric">
+                <span>Gross Pay</span>
+                <strong>${ssEscapeHtml(ssFormatCurrency(record.gross_pay, currency))}</strong>
+              </div>
+
+              <div class="bexhr-self-service-payroll-metric">
+                <span>${ssEscapeHtml(taxLabel)}</span>
+                <strong class="${taxValue > 0 ? "" : "is-muted"}">
+                  ${taxValue > 0 ? ssEscapeHtml(ssFormatCurrency(taxValue, currency)) : "No tax"}
+                </strong>
+              </div>
+
+              <div class="bexhr-self-service-payroll-metric">
+                <span>Employee Pension</span>
+                <strong>${ssEscapeHtml(ssFormatCurrency(employeePension, currency))}</strong>
+              </div>
+
+              <div class="bexhr-self-service-payroll-metric">
+                <span>Total Deductions</span>
+                <strong>${ssEscapeHtml(ssFormatCurrency(record.total_deductions, currency))}</strong>
+              </div>
+
+              <div class="bexhr-self-service-payroll-metric is-net-pay">
+                <span>Net Pay</span>
+                <strong>${ssEscapeHtml(ssFormatCurrency(record.net_pay, currency))}</strong>
+              </div>
+            </section>
+
+            <footer class="bexhr-self-service-payroll-footer">
+              <div class="bexhr-self-service-payroll-note">
+                <i class="bi bi-shield-check" aria-hidden="true"></i>
+                Read-only authorised payroll record
+              </div>
+
+              <div class="bexhr-self-service-payroll-actions">
+                ${shouldShowViewAction ? `
+                  <button type="button"
+                    class="btn btn-outline-secondary ss-view-payslip-btn bexhr-self-service-payroll-action"
+                    data-payroll-id="${ssEscapeHtml(record.id)}"
+                    title="View payslip details"
+                    aria-label="View payslip details">
+                    <i class="bi bi-eye" aria-hidden="true"></i>
+                    <span>View payslip</span>
+                  </button>
+                ` : ""}
+
+                <button type="button"
+                  class="btn btn-outline-primary ss-download-payslip-btn bexhr-self-service-payroll-action"
+                  data-payroll-id="${ssEscapeHtml(record.id)}"
+                  title="Download payslip PDF"
+                  aria-label="Download payslip PDF">
+                  <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
+                  <span>Download PDF</span>
+                </button>
+              </div>
+            </footer>
+          </article>
         </td>
       `;
 
       tbody.appendChild(row);
 
-      // MANAGER SELF-SERVICE PAYSLIP VIEW - STEP 1E
-      // View opens a read-only payslip preview. PDF download remains separate.
-      row.querySelector(".ss-view-payslip-btn")?.addEventListener("click", (e) => {
-        const btn = e.currentTarget;
-        openSsPayslipPreview(btn.getAttribute("data-payroll-id"));
+      // Preserve the existing read-only payslip preview action.
+      row.querySelector(".ss-view-payslip-btn")?.addEventListener("click", (event) => {
+        const button = event.currentTarget;
+        openSsPayslipPreview(button.getAttribute("data-payroll-id"));
       });
 
-      row.querySelector(".ss-download-payslip-btn")?.addEventListener("click", async (e) => {
-        const btn = e.currentTarget;
-        await downloadSsPayslipPdf(record.id, btn);
+      // Preserve the existing tenant-aware PDF generation and download action.
+      row.querySelector(".ss-download-payslip-btn")?.addEventListener("click", async (event) => {
+        const button = event.currentTarget;
+        await downloadSsPayslipPdf(record.id, button);
       });
     });
   }

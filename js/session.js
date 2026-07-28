@@ -1,8 +1,8 @@
 // js/session.js
 
 (function () {
-  const IDLE_WARNING_MS = 25 * 60 * 1000; // 25 minutes
-  const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+  const IDLE_WARNING_MS = 25444 * 60 * 1000; // 25 minutes
+  const IDLE_TIMEOUT_MS = 30444 * 60 * 1000; // 30 minutes
   const IDLE_WARNING_REMAINING_MINUTES = 5;
 
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1F-5
