@@ -607,7 +607,7 @@
               <div>
                 <strong id="managerSecondaryVisibilityCount">0</strong>
                 <span>Secondary Manager visibility</span>
-                <small>Visible for planning; the employee’s Primary Manager must decide</small>
+                <small>Visible for planning; the employeeâ€™s Primary Manager must decide</small>
               </div>
               <button type="button" class="manager-action-centre-link" data-manager-action-target="secondary"
                 onclick="window.managerNavigateActionCentre?.('secondary')">
@@ -889,6 +889,15 @@
             <span><strong id="managerTeamAssignedCount">0</strong><small>Assigned employees</small></span>
           </button>
         </div>
+
+        <div id="managerLeaveDelegationActionHost" class="manager-delegation-action-panel d-none" aria-live="polite">
+          <div class="manager-delegation-action-copy">
+            <span class="manager-delegation-action-kicker">Approval continuity</span>
+            <strong>Manage temporary approval access</strong>
+            <small>Grant, review or revoke temporary leave approval access for eligible Secondary Managers.</small>
+          </div>
+          <div id="managerLeaveDelegationActionControls" class="manager-delegation-action-controls"></div>
+        </div>
       </section>
       <section class="card dashboard-section-card mb-4">
         <div class="card-body p-4 p-lg-5">
@@ -927,7 +936,7 @@
               <span>Your assigned team currently has no requests awaiting review.</span>
             </div>
 
-            <div class="dashboard-table-hint">Swipe to view more ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢</div>
+            <div class="dashboard-table-hint">Swipe to view more ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢</div>
             <div id="pendingRequestsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
               style="max-height: 360px; overflow-y: auto;">
 
@@ -997,7 +1006,7 @@
               <span>Approved, rejected, returned, and cancelled decisions will appear here.</span>
             </div>
 
-            <div class="dashboard-table-hint">Swipe to view more ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢</div>
+            <div class="dashboard-table-hint">Swipe to view more ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢</div>
             <div id="processedRequestsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
               style="max-height: 430px; overflow-y: auto;">
               <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1G
@@ -1067,7 +1076,7 @@
               <span>Your current and upcoming team schedule is clear.</span>
             </div>
 
-            <div class="dashboard-table-hint">Swipe to view more ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢</div>
+            <div class="dashboard-table-hint">Swipe to view more ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢</div>
             <div id="teamScheduleTableWrapper" class="dashboard-table-wrap table-responsive d-none"
               style="max-height: 360px; overflow-y: auto;">
               <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
@@ -1159,7 +1168,7 @@
               <span>Employees linked to your active reporting lines will appear here.</span>
             </div>
 
-            <div class="dashboard-table-hint">Swipe to view more ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢</div>
+            <div class="dashboard-table-hint">Swipe to view more ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢</div>
             <div id="teamTableWrapper" class="dashboard-table-wrap table-responsive d-none"
               style="max-height: 430px; overflow-y: auto;">
               <!-- MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-D
@@ -1233,7 +1242,7 @@
         </div>
       </section>
 
-      <!-- ── Leave Sub-Section ── -->
+      <!-- â”€â”€ Leave Sub-Section â”€â”€ -->
       <div id="ssLeaveSection">
 
         <!-- Leave Balances -->
@@ -1498,7 +1507,7 @@
         </div>
       </div>
 
-      <!-- ── Payroll Sub-Section ── -->
+      <!-- â”€â”€ Payroll Sub-Section â”€â”€ -->
       <div id="ssPayrollSection" class="d-none">
 
         <!-- Current Payslip Summary -->
@@ -1857,10 +1866,9 @@
       </div>
     </div>
   </div>
-  <!-- SECONDARY MANAGER HELP GUIDE HR FORMAT - v1.0.1
-     Uses the HR Workspace Guide structure and visual rhythm as the source pattern.
-     Content is limited to Secondary Manager visibility, planning, employee records,
-     profile, and personal self-service. No Primary Manager decision authority is implied. -->
+  <!-- AUTHORITY-AWARE MANAGER HELP GUIDE - v1.0.0
+     Preserves the existing HR-style guide modal and workspace-card format.
+     Copy adapts at runtime for Primary, Secondary, Acting Secondary, and Mixed coverage. -->
   <div class="modal fade manager-operating-guide-modal" id="managerOperatingGuideModal" tabindex="-1"
     aria-labelledby="managerOperatingGuideModalLabel" aria-describedby="managerOperatingGuideModalDescription"
     aria-hidden="true">
@@ -1872,14 +1880,14 @@
               <i class="bi bi-compass"></i>
             </span>
             <div>
-              <div class="manager-operating-guide-kicker">Secondary Manager workspace guide</div>
+              <div class="manager-operating-guide-kicker" id="managerGuideModeKicker">Manager workspace guide</div>
               <h2 class="modal-title" id="managerOperatingGuideModalLabel">Find the right place for each task</h2>
               <p id="managerOperatingGuideModalDescription">Open a workspace below to continue directly from the guide.</p>
             </div>
           </div>
 
           <button type="button" class="btn btn-sm btn-outline-secondary manager-operating-guide-close"
-            data-bs-dismiss="modal" aria-label="Close Secondary Manager workspace guide">
+            data-bs-dismiss="modal" aria-label="Close Manager workspace guide">
             <i class="bi bi-x-lg" aria-hidden="true"></i>
           </button>
         </div>
@@ -1890,47 +1898,54 @@
             <div class="manager-guide-recommended-copy">
               <div class="manager-operating-guide-kicker">Recommended starting point</div>
               <h3 id="managerGuideRecommendedTitle">Dashboard</h3>
-              <p>Review secondary-manager visibility, current team coverage, approved absence information, and assigned employee activity before opening a detailed workspace.</p>
+              <p id="managerGuideRecommendedBody">Review your current team activity, responsibilities, and coverage before opening a detailed workspace.</p>
             </div>
             <button type="button" class="manager-guide-open-link" data-manager-guide-target="dashboard">
               Open Dashboard <i class="bi bi-arrow-right" aria-hidden="true"></i>
             </button>
           </section>
 
-          <section class="manager-guide-workspace-grid" aria-label="Secondary Manager workspaces">
+          <section class="manager-guide-workspace-grid" id="managerGuideWorkspaceGrid" aria-label="Manager workspaces">
             <article class="manager-guide-workspace-card manager-guide-workspace-card--team">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-people"></i></span>
-              <h3>Team Management</h3>
-              <p>Open the team workspace for secondary visibility, leave coverage, decision history, and assigned employee records.</p>
+              <h3 id="managerGuideTeamTitle">Team Management</h3>
+              <p id="managerGuideTeamBody">Open the team workspace for leave activity, coverage planning, decision history, and employee records.</p>
               <button type="button" class="manager-guide-card-link" data-manager-guide-target="team">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
 
             <article class="manager-guide-workspace-card manager-guide-workspace-card--pending">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
-              <h3>Pending Leave Visibility</h3>
-              <p>Review requests visible through your Secondary Manager assignment for awareness and coverage planning. Decision controls remain with the Primary Manager.</p>
+              <h3 id="managerGuidePendingTitle">Pending Leave Requests</h3>
+              <p id="managerGuidePendingBody">Review pending requests and use the actions available for your current authority.</p>
               <button type="button" class="manager-guide-card-link" data-manager-guide-target="pending">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
 
             <article class="manager-guide-workspace-card manager-guide-workspace-card--history">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-clock-history"></i></span>
               <h3>Decision History</h3>
-              <p>Review completed leave outcomes and audit history that are visible within your assigned reporting coverage.</p>
+              <p id="managerGuideHistoryBody">Review completed leave outcomes and the available decision audit history.</p>
               <button type="button" class="manager-guide-card-link" data-manager-guide-target="processed">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
 
             <article class="manager-guide-workspace-card manager-guide-workspace-card--schedule">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
               <h3>Team Leave Schedule</h3>
-              <p>Review approved current and upcoming absences to understand availability, overlaps, and coverage requirements.</p>
+              <p id="managerGuideScheduleBody">Review approved current and upcoming absences to understand availability, overlaps, and coverage requirements.</p>
               <button type="button" class="manager-guide-card-link" data-manager-guide-target="schedule">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
 
             <article class="manager-guide-workspace-card manager-guide-workspace-card--employees">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-person-vcard"></i></span>
               <h3>Assigned Employee Records</h3>
-              <p>Find employees included in your Secondary Manager assignment and review the role-appropriate information available to you.</p>
+              <p id="managerGuideEmployeesBody">Find employees included in your reporting coverage and review the role-appropriate information available to you.</p>
               <button type="button" class="manager-guide-card-link" data-manager-guide-target="employees">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+            </article>
+
+            <article class="manager-guide-workspace-card manager-guide-workspace-card--authority d-none" id="managerGuideAuthorityCard">
+              <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-person-check"></i></span>
+              <h3 id="managerGuideAuthorityTitle">Temporary Approval Access</h3>
+              <p id="managerGuideAuthorityBody">Grant, review, or use temporary leave approval access according to your current Manager authority.</p>
+              <button type="button" class="manager-guide-card-link" id="managerGuideAuthorityLink" data-manager-guide-target="delegation">Open access controls <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
 
             <article class="manager-guide-workspace-card manager-guide-workspace-card--profile">
@@ -1953,15 +1968,15 @@
               <span class="manager-guide-flow-icon" aria-hidden="true"><i class="bi bi-signpost-split"></i></span>
               <div>
                 <div class="manager-operating-guide-kicker">Suggested operating flow</div>
-                <h3 id="managerGuideFlowTitle">From visibility to coverage follow-up</h3>
+                <h3 id="managerGuideFlowTitle">From review to the right next action</h3>
               </div>
             </div>
 
             <ol class="manager-guide-flow-list">
-              <li><span>1</span><div><strong>Review</strong><small>Start on Dashboard and identify requests, absences, or employee changes that need awareness.</small></div></li>
-              <li><span>2</span><div><strong>Understand</strong><small>Use Pending Leave Visibility and Decision History to understand status without taking Primary Manager actions.</small></div></li>
-              <li><span>3</span><div><strong>Plan</strong><small>Use Team Leave Schedule to assess availability, overlaps, and operational coverage.</small></div></li>
-              <li><span>4</span><div><strong>Follow up</strong><small>Use Assigned Employee Records or contact the responsible Primary Manager or HR team where action is required.</small></div></li>
+              <li><span>1</span><div><strong id="managerGuideStep1Title">Review</strong><small id="managerGuideStep1Body">Start on Dashboard and identify the team activity that needs your attention.</small></div></li>
+              <li><span>2</span><div><strong id="managerGuideStep2Title">Check authority</strong><small id="managerGuideStep2Body">Confirm whether the request is yours to decide, delegated to you, or visible for awareness only.</small></div></li>
+              <li><span>3</span><div><strong id="managerGuideStep3Title">Act or plan</strong><small id="managerGuideStep3Body">Complete the available decision or use the schedule to plan operational coverage.</small></div></li>
+              <li><span>4</span><div><strong id="managerGuideStep4Title">Follow through</strong><small id="managerGuideStep4Body">Review history and employee records, then follow up with the responsible Manager or HR where needed.</small></div></li>
             </ol>
           </section>
 
@@ -1969,13 +1984,13 @@
             <span class="manager-guide-help-icon" aria-hidden="true"><i class="bi bi-lightbulb"></i></span>
             <div>
               <h3 id="managerGuideHelpTitle">Not sure where a task belongs?</h3>
-              <p>Open Dashboard first. Secondary visibility cards and Team Management shortcuts will point you to the correct workspace.</p>
+              <p id="managerGuideHelpBody">Open Dashboard first. Your coverage and decision-authority indicators will point you to the correct workspace.</p>
             </div>
           </section>
         </div>
 
         <div class="modal-footer manager-operating-guide-footer border-0">
-          <span><i class="bi bi-shield-check" aria-hidden="true"></i> Workspace access still follows your assigned Secondary Manager role.</span>
+          <span id="managerGuideFooterText"><i class="bi bi-shield-check" aria-hidden="true"></i> Workspace access follows your current reporting-line and delegated authority.</span>
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close Guide</button>
         </div>
       </div>
