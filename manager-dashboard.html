@@ -13,64 +13,163 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
   <link rel="stylesheet" href="css/styles.css" />
 
-  <!-- MANAGER SELF-SERVICE PARITY - STEP 2C-1
-       Repair Manager My Leave History layout:
-       - expanded history can align with Request Leave on desktop
-       - collapsed history shrinks to header-only
-       - long history records scroll inside the history card -->
-  <style>
+<!-- MANAGER-WIDE SELF-SERVICE LEAVE INNER-SCROLL PARITY - v1.0.1
+     Controlled desktop card heights for standard BexHR and Alpatech Manager.
+     Request Leave remains internally scrollable when History is expanded or collapsed.
+     Presentation only: no leave, approval, tenant, RLS, payroll, or Supabase changes. -->
+<style>
+  #managerSelfServiceSection .employee-leave-history-scroll-area {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  @media (min-width: 1200px) {
+    #managerSelfServiceSection
+      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none))
+      > [class*="col-"] {
+      display: flex;
+      align-self: stretch;
+    }
+
+    #managerSelfServiceSection
+      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none))
+      .ss-leave-equal-card {
+      width: 100%;
+      height: clamp(520px, calc(100vh - 150px), 620px) !important;
+      min-height: 520px !important;
+      max-height: 620px !important;
+      overflow: hidden !important;
+    }
+
+    #managerSelfServiceSection
+      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none))
+      .ss-leave-equal-card
+      > .card-body {
+      display: flex;
+      flex-direction: column;
+      height: 100% !important;
+      min-height: 0 !important;
+      overflow: hidden;
+    }
+
+    #managerSelfServiceSection
+      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none))
+      .hr-self-service-card-heading {
+      flex: 0 0 auto;
+    }
+
+    #managerSelfServiceSection
+      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none))
+      #ssLeaveRequestForm {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 0.45rem;
+      scrollbar-width: thin;
+      scrollbar-color:
+        rgba(14, 116, 144, 0.36)
+        rgba(148, 163, 184, 0.1);
+    }
+
+    #managerSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    #managerSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar-track {
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.1);
+    }
+
+    #managerSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar-thumb {
+      border: 2px solid transparent;
+      border-radius: 999px;
+      background: rgba(14, 116, 144, 0.36);
+      background-clip: padding-box;
+    }
+
+    #managerSelfServiceSection #ssLeaveHistoryCardCollapse:not(.d-none) {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    #managerSelfServiceSection
+      #ssLeaveHistoryCardCollapse:not(.d-none)
+      > .d-flex {
+      flex: 0 0 auto;
+    }
+
     #managerSelfServiceSection .employee-leave-history-scroll-area {
-      max-height: none;
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: none !important;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 0.45rem;
+    }
+
+    /* Collapse only History. Request Leave keeps controlled height and scroll. */
+    #managerSelfServiceSection
+      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
+      #ssEmployeeLeaveHistoryCard {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: visible !important;
+    }
+
+    #managerSelfServiceSection
+      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
+      .dashboard-form-card.ss-leave-equal-card {
+      height: clamp(520px, calc(100vh - 150px), 620px) !important;
+      min-height: 520px !important;
+      max-height: 620px !important;
+      overflow: hidden !important;
+    }
+
+    #managerSelfServiceSection
+      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
+      .dashboard-form-card.ss-leave-equal-card
+      > .card-body {
+      display: flex;
+      flex-direction: column;
+      height: 100% !important;
+      min-height: 0 !important;
+      overflow: hidden;
+    }
+
+    #managerSelfServiceSection
+      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
+      #ssLeaveRequestForm {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 0.45rem;
+    }
+  }
+
+  @media (max-width: 1199.98px) {
+    #managerSelfServiceSection .ss-leave-equal-card {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+    }
+
+    #managerSelfServiceSection #ssLeaveRequestForm,
+    #managerSelfServiceSection .employee-leave-history-scroll-area {
+      max-height: none !important;
       overflow: visible;
-      padding-right: 0;
     }
-
-    @media (min-width: 1200px) {
-      #managerSelfServiceSection .ss-leave-main-row {
-        align-items: flex-start;
-      }
-
-      #managerSelfServiceSection .ss-leave-main-row>[class*="col-"] {
-        display: flex;
-      }
-
-      #managerSelfServiceSection .ss-leave-equal-card {
-        width: 100%;
-      }
-
-      #managerSelfServiceSection .ss-leave-main-row[data-ss-leave-card-height] .ss-leave-equal-card {
-        height: var(--ss-leave-card-height);
-      }
-
-      #managerSelfServiceSection #ssEmployeeLeaveHistoryCard.ss-leave-equal-card {
-        overflow: hidden;
-      }
-
-      #managerSelfServiceSection #ssEmployeeLeaveHistoryCard>.card-body {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        min-height: 0;
-      }
-
-      #managerSelfServiceSection #ssLeaveHistoryCardCollapse:not(.d-none) {
-        display: flex;
-        flex-direction: column;
-        flex: 1 1 auto;
-        min-height: 0;
-      }
-
-      #managerSelfServiceSection .employee-leave-history-scroll-area {
-        flex: 1 1 auto;
-        min-height: 0;
-        max-height: none;
-        overflow-y: auto;
-        overflow-x: hidden;
-        overscroll-behavior: contain;
-        padding-right: 0.25rem;
-      }
-    }
-  </style>
+  }
+</style>
 
   <!-- BEXHR UNIVERSAL FAVICON SET - v1.0.0 -->
   <link rel="icon" type="image/svg+xml" href="assets/favicon/favicon.svg?v=20260804" />
