@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">BexHR favicon</title>
+  <desc id="desc">A modern shield containing a person and check mark, representing trusted people operations.</desc>
+  <defs>
+    <linearGradient id="shieldGradient" x1="78" y1="82" x2="438" y2="438" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#08A6B5"/>
+      <stop offset="0.52" stop-color="#0E8F9A"/>
+      <stop offset="1" stop-color="#58B947"/>
+    </linearGradient>
+    <linearGradient id="highlightGradient" x1="132" y1="120" x2="368" y2="382" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#0B4D55" flood-opacity="0.24"/>
+    </filter>
+  </defs>
+
+  <path filter="url(#softShadow)" fill="url(#shieldGradient)" d="M256 34 430 101v124c0 115-67 207-174 253C149 432 82 340 82 225V101L256 34Z"/>
+  <path fill="url(#highlightGradient)" d="M256 50 414 111v113c0 100-57 182-158 229V50Z"/>
+  <path fill="none" stroke="#FFFFFF" stroke-opacity="0.24" stroke-width="8" d="M256 49 414 110v114c0 101-57 183-158 230-101-47-158-129-158-230V110L256 49Z"/>
+
+  <circle cx="218" cy="178" r="52" fill="#FFFFFF"/>
+  <path fill="#FFFFFF" d="M136 338c7-70 45-112 91-112 35 0 63 18 81 51l-36 38c-13-22-28-33-47-33-24 0-42 19-49 56h-40Z"/>
+  <path fill="#FFFFFF" d="m214 318 44 45 112-122 35 32-146 159-80-81 35-33Z"/>
+</svg>

@@ -35,13 +35,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Browser refresh restores the last Manager workspace and lands at the top.
     restoreManagerWorkspaceAfterRefresh();
 
-    // MANAGER WORKSPACE FIRST PAINT FINALISATION - v1.0.2
-    // Match the HR dashboard first-paint gate: reveal the exact remembered
-    // Manager workspace as soon as profile, tenant branding, navigation,
-    // title, and subtitle are restored. Longer team/leave loads continue progressively.
-    revealRestoredManagerWorkspace();
-
     initialiseDecisionModal();
+
+    // TEMPORARY DELEGATED LEAVE AUTHORITY - v1.0.0
+    // Create and bind the delegation interface before Manager data refresh.
+    // The protected RPCs remain responsible for confirming actual authority.
+    initialiseManagerLeaveDelegationUi();
 
     window.managerHandleLeaveAction = function (leaveId, action, button) {
       openDecisionModal(leaveId, action, button);
@@ -52,6 +51,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
     await refreshManagerWorkspace();
+
+    // MANAGER AUTHORITY FIRST-PAINT FINALISATION - v1.0.3
+    // Reuse the existing Manager anti-flash gate and reveal the workspace only
+    // after reporting-line authority and the visible Manager overview are resolved.
+    revealRestoredManagerWorkspace();
   } catch (error) {
     console.error("Error initialising manager dashboard:", error);
 
@@ -107,6 +111,18 @@ const state = {
   pendingDecisionRequest: null,
   pendingDecisionButton: null,
   leaveDecisionModal: null,
+
+  // TEMPORARY DELEGATED LEAVE AUTHORITY - v1.0.0
+  // Stores only the protected delegation context returned for the
+  // authenticated Manager. No delegation authority is calculated in-browser.
+  managerLeaveDelegationContext: {
+    eligible_delegates: [],
+    active_granted: [],
+    active_received: [],
+  },
+
+  // Bootstrap modal instance created by the delegation UI initialiser.
+  managerLeaveDelegationModal: null,
 
   // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
   // Controls the temporary bottom-right manager notification.
@@ -193,22 +209,36 @@ function isCurrentManagerTenantAlpatechWorkspace() {
 }
 
 // ALPATECH TENANT BRANDING - MANAGER STEP 1D
-// Browser tab icon only. The icon changes only for Alpatech managers.
+// Browser tab icon only. Update every declared favicon link so the browser
+// cannot retain a different BexHR icon from the universal favicon set.
+// Tenant branding only; no session, access, data, tenant-filter or role changes.
 function applyManagerTenantFaviconBranding() {
-  const favicon = document.querySelector("link[rel~='icon']");
+  const faviconLinks = Array.from(
+    document.querySelectorAll(
+      'link[rel~="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]',
+    ),
+  );
 
-  if (!favicon) return;
+  if (!faviconLinks.length) return;
 
-  if (isCurrentManagerTenantAlpatechWorkspace()) {
-    favicon.type = "image/x-icon";
-    favicon.href = "assets/favicon.ico?v=20260725-1";
-    return;
-  }
+  const isAlpatech =
+    isCurrentManagerTenantAlpatechWorkspace();
 
-  favicon.type = "image/x-icon";
-  favicon.href = "assets/favicon.png";
+  const faviconHref = isAlpatech
+    ? "assets/alpatech-favicon-large.png?v=20260804"
+    : "assets/favicon/favicon.svg?v=20260804";
+
+  faviconLinks.forEach((faviconLink) => {
+    faviconLink.href = faviconHref;
+    faviconLink.type = isAlpatech
+      ? "image/png"
+      : "image/svg+xml";
+
+    if (isAlpatech) {
+      faviconLink.removeAttribute("sizes");
+    }
+  });
 }
-
 // MANAGER DASHBOARD VISUAL REFRESH - STEP 1
 // Resolve only the display name used by the compact manager app header.
 // This reads the existing validated tenant/profile context and does not change
@@ -377,7 +407,7 @@ function getManagerWorkspaceMemoryKey() {
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Save only the active workspace key. Do not store leave, employee, team,
 // decision, comment, or manager-sensitive data in browser storage.
-// In-memory fallback ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â survives the page session even when
+// In-memory fallback survives the page session even when
 // sessionStorage is blocked by browser tracking prevention.
 let _managerWorkspaceInMemory = null;
 
@@ -609,6 +639,16 @@ function cacheDomElements() {
       "saveManagerProfileImageBtn",
     ),
 
+    removeManagerProfileImageBtn: document.getElementById(
+      "removeManagerProfileImageBtn",
+    ),
+    managerProfileAuthorityPill: document.getElementById(
+      "managerProfileAuthorityPill",
+    ),
+    managerProfileAuthorityText: document.getElementById(
+      "managerProfileAuthorityText",
+    ),
+
     leaveDecisionModal: document.getElementById("leaveDecisionModal"),
     leaveDecisionModalLabel: document.getElementById("leaveDecisionModalLabel"),
     leaveDecisionModalSubtext: document.getElementById("leaveDecisionModalSubtext"),
@@ -619,6 +659,9 @@ function cacheDomElements() {
     decisionTotalDays: document.getElementById("decisionTotalDays"),
     decisionConflictStatus: document.getElementById("decisionConflictStatus"),
     decisionActionBadge: document.getElementById("decisionActionBadge"),
+    // MANAGER LEAVE EMPLOYEE REASON - v1.0.0
+    // Read-only destination for the employee's submitted supporting note.
+    decisionEmployeeReason: document.getElementById("decisionEmployeeReason"),
     decisionCommentInput: document.getElementById("decisionCommentInput"),
     decisionCommentHelpText: document.getElementById("decisionCommentHelpText"),
     decisionCommentRequiredMarker: document.getElementById("decisionCommentRequiredMarker"),
@@ -1404,9 +1447,19 @@ function bindEvents() {
     handlePendingProfileImage(file);
   });
 
-  state.dom.saveManagerProfileImageBtn?.addEventListener("click", async () => {
-    await uploadManagerProfileImage();
-  });
+  state.dom.saveManagerProfileImageBtn?.addEventListener(
+    "click",
+    async () => {
+      await uploadManagerProfileImage();
+    },
+  );
+
+  state.dom.removeManagerProfileImageBtn?.addEventListener(
+    "click",
+    async () => {
+      await removeManagerProfileImage();
+    },
+  );
 
   state.dom.confirmDecisionBtn?.addEventListener("click", async () => {
     await submitLeaveDecisionFromModal();
@@ -1502,6 +1555,219 @@ function bindEvents() {
 // Close the guide, reuse existing workspace controls, and open the requested
 // Manager panel. No data query, role, authority, session, or persistence change.
 // =========================================================
+
+function setManagerGuideText(id, value) {
+  const element = document.getElementById(id);
+  if (element) element.textContent = String(value || "");
+}
+
+function getManagerGuideAuthorityContext() {
+  const teamMembers = Array.isArray(state.teamMembers) ? state.teamMembers : [];
+  const delegationContext = getManagerDelegationContext();
+  const primaryCount = teamMembers.filter((member) =>
+    isPrimaryReportingManagerRelationship(member.relationshipLabel),
+  ).length;
+  const secondaryCount = teamMembers.filter((member) =>
+    normalizeText(member.relationshipLabel).includes("secondary"),
+  ).length;
+  const activeReceived = Array.isArray(delegationContext.active_received)
+    ? delegationContext.active_received
+    : [];
+  const canManageDelegation =
+    (Array.isArray(delegationContext.eligible_delegates) &&
+      delegationContext.eligible_delegates.length > 0) ||
+    (Array.isArray(delegationContext.active_granted) &&
+      delegationContext.active_granted.length > 0);
+
+  let mode = "secondary";
+  if (primaryCount > 0 && secondaryCount > 0) mode = "mixed";
+  else if (primaryCount > 0) mode = "primary";
+  else if (activeReceived.length > 0) mode = "acting";
+
+  return {
+    mode,
+    primaryCount,
+    secondaryCount,
+    activeReceived,
+    hasActingAccess: activeReceived.length > 0,
+    canManageDelegation,
+  };
+}
+
+function renderAuthorityAwareManagerGuide() {
+  const modal = document.getElementById("managerOperatingGuideModal");
+  if (!modal) return;
+
+  const context = getManagerGuideAuthorityContext();
+  const authorityCard = document.getElementById("managerGuideAuthorityCard");
+  const authorityLink = document.getElementById("managerGuideAuthorityLink");
+
+  const common = {
+    history:
+      "Review completed leave outcomes, decision comments, and the authority audit shown for each processed request.",
+    schedule:
+      "Review approved current and upcoming absences to understand availability, overlaps, and coverage requirements.",
+    employees:
+      "Find employees included in your reporting coverage and review the role-appropriate information available to you.",
+  };
+
+  const configs = {
+    primary: {
+      kicker: "Primary Manager workspace guide",
+      description:
+        "Use this guide to review team coverage, make accountable leave decisions, and manage temporary approval access.",
+      recommended:
+        "Review requests requiring your decision, current team coverage, approved absences, and assigned employee activity before opening a detailed workspace.",
+      team:
+        "Open the team workspace to review pending decisions, completed outcomes, approved absences, and assigned employee records.",
+      pendingTitle: "Pending Leave Decisions",
+      pending:
+        "Check balance, eligibility, overlap, and request details before approving, rejecting, or returning a request for clarification.",
+      flowTitle: "From readiness review to accountable decision",
+      steps: [
+        ["Review", "Start on Dashboard and identify Primary Manager decisions requiring your attention."],
+        ["Validate", "Open Pending Leave Decisions and confirm balance, eligibility, dates, and coverage impact."],
+        ["Decide", "Approve, reject, or return the request with a clear comment. The database performs the final authority and balance checks."],
+        ["Follow through", "Review Decision History and Team Leave Schedule, then follow up on any employee or coverage action."],
+      ],
+      help:
+        "Open Dashboard first. Primary decision indicators and Team Management shortcuts will take you to the correct request or record.",
+      footer:
+        "Decision controls apply only to employees assigned to you as Primary Manager.",
+      authorityTitle: "Temporary Approval Access",
+      authority:
+        "Grant, review, or revoke time-limited approval access for one or more eligible Secondary Managers while you are unavailable.",
+      authorityTarget: "delegation",
+      showAuthority: true,
+    },
+    secondary: {
+      kicker: "Secondary Manager workspace guide",
+      description:
+        "Use this guide to monitor assigned employees, leave activity, and operational coverage without taking Primary Manager decisions.",
+      recommended:
+        "Review secondary-manager visibility, current team coverage, approved absence information, and assigned employee activity before opening a detailed workspace.",
+      team:
+        "Open the team workspace for secondary visibility, leave coverage, decision history, and assigned employee records.",
+      pendingTitle: "Pending Leave Visibility",
+      pending:
+        "Review requests visible through your Secondary Manager assignment for awareness and coverage planning. Decision controls remain with the Primary Manager.",
+      flowTitle: "From visibility to coverage follow-up",
+      steps: [
+        ["Review", "Start on Dashboard and identify requests, absences, or employee changes that need awareness."],
+        ["Understand", "Use Pending Leave Visibility and Decision History to understand status without taking Primary Manager actions."],
+        ["Plan", "Use Team Leave Schedule to assess availability, overlaps, and operational coverage."],
+        ["Follow up", "Use Assigned Employee Records or contact the responsible Primary Manager or HR team where action is required."],
+      ],
+      help:
+        "Open Dashboard first. Secondary visibility cards and Team Management shortcuts will point you to the correct workspace.",
+      footer:
+        "Workspace access follows your assigned Secondary Manager reporting lines.",
+      showAuthority: false,
+    },
+    acting: {
+      kicker: "Acting Secondary Manager workspace guide",
+      description:
+        "Use this guide while temporary approval access is active. Your decision rights apply only to the employees and time period covered by the delegation.",
+      recommended:
+        "Review delegated requests, expiry details, team coverage, and employee activity before taking a temporary leave decision.",
+      team:
+        "Open the team workspace to identify requests covered by your temporary approval access and requests that remain view only.",
+      pendingTitle: "Delegated Leave Decisions",
+      pending:
+        "Approve, reject, or return only requests marked with active acting authority. Requests outside the delegated scope remain Awaiting Primary Manager.",
+      flowTitle: "From delegated authority to audited decision",
+      steps: [
+        ["Confirm scope", "Check the acting-authority label, covered employee, and access expiry before taking action."],
+        ["Validate", "Review balance, eligibility, dates, overlap, and the employee's request details."],
+        ["Decide", "Approve, reject, or return the covered request with a clear comment before access expires or is revoked."],
+        ["Verify audit", "Review Decision History to confirm the acting Manager and the Primary Manager who granted access are recorded."],
+      ],
+      help:
+        "Only requests showing active acting authority can be decided. All other Secondary Manager requests remain view only.",
+      footer:
+        "Temporary approval access is time-bound, scope-bound, independently revocable, and fully audited.",
+      authorityTitle: "Temporary Approval Access Granted to You",
+      authority:
+        "Review the active scope and expiry shown on each covered request. The Primary Manager can revoke access at any time.",
+      authorityTarget: "pending",
+      showAuthority: true,
+    },
+    mixed: {
+      kicker: "Mixed Manager Coverage workspace guide",
+      description:
+        "Your team includes both Primary and Secondary reporting lines. Use the authority shown on each request before taking action.",
+      recommended:
+        "Review Primary decisions, Secondary visibility, delegated access, approved absences, and assigned employees from one combined workspace.",
+      team:
+        "Open Team Management to separate Primary decisions from Secondary visibility and any temporary acting authority currently granted to you.",
+      pendingTitle: "Pending Leave Requests",
+      pending:
+        "Decide requests for your Primary assignments and any request with active delegated authority. Other Secondary assignments remain view only.",
+      flowTitle: "From mixed coverage to the correct authority path",
+      steps: [
+        ["Review", "Start on Dashboard and distinguish Primary decisions from Secondary visibility."],
+        ["Check authority", "Use the request badge to confirm Primary, acting, or view-only status before selecting an action."],
+        ["Act or plan", "Complete authorised decisions and use the schedule for requests visible only for coverage planning."],
+        ["Follow through", "Review the audit trail and employee records, then coordinate with the responsible Primary Manager or HR where needed."],
+      ],
+      help:
+        "The request card is authoritative: action buttons appear only for your Primary assignments or active delegated access.",
+      footer:
+        "Mixed coverage never expands authority automatically; each request follows its reporting-line or active delegation record.",
+      authorityTitle: context.canManageDelegation
+        ? "Temporary Approval Access"
+        : "Temporary Approval Access Granted to You",
+      authority: context.canManageDelegation
+        ? "Grant, review, or revoke access for your Primary assignments. Any access granted to you remains limited to its own scope and expiry."
+        : "Review the scope and expiry of temporary access granted to you for selected Primary Manager requests.",
+      authorityTarget: context.canManageDelegation ? "delegation" : "pending",
+      showAuthority: context.canManageDelegation || context.hasActingAccess,
+    },
+  };
+
+  const config = configs[context.mode] || configs.secondary;
+
+  setManagerGuideText("managerGuideModeKicker", config.kicker);
+  setManagerGuideText("managerOperatingGuideModalDescription", config.description);
+  setManagerGuideText("managerGuideRecommendedBody", config.recommended);
+  setManagerGuideText("managerGuideTeamBody", config.team);
+  setManagerGuideText("managerGuidePendingTitle", config.pendingTitle);
+  setManagerGuideText("managerGuidePendingBody", config.pending);
+  setManagerGuideText("managerGuideHistoryBody", common.history);
+  setManagerGuideText("managerGuideScheduleBody", common.schedule);
+  setManagerGuideText("managerGuideEmployeesBody", common.employees);
+  setManagerGuideText("managerGuideFlowTitle", config.flowTitle);
+  setManagerGuideText("managerGuideHelpBody", config.help);
+  setManagerGuideText("managerGuideFooterText", config.footer);
+
+  config.steps.forEach(([title, body], index) => {
+    setManagerGuideText(`managerGuideStep${index + 1}Title`, title);
+    setManagerGuideText(`managerGuideStep${index + 1}Body`, body);
+  });
+
+  if (authorityCard) {
+    authorityCard.classList.toggle("d-none", !config.showAuthority);
+  }
+  setManagerGuideText("managerGuideAuthorityTitle", config.authorityTitle || "Temporary Approval Access");
+  setManagerGuideText("managerGuideAuthorityBody", config.authority || "");
+  if (authorityLink) {
+    authorityLink.dataset.managerGuideTarget = config.authorityTarget || "pending";
+    authorityLink.firstChild.textContent =
+      config.authorityTarget === "delegation" ? "Open access controls " : "Open covered requests ";
+  }
+
+  const workspaceGrid = document.getElementById("managerGuideWorkspaceGrid");
+  if (workspaceGrid) {
+    workspaceGrid.setAttribute("aria-label", `${config.kicker.replace(" workspace guide", "")} workspaces`);
+  }
+}
+
+// =========================================================
+// MANAGER HELP GUIDE CONTEXTUAL NAVIGATION - v1.0.2
+// Close the guide, reuse existing workspace controls, and open the requested
+// Manager panel. No data query, role, authority, session, or persistence change.
+// =========================================================
+
 function openManagerGuideDestinationPanel(toggleButton, collapsePanel) {
   if (!toggleButton || !collapsePanel) return;
 
@@ -1669,7 +1935,7 @@ function openDecisionModal(leaveId, action, buttonElement) {
   // SECONDARY MANAGER PENDING LEAVE VISIBILITY - STEP 1
   // Defence in depth: do not open a decision workflow for a Secondary Manager,
   // even if a stale element or manual browser call reaches this function.
-  if (!isPrimaryReportingManagerRelationship(request.managerRelationshipLabel)) {
+  if (!canManagerDecideLeaveRequest(request)) {
     showPageAlert(
       "info",
       "This request is visible for team planning. Only the Primary Manager can make a decision unless delegated approval is granted in a future release.",
@@ -1686,7 +1952,23 @@ function openDecisionModal(leaveId, action, buttonElement) {
   if (state.dom.decisionLeaveType) state.dom.decisionLeaveType.textContent = request.leaveTypeName || "--";
   if (state.dom.decisionStartDate) state.dom.decisionStartDate.textContent = formatDate(request.start_date);
   if (state.dom.decisionEndDate) state.dom.decisionEndDate.textContent = formatDate(request.end_date);
-  if (state.dom.decisionTotalDays) state.dom.decisionTotalDays.textContent = String(request.total_days || "--");
+  if (state.dom.decisionTotalDays) {
+    state.dom.decisionTotalDays.textContent = String(
+      request.total_days || "--",
+    );
+  }
+
+  // MANAGER LEAVE EMPLOYEE REASON - v1.0.0
+  // Display the employee's original supporting note without allowing edits.
+  if (state.dom.decisionEmployeeReason) {
+    const employeeReason = String(
+      request.reason || "",
+    ).trim();
+
+    state.dom.decisionEmployeeReason.textContent =
+      employeeReason || "No reason provided.";
+  }
+
   if (state.dom.decisionConflictStatus) {
     state.dom.decisionConflictStatus.innerHTML = buildOverlapCellHtml(request);
   }
@@ -1755,10 +2037,10 @@ async function submitLeaveDecisionFromModal() {
   // SECONDARY MANAGER PENDING LEAVE VISIBILITY - STEP 1
   // Submission remains Primary-Manager-only in the browser as well as in the
   // existing database decision RPC.
-  if (!isPrimaryReportingManagerRelationship(request.managerRelationshipLabel)) {
+  if (!canManagerDecideLeaveRequest(request)) {
     showPageAlert(
       "warning",
-      "Only the Primary Manager can make this leave decision.",
+      "Only the Primary Manager or an actively delegated Secondary Manager can make this leave decision.",
     );
     return;
   }
@@ -2036,11 +2318,10 @@ function getInitials(fullName, fallback = "MG") {
   return parts.map((part) => part.charAt(0).toUpperCase()).join("");
 }
 
-// MANAGER PROFILE DEPARTMENT SEEDING
 // Resolves the manager's department from their employees record (set by HR
 // from the controlled organization_departments list). Syncs the value into
 // profiles.department if the profile department is blank or out of date.
-// Does not insert into organization_departments ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â department setup is owned
+// Does not insert into organization_departments; department setup is owned
 // by HR/Admin through Manage Organization.
 async function ensureManagerProfileDepartment(supabase, profileData) {
   if (!profileData) return profileData;
@@ -2172,7 +2453,6 @@ function renderManagerProfile(profile, user) {
   const initials = getInitials(fullName, "MG");
 
   if (state.dom.managerEmail) state.dom.managerEmail.textContent = email;
-  if (state.dom.managerRole) state.dom.managerRole.textContent = role;
   if (state.dom.managerInitials) {
     state.dom.managerInitials.textContent = initials;
     state.dom.managerInitials.classList.remove("d-none");
@@ -2207,8 +2487,13 @@ function renderManagerProfile(profile, user) {
     state.dom.managerProfileEmail.value = email;
   }
 
+  // MANAGER AUTHORITY FIRST-PAINT CONTROL - v1.0.0
+  // Do not display the generic system role while reporting-line authority
+  // is still being resolved. The coverage renderer supplies the final value.
   if (state.dom.managerProfileRole) {
-    state.dom.managerProfileRole.value = role;
+    state.dom.managerProfileRole.value = "";
+    state.dom.managerProfileRole.placeholder =
+      "Resolving manager authority...";
   }
 
   if (state.dom.managerProfileDepartment) {
@@ -2432,6 +2717,11 @@ function handlePendingProfileImage(file) {
 }
 
 async function loadManagerProfileImages(profileImagePath, initials) {
+  if (state.dom.removeManagerProfileImageBtn) {
+    state.dom.removeManagerProfileImageBtn.disabled =
+      !String(profileImagePath || "").trim();
+  }
+
   if (!profileImagePath) {
     if (state.dom.managerProfileAvatar) {
       state.dom.managerProfileAvatar.textContent = initials;
@@ -2534,6 +2824,118 @@ async function uploadManagerProfileImage() {
     );
   } finally {
     setProfileImageSaveLoading(false);
+  }
+}
+
+async function removeManagerProfileImage() {
+  if (!state.currentUser?.id) {
+    showPageAlert(
+      "warning",
+      "Your Manager profile is not ready yet.",
+    );
+    return;
+  }
+
+  const existingImagePath = String(
+    state.currentProfile?.profile_image_path || "",
+  ).trim();
+
+  if (!existingImagePath) {
+    const initials = getInitials(
+      state.currentProfile?.full_name || "Manager",
+      "MG",
+    );
+
+    await loadManagerProfileImages("", initials);
+    return;
+  }
+
+  const button = state.dom.removeManagerProfileImageBtn;
+  const originalHtml = button?.innerHTML || "";
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = `
+        <span
+          class="spinner-border spinner-border-sm me-2"
+          aria-hidden="true"
+        ></span>
+        Removing...
+      `;
+    }
+
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({
+        profile_image_path: null,
+      })
+      .eq("id", state.currentUser.id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) throw error;
+
+    state.currentProfile = {
+      ...state.currentProfile,
+      ...(data || {}),
+      profile_image_path: "",
+    };
+
+    state.pendingProfileImageFile = null;
+
+    if (state.dom.managerProfileImageInput) {
+      state.dom.managerProfileImageInput.value = "";
+    }
+
+    if (state.dom.managerProfileImagePreview) {
+      state.dom.managerProfileImagePreview.src = "";
+      state.dom.managerProfileImagePreview.classList.add("d-none");
+    }
+
+    const initials = getInitials(
+      state.currentProfile?.full_name || "Manager",
+      "MG",
+    );
+
+    await loadManagerProfileImages("", initials);
+    updateManagerProfileImageButtonState();
+
+    const { error: storageError } = await supabase.storage
+      .from(PROFILE_IMAGES_BUCKET)
+      .remove([existingImagePath]);
+
+    if (storageError) {
+      console.warn(
+        "Manager profile image reference was cleared, but storage cleanup failed:",
+        storageError,
+      );
+    }
+
+    showPageAlert(
+      "success",
+      "Profile picture removed successfully.",
+    );
+  } catch (error) {
+    console.error(
+      "Error removing Manager profile image:",
+      error,
+    );
+
+    showPageAlert(
+      "danger",
+      error.message ||
+      "Profile picture could not be removed.",
+    );
+  } finally {
+    if (button) {
+      button.innerHTML = originalHtml;
+      button.disabled = !String(
+        state.currentProfile?.profile_image_path || "",
+      ).trim();
+    }
   }
 }
 
@@ -3665,7 +4067,9 @@ function openManagerEmployeeDetails(employeeId = "") {
 
   setManagerEmployeeDetailsText(
     "managerEmployeeDetailsRoleDepartment",
-    `${jobTitle} Â· ${department}`,
+    // MANAGER EMPLOYEE DETAILS TEXT REPAIR - v1.0.0
+    // Use a safe ASCII separator so job title and department render consistently.
+    `${jobTitle} - ${department}`,
   );
 
   setManagerEmployeeDetailsText(
@@ -3899,11 +4303,11 @@ function buildPendingRequestDecisionActionsHtml(request = {}) {
   // SECONDARY MANAGER PENDING LEAVE VISIBILITY - STEP 1
   // Every active reporting manager may see a pending request, but only the
   // Primary Manager may decide it until delegated approval is implemented.
-  if (!isPrimaryReportingManagerRelationship(request.managerRelationshipLabel)) {
+  if (!canManagerDecideLeaveRequest(request)) {
     return `
       <div class="d-inline-flex flex-column align-items-end gap-1">
         <span class="bexhr-status-pill bexhr-status-pill--warning"
-          title="Only the Primary Manager can make this leave decision.">
+          title="Only the Primary Manager or an actively delegated Secondary Manager can make this leave decision.">
           <i class="bi bi-eye-fill" aria-hidden="true"></i>
           <span>Awaiting Primary Manager</span>
         </span>
@@ -4285,31 +4689,31 @@ function buildTeamScheduleTimingHtml(item = {}) {
   `;
 }
 
-// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
-// Replace raw "Conflict Details" with HR-facing coverage status.
+// MANAGER TEAM SCHEDULE OVERLAP PRESENTATION - v1.0.0
+// Modernise only the overlap status presentation.
+// Existing overlap detection, counts, dates, and schedule data remain unchanged.
 function buildTeamScheduleCoverageHtml(item = {}) {
-  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J-B
-  // This is an overlap signal, not a full workforce coverage calculation.
-  // Keep the label HR-accurate: no overlap unless another approved team
-  // leave item intersects this period.
   if (!item?.hasOverlap) {
     return `
-      <span class="badge text-bg-success">
-        No overlap
+      <span class="manager-schedule-overlap-status manager-schedule-overlap-status--clear">
+        <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+        <span>No overlap</span>
       </span>
     `;
   }
 
   return `
-    <div class="d-flex flex-column gap-2">
-      <div>
-        <span class="badge text-bg-warning">
+    <div class="manager-schedule-overlap-detail">
+      <span class="manager-schedule-overlap-status manager-schedule-overlap-status--risk">
+        <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+        <span>
           Overlap risk (${escapeHtml(item.overlapCount || 0)})
         </span>
-      </div>
-      <div class="small text-secondary">
+      </span>
+
+      <span class="manager-schedule-overlap-summary">
         ${escapeHtml(getOverlapSummaryText(item))}
-      </div>
+      </span>
     </div>
   `;
 }
@@ -4424,6 +4828,13 @@ async function refreshManagerWorkspace() {
     renderLeaveSummaryTiles([], []);
     return;
   }
+
+  // TEMPORARY DELEGATED LEAVE AUTHORITY - v1.0.0
+
+  // Load tenant-scoped delegation context before leave requests.
+
+  await loadManagerLeaveDelegationContext();
+
 
   await loadTeamLeaveVisibility();
 }
@@ -4807,7 +5218,7 @@ function renderManagerActionCoverageCentre() {
     coverageMode = "Secondary Manager";
     coverageModeKey = "secondary";
     coverageDescription =
-      "You can monitor leave activity and team coverage. Pending decisions remain with each employeeâ€™s Primary Manager.";
+      "You can monitor leave activity and team coverage. Pending decisions remain with each employee's Primary Manager.";
     decisionAuthority = "Primary Manager action required";
   } else if (primaryRelationshipCount > 0) {
     coverageMode = "Primary Manager";
@@ -4821,11 +5232,43 @@ function renderManagerActionCoverageCentre() {
     "managerCoverageModeBadge",
   );
 
+  // MANAGER ACTION CENTRE AUTHORITY BADGE - v1.0.1
+  // Keep the overview badge aligned with the reporting-line authority
+  // already resolved for the Manager profile and account header.
   if (modeBadge) {
     modeBadge.textContent = coverageMode;
     modeBadge.className =
       `manager-coverage-mode-badge ` +
       `manager-coverage-mode-badge--${coverageModeKey}`;
+  }
+
+  // MANAGER PROFILE AUTHORITY PARITY - v1.0.0
+  // Display the reporting-line authority already resolved for this Manager.
+  // This does not change the stored role or any leave decision permissions.
+  if (state.dom.managerProfileAuthorityText) {
+    state.dom.managerProfileAuthorityText.textContent =
+      `${coverageMode} workspace member`;
+  }
+
+  if (state.dom.managerProfileAuthorityPill) {
+    state.dom.managerProfileAuthorityPill.dataset.managerAuthority =
+      coverageModeKey;
+  }
+
+  if (state.dom.managerProfileRole) {
+    state.dom.managerProfileRole.value = coverageMode;
+  }
+
+  if (state.dom.managerProfileRole) {
+    state.dom.managerProfileRole.removeAttribute("placeholder");
+  }
+
+  if (modeBadge) {
+    modeBadge.classList.remove("manager-authority-resolving");
+  }
+
+  if (state.dom.managerRole) {
+    state.dom.managerRole.textContent = coverageMode;
   }
 
   setManagerActionCentreText(
@@ -4890,8 +5333,7 @@ function renderManagerActionCoverageCentre() {
 
   const period =
     startDate && endDate && startDate !== endDate
-      ? `${startDate} â€“ ${endDate}`
-      : startDate || endDate || "Date unavailable";
+      ? `${startDate} to ${endDate}`      : startDate || endDate || "Date unavailable";
 
   setManagerActionCentreText(
     "managerNextAbsenceName",
@@ -4900,7 +5342,7 @@ function renderManagerActionCoverageCentre() {
 
   setManagerActionCentreText(
     "managerNextAbsencePeriod",
-    `${period} Â· ${nextAbsence.leaveTypeName || "Approved leave"}`,
+    `${period} - ${nextAbsence.leaveTypeName || "Approved leave"}`,
   );
 }
 
@@ -5242,6 +5684,707 @@ function renderTeamTable(teamMembers) {
     tbody.appendChild(row);
   });
 }
+
+// TEMPORARY DELEGATED LEAVE AUTHORITY - v1.0.0
+// Decision controls remain request-scoped. A Secondary Manager receives action
+// controls only when the protected readiness RPC confirms an active delegation.
+function canManagerDecideLeaveRequest(request = {}) {
+  return (
+    isPrimaryReportingManagerRelationship(request.managerRelationshipLabel) ||
+    request.canDecideLeaveRequest === true
+  );
+}
+
+function getManagerDelegationContext() {
+  const context = state.managerLeaveDelegationContext || {};
+  return {
+    eligible_delegates: Array.isArray(context.eligible_delegates)
+      ? context.eligible_delegates
+      : [],
+    active_granted: Array.isArray(context.active_granted)
+      ? context.active_granted
+      : [],
+    active_received: Array.isArray(context.active_received)
+      ? context.active_received
+      : [],
+  };
+}
+
+async function loadManagerLeaveDelegationContext() {
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "get_manager_leave_delegation_context",
+    );
+    if (error) throw error;
+
+    state.managerLeaveDelegationContext = {
+      eligible_delegates: Array.isArray(data?.eligible_delegates)
+        ? data.eligible_delegates
+        : [],
+      active_granted: Array.isArray(data?.active_granted)
+        ? data.active_granted
+        : [],
+      active_received: Array.isArray(data?.active_received)
+        ? data.active_received
+        : [],
+    };
+  } catch (error) {
+    console.warn("Unable to load manager leave delegations:", error);
+    state.managerLeaveDelegationContext = {
+      eligible_delegates: [],
+      active_granted: [],
+      active_received: [],
+    };
+  }
+
+  renderManagerLeaveDelegationUi();
+  renderAuthorityAwareManagerGuide();
+}
+
+function ensureManagerLeaveDelegationStyles() {
+  if (document.getElementById("managerLeaveDelegationStyles")) return;
+
+  const style = document.createElement("style");
+  style.id = "managerLeaveDelegationStyles";
+  style.textContent = `
+    #managerLeaveDelegationModal .modal-dialog {
+      width: min(900px, calc(100vw - 1.5rem));
+      max-width: 900px;
+      margin: 0.75rem auto;
+    }
+
+    #managerLeaveDelegationModal .modal-content {
+      max-height: calc(100dvh - 1.5rem);
+    }
+
+    #managerLeaveDelegationModal .modal-body {
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+
+    #managerLeaveDelegationModal .modal-content {
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdfc 100%);
+    }
+
+    .manager-delegation-hero {
+      background:
+        radial-gradient(circle at top right, rgba(15, 157, 123, 0.13), transparent 42%),
+        linear-gradient(135deg, #f4fffb 0%, #ffffff 72%);
+      border-bottom: 1px solid rgba(15, 157, 123, 0.14);
+    }
+
+    .manager-delegation-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 999px;
+      background: rgba(15, 157, 123, 0.1);
+      color: #087f63;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .manager-delegation-panel,
+    .manager-delegation-summary,
+    .manager-delegation-record {
+      border: 1px solid #dce9e5;
+      border-radius: 1rem;
+      background: #ffffff;
+      box-shadow: 0 10px 30px rgba(15, 45, 38, 0.05);
+    }
+
+    .manager-delegation-selector {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .manager-delegation-person {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-height: 74px;
+      padding: 0.9rem;
+      border: 1px solid #dce6e3;
+      border-radius: 0.9rem;
+      background: #ffffff;
+      cursor: pointer;
+      transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    }
+
+    .manager-delegation-person:hover {
+      border-color: #70cdb6;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(15, 157, 123, 0.08);
+    }
+
+    .manager-delegation-person:has(input:checked) {
+      border-color: #0f9d7b;
+      background: #f1fcf8;
+      box-shadow: 0 0 0 3px rgba(15, 157, 123, 0.1);
+    }
+
+    .manager-delegation-person input {
+      width: 1.1rem;
+      height: 1.1rem;
+      accent-color: #0f9d7b;
+      flex: 0 0 auto;
+    }
+
+    .manager-delegation-avatar {
+      width: 2.45rem;
+      height: 2.45rem;
+      border-radius: 0.75rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #dff8f0;
+      color: #087f63;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+
+    .manager-delegation-summary {
+      background: #f7fbfa;
+      border-style: dashed;
+    }
+
+    .manager-delegation-summary strong {
+      color: #123b32;
+    }
+
+    .manager-delegation-record {
+      padding: 1rem;
+    }
+
+    .manager-delegation-record-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.28rem 0.55rem;
+      border-radius: 999px;
+      background: #eaf9f3;
+      color: #087f63;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .manager-delegation-empty {
+      padding: 1rem;
+      border: 1px dashed #cfded9;
+      border-radius: 0.9rem;
+      background: #fbfdfc;
+      color: #63756f;
+    }
+
+    .manager-delegation-footer {
+      position: sticky;
+      bottom: -1px;
+      z-index: 2;
+      margin-inline: -0.25rem;
+      padding: 1rem 0.25rem 0.25rem;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff 30%);
+      border-top: 1px solid #e4eeeb;
+    }
+
+    .manager-delegation-footer .btn {
+      min-height: 46px;
+    }
+
+    .manager-delegation-record-status--scheduled {
+      background: #fff7df;
+      color: #946200;
+    }
+
+    .manager-delegation-record-status--expired {
+      background: #f1f5f9;
+      color: #526176;
+    }
+
+    .manager-delegation-record-status--revoked {
+      background: #fff0f1;
+      color: #b42334;
+    }
+
+    @media (max-width: 767.98px) {
+      #managerLeaveDelegationModal .modal-dialog {
+        width: calc(100vw - 1rem);
+        margin: 0.5rem auto;
+      }
+
+      #managerLeaveDelegationModal .modal-content {
+        max-height: calc(100dvh - 1rem);
+        border-radius: 1rem !important;
+      }
+
+      #managerLeaveDelegationModal .modal-header,
+      #managerLeaveDelegationModal .modal-body {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+      }
+
+      .manager-delegation-footer .btn {
+        width: 100%;
+      }
+
+      .manager-delegation-selector {
+        grid-template-columns: 1fr;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function ensureManagerLeaveDelegationModalMarkup() {
+  if (document.getElementById("managerLeaveDelegationModal")) return;
+
+  ensureManagerLeaveDelegationStyles();
+
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `
+      <div class="modal fade" id="managerLeaveDelegationModal" tabindex="-1"
+        aria-labelledby="managerLeaveDelegationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+          <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header manager-delegation-hero border-0 px-4 px-lg-5 pt-4 pb-4 align-items-start">
+              <div class="pe-3">
+                <div class="manager-delegation-kicker mb-3">
+                  <i class="bi bi-person-check"></i>
+                  Temporary approval access
+                </div>
+                <h2 class="modal-title h3 fw-bold mb-2" id="managerLeaveDelegationModalLabel">Temporary Approval Access</h2>
+                <p class="text-secondary mb-0">Give trusted Secondary Managers temporary permission to review and decide leave requests while you are unavailable.</p>
+              </div>
+              <button type="button" class="btn-close mt-1" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body px-4 px-lg-5 py-4">
+              <div id="managerLeaveDelegationNotice" class="alert d-none" role="alert"></div>
+              <form id="managerLeaveDelegationForm" class="manager-delegation-panel p-3 p-lg-4 mb-4">
+                <div class="d-flex align-items-start gap-3 mb-4">
+                  <div class="manager-delegation-avatar"><i class="bi bi-people"></i></div>
+                  <div>
+                    <h3 class="h5 fw-bold mb-1">Choose who can act for you</h3>
+                    <p class="text-secondary mb-0">Select one or more Secondary Managers. Each person receives a separate access record that you can revoke independently.</p>
+                  </div>
+                </div>
+
+                <div id="managerLeaveDelegates" class="manager-delegation-selector mb-4" role="group" aria-label="Secondary Managers"></div>
+
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label for="managerLeaveDelegationScope" class="form-label fw-semibold">Who can they approve leave for?</label>
+                    <select id="managerLeaveDelegationScope" class="form-select">
+                      <option value="team">All employees I manage</option>
+                      <option value="employee">Selected employee only</option>
+                    </select>
+                    <div class="form-text">Choose whether access applies to your full team or one selected employee.</div>
+                  </div>
+                  <div class="col-md-6 d-none" id="managerLeaveDelegationEmployeeWrap">
+                    <label for="managerLeaveDelegationEmployee" class="form-label fw-semibold">Selected employee</label>
+                    <select id="managerLeaveDelegationEmployee" class="form-select"></select>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="managerLeaveDelegationStartsAt" class="form-label fw-semibold">Access starts</label>
+                    <input id="managerLeaveDelegationStartsAt" type="datetime-local" class="form-control" required />
+                  </div>
+                  <div class="col-md-6">
+                    <label for="managerLeaveDelegationEndsAt" class="form-label fw-semibold">Access ends</label>
+                    <input id="managerLeaveDelegationEndsAt" type="datetime-local" class="form-control" required />
+                    <div class="form-text">Access ends automatically at this time.</div>
+                  </div>
+                  <div class="col-12">
+                    <label for="managerLeaveDelegationReason" class="form-label fw-semibold">Why is this access needed?</label>
+                    <textarea id="managerLeaveDelegationReason" class="form-control" rows="3" maxlength="500" required placeholder="For example: Annual leave cover from Monday to Friday"></textarea>
+                  </div>
+                </div>
+
+                <div class="manager-delegation-summary p-3 mt-4" id="managerLeaveDelegationSummary" aria-live="polite">
+                  <strong>Access summary</strong>
+                  <div class="small text-secondary mt-1">Select a Secondary Manager and complete the dates to preview this temporary access.</div>
+                </div>
+
+                <div class="manager-delegation-footer d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mt-4 pt-3">
+                  <div class="small text-secondary"><i class="bi bi-shield-check me-1"></i>You remain the Primary Manager and can revoke access at any time.</div>
+                  <button id="managerLeaveDelegationSubmit" type="submit" class="btn btn-success px-4">
+                    <i class="bi bi-person-check me-2"></i>Grant temporary approval access
+                  </button>
+                </div>
+              </form>
+              <section>
+                <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+                  <h3 class="h5 fw-bold mb-0">Active access you granted</h3>
+                  <span class="small text-secondary">Each person can be revoked separately</span>
+                </div>
+                <div id="managerLeaveDelegationGrantedList" class="d-grid gap-3 mb-4"></div>
+                <h3 class="h5 fw-bold mb-2">Temporary access granted to you</h3>
+                <div id="managerLeaveDelegationReceivedList" class="d-grid gap-3"></div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    `,
+  );
+}
+
+function formatDelegationDateTime(value) {
+  if (!value) return "--";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+}
+
+function getManagerDelegationStatus(item = {}) {
+  const rawStatus = String(item.status || "").trim().toLowerCase();
+  const now = Date.now();
+  const startsAt = new Date(item.starts_at || 0).getTime();
+  const endsAt = new Date(item.ends_at || 0).getTime();
+
+  if (item.revoked_at || rawStatus === "revoked") {
+    return { label: "Revoked", tone: "revoked", icon: "bi-x-circle" };
+  }
+  if (
+    rawStatus === "expired" ||
+    (Number.isFinite(endsAt) && endsAt > 0 && endsAt <= now)
+  ) {
+    return { label: "Expired", tone: "expired", icon: "bi-clock-history" };
+  }
+  if (
+    rawStatus === "scheduled" ||
+    (Number.isFinite(startsAt) && startsAt > now)
+  ) {
+    return { label: "Scheduled", tone: "scheduled", icon: "bi-calendar-event" };
+  }
+  return { label: "Active", tone: "active", icon: "bi-shield-check" };
+}
+
+function buildManagerDelegationStatusHtml(item = {}) {
+  const status = getManagerDelegationStatus(item);
+  return `
+    <span class="manager-delegation-record-status manager-delegation-record-status--${status.tone}">
+      <i class="bi ${status.icon}"></i>${status.label}
+    </span>
+  `;
+}
+
+function toDelegationDateTimeLocalValue(date) {
+  const value = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(value.getTime())) return "";
+  const offsetMs = value.getTimezoneOffset() * 60000;
+  return new Date(value.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function getSelectedManagerLeaveDelegateIds() {
+  return [...document.querySelectorAll('input[name="managerLeaveDelegate"]:checked')]
+    .map((input) => input.value)
+    .filter(Boolean);
+}
+
+function getManagerLeaveDelegateInitials(item = {}) {
+  const name = String(item.delegate_name || item.delegate_email || "SM").trim();
+  const parts = name.split(/\s+/).filter(Boolean);
+  return (parts.length > 1 ? `${parts[0][0]}${parts[parts.length - 1][0]}` : name.slice(0, 2)).toUpperCase();
+}
+
+function updateManagerLeaveDelegationSummary() {
+  const summary = document.getElementById("managerLeaveDelegationSummary");
+  if (!summary) return;
+
+  const selectedIds = getSelectedManagerLeaveDelegateIds();
+  const context = getManagerDelegationContext();
+  const selectedNames = context.eligible_delegates
+    .filter((item) => selectedIds.includes(String(item.delegate_employee_id)))
+    .map((item) => item.delegate_name || item.delegate_email || "Secondary Manager");
+  const scopeType = document.getElementById("managerLeaveDelegationScope")?.value || "team";
+  const employeeSelect = document.getElementById("managerLeaveDelegationEmployee");
+  const coverageText = scopeType === "employee"
+    ? employeeSelect?.selectedOptions?.[0]?.textContent || "the selected employee"
+    : "all employees you manage";
+  const startsAt = document.getElementById("managerLeaveDelegationStartsAt")?.value;
+  const endsAt = document.getElementById("managerLeaveDelegationEndsAt")?.value;
+
+  if (!selectedNames.length || !startsAt || !endsAt) {
+    summary.innerHTML = `
+      <strong>Access summary</strong>
+      <div class="small text-secondary mt-1">Select a Secondary Manager and complete the dates to preview this temporary access.</div>
+    `;
+    return;
+  }
+
+  summary.innerHTML = `
+    <strong>${escapeHtml(selectedNames.join(", "))}</strong>
+    <div class="small text-secondary mt-1">
+      Can review and decide leave requests for <strong>${escapeHtml(coverageText)}</strong>
+      from ${escapeHtml(formatDelegationDateTime(startsAt))}
+      until ${escapeHtml(formatDelegationDateTime(endsAt))}.
+    </div>
+  `;
+}
+
+function renderManagerLeaveDelegationUi() {
+  ensureManagerLeaveDelegationModalMarkup();
+  const context = getManagerDelegationContext();
+  const intro = document.querySelector(".manager-team-workspace-intro");
+  if (!intro) return;
+
+  const actionHost = document.getElementById("managerLeaveDelegationActionHost");
+  const actionControls = document.getElementById("managerLeaveDelegationActionControls");
+  if (!actionHost || !actionControls) return;
+
+  let button = document.getElementById("managerLeaveDelegationOpenBtn");
+  if (!button) {
+    button = document.createElement("button");
+    button.id = "managerLeaveDelegationOpenBtn";
+    button.type = "button";
+    button.className = "btn btn-success dashboard-action-btn manager-delegation-action-button";
+    button.innerHTML = '<i class="bi bi-person-check me-2"></i>Temporary Approval Access';
+    button.addEventListener("click", () => {
+      populateManagerLeaveDelegationModal();
+      state.managerLeaveDelegationModal?.show();
+    });
+    actionControls.appendChild(button);
+  }
+
+  // Only a manager with Primary assignments may grant temporary approval access.
+  // Delegated Secondary Managers receive request-level action controls but never
+  // the authority-management control itself.
+  const hasPrimaryAssignments = (
+    Array.isArray(state.teamMembers) ? state.teamMembers : []
+  ).some((member) =>
+    isPrimaryReportingManagerRelationship(member.relationshipLabel),
+  );
+  const canManageDelegation = hasPrimaryAssignments;
+  actionHost.classList.toggle("d-none", !canManageDelegation);
+  button.classList.toggle("d-none", !canManageDelegation);
+}
+
+function populateManagerLeaveDelegationModal() {
+  const context = getManagerDelegationContext();
+  const delegateContainer = document.getElementById("managerLeaveDelegates");
+  const employeeSelect = document.getElementById("managerLeaveDelegationEmployee");
+  const form = document.getElementById("managerLeaveDelegationForm");
+
+  if (delegateContainer) {
+    delegateContainer.innerHTML = context.eligible_delegates.length
+      ? context.eligible_delegates.map((item) => `
+          <label class="manager-delegation-person">
+            <input type="checkbox" name="managerLeaveDelegate" value="${escapeHtml(item.delegate_employee_id)}" />
+            <span class="manager-delegation-avatar">${escapeHtml(getManagerLeaveDelegateInitials(item))}</span>
+            <span class="min-w-0">
+              <span class="d-block fw-semibold text-truncate">${escapeHtml(item.delegate_name || item.delegate_email || "Secondary Manager")}</span>
+              <span class="d-block small text-secondary text-truncate">Secondary Manager</span>
+            </span>
+          </label>`).join("")
+      : '<div class="manager-delegation-empty">No eligible Secondary Managers are available for your Primary Manager assignments.</div>';
+  }
+
+  if (employeeSelect) {
+    employeeSelect.innerHTML = state.teamMembers
+      .filter((member) => isPrimaryReportingManagerRelationship(member.relationshipLabel))
+      .map((member) => `<option value="${escapeHtml(member.id)}">${escapeHtml(member.employeeFullName || member.work_email || "Employee")}</option>`)
+      .join("");
+  }
+
+  if (form) form.classList.toggle("d-none", !context.eligible_delegates.length);
+
+  const startsInput = document.getElementById("managerLeaveDelegationStartsAt");
+  const endsInput = document.getElementById("managerLeaveDelegationEndsAt");
+  if (startsInput && !startsInput.value) {
+    const now = new Date();
+    now.setMinutes(Math.ceil(now.getMinutes() / 5) * 5, 0, 0);
+    startsInput.value = toDelegationDateTimeLocalValue(now);
+  }
+  if (endsInput && !endsInput.value) {
+    const end = new Date(startsInput?.value || Date.now());
+    end.setHours(end.getHours() + 8);
+    endsInput.value = toDelegationDateTimeLocalValue(end);
+  }
+
+  const grantedList = document.getElementById("managerLeaveDelegationGrantedList");
+  if (grantedList) {
+    grantedList.innerHTML = context.active_granted.length
+      ? context.active_granted.map((item) => `
+          <div class="manager-delegation-record d-flex flex-column flex-md-row justify-content-between gap-3">
+            <div>
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <strong>${escapeHtml(item.delegate_name || "Secondary Manager")}</strong>
+                ${buildManagerDelegationStatusHtml(item)}
+              </div>
+              <div class="small text-secondary mb-1">${escapeHtml(item.scope_label || "All employees I manage")}</div>
+              <div class="small text-secondary mb-2">${escapeHtml(formatDelegationDateTime(item.starts_at))} to ${escapeHtml(formatDelegationDateTime(item.ends_at))}</div>
+              <div class="small">${escapeHtml(item.reason || "No reason provided")}</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger align-self-start" data-revoke-delegation-id="${escapeHtml(item.id)}">
+              <i class="bi bi-x-circle me-1"></i>Revoke access
+            </button>
+          </div>`).join("")
+      : '<div class="manager-delegation-empty">You have not granted any active temporary approval access.</div>';
+  }
+
+  const receivedList = document.getElementById("managerLeaveDelegationReceivedList");
+  if (receivedList) {
+    receivedList.innerHTML = context.active_received.length
+      ? context.active_received.map((item) => `
+          <div class="manager-delegation-record">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+              <strong>Approval access from ${escapeHtml(item.primary_manager_name || "Primary Manager")}</strong>
+              ${buildManagerDelegationStatusHtml(item)}
+            </div>
+            <div class="small text-secondary">${escapeHtml(item.scope_label || "All employees managed by the Primary Manager")}</div>
+            <div class="small text-secondary">Available until ${escapeHtml(formatDelegationDateTime(item.ends_at))}</div>
+          </div>`).join("")
+      : '<div class="manager-delegation-empty">No temporary approval access has been granted to you.</div>';
+  }
+
+  updateManagerLeaveDelegationSummary();
+}
+
+function showManagerLeaveDelegationNotice(type, message) {
+  const notice = document.getElementById("managerLeaveDelegationNotice");
+  if (!notice) return;
+  notice.className = `alert alert-${type}`;
+  notice.textContent = message;
+}
+
+async function submitManagerLeaveDelegations(event) {
+  event.preventDefault();
+  const selectedDelegateIds = getSelectedManagerLeaveDelegateIds();
+  const scopeType = document.getElementById("managerLeaveDelegationScope")?.value || "team";
+  const coveredEmployeeId = scopeType === "employee"
+    ? document.getElementById("managerLeaveDelegationEmployee")?.value || null
+    : null;
+  const startsAt = document.getElementById("managerLeaveDelegationStartsAt")?.value;
+  const endsAt = document.getElementById("managerLeaveDelegationEndsAt")?.value;
+  const reason = String(document.getElementById("managerLeaveDelegationReason")?.value || "").trim();
+
+  if (!selectedDelegateIds.length || !startsAt || !endsAt || !reason) {
+    showManagerLeaveDelegationNotice("warning", "Select at least one Secondary Manager and complete all required fields.");
+    return;
+  }
+  if (scopeType === "employee" && !coveredEmployeeId) {
+    showManagerLeaveDelegationNotice("warning", "Select the employee this temporary access should cover.");
+    return;
+  }
+  if (new Date(endsAt) <= new Date(startsAt)) {
+    showManagerLeaveDelegationNotice("warning", "The access end time must be after its start time.");
+    return;
+  }
+
+  const button = document.getElementById("managerLeaveDelegationSubmit");
+  const originalButtonHtml = button?.innerHTML;
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Granting access...';
+  }
+  try {
+    const supabase = getSupabaseClient();
+    for (const delegateEmployeeId of selectedDelegateIds) {
+      const { error } = await supabase.rpc("create_manager_leave_delegation", {
+        p_delegate_employee_id: delegateEmployeeId,
+        p_scope_type: scopeType,
+        p_covered_employee_id: coveredEmployeeId,
+        p_starts_at: new Date(startsAt).toISOString(),
+        p_ends_at: new Date(endsAt).toISOString(),
+        p_reason: reason,
+      });
+      if (error) throw error;
+    }
+    showManagerLeaveDelegationNotice("success", `${selectedDelegateIds.length} temporary approval access record${selectedDelegateIds.length === 1 ? "" : "s"} created.`);
+    document.getElementById("managerLeaveDelegationForm")?.reset();
+    await loadManagerLeaveDelegationContext();
+    await loadTeamLeaveVisibility();
+    populateManagerLeaveDelegationModal();
+  } catch (error) {
+    showManagerLeaveDelegationNotice("danger", error?.message || "Temporary approval access could not be created.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = originalButtonHtml || '<i class="bi bi-person-check me-2"></i>Grant temporary approval access';
+    }
+  }
+}
+
+async function revokeManagerLeaveDelegation(delegationId) {
+  try {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc("revoke_manager_leave_delegation", {
+      p_delegation_id: delegationId,
+    });
+    if (error) throw error;
+    showManagerLeaveDelegationNotice("success", "Temporary approval access revoked.");
+    await loadManagerLeaveDelegationContext();
+    await loadTeamLeaveVisibility();
+    populateManagerLeaveDelegationModal();
+  } catch (error) {
+    showManagerLeaveDelegationNotice("danger", error?.message || "Temporary approval access could not be revoked.");
+  }
+}
+
+function initialiseManagerLeaveDelegationUi() {
+  ensureManagerLeaveDelegationModalMarkup();
+  const modalElement = document.getElementById("managerLeaveDelegationModal");
+  if (modalElement && window.bootstrap?.Modal) {
+    state.managerLeaveDelegationModal = new window.bootstrap.Modal(modalElement);
+  }
+
+  document.getElementById("managerLeaveDelegationForm")?.addEventListener("submit", submitManagerLeaveDelegations);
+  document.getElementById("managerLeaveDelegationScope")?.addEventListener("change", (event) => {
+    document.getElementById("managerLeaveDelegationEmployeeWrap")?.classList.toggle("d-none", event.target.value !== "employee");
+    updateManagerLeaveDelegationSummary();
+  });
+  document.getElementById("managerLeaveDelegationEmployee")?.addEventListener("change", updateManagerLeaveDelegationSummary);
+  document.getElementById("managerLeaveDelegationStartsAt")?.addEventListener("change", updateManagerLeaveDelegationSummary);
+  document.getElementById("managerLeaveDelegationEndsAt")?.addEventListener("change", updateManagerLeaveDelegationSummary);
+  document.getElementById("managerLeaveDelegates")?.addEventListener("change", updateManagerLeaveDelegationSummary);
+  document.getElementById("managerLeaveDelegationGrantedList")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-revoke-delegation-id]");
+    if (button) revokeManagerLeaveDelegation(button.dataset.revokeDelegationId);
+  });
+}
+
+async function loadManagerLeaveReadinessRows() {
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "get_manager_leave_readiness",
+    );
+
+    if (error) throw error;
+
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.warn(
+      "Unable to load protected manager leave readiness; using direct-read fallback:",
+      error,
+    );
+    return [];
+  }
+}
+
+async function loadManagerLeaveDecisionAuthorityAuditRows() {
+  const supabase = getSupabaseClient();
+
+  try {
+    const { data, error } = await supabase.rpc(
+      "get_manager_leave_decision_authority_history",
+    );
+
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.warn(
+      "Unable to load delegated leave decision authority history:",
+      error,
+    );
+    return [];
+  }
+}
+
 async function loadTeamLeaveVisibility() {
   const supabase = getSupabaseClient();
 
@@ -5309,10 +6452,28 @@ async function loadTeamLeaveVisibility() {
 
     const leaveRowsArray = Array.isArray(leaveRows) ? leaveRows : [];
 
-    // MANAGER DASHBOARD WIRING - STEP 2G
-    // Load leave balances for the visible manager-team leave rows so Pending
-    // Leave Requests can show accurate approval readiness before the manager
-    // opens the modal. Approval is still protected again at save time.
+    // MANAGER LEAVE READINESS IDENTITY RESOLUTION - v1.0.0
+    // Prefer the protected same-tenant readiness RPC. It resolves leave request
+    // employee identities to the canonical employees.id record and returns only
+    // the minimum balance, eligibility, and manager-relationship fields needed
+    // by this page. Direct balance reads remain a safe compatibility fallback.
+    const readinessRows = await loadManagerLeaveReadinessRows();
+    const readinessByRequestId = new Map();
+
+    readinessRows.forEach((readinessRow) => {
+      const requestId = String(readinessRow?.request_id || "").trim();
+      if (requestId) readinessByRequestId.set(requestId, readinessRow);
+    });
+
+    const authorityAuditRows =
+      await loadManagerLeaveDecisionAuthorityAuditRows();
+    const authorityAuditByRequestId = new Map();
+
+    authorityAuditRows.forEach((auditRow) => {
+      const requestId = String(auditRow?.leave_request_id || "").trim();
+      if (requestId) authorityAuditByRequestId.set(requestId, auditRow);
+    });
+
     const leaveBalanceByEmployeeAndType = new Map();
 
     const leaveBalanceEmployeeIds = [
@@ -5340,12 +6501,17 @@ async function loadTeamLeaveVisibility() {
         .in("employee_id", leaveBalanceEmployeeIds)
         .in("leave_type_id", leaveBalanceTypeIds);
 
-      if (balanceError) throw balanceError;
-
-      (balanceRows || []).forEach((balanceRow) => {
-        const balanceKey = `${balanceRow.employee_id}|${balanceRow.leave_type_id}`;
-        leaveBalanceByEmployeeAndType.set(balanceKey, balanceRow);
-      });
+      if (balanceError) {
+        console.warn(
+          "Direct manager balance fallback was unavailable under RLS:",
+          balanceError,
+        );
+      } else {
+        (balanceRows || []).forEach((balanceRow) => {
+          const balanceKey = `${balanceRow.employee_id}|${balanceRow.leave_type_id}`;
+          leaveBalanceByEmployeeAndType.set(balanceKey, balanceRow);
+        });
+      }
     }
 
     const teamMembersByIdentity = new Map();
@@ -5361,13 +6527,21 @@ async function loadTeamLeaveVisibility() {
         const owner = teamMembersByIdentity.get(String(leaveRow.employee_id));
         if (!owner) return null;
 
-        // MANAGER DASHBOARD WIRING - STEP 2G FIX
-        // Leave requests can be loaded through multiple identity candidates,
-        // but leave balances are keyed by the real employees.id record.
-        // Use owner.id here so the pending queue does not falsely report
-        // "No balance record" when the balance exists but is fully used.
-        const balanceKey = `${owner.id}|${leaveRow.leave_type_id}`;
-        const leaveBalance = leaveBalanceByEmployeeAndType.get(balanceKey) || null;
+        // MANAGER LEAVE READINESS IDENTITY RESOLUTION - v1.0.0
+        // The RPC resolves employees.id, employees.user_id, and profile-linked
+        // request identities inside the signed-in manager's tenant. Prefer that
+        // canonical result; use the existing direct-read map only as fallback.
+        const readiness =
+          readinessByRequestId.get(String(leaveRow.id || "")) || null;
+        const canonicalEmployeeId = String(
+          readiness?.canonical_employee_id || owner.id || "",
+        ).trim();
+        const balanceKey = `${canonicalEmployeeId}|${leaveRow.leave_type_id}`;
+        const leaveBalance = readiness?.has_balance
+          ? readiness
+          : leaveBalanceByEmployeeAndType.get(balanceKey) || null;
+        const authorityAudit =
+          authorityAuditByRequestId.get(String(leaveRow.id || "")) || null;
 
         return {
           ...leaveRow,
@@ -5385,18 +6559,31 @@ async function loadTeamLeaveVisibility() {
           leaveTypeEligibilityRule:
             leaveRow.leave_types?.eligibility_rule || "all_employees",
           employeeGender:
+            readiness?.employee_gender ||
             owner.raw?.gender ||
             owner.raw?.sex ||
             owner.raw?.gender_identity ||
             "",
 
-          employeeRecordId: owner.id,
+          employeeRecordId: canonicalEmployeeId || owner.id,
 
           // LINE MANAGER LEAVE APPROVAL AUTHORITY - STEP 1I
           // Preserve this manager's relationship to the employee on each leave
           // item so processed decisions can show FYI behaviour for additional
           // managers without giving them approval rights.
-          managerRelationshipLabel: owner.relationshipLabel || "",
+          managerRelationshipLabel: readiness?.manager_type
+            ? `${readiness.manager_type} Manager`
+            : owner.relationshipLabel || "",
+          canDecideLeaveRequest: readiness?.can_decide === true,
+          decisionAuthority: readiness?.decision_authority || "view_only",
+          activeDelegationId: readiness?.delegation_id || null,
+          delegationEndsAt: readiness?.delegation_ends_at || null,
+          delegatedByName: readiness?.delegated_by_name || "",
+          decisionAuthorityType: authorityAudit?.authority_type || "",
+          decisionAuthorityActorName: authorityAudit?.actor_manager_name || "",
+          decisionAuthorityPrimaryName:
+            authorityAudit?.primary_manager_name || "",
+          decisionAuthorityDelegationId: authorityAudit?.delegation_id || null,
 
           // MANAGER DASHBOARD WIRING - STEP 2F FIX
           // leave_requests.employee_id can be the linked user/profile ID,
@@ -5642,6 +6829,21 @@ function renderPendingLeaveRequests(requests) {
             </div>
           </div>
 
+          <!-- MANAGER LEAVE EMPLOYEE REASON - v1.0.0
+               Show the employee's submitted supporting note before decision readiness. -->
+          <section class="manager-pending-modern-readiness manager-pending-modern-employee-reason">
+            <span class="manager-pending-modern-label">Employee reason</span>
+
+            <div class="manager-pending-modern-readiness-content">
+              <span class="manager-pending-modern-reason-text">
+                ${escapeHtml(
+      String(request.reason || "").trim() ||
+      "No reason provided.",
+    )}
+              </span>
+            </div>
+          </section>
+
           <section class="manager-pending-modern-readiness">
             <span class="manager-pending-modern-label">Decision readiness</span>
             <div class="manager-pending-modern-readiness-content">
@@ -5804,10 +7006,10 @@ function buildProcessedDecisionAuditCardHtml(request = {}) {
       <span class="manager-processed-card-audit-chip">
         <i class="bi bi-calendar2-check" aria-hidden="true"></i>
         ${escapeHtml(
-          hasRestoredDays
-            ? `${restoredDays} day(s) restored`
-            : "Balance restoration not recorded",
-        )}
+      hasRestoredDays
+        ? `${restoredDays} day(s) restored`
+        : "Balance restoration not recorded",
+    )}
       </span>
     `
     : "";
@@ -5839,9 +7041,15 @@ function buildProcessedDecisionAuditCardHtml(request = {}) {
 
         <div class="manager-processed-card-status-area">
           ${relationshipHtml}
-          <span class="manager-processed-card-status manager-processed-card-status--${escapeHtml(tone)}">
-            ${escapeHtml(statusLabel || request.status || "Updated")}
-          </span>
+<!-- MANAGER PROCESSED DECISION STATUS ICON - v1.0.0
+     Add a status-specific icon without changing the decision status logic. -->
+<span class="manager-processed-card-status manager-processed-card-status--${escapeHtml(tone)}">
+<!-- MANAGER PROCESSED DECISION STATUS ICON - v1.0.1
+     Reuse the existing shared status icon helper. -->
+<i class="bi ${escapeHtml(getStatusPillIconClass(request.status))}"
+  aria-hidden="true"></i>
+  <span>${escapeHtml(statusLabel)}</span>
+</span>
         </div>
       </header>
 
@@ -5878,13 +7086,13 @@ function buildProcessedDecisionAuditCardHtml(request = {}) {
       </div>
 
       ${isCancelled
-        ? `
+      ? `
           <div class="manager-processed-card-audit-chips">
             ${originalDecisionHtml}
             ${restoredBalanceHtml}
           </div>
         `
-        : ""}
+      : ""}
 
       <section class="manager-processed-card-comment" aria-label="Decision comment">
         <span class="manager-processed-card-comment-label">Comment</span>
