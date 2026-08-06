@@ -114,48 +114,71 @@
       padding-right: 0.45rem;
     }
 
-    /* Collapse only History. Request Leave keeps controlled height and scroll. */
-    #managerSelfServiceSection
-      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
-      #ssEmployeeLeaveHistoryCard {
-      height: auto !important;
-      min-height: 0 !important;
-      max-height: none !important;
-      overflow: visible !important;
-    }
+/* MANAGER SYSTEM-WIDE COMPACT LEAVE COLLAPSE - v1.0.3
+   Match the approved Employee collapse behaviour across every Manager tenant.
 
-    #managerSelfServiceSection
-      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
-      .dashboard-form-card.ss-leave-equal-card {
-      height: clamp(520px, calc(100vh - 150px), 620px) !important;
-      min-height: 520px !important;
-      max-height: 620px !important;
-      overflow: hidden !important;
-    }
+   When My Leave History is collapsed:
+   - Request Leave also becomes header-only;
+   - both cards return to compact natural height;
+   - neither card stretches the page;
+   - coloured accents remain inside the rounded card boundaries.
 
-    #managerSelfServiceSection
-      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
-      .dashboard-form-card.ss-leave-equal-card
-      > .card-body {
-      display: flex;
-      flex-direction: column;
-      height: 100% !important;
-      min-height: 0 !important;
-      overflow: hidden;
-    }
+   Presentation only:
+   - no leave submission, approval or calculation changes;
+   - no tenant, Alpatech, role, RLS, reporting-line or Supabase changes. */
+#managerSelfServiceSection
+  .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
+  > [class*="col-"] {
+  display: flex;
+  align-self: flex-start;
+}
 
-    #managerSelfServiceSection
-      .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
-      #ssLeaveRequestForm {
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow-x: hidden;
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      padding-right: 0.45rem;
-    }
-  }
+#managerSelfServiceSection
+  .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
+  .ss-leave-equal-card {
+  width: 100%;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
 
+  /* MANAGER COLLAPSED CARD EDGE CONTAINMENT - v1.0.3
+     Keep the cyan accent and card contents inside rounded boundaries. */
+  overflow: hidden !important;
+}
+
+#managerSelfServiceSection
+  .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
+  .ss-leave-equal-card
+  > .card-body {
+  display: block;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+}
+
+#managerSelfServiceSection
+  .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
+  .hr-self-service-card-heading {
+  margin-bottom: 0 !important;
+}
+
+/* Hide only the Request Leave form while the paired History card is collapsed.
+   Expanding History automatically restores the form and desktop inner scroll
+   through the existing expanded-state rules above. */
+#managerSelfServiceSection
+  .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
+  #ssLeaveRequestForm {
+  display: none !important;
+}
+
+/* History content is already hidden by its existing d-none class.
+   Explicit containment prevents the cyan accent from protruding. */
+#managerSelfServiceSection
+  .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)
+  #ssEmployeeLeaveHistoryCard {
+  overflow: hidden !important;
+}
   @media (max-width: 1199.98px) {
     #managerSelfServiceSection .ss-leave-equal-card {
       height: auto !important;
