@@ -28,6 +28,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Summary first, Full Employee List next, then create/import actions.
     alignEmployeeWorkspaceCardOrder();
 
+    // EMPLOYEE BIODATA INTERNAL WORKSPACE - STEP 1
+    // Turn the existing seven-stage strip into real in-form navigation.
+    // Fields are only shown/hidden in place; IDs, listeners, save logic,
+    // access rules, Supabase operations, and tenant behaviour stay unchanged.
+    enhanceEmployeeBiodataInternalWorkspace();
+
     // HR REVIEW WORKSPACE SEPARATION - STEP 1P
     // Move HR review/audit cards out of People before default card collapse
     // runs, so collapse/double-click behaviour remains consistent.
@@ -609,10 +615,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       return headingCandidate
         ? getHrOrganizationWorkspaceBlock(
-            headingCandidate,
-            organizationContainer,
-            organizationCard,
-          )
+          headingCandidate,
+          organizationContainer,
+          organizationCard,
+        )
         : null;
     }
 
@@ -818,18 +824,36 @@ document.addEventListener("DOMContentLoaded", async () => {
     // save/edit flows that reopen cards when needed.
     collapseDashboardWorkingCardsByDefault();
 
+    // HR STARTUP BLOCKER DIAGNOSTIC - TEMPORARY
+    // This does not change authentication or profile behaviour.
+    // It identifies exactly which existing awaited operation is holding first paint.
+    console.time("BexHR startup: protectPage");
+    console.log("[BexHR STARTUP] 1 - before protectPage");
+
     const access = await window.SessionManager.protectPage("hr");
 
+    console.timeEnd("BexHR startup: protectPage");
+    console.log("[BexHR STARTUP] 2 - protectPage completed", Boolean(access));
+
     if (!access) {
+      console.warn("[BexHR STARTUP] protectPage returned no access.");
       return;
     }
 
     state.currentUser = access.session.user;
     state.currentProfile = access.profile;
 
+    console.time("BexHR startup: loadLatestHrProfile");
+    console.log("[BexHR STARTUP] 3 - before loadLatestHrProfile");
+
     await loadLatestHrProfile();
 
+    console.timeEnd("BexHR startup: loadLatestHrProfile");
+    console.log("[BexHR STARTUP] 4 - loadLatestHrProfile completed");
+
     renderHrProfile(state.currentProfile, access.session.user);
+
+    console.log("[BexHR STARTUP] 5 - renderHrProfile completed");
     resetEmployeeForm();
 
     // DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
@@ -837,9 +861,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Do this before the long async HR/payroll data refreshes continue.
     restoreHrWorkspaceAfterRefresh();
 
-    // HR WORKSPACE FIRST PAINT FINALISATION - STEP 2
-    // The exact user-and-tenant workspace, active navigation item, title,
-    // and subtitle are now restored. Reveal the application shell.
+    // HR WORKSPACE FIRST PAINT DEADLOCK REPAIR - v1.0.0
+    // Do not make the entire HR dashboard depend on reporting-responsibility
+    // enrichment. renderHrProfile() has already rendered the verified HR access
+    // label and started the protected manager-responsibility lookup.
+    //
+    // Primary/Secondary Manager badges can enrich the header when that lookup
+    // completes, but a slow or failed reporting lookup must never trap HR on
+    // the workspace-loader screen.
+    const responsibilityTitlePromise =
+      state.hrAccountResponsibilityTitlePromise;
+
+    if (responsibilityTitlePromise?.catch) {
+      responsibilityTitlePromise.catch((error) => {
+        console.warn(
+          "HR responsibility badge enrichment failed:",
+          error,
+        );
+      });
+    }
+
+    // Reveal the remembered HR workspace immediately after authentication,
+    // profile loading, form reset, and workspace restoration are complete.
     revealRestoredHrWorkspace();
 
     // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - STEP 5
@@ -970,7 +1013,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Load approved Bex recipients and recent delivery logs for the
     // Email / Communication Setup card. This does not send payslips and
     // does not load salary, deduction, or bank data.
-        await refreshHrp85EmailIntegrationWorkspace();
+    await refreshHrp85EmailIntegrationWorkspace();
     // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
     // Email / Communication Setup is review-only for non-HR maintenance roles.
     applyHrCommunicationSetupAccessControls();
@@ -1004,6 +1047,48 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Expose the manager role toggle for the employee list action button.
     window.hrToggleManagerRole = (employeeId) => {
       toggleEmployeeManagerRole(employeeId);
+    };
+
+    // HR ACCESS / REPORTING RESPONSIBILITY DECOUPLING - PHASE 1
+    // HR Standard manages reporting relationships without changing dashboard access.
+    // HR Admin receives a distinct access-management modal; reporting lines remain separate.
+    window.hrManageReportingManagers = (employeeId) => {
+      openEmployeeReportingManagerWorkspace(employeeId);
+    };
+
+    window.hrManageEmployeeAccess = (employeeId) => {
+      openHrEmployeeAccessModal(employeeId);
+    };
+
+    window.hrSaveEmployeeAccess = async () => {
+      await saveHrEmployeeAccessFromModal();
+    };
+
+    window.hrCloseEmployeeAccess = () => {
+      closeHrEmployeeAccessModal();
+    };
+
+    window.hrOpenReportingManagersFromAccess = () => {
+      const employeeId = String(
+        document.getElementById("hrEmployeeAccessEmployeeId")?.value || "",
+      ).trim();
+
+      if (!employeeId) {
+        showPageAlert(
+          "warning",
+          "The selected employee could not be resolved. Please close the modal and try again.",
+        );
+        return;
+      }
+
+      document.body.dataset.hrEmployeeAccessReturnEmployeeId = employeeId;
+
+      closeHrEmployeeAccessModal();
+      openEmployeeReportingManagerWorkspace(employeeId);
+    };
+
+    window.hrPrepareManagedEmployeeAssignmentFromAccess = () => {
+      prepareEmployeeAsReportingManagerFromAccess();
     };
 
     // HR EMPLOYEE LOGIN RESEND - STEP 15C
@@ -2903,6 +2988,26 @@ function canCurrentUserMaintainOrganizationSetupData() {
   );
 }
 
+// HR EMPLOYEE ACCESS ADMINISTRATION - PERMISSION GUARD
+// Employee dashboard-access changes and Primary Manager assignment are
+// restricted to the active tenant HR Admin account.
+function canCurrentUserManageHrEmployeeAccess() {
+  return canCurrentUserMaintainOrganizationSetupData();
+}
+
+function showHrEmployeeAccessAdminRequiredMessage() {
+  showPageAlert(
+    "warning",
+    "HR Admin access is required to change employee dashboard access or assign a Primary Manager.",
+  );
+
+  showDashboardToast(
+    "warning",
+    "HR Admin required",
+    "Use an active HR Admin account for employee access and Primary Manager changes.",
+  );
+}
+
 function canCurrentUserMaintainCommunicationSetupData() {
   return HR_COMMUNICATION_SETUP_MAINTENANCE_ROLES.has(
     getCurrentHrBusinessRole(),
@@ -4098,12 +4203,57 @@ function isCurrentTenantAlpatechWorkspace() {
   );
 }
 
+// ALPATECH PAYROLL TENANT ISOLATION - STEP 2
+// Batch Payroll CSV Import is an Alpatech-specific operational workflow.
+// Keep it hidden for every other tenant while preserving the shared
+// payroll experience and all existing payroll calculations.
+function applyTenantSpecificPayrollVisibility() {
+  const batchPayrollCsvImportPanel =
+    state.dom?.batchPayrollCsvImportPanel ||
+    document.getElementById("batchPayrollCsvImportPanel");
+
+  if (!batchPayrollCsvImportPanel) return;
+
+  const isAlpatechWorkspace = isCurrentTenantAlpatechWorkspace();
+
+  batchPayrollCsvImportPanel.classList.toggle(
+    "d-none",
+    !isAlpatechWorkspace,
+  );
+
+  // Clear any selected/imported Alpatech working data if the currently
+  // resolved workspace is not Alpatech. Saved payroll records are untouched.
+  if (!isAlpatechWorkspace) {
+    const csvFile =
+      state.dom?.batchPayrollCsvFile ||
+      document.getElementById("batchPayrollCsvFile");
+
+    const csvSummary =
+      state.dom?.batchPayrollCsvImportSummary ||
+      document.getElementById("batchPayrollCsvImportSummary");
+
+    if (csvFile) {
+      csvFile.value = "";
+    }
+
+    if (csvSummary) {
+      csvSummary.classList.add("d-none");
+      csvSummary.innerHTML = "";
+    }
+  }
+}
+
 // ALPATECH TENANT BRANDING - STEP 1E
 // Browser tab icon only.
 // Browsers control the rendered favicon size, so this uses a tighter,
 // fuller Alpatech flame asset to make the icon appear larger inside
 // the browser's fixed favicon slot.
 function applyTenantFaviconBranding() {
+  // ALPATECH PAYROLL TENANT ISOLATION - STEP 2
+  // Reapply tenant-specific operational visibility whenever tenant
+  // branding/context is resolved.
+  applyTenantSpecificPayrollVisibility();
+
   const favicon = document.querySelector("link[rel~='icon']");
 
   if (!favicon) return;
@@ -4205,7 +4355,7 @@ function applyTenantWorkspaceShellBranding() {
 
 function cacheDomElements() {
   state.dom = {
-        pageAlert: document.getElementById("pageAlert"),
+    pageAlert: document.getElementById("pageAlert"),
 
     // BEXHR HR MODERN OVERVIEW - STEP 6
     // Compact application header and operational overview references.
@@ -4242,7 +4392,7 @@ function cacheDomElements() {
     refreshEmployeesBtn: document.getElementById("refreshEmployeesBtn"),
     cancelEditBtn: document.getElementById("cancelEditBtn"),
 
-        hrTabDashboardBtn: document.getElementById("hrTabDashboardBtn"),
+    hrTabDashboardBtn: document.getElementById("hrTabDashboardBtn"),
     hrTabProfileBtn: document.getElementById("hrTabProfileBtn"),
     hrTabEmployeesBtn: document.getElementById("hrTabEmployeesBtn"),
 
@@ -4335,6 +4485,12 @@ function cacheDomElements() {
     hrProfileImageInput: document.getElementById("hrProfileImageInput"),
     hrProfileImagePreview: document.getElementById("hrProfileImagePreview"),
     saveHrProfileImageBtn: document.getElementById("saveHrProfileImageBtn"),
+
+    // HR PROFILE IMAGE REMOVAL - v1.0.0
+    // Signed-in HR Profile control only. Does not affect employee profile records.
+    removeHrProfileImageBtn: document.getElementById(
+      "removeHrProfileImageBtn",
+    ),
 
     totalEmployeesValue: document.getElementById("totalEmployeesValue"),
     activeEmployeesValue: document.getElementById("activeEmployeesValue"),
@@ -8866,8 +9022,8 @@ function renderPayrollEmployeeOverrideRecords(records = []) {
                 </strong>
 
                 ${supportingContext
-                  ? `<div class="hr-override-context">${supportingContext}</div>`
-                  : ""}
+        ? `<div class="hr-override-context">${supportingContext}</div>`
+        : ""}
               </div>
             </div>
 
@@ -8919,8 +9075,8 @@ function renderPayrollEmployeeOverrideRecords(records = []) {
           </div>
 
           ${auditItems
-            ? `<footer class="hr-override-audit">${auditItems}</footer>`
-            : ""}
+        ? `<footer class="hr-override-audit">${auditItems}</footer>`
+        : ""}
         </article>
       </td>
     `;
@@ -9631,7 +9787,7 @@ function bindEvents() {
 
   updateBackToTopButtonVisibility();
 
-    state.dom.hrTabDashboardBtn?.addEventListener("click", () => {
+  state.dom.hrTabDashboardBtn?.addEventListener("click", () => {
     rememberHrWorkspace("dashboard");
     switchHrWorkspace("dashboard");
     renderHrModernOverview();
@@ -9780,6 +9936,15 @@ function bindEvents() {
   state.dom.saveHrProfileImageBtn?.addEventListener("click", async () => {
     await uploadHrProfileImage();
   });
+
+  // HR PROFILE IMAGE REMOVAL - v1.0.0
+  // Remove only the signed-in HR user's stored profile-picture reference.
+  state.dom.removeHrProfileImageBtn?.addEventListener(
+    "click",
+    async () => {
+      await removeHrProfileImage();
+    },
+  );
 
   // ADMIN UI CLEANUP - STEP 1D-HR PARITY
   // Start HR profile photo upload greyed out until a valid file is selected.
@@ -10167,12 +10332,66 @@ function bindEvents() {
     }
   });
 
+  // HR OPERATING GUIDE FOCUS MANAGEMENT - v1.0.0
+  // Keep keyboard focus inside the open guide and preserve the existing
+  // Escape-close and return-focus behaviour. No workspace or permission change.
   document.addEventListener("keydown", (event) => {
-    if (
-      event.key === "Escape" &&
-      !state.dom.hrOperatingGuideModal?.classList.contains("d-none")
-    ) {
+    const modal = state.dom.hrOperatingGuideModal;
+    const isGuideOpen = Boolean(
+      modal &&
+      !modal.classList.contains("d-none"),
+    );
+
+    if (!isGuideOpen) return;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
       closeHrOperatingGuide();
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const focusableElements = Array.from(
+      modal.querySelectorAll(
+        [
+          'a[href]',
+          'button:not([disabled])',
+          'input:not([disabled])',
+          'select:not([disabled])',
+          'textarea:not([disabled])',
+          '[tabindex]:not([tabindex="-1"])',
+        ].join(","),
+      ),
+    ).filter((element) => {
+      if (!(element instanceof HTMLElement)) return false;
+
+      return Boolean(
+        element.offsetWidth ||
+        element.offsetHeight ||
+        element.getClientRects().length,
+      );
+    });
+
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      modal.querySelector(".hr-operating-guide-shell")?.focus();
+      return;
+    }
+
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement;
+
+    if (event.shiftKey && activeElement === firstFocusable) {
+      event.preventDefault();
+      lastFocusable.focus();
+      return;
+    }
+
+    if (!event.shiftKey && activeElement === lastFocusable) {
+      event.preventDefault();
+      firstFocusable.focus();
     }
   });
 
@@ -12170,7 +12389,7 @@ function buildBatchEmployeePreparedRowFromCsv(
     Boolean(
       normalizedEmployeeNumber &&
       String(employee.employee_number || "").trim().toUpperCase() ===
-        normalizedEmployeeNumber,
+      normalizedEmployeeNumber,
     ),
   );
 
@@ -12487,8 +12706,8 @@ function renderImportedBatchEmployeeCsvRows(preparedRows = [], skippedRows = [])
       </td>
       <td class="text-nowrap">
         ${employee.employee_number
-          ? `<div class="fw-semibold">${escapeHtml(employee.employee_number)}</div><div class="text-secondary small">Supplied by CSV</div>`
-          : `<div class="fw-semibold text-secondary">Auto-generate</div><div class="text-secondary small">Assigned on creation</div>`}
+        ? `<div class="fw-semibold">${escapeHtml(employee.employee_number)}</div><div class="text-secondary small">Supplied by CSV</div>`
+        : `<div class="fw-semibold text-secondary">Auto-generate</div><div class="text-secondary small">Assigned on creation</div>`}
       </td>
       <td class="text-break">${escapeHtml(employee.work_email)}</td>
       <td>${escapeHtml(employee.department || "Not provided")}</td>
@@ -12499,17 +12718,17 @@ function renderImportedBatchEmployeeCsvRows(preparedRows = [], skippedRows = [])
         <div class="hr-batch-row-status-stack">
           <span class="badge text-bg-success">Eligible to create</span>
           ${needsCompletion
-            ? `<span class="badge text-bg-warning">${escapeHtml(missingDetailLabel)}</span>`
-            : `<span class="badge text-bg-light border text-dark">Profile details complete</span>`}
+        ? `<span class="badge text-bg-warning">${escapeHtml(missingDetailLabel)}</span>`
+        : `<span class="badge text-bg-light border text-dark">Profile details complete</span>`}
         </div>
         <div class="text-secondary small mt-1">
           ${needsCompletion
-            ? "Create now and complete the profile later."
-            : "The supplied profile details are ready to create."}
+        ? "Create now and complete the profile later."
+        : "The supplied profile details are ready to create."}
         </div>
         ${warnings.length
-          ? `<ul class="hr-batch-row-warning-list">${warnings.slice(0, 4).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
-          : ""}
+        ? `<ul class="hr-batch-row-warning-list">${warnings.slice(0, 4).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
+        : ""}
         ${childBiodataSummary ? `<div class="text-secondary small mt-1">${escapeHtml(childBiodataSummary)}</div>` : ""}
       </td>
     `;
@@ -12990,6 +13209,8 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
   // should appear in the Assign Line Manager dropdown.
   const managerEligibleRoles = new Set([
     "manager",
+    "hr",
+    "hr_manager",
   ]);
 
   const managerCandidates = (state.employees || [])
@@ -13045,7 +13266,7 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
     option.value = employee.id;
     // EMPLOYEE BIODATA COMPLETION - STEP 6B-PREP
     // Keep the manager dropdown readable. Email is shown separately in Primary Approver Email.
-    option.textContent = `${getEmployeeManagerDisplayName(employee)} — ${employee.job_title || "Manager"}`;
+    option.textContent = `${getEmployeeManagerDisplayName(employee)} - ${employee.job_title || "Manager"}`;
     option.dataset.managerName = getEmployeeManagerDisplayName(employee);
     option.dataset.managerEmail = String(employee.work_email || "").trim().toLowerCase();
     select.appendChild(option);
@@ -13193,6 +13414,8 @@ function getEmployeeReportingLineManagerCandidates() {
 
   const managerEligibleRoles = new Set([
     "manager",
+    "hr",
+    "hr_manager",
   ]);
 
   return (state.employees || [])
@@ -13559,18 +13782,9 @@ function validateEmployeeReportingLines() {
         firstInvalidField.closest?.(".col-md-6") ||
         firstInvalidField;
 
-      window.requestAnimationFrame(() => {
-        if (typeof scrollToDashboardTarget === "function") {
-          scrollToDashboardTarget(target, 96);
-        } else {
-          target.scrollIntoView({
-            behavior: "smooth",
-            block: "center",
-          });
-        }
-
-        firstInvalidField.focus?.({ preventScroll: true });
-      });
+      // EMPLOYEE BIODATA INTERNAL WORKSPACE - STEP 1
+      // Reveal Reporting before focusing an invalid manager field.
+      focusEmployeeBiodataField(firstInvalidField, { scrollTarget: target });
     }
 
     return false;
@@ -13670,17 +13884,34 @@ async function loadEmployeeReportingLinesForEdit(employeeId) {
       applyAssignedLineManagerSelection();
     }
 
-    rows
-      .filter((row) => row.id !== primaryRow?.id)
-      .forEach((row) => {
-        addEmployeeReportingLineRow({
-          managerEmployeeId: row.manager_employee_id || "",
-          managerType: row.manager_type || "Secondary",
-          effectiveDate: row.effective_date || "",
-          status: row.status || "Active",
-          notes: row.notes || "",
-        });
-      });
+// EMPLOYEE REPORTING-LINE LEGACY ROW RECOVERY - v1.0.0
+// Only render additional reporting rows that contain a real saved manager.
+//
+// Historical/incomplete database rows with no manager_employee_id must not
+// become blank Secondary Manager controls when HR opens an employee for edit.
+// A blank rendered row is treated as an actively started reporting line and
+// correctly blocks Save, so loading an empty legacy row creates a false
+// validation failure.
+//
+// Important:
+// - Valid Primary/Secondary assignments are preserved.
+// - A new blank row deliberately added by HR still blocks Save.
+// - No role, access, payroll, tenant or authorisation behaviour is changed.
+rows
+  .filter(
+    (row) =>
+      row.id !== primaryRow?.id &&
+      Boolean(String(row.manager_employee_id || "").trim()),
+  )
+  .forEach((row) => {
+    addEmployeeReportingLineRow({
+      managerEmployeeId: row.manager_employee_id,
+      managerType: row.manager_type || "Secondary",
+      effectiveDate: row.effective_date || "",
+      status: row.status || "Active",
+      notes: row.notes || "",
+    });
+  });
   } catch (error) {
     console.error("Error loading employee reporting lines:", error);
 
@@ -13763,7 +13994,7 @@ function validateEmployeeAddressFields() {
       "Please complete the main address line for any current or permanent address you started.",
     );
 
-    firstInvalidField?.focus?.();
+    focusEmployeeBiodataField(firstInvalidField);
   }
 
   return isValid;
@@ -13983,7 +14214,7 @@ function validateEmployeeNextOfKinFields() {
       "Please complete the required next of kin details or clear the next of kin section.",
     );
 
-    firstInvalidField?.focus?.();
+    focusEmployeeBiodataField(firstInvalidField);
     return false;
   }
 
@@ -14215,7 +14446,7 @@ function validateEmployeeEducationFields() {
       "Please complete the required education details or clear the education section.",
     );
 
-    firstInvalidField.focus?.();
+    focusEmployeeBiodataField(firstInvalidField);
     return false;
   }
 
@@ -14865,7 +15096,7 @@ function validateEmployeeDependantFields() {
       "warning",
       "Please complete Full Name, Relationship, and Type before adding the record.",
     );
-    firstInvalidField.focus?.();
+    focusEmployeeBiodataField(firstInvalidField);
     return false;
   }
 
@@ -15312,7 +15543,7 @@ async function loadEmployeeEducationRecordsForEdit(employeeId) {
 const EMPLOYEE_SYSTEM_ROLE_LABELS = {
   employee: "Employee",
   manager: "Manager",
-  hr: "HR",
+  hr: "HR Standard",
   admin: "Admin",
 };
 
@@ -15330,6 +15561,40 @@ function formatEmployeeSystemRoleLabel(roleValue = "") {
 
 // ASSIGN LINE MANAGER - STEP 1E
 // Return standard role values already present in the System Role dropdown.
+// HR ACCESS LABEL CLARITY
+// Display the linked HR account tier without changing stored role values.
+function formatEmployeeAccessRoleLabel(employee = {}) {
+  const systemRole = normaliseHrBusinessRole(employee?.system_role || "");
+
+  if (!isHrAccessBusinessRole(systemRole)) {
+    return formatEmployeeSystemRoleLabel(employee?.system_role || "");
+  }
+
+  const profile = getEmployeeLinkedAuthProfile(employee);
+
+  if (!profile) return "HR Standard";
+
+  const employeeTenantId = String(employee?.tenant_id || "").trim();
+  const profileTenantId = String(profile?.tenant_id || "").trim();
+  const sameTenant =
+    !employeeTenantId ||
+    !profileTenantId ||
+    employeeTenantId === profileTenantId;
+
+  const activeHrProfile = Boolean(
+    profile.is_active === true &&
+    normaliseHrBusinessRole(profile.role) === "hr" &&
+    sameTenant,
+  );
+
+  if (!activeHrProfile) return "HR Standard";
+
+  return normaliseHrBusinessRole(profile.hr_access_level || "standard") ===
+    "tenant_admin"
+    ? "HR Admin"
+    : "HR Standard";
+}
+
 function getStandardEmployeeSystemRoleValues() {
   const select = state.dom.systemRole;
   if (!select) return new Set();
@@ -15489,7 +15754,7 @@ function syncEmployeeCompanyAdminAccessBadge(
     linkedProfile.is_active === true &&
     normaliseHrBusinessRole(linkedProfile.role) === "hr" &&
     normaliseHrBusinessRole(linkedProfile.hr_access_level) ===
-      "tenant_admin" &&
+    "tenant_admin" &&
     isSameTenant,
   );
 
@@ -15497,6 +15762,30 @@ function syncEmployeeCompanyAdminAccessBadge(
     "d-none",
     !isCompanyAdmin,
   );
+
+  // EMPLOYEE BIODATA MODERN STATUS CHIPS - STEP 1B
+  // Presentation only. Keep the existing tenant-safe Company Admin check
+  // unchanged while replacing the old Bootstrap pill appearance.
+  const companyAdminChip = accessIndicator.querySelector(".badge");
+
+  if (companyAdminChip) {
+    companyAdminChip.className =
+      "hr-employee-form-chip hr-employee-form-chip--protected";
+    companyAdminChip.innerHTML = `
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      <span>HR Admin</span>
+    `;
+  }
+
+  // HR ACCESS LABEL CLARITY
+  // Keep the stored option value as hr and change only its visible label.
+  const hrOption = Array.from(
+    state.dom.systemRole?.options || [],
+  ).find((option) => option.value === "hr");
+
+  if (hrOption) {
+    hrOption.textContent = isCompanyAdmin ? "HR Admin" : "HR Standard";
+  }
 }
 
 function syncEmployeeSystemRoleOptions(roleValue = "") {
@@ -15537,7 +15826,9 @@ function syncEmployeeSystemRoleOptions(roleValue = "") {
       }
     }
 
-    hrOfficerOption.textContent = "HR Officer";
+    hrOfficerOption.textContent = formatEmployeeAccessRoleLabel(
+      state.currentEditingEmployee || { system_role: "hr" },
+    );
     hrOfficerOption.hidden = false;
     hrOfficerOption.disabled = false;
     hrOfficerOption.dataset.companyAdminOnly = "true";
@@ -15664,7 +15955,7 @@ function showOwnSystemRoleChangeBlockedMessage() {
 
   const message = isOwnEmployeeRecord
     ? "You cannot change your own dashboard access."
-    : "Only a Company Admin can grant or remove HR Officer access.";
+    : "Only a Company Admin can grant or remove HR Standard access.";
 
   showPageAlert("warning", message);
 
@@ -15722,13 +16013,13 @@ function showHrRoleAssignmentConfirmationWarning() {
 
   showPageAlert(
     "warning",
-    "Please confirm that this employee is authorised to work as an HR Officer before saving.",
+    "Please confirm that this employee is authorised to work with HR Standard access before saving.",
   );
 
   showDashboardToast(
     "warning",
     "HR access confirmation required",
-    "Tick the HR authorisation confirmation box before saving this employee as an HR Officer.",
+    "Tick the HR authorisation confirmation box before saving this employee with HR Standard access.",
   );
 }
 
@@ -15872,14 +16163,338 @@ function isEmployeeFormReadyForSubmit() {
   );
 }
 
-// EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1D FIX
-// Updates the Create/Update Employee button without submitting the form.
+// EMPLOYEE REPORTING-LINE READINESS FEEDBACK - v1.0.0
+// Keep the existing employee validation authoritative.
+//
+// When an additional reporting-line row cannot resolve to a valid manager,
+// Update Employee Profile correctly remains disabled. Show HR the reason
+// immediately instead of leaving a grey button with no explanation.
+//
+// This is shared behaviour for every company workspace.
 function updateEmployeeSaveButtonState() {
+  const canSubmit = isEmployeeFormReadyForSubmit();
+
+  // Additional reporting managers are optional, but every rendered row
+  // represents an active reporting-line entry and therefore needs a valid
+  // manager selection.
+  const reportingLineRows = Array.from(
+    state.dom.employeeReportingLinesList?.querySelectorAll(
+      "[data-employee-reporting-line-row]",
+    ) || [],
+  );
+
+  const reportingLinesReady = reportingLineRows.every((row) =>
+    Boolean(
+      String(
+        row.querySelector("[data-reporting-line-manager-id]")?.value || "",
+      ).trim(),
+    ),
+  );
+
+  // Preserve the existing shared primary-action behaviour.
   setPrimaryActionButtonReadyState(
     state.dom.saveEmployeeBtn,
-    isEmployeeFormReadyForSubmit(),
+    canSubmit,
   );
+
+  // Explain a reporting-line blocker while leaving the existing validation,
+  // manager eligibility rules and save workflow completely unchanged.
+  const reportingAttention = document.getElementById(
+    "employeeReportingLineAttention",
+  );
+
+  reportingAttention?.classList.toggle(
+    "d-none",
+    reportingLinesReady,
+  );
+
   updateEmployeeFormSteps();
+}
+
+// EMPLOYEE BIODATA INTERNAL WORKSPACE - STEP 1
+// Show one logical employee-profile group at a time without moving or copying
+// the existing form controls. This keeps the current form and all business logic
+// authoritative while reducing the long-form cognitive load.
+const EMPLOYEE_BIODATA_TAB_DEFINITIONS = [
+  { key: "core", stepNumber: "1", heading: "" },
+  { key: "reporting", stepNumber: "2", heading: "Reporting Lines" },
+  { key: "dependants", stepNumber: "3", heading: "Benefits / HMO" },
+  { key: "address", stepNumber: "4", heading: "Address Details" },
+  { key: "next-of-kin", stepNumber: "5", heading: "Next of Kin" },
+  {
+    key: "education",
+    stepNumber: "6",
+    heading: "Education / Academic Qualifications",
+  },
+  { key: "documents", stepNumber: "7", heading: "Supporting Documents" },
+];
+
+function normalizeEmployeeBiodataHeading(value = "") {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function findEmployeeBiodataHeadingIndex(sourceChildren = [], heading = "") {
+  const expected = normalizeEmployeeBiodataHeading(heading);
+
+  return sourceChildren.findIndex((child) => {
+    const directHeading = Array.from(child?.children || []).find((element) =>
+      /^H[1-6]$/.test(String(element?.tagName || "")),
+    );
+
+    return normalizeEmployeeBiodataHeading(directHeading?.textContent) === expected;
+  });
+}
+
+function setEmployeeBiodataTab(tabKey = "core", options = {}) {
+  const form = state.dom.employeeCreateForm;
+  const stepper = document.getElementById("employeeFormSteps");
+  const cleanTabKey = String(tabKey || "core").trim() || "core";
+
+  if (!form || !stepper || form.dataset.employeeBiodataTabsReady !== "true") {
+    return false;
+  }
+
+  const requestedTab = stepper.querySelector(
+    `[data-employee-form-tab="${cleanTabKey}"]`,
+  );
+
+  if (!requestedTab) return false;
+
+  const sectionNodes = Array.from(
+    form.querySelectorAll("[data-employee-form-section]"),
+  );
+
+  if (!sectionNodes.some(
+    (node) => node.dataset.employeeFormSection === cleanTabKey,
+  )) {
+    return false;
+  }
+
+  sectionNodes.forEach((node) => {
+    node.hidden = node.dataset.employeeFormSection !== cleanTabKey;
+  });
+
+  stepper.querySelectorAll("[data-employee-form-tab]").forEach((tab) => {
+    const isActive = tab === requestedTab;
+
+    tab.classList.toggle("form-step-current", isActive);
+    tab.setAttribute("aria-pressed", String(isActive));
+    tab.setAttribute("tabindex", isActive ? "0" : "-1");
+
+    if (isActive) {
+      tab.setAttribute("aria-current", "step");
+    } else {
+      tab.removeAttribute("aria-current");
+    }
+  });
+
+  form.dataset.activeEmployeeTab = cleanTabKey;
+
+  if (options.resetScroll !== false) {
+    form.scrollTop = 0;
+  }
+
+  if (options.focus === true) {
+    requestedTab.focus({ preventScroll: true });
+  }
+
+  updateEmployeeFormSteps();
+  return true;
+}
+
+function focusEmployeeBiodataField(field, options = {}) {
+  if (!field) return;
+
+  const section = field.closest?.("[data-employee-form-section]");
+  const sectionKey = String(section?.dataset?.employeeFormSection || "").trim();
+
+  if (sectionKey) {
+    setEmployeeBiodataTab(sectionKey, { resetScroll: false });
+  }
+
+  const scrollTarget =
+    options.scrollTarget ||
+    field.closest?.("[data-employee-reporting-line-row]") ||
+    field.closest?.("[class*='col-']") ||
+    field;
+
+  window.requestAnimationFrame(() => {
+    scrollTarget?.scrollIntoView?.({
+      behavior: "smooth",
+      block: "center",
+      inline: "nearest",
+    });
+    field.focus?.({ preventScroll: true });
+  });
+}
+
+function enhanceEmployeeBiodataInternalWorkspace() {
+  const form = state.dom.employeeCreateForm;
+  const stepper = document.getElementById("employeeFormSteps");
+
+  if (!form || !stepper) return false;
+  if (form.dataset.employeeBiodataTabsReady === "true") return true;
+
+  const sourceRow = Array.from(form.children).find(
+    (child) =>
+      child.classList?.contains("row") &&
+      child.classList?.contains("g-4"),
+  );
+
+  const submitWrap = Array.from(sourceRow?.children || []).find((child) =>
+    child.classList?.contains("hr-create-employee-submit-wrap"),
+  );
+
+  if (!sourceRow || !submitWrap) {
+    console.warn("Employee biodata navigation could not resolve the form layout.");
+    return false;
+  }
+
+  const sourceChildren = Array.from(sourceRow.children).filter(
+    (child) => child !== submitWrap,
+  );
+
+  const indexes = {
+    reporting: findEmployeeBiodataHeadingIndex(sourceChildren, "Reporting Lines"),
+    employment: sourceChildren.findIndex((child) =>
+      child.contains(state.dom.employmentDate),
+    ),
+    dependants: findEmployeeBiodataHeadingIndex(sourceChildren, "Benefits / HMO"),
+    address: findEmployeeBiodataHeadingIndex(sourceChildren, "Address Details"),
+    nextOfKin: findEmployeeBiodataHeadingIndex(sourceChildren, "Next of Kin"),
+    education: findEmployeeBiodataHeadingIndex(
+      sourceChildren,
+      "Education / Academic Qualifications",
+    ),
+    documents: findEmployeeBiodataHeadingIndex(
+      sourceChildren,
+      "Supporting Documents",
+    ),
+  };
+
+  const hasSafeBoundaries =
+    indexes.reporting > 0 &&
+    indexes.employment > indexes.reporting &&
+    indexes.dependants > indexes.employment &&
+    indexes.address > indexes.dependants &&
+    indexes.nextOfKin > indexes.address &&
+    indexes.education > indexes.nextOfKin &&
+    indexes.documents > indexes.education;
+
+  const tabs = EMPLOYEE_BIODATA_TAB_DEFINITIONS.map((definition) =>
+    stepper.querySelector(`[data-step="${definition.stepNumber}"]`),
+  );
+
+  if (!hasSafeBoundaries || tabs.some((tab) => !tab)) {
+    console.warn(
+      "Employee biodata navigation was not applied because the seven sections could not be resolved safely.",
+    );
+    return false;
+  }
+
+  // Employment lifecycle and System Role remain under Core Details. Reporting
+  // therefore contains only Primary/Secondary manager assignment.
+  const groups = new Map([
+    [
+      "core",
+      [
+        ...sourceChildren.slice(0, indexes.reporting),
+        ...sourceChildren.slice(indexes.employment, indexes.dependants),
+      ],
+    ],
+    ["reporting", sourceChildren.slice(indexes.reporting, indexes.employment)],
+    ["dependants", sourceChildren.slice(indexes.dependants, indexes.address)],
+    ["address", sourceChildren.slice(indexes.address, indexes.nextOfKin)],
+    ["next-of-kin", sourceChildren.slice(indexes.nextOfKin, indexes.education)],
+    ["education", sourceChildren.slice(indexes.education, indexes.documents)],
+    ["documents", sourceChildren.slice(indexes.documents)],
+  ]);
+
+  const assignedNodes = Array.from(groups.values()).flat();
+  const groupingIsComplete =
+    assignedNodes.length === sourceChildren.length &&
+    new Set(assignedNodes).size === sourceChildren.length;
+
+  if (!groupingIsComplete) {
+    console.warn(
+      "Employee biodata navigation was not applied because a field would be omitted or duplicated.",
+    );
+    return false;
+  }
+
+  groups.forEach((nodes, key) => {
+    nodes.forEach((node) => {
+      node.dataset.employeeFormSection = key;
+    });
+  });
+
+  stepper.setAttribute("role", "navigation");
+  stepper.setAttribute("aria-label", "Employee profile sections");
+
+  tabs.forEach((tab, index) => {
+    const definition = EMPLOYEE_BIODATA_TAB_DEFINITIONS[index];
+
+    tab.dataset.employeeFormTab = definition.key;
+    tab.classList.add("hr-employee-form-tab");
+    tab.setAttribute("role", "button");
+    tab.setAttribute("aria-pressed", String(index === 0));
+    tab.setAttribute("tabindex", index === 0 ? "0" : "-1");
+  });
+
+  stepper.querySelectorAll(".bexhr-form-step-connector").forEach((connector) => {
+    connector.setAttribute("aria-hidden", "true");
+  });
+
+  stepper.addEventListener("click", (event) => {
+    const tab = event.target.closest?.("[data-employee-form-tab]");
+    if (!tab || !stepper.contains(tab)) return;
+
+    setEmployeeBiodataTab(tab.dataset.employeeFormTab, { resetScroll: true });
+  });
+
+  stepper.addEventListener("keydown", (event) => {
+    const tab = event.target.closest?.("[data-employee-form-tab]");
+    if (!tab || !stepper.contains(tab)) return;
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setEmployeeBiodataTab(tab.dataset.employeeFormTab, {
+        focus: true,
+        resetScroll: true,
+      });
+      return;
+    }
+
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const currentIndex = tabs.indexOf(tab);
+    let nextIndex = currentIndex;
+
+    if (event.key === "ArrowLeft") {
+      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    } else if (event.key === "ArrowRight") {
+      nextIndex = (currentIndex + 1) % tabs.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = tabs.length - 1;
+    }
+
+    setEmployeeBiodataTab(
+      EMPLOYEE_BIODATA_TAB_DEFINITIONS[nextIndex]?.key,
+      { focus: true, resetScroll: true },
+    );
+  });
+
+  form.dataset.employeeBiodataTabsReady = "true";
+  return setEmployeeBiodataTab("core", { resetScroll: false });
 }
 
 // CREATE EMPLOYEE STEPPER SEMANTICS - STEP 1
@@ -15920,16 +16535,25 @@ function updateEmployeeFormSteps() {
     Boolean(state.dom.attachedDocumentsList?.querySelector("[data-document-id]")),
   ];
 
+  const activeTabKey = String(
+    state.dom.employeeCreateForm?.dataset?.activeEmployeeTab || "core",
+  ).trim();
+
   stepDone.forEach((done, i) => {
     const step = document.querySelector(`#employeeFormSteps [data-step="${i + 1}"]`);
     if (!step) return;
 
-    const isCurrentCoreStep = i === 0 && !done;
+    // EMPLOYEE BIODATA INTERNAL WORKSPACE - STEP 1
+    // Completion and current location are independent states.
+    const stepTabKey = String(step.dataset.employeeFormTab || "").trim();
+    const isCurrentStep = stepTabKey
+      ? stepTabKey === activeTabKey
+      : i === 0 && !done;
 
     step.classList.toggle("form-step-done", done);
-    step.classList.toggle("form-step-current", isCurrentCoreStep);
+    step.classList.toggle("form-step-current", isCurrentStep);
 
-    if (isCurrentCoreStep) {
+    if (isCurrentStep) {
       step.setAttribute("aria-current", "step");
     } else {
       step.removeAttribute("aria-current");
@@ -16406,7 +17030,7 @@ function renderProfileCorrectionRequests(records = []) {
         </div>
       `
       : canCurrentUserMaintainHrReviewData()
-      ? `
+        ? `
         <label class="form-label small fw-semibold mb-1" for="profileCorrectionStatus-${escapeHtml(request.id)}">
           HR Decision
         </label>
@@ -16448,7 +17072,7 @@ function renderProfileCorrectionRequests(records = []) {
           Save Decision
         </button>
       `
-      : `
+        : `
         <div class="hr-review-read-only-action" role="note">
           <span class="hr-review-read-only-action-icon" aria-hidden="true">
             <i class="bi bi-eye"></i>
@@ -17137,10 +17761,10 @@ function renderRecentManagerLeaveDecisions(records = []) {
       normalisedStatus === "approved"
         ? "hr-manager-decision-status--approved"
         : normalisedStatus === "rejected" ||
-            normalisedStatus === "declined"
+          normalisedStatus === "declined"
           ? "hr-manager-decision-status--rejected"
           : normalisedStatus === "returned" ||
-              normalisedStatus === "returned for clarification"
+            normalisedStatus === "returned for clarification"
             ? "hr-manager-decision-status--returned"
             : isCancelledDecision
               ? "hr-manager-decision-status--cancelled"
@@ -17150,10 +17774,10 @@ function renderRecentManagerLeaveDecisions(records = []) {
       normalisedStatus === "approved"
         ? "bi-check-circle-fill"
         : normalisedStatus === "rejected" ||
-            normalisedStatus === "declined"
+          normalisedStatus === "declined"
           ? "bi-x-circle-fill"
           : normalisedStatus === "returned" ||
-              normalisedStatus === "returned for clarification"
+            normalisedStatus === "returned for clarification"
             ? "bi-arrow-return-left"
             : isCancelledDecision
               ? "bi-slash-circle-fill"
@@ -17170,15 +17794,15 @@ function renderRecentManagerLeaveDecisions(records = []) {
     const decisionDateLabel =
       decisionDateSeparatorIndex > -1
         ? String(decisionDateTime)
-            .slice(0, decisionDateSeparatorIndex)
-            .trim()
+          .slice(0, decisionDateSeparatorIndex)
+          .trim()
         : decisionDateTime;
 
     const decisionTimeLabel =
       decisionDateSeparatorIndex > -1
         ? String(decisionDateTime)
-            .slice(decisionDateSeparatorIndex + 1)
-            .trim()
+          .slice(decisionDateSeparatorIndex + 1)
+          .trim()
         : "";
 
     const comment = isCancelledDecision
@@ -17298,25 +17922,23 @@ function renderRecentManagerLeaveDecisions(records = []) {
                 ${escapeHtml(decisionDateLabel)}
               </strong>
 
-              ${
-                decisionTimeLabel
-                  ? `
+              ${decisionTimeLabel
+        ? `
                     <span class="hr-manager-decision-detail-support">
                       ${escapeHtml(decisionTimeLabel)}
                     </span>
                   `
-                  : ""
-              }
+        : ""
+      }
             </div>
           </div>
 
           <div class="hr-manager-decision-note">
             <span class="hr-manager-decision-note-icon" aria-hidden="true">
-              <i class="bi ${
-                isCancelledDecision
-                  ? "bi-exclamation-circle"
-                  : "bi-chat-left-text"
-              }"></i>
+              <i class="bi ${isCancelledDecision
+        ? "bi-exclamation-circle"
+        : "bi-chat-left-text"
+      }"></i>
             </span>
 
             <div class="hr-manager-decision-note-copy">
@@ -17324,23 +17946,21 @@ function renderRecentManagerLeaveDecisions(records = []) {
                 ${escapeHtml(commentLabel)}
               </span>
 
-              ${
-                comment
-                  ? `
+              ${comment
+        ? `
                     <p title="${escapeHtml(comment)}">
-                      “${escapeHtml(comment)}”
+                      "${escapeHtml(comment)}"
                     </p>
                   `
-                  : `
+        : `
                     <p class="hr-manager-decision-note-empty">
-                      ${
-                        isCancelledDecision
-                          ? "No cancellation reason recorded."
-                          : "No manager note recorded."
-                      }
+                      ${isCancelledDecision
+          ? "No cancellation reason recorded."
+          : "No manager note recorded."
+        }
                     </p>
                   `
-              }
+      }
             </div>
           </div>
         </article>
@@ -18638,6 +19258,10 @@ function getBexhrStatusPresentation(status = "") {
     "pending",
     "pending approval",
     "profile found",
+    // HR PAYROLL STATUS CHIP REFRESH - v1.0.1
+    // Reuse the shared BexHR status presentation for payroll readiness labels.
+    "missing active setup",
+    "required before submit",
     "returned",
     "scheduled",
   ]);
@@ -18649,7 +19273,10 @@ function getBexhrStatusPresentation(status = "") {
   ]);
 
   const iconByStatus = {
-    active: "bi-circle-fill",
+    // HR PAYROLL STATUS CHIP REFRESH - v1.0.1
+    // Active is a confirmed positive state, so use the same clear check language
+    // as Ready rather than the old generic status dot.
+    active: "bi-check-circle-fill",
     approved: "bi-check-circle-fill",
     authorised: "bi-shield-check",
     authorized: "bi-shield-check",
@@ -18664,6 +19291,9 @@ function getBexhrStatusPresentation(status = "") {
     historical: "bi-clock-history",
     inactive: "bi-pause-circle-fill",
     linked: "bi-link-45deg",
+    // HR PAYROLL STATUS CHIP REFRESH - v1.0.1
+    "missing active setup": "bi-exclamation-circle-fill",
+    "required before submit": "bi-info-circle-fill",
     "not finalised": "bi-hourglass-split",
     "not finalized": "bi-hourglass-split",
     paid: "bi-cash-coin",
@@ -20903,9 +21533,8 @@ function renderPayrollAllowanceRecords(records) {
             </div>
           </div>
 
-          ${
-            notes
-              ? `
+          ${notes
+        ? `
                 <footer class="hr-allowance-record-note">
                   <span class="hr-allowance-record-note-icon" aria-hidden="true">
                     <i class="bi bi-chat-left-text"></i>
@@ -20917,8 +21546,8 @@ function renderPayrollAllowanceRecords(records) {
                   </div>
                 </footer>
               `
-              : ""
-          }
+        : ""
+      }
         </article>
       </td>
     `;
@@ -21471,7 +22100,7 @@ function startBankDirectoryEdit(bankId) {
     return;
   }
 
-  // 🔴 CRITICAL: set edit mode
+  // ðŸ”´ CRITICAL: set edit mode
   state.currentEditingBankDirectory = record;
   setBankDirectoryEditMode();
 
@@ -21602,8 +22231,8 @@ function renderBankDirectoryTable() {
 
             <div class="hr-payment-record-actions">
               ${renderBexhrStatusPill(
-                formatStatusLabel(bank.status || "Inactive"),
-              )}
+      formatStatusLabel(bank.status || "Inactive"),
+    )}
 
               <button
                 type="button"
@@ -22564,6 +23193,15 @@ function buildBatchPayrollTemplateRow(employee = {}) {
 // This is not the bank payment export. It is the input file HR can edit
 // and re-upload through Batch Payroll CSV Import.
 function downloadBatchPayrollCsvImportTemplate() {
+  // ALPATECH PAYROLL TENANT ISOLATION - STEP 2
+  // This template belongs only to the Alpatech payroll workflow.
+  if (!isCurrentTenantAlpatechWorkspace()) {
+    showPageAlert(
+      "warning",
+      "The Alpatech payroll import template is not available for this company workspace.",
+    );
+    return;
+  }
   // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
   // Batch payroll templates expose payroll preparation data and are restricted
   // to HR/Payroll maintenance roles.
@@ -23175,6 +23813,16 @@ ${preparedRow.employee_override_applied
 // Read the selected Alpatech CSV and prepare rows for the existing batch submit flow.
 async function handleBatchPayrollCsvImport() {
   clearPageAlert();
+  // ALPATECH PAYROLL TENANT ISOLATION - STEP 2
+  // Do not allow tenant-specific payroll imports outside Alpatech,
+  // even if the hidden browser control is manually exposed.
+  if (!isCurrentTenantAlpatechWorkspace()) {
+    showPageAlert(
+      "warning",
+      "Batch Payroll CSV Import is not available for this company workspace.",
+    );
+    return;
+  }
 
   // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
   // CSV import prepares payroll rows and must not run for view-only roles.
@@ -23484,11 +24132,11 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
 
       <td>${escapeHtml(employee.job_title || "--")}</td>
 
-      <td>
-        <span class="badge ${getStatusBadgeClass(employee.status)}">
-          ${escapeHtml(formatStatusLabel(employee.status))}
-        </span>
-      </td>
+<td>
+  <!-- HR PAYROLL STATUS CHIP REFRESH - v1.0.1
+       Presentation only; employee status value is unchanged. -->
+  ${renderBexhrStatusPill(formatStatusLabel(employee.status))}
+</td>
 
       <td class="text-nowrap">
         <div>
@@ -23532,13 +24180,13 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
       </td>
 
 <td>
-  ${!isActiveEmployee
+${!isActiveEmployee
         ? `<span class="badge text-bg-secondary">Inactive - excluded</span>`
         : !isSelectedForPayroll
           ? `<span class="badge text-bg-light border text-secondary">Not selected</span>`
           : hasValidActiveMaster
-            ? `<span class="badge text-bg-success">Ready</span>`
-            : `<span class="badge text-bg-warning">Missing active setup</span>`
+            ? renderBexhrStatusPill("Ready")
+            : renderBexhrStatusPill("Missing active setup")
       }
 
   ${activePayrollMaster?.salary_effective_date
@@ -23692,6 +24340,147 @@ function updateHrModernApplicationHeader(workspace = "dashboard") {
   }
 }
 
+// HR AND MANAGER RESPONSIBILITY TITLE - v1.0.0
+// HR system access and reporting-line responsibility are independent.
+// This updates only the compact account subtitle and does not change
+// permissions, routing, leave authority, RLS, or reporting assignments.
+function getCurrentHrAccessTitle(profile = {}) {
+  const normalisedAccessLevel = String(
+    profile.hr_access_level || "",
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  const hrAdminAccessLevels = new Set([
+    "admin",
+    "hr_admin",
+    "tenant_admin",
+    "company_admin",
+  ]);
+
+  return hrAdminAccessLevels.has(normalisedAccessLevel)
+    ? "HR Admin"
+    : "HR Standard";
+}
+
+// HR AND MANAGER RESPONSIBILITY BADGES - v1.0.1
+// Display HR access and reporting responsibility as separate compact pills.
+// Presentation only: no permissions, authority, routing, RLS, or data changes.
+function renderHrAccountResponsibilityBadges(
+  hrAccessTitle = "HR Standard",
+  managerTitle = "",
+) {
+  const container = state.dom.hrRole;
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  const hrBadge = document.createElement("span");
+  hrBadge.className =
+    "hr-modern-account-responsibility-pill " +
+    "hr-modern-account-responsibility-pill--hr";
+  hrBadge.textContent = hrAccessTitle;
+
+  container.appendChild(hrBadge);
+
+  if (managerTitle) {
+    const managerBadge = document.createElement("span");
+    managerBadge.className =
+      "hr-modern-account-responsibility-pill " +
+      "hr-modern-account-responsibility-pill--manager";
+    managerBadge.textContent = managerTitle;
+
+    container.appendChild(managerBadge);
+  }
+
+  container.setAttribute(
+    "aria-label",
+    managerTitle
+      ? `${hrAccessTitle}, ${managerTitle}`
+      : hrAccessTitle,
+  );
+}
+
+// HR AND MANAGER RESPONSIBILITY TITLE - v1.0.0
+// Read the signed-in HR user's existing tenant-scoped reporting assignments.
+// The RPC is already used for Manager workspace eligibility and returns only
+// assignments belonging to the authenticated manager.
+async function updateHrAccountResponsibilityTitle(
+  profile = state.currentProfile || {},
+) {
+  const hrAccessTitle = getCurrentHrAccessTitle(profile);
+
+  renderHrAccountResponsibilityBadges(hrAccessTitle);
+
+  try {
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.rpc(
+      "get_manager_reporting_line_assignments",
+    );
+
+    if (error) throw error;
+
+    const activeManagerTypes = new Set(
+      (Array.isArray(data) ? data : [])
+        .filter(
+          (row) =>
+            normalizeText(row?.status || "active") === "active",
+        )
+        .map((row) => normalizeText(row?.manager_type))
+        .filter(Boolean),
+    );
+
+    let managerTitle = "";
+
+    const isPrimaryManager =
+      activeManagerTypes.has("primary");
+
+    const isSecondaryManager =
+      activeManagerTypes.has("secondary");
+
+    if (isPrimaryManager && isSecondaryManager) {
+      managerTitle = "Mixed Manager Coverage";
+    } else if (isPrimaryManager) {
+      managerTitle = "Primary Manager";
+    } else if (isSecondaryManager) {
+      managerTitle = "Secondary Manager";
+    }
+
+    renderHrAccountResponsibilityBadges(
+      hrAccessTitle,
+      managerTitle,
+    );
+
+    // LIVE WORKSPACE SWITCHER ELIGIBILITY REFRESH - v1.0.1
+    // Reporting responsibility must never block HR dashboard first paint.
+    // Refresh Manager workspace eligibility independently after the HR/manager
+    // badges have resolved. Any switcher failure is non-fatal to the HR shell.
+    const workspaceSwitcherRefresh =
+      window.SessionManager?.initialiseWorkspaceSwitcher?.(
+        profile,
+      );
+
+    if (workspaceSwitcherRefresh?.catch) {
+      workspaceSwitcherRefresh.catch((error) => {
+        console.warn(
+          "HR workspace switcher eligibility refresh failed:",
+          error,
+        );
+      });
+    }
+  } catch (error) {
+    console.warn(
+      "HR account manager responsibility title could not be resolved:",
+      error,
+    );
+
+    // Safe fallback: preserve the verified HR access title.
+    renderHrAccountResponsibilityBadges(hrAccessTitle);
+  }
+}
+
 function getHrOverviewEmployeeName(employee = {}) {
   const fullName = String(employee.full_name || "").trim();
   if (fullName) return fullName;
@@ -23768,9 +24557,8 @@ function renderHrOverviewRecentActivityWithSalarySetups() {
     const employee = employeeById.get(employeeId) || {};
 
     return (
-      `${record.first_name || employee.first_name || ""} ${
-        record.last_name || employee.last_name || ""
-      }`.trim() ||
+      `${record.first_name || employee.first_name || ""} ${record.last_name || employee.last_name || ""
+        }`.trim() ||
       record.work_email ||
       employee.work_email ||
       "Unknown employee"
@@ -23810,9 +24598,9 @@ function renderHrOverviewRecentActivityWithSalarySetups() {
   const salaryActivities = salaryRecords.map((record) => {
     const salaryStatus = formatStatusLabel(
       record.payroll_status ||
-        record.salary_status ||
-        record.status ||
-        "--",
+      record.salary_status ||
+      record.status ||
+      "--",
     );
 
     const versionLabel = getPayrollMasterVersionLabel(record);
@@ -24162,11 +24950,11 @@ function renderHrModernOverview() {
 
     state.dom.hrOverviewDepartmentList.innerHTML = departmentRows.length
       ? departmentRows.map(([department, counts]) => {
-          const departmentReadiness = counts.active
-            ? Math.round((counts.ready / counts.active) * 100)
-            : 0;
+        const departmentReadiness = counts.active
+          ? Math.round((counts.ready / counts.active) * 100)
+          : 0;
 
-          return `
+        return `
             <div class="hr-overview-department-row">
               <div class="hr-overview-department-main">
                 <span class="hr-overview-department-mark">${escapeHtml(department.slice(0, 2).toUpperCase())}</span>
@@ -24181,7 +24969,7 @@ function renderHrModernOverview() {
               </div>
             </div>
           `;
-        }).join("")
+      }).join("")
       : '<div class="hr-overview-empty-state">No department records are available yet.</div>';
   }
 
@@ -24817,15 +25605,17 @@ function populateJobTitleOptionsForDepartment(preferredJobTitle = "") {
 function setEmployeeAccountPanel(accountLinkage = null) {
   const linkage = accountLinkage || {
     label: "No User Account",
-    badgeClass: "text-bg-secondary",
+    chipVariant: "neutral",
+    iconClass: "bi-person-dash",
     matchedEmail: "--",
     helperText: "No user account exists yet for this employee.",
   };
 
   if (state.dom.employeeAccountStatusBadge) {
     state.dom.employeeAccountStatusBadge.innerHTML = `
-      <span class="badge ${linkage.badgeClass}">
-        ${escapeHtml(linkage.label)}
+      <span class="hr-employee-form-chip hr-employee-form-chip--${escapeHtml(linkage.chipVariant || "neutral")}">
+        <i class="bi ${escapeHtml(linkage.iconClass || "bi-person-dash")}" aria-hidden="true"></i>
+        <span>${escapeHtml(linkage.label)}</span>
       </span>
     `;
   }
@@ -24974,9 +25764,27 @@ function renderHrProfile(profile, user) {
     state.dom.hrInitials.classList.remove("d-none");
   }
 
-  if (state.dom.hrEmail) state.dom.hrEmail.textContent = email;
-  if (state.dom.hrRole) state.dom.hrRole.textContent = role;
-    if (state.dom.hrProfileCardName) state.dom.hrProfileCardName.textContent = fullName;
+  if (state.dom.hrEmail) {
+    state.dom.hrEmail.textContent = email;
+  }
+
+  // HR AND MANAGER RESPONSIBILITY TITLE - v1.0.0
+  // Show the HR access title immediately, then enrich it with verified
+  // Primary/Secondary reporting responsibility from the existing RPC.
+  renderHrAccountResponsibilityBadges(
+    getCurrentHrAccessTitle(profile),
+  );
+
+  // HR HEADER RESPONSIBILITY FIRST PAINT - v1.0.0
+  // Retain the existing tenant-scoped responsibility lookup so startup can
+  // wait for the verified HR and manager badges before revealing the shell.
+  // Later profile renders can still refresh the same responsibility title.
+  state.hrAccountResponsibilityTitlePromise =
+    updateHrAccountResponsibilityTitle(profile);
+
+  if (state.dom.hrProfileCardName) {
+    state.dom.hrProfileCardName.textContent = fullName;
+  }
   if (state.dom.hrProfileCardEmail) state.dom.hrProfileCardEmail.textContent = email;
   if (state.dom.hrModernUserName) state.dom.hrModernUserName.textContent = fullName;
   if (state.dom.hrOverviewUserFirstName) {
@@ -25012,6 +25820,13 @@ function renderHrProfile(profile, user) {
 }
 
 async function loadHrProfileImages(profileImagePath, initials) {
+    // HR PROFILE IMAGE REMOVAL - v1.0.0
+  // Enable Remove Picture only when the current HR profile
+  // genuinely has a stored image reference.
+  if (state.dom.removeHrProfileImageBtn) {
+    state.dom.removeHrProfileImageBtn.disabled =
+      !String(profileImagePath || "").trim();
+  }
   if (!profileImagePath) {
     if (state.dom.hrProfileAvatar) {
       state.dom.hrProfileAvatar.textContent = initials;
@@ -25057,32 +25872,32 @@ async function loadHrProfileImages(profileImagePath, initials) {
   }
 }
 
-// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
-// Capture only editable My Profile fields.
-// Department is read-only (sourced from the employee record) and excluded.
+// SYSTEM-WIDE EMPLOYEE IDENTITY AUTHORITY - v1.0.0
+// HR My Profile no longer owns employee-name changes.
+//
+// Employee identity is maintained through the structured People record:
+// - employees.first_name
+// - employees.middle_name
+// - employees.last_name
+//
+// The existing employee -> profile database synchronisation keeps
+// profiles.full_name aligned for dashboard/header display.
+//
+// Keep the snapshot helper for compatibility with the existing profile
+// rendering/baseline lifecycle, but there are currently no editable
+// text identity fields in this HR My Profile form.
 function getHrProfileEditableSnapshot() {
-  return {
-    full_name: String(state.dom.hrProfileFullName?.value || "").trim(),
-  };
+  return {};
 }
 
-// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
-// Save Profile Changes should only activate when HR changes profile values.
+// With no editable profile text fields remaining, Save Profile Changes
+// must stay disabled. Profile photo upload/removal remains independent.
 function hasHrProfileEditableChanges() {
-  const currentSnapshot = getHrProfileEditableSnapshot();
-  const baselineSnapshot = state.currentProfileEditableBaseline || {};
-
-  return Object.keys(currentSnapshot).some(
-    (key) => currentSnapshot[key] !== String(baselineSnapshot[key] || ""),
-  );
+  return false;
 }
 
-// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
-// Full Name remains required; Department is optional.
 function isHrProfileFormReadyForSubmit() {
-  const hasFullName = Boolean(String(state.dom.hrProfileFullName?.value || "").trim());
-
-  return hasFullName && hasHrProfileEditableChanges();
+  return false;
 }
 
 // DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
@@ -25094,47 +25909,17 @@ function updateHrProfileSaveButtonState() {
   );
 }
 
+// SYSTEM-WIDE EMPLOYEE IDENTITY AUTHORITY - v1.0.0
+// Employee-name changes must be made from the structured HR People record.
+// Do not write profiles.full_name independently from My Profile because that
+// would allow the account identity to drift from employees.first/middle/last_name.
 async function saveHrOwnProfile() {
-  const fullName = String(state.dom.hrProfileFullName?.value || "").trim();
+  showPageAlert(
+    "info",
+    "Your name is maintained from your HR employee record. Use People to update employee identity details.",
+  );
 
-  if (!fullName) {
-    showPageAlert("warning", "Full name is required before saving your profile.");
-    state.dom.hrProfileFullName?.focus();
-    return;
-  }
-
-  try {
-    setProfileSaveLoading(true);
-
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from("profiles")
-      .update({
-        full_name: fullName,
-      })
-      .eq("id", state.currentUser.id)
-      .select("*")
-      .maybeSingle();
-
-    if (error) throw error;
-
-    state.currentProfile = {
-      ...state.currentProfile,
-      ...(data || {}),
-      full_name: fullName,
-    };
-
-    renderHrProfile(state.currentProfile, state.currentUser);
-    showPageAlert("success", "Your profile was updated successfully.");
-  } catch (error) {
-    console.error("Error updating HR profile:", error);
-    showPageAlert(
-      "danger",
-      error.message || "Your profile could not be updated.",
-    );
-  } finally {
-    setProfileSaveLoading(false);
-  }
+  updateHrProfileSaveButtonState();
 }
 
 function setProfileSaveLoading(isLoading) {
@@ -25325,6 +26110,137 @@ async function uploadHrProfileImage() {
     );
   } finally {
     setProfileImageSaveLoading(false);
+  }
+}
+
+// HR PROFILE IMAGE REMOVAL - v1.0.0
+// Clears the signed-in HR user's stored profile-image reference first,
+// restores the existing initials fallback, then performs best-effort
+// storage cleanup.
+//
+// Safety:
+// - operates only on state.currentUser.id;
+// - does not change another employee or manager profile;
+// - does not alter tenant, role, RLS or authentication behaviour;
+// - storage deletion failure cannot restore the cleared profile reference.
+async function removeHrProfileImage() {
+  if (!state.currentUser?.id) {
+    showPageAlert(
+      "warning",
+      "Your HR profile is not ready yet.",
+    );
+    return;
+  }
+
+  const existingImagePath = String(
+    state.currentProfile?.profile_image_path || "",
+  ).trim();
+
+  if (!existingImagePath) {
+    await loadHrProfileImages(
+      "",
+      getInitials(
+        state.currentProfile?.full_name || "HR User",
+        "HR",
+      ),
+    );
+    return;
+  }
+
+  const button = state.dom.removeHrProfileImageBtn;
+  const originalHtml = button?.innerHTML || "";
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = `
+        <span
+          class="spinner-border spinner-border-sm me-2"
+          aria-hidden="true"
+        ></span>
+        Removing...
+      `;
+    }
+
+    const supabase = getSupabaseClient();
+
+    // Clear the database reference first.
+    // A refresh therefore cannot restore the removed picture.
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({
+        profile_image_path: null,
+      })
+      .eq("id", state.currentUser.id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) throw error;
+
+    state.currentProfile = {
+      ...state.currentProfile,
+      ...(data || {}),
+      profile_image_path: "",
+    };
+
+    state.pendingProfileImageFile = null;
+
+    if (state.dom.hrProfileImageInput) {
+      state.dom.hrProfileImageInput.value = "";
+    }
+
+    if (state.dom.hrProfileImagePreview) {
+      state.dom.hrProfileImagePreview.src = "";
+      state.dom.hrProfileImagePreview.classList.add("d-none");
+    }
+
+    const initials = getInitials(
+      state.currentProfile?.full_name || "HR User",
+      "HR",
+    );
+
+    // Reuse the existing authoritative HR image renderer so both
+    // Profile and header/avatar fallbacks remain synchronised.
+    await loadHrProfileImages("", initials);
+
+    updateHrProfileImageSaveButtonState();
+
+    // Object cleanup is best-effort because the profile reference has
+    // already been safely cleared from the signed-in HR user's profile.
+    const { error: storageError } = await supabase.storage
+      .from(PROFILE_IMAGES_BUCKET)
+      .remove([existingImagePath]);
+
+    if (storageError) {
+      console.warn(
+        "HR profile image reference was cleared, but storage cleanup failed:",
+        storageError,
+      );
+    }
+
+    showPageAlert(
+      "success",
+      "Profile picture removed successfully.",
+    );
+  } catch (error) {
+    console.error(
+      "Error removing HR profile image:",
+      error,
+    );
+
+    showPageAlert(
+      "danger",
+      error.message ||
+        "Profile picture could not be removed.",
+    );
+  } finally {
+    if (button) {
+      button.innerHTML = originalHtml;
+
+      button.disabled = !String(
+        state.currentProfile?.profile_image_path || "",
+      ).trim();
+    }
   }
 }
 
@@ -25545,8 +26461,8 @@ function formatCompanyAdminAuditValue(fieldName = "", value = null) {
   const normalizedValue = String(value).trim().toLowerCase();
 
   if (normalizedField === "hr_access_level") {
-    if (normalizedValue === "tenant_admin") return "Company Admin";
-    if (normalizedValue === "standard") return "HR Officer";
+    if (normalizedValue === "tenant_admin") return "HR Admin";
+    if (normalizedValue === "standard") return "HR Standard";
   }
 
   if (normalizedField === "role") {
@@ -25779,8 +26695,8 @@ function renderCompanyAdminAuditHistory() {
                   <div>
                     <strong>
                       ${escapeHtml(
-                        formatCompanyAdminAuditEventLabel(record.event_type),
-                      )}
+        formatCompanyAdminAuditEventLabel(record.event_type),
+      )}
                     </strong>
                     <span>
                       ${escapeHtml(record.entity_type || "administration")}
@@ -25790,12 +26706,12 @@ function renderCompanyAdminAuditHistory() {
 
                 <div class="company-admin-audit-event-state">
                   ${renderCompanyAdminAuditStatusPill(
-                    record.action_status || "Success",
-                  )}
+        record.action_status || "Success",
+      )}
                   <time datetime="${escapeHtml(record.occurred_at || "")}">
                     ${escapeHtml(
-                      formatCompanyAdminAuditDateTime(record.occurred_at),
-                    )}
+        formatCompanyAdminAuditDateTime(record.occurred_at),
+      )}
                   </time>
                 </div>
               </header>
@@ -25804,11 +26720,10 @@ function renderCompanyAdminAuditHistory() {
                 <div class="company-admin-audit-party">
                   <span class="company-admin-audit-party-label">Actor</span>
                   <strong>${escapeHtml(actorName)}</strong>
-                  ${
-                    actorEmail
-                      ? `<span class="company-admin-audit-party-detail">${escapeHtml(actorEmail)}</span>`
-                      : ""
-                  }
+                  ${actorEmail
+          ? `<span class="company-admin-audit-party-detail">${escapeHtml(actorEmail)}</span>`
+          : ""
+        }
                   <span class="company-admin-audit-role">
                     ${escapeHtml(actorRoleLabel)}
                   </span>
@@ -25821,11 +26736,10 @@ function renderCompanyAdminAuditHistory() {
                 <div class="company-admin-audit-party">
                   <span class="company-admin-audit-party-label">Target</span>
                   <strong>${escapeHtml(targetLabel)}</strong>
-                  ${
-                    targetEmail
-                      ? `<span class="company-admin-audit-party-detail">${escapeHtml(targetEmail)}</span>`
-                      : ""
-                  }
+                  ${targetEmail
+          ? `<span class="company-admin-audit-party-detail">${escapeHtml(targetEmail)}</span>`
+          : ""
+        }
                 </div>
               </div>
 
@@ -25876,8 +26790,8 @@ async function refreshCompanyAdminAuditHistory({
     state.companyAdminAuditEvents = Array.isArray(data) ? data : [];
     state.companyAdminAuditTotalCount = Number(
       state.companyAdminAuditEvents[0]?.total_count ||
-        state.companyAdminAuditEvents.length ||
-        0,
+      state.companyAdminAuditEvents.length ||
+      0,
     );
 
     renderCompanyAdminAuditHistory();
@@ -25903,7 +26817,7 @@ async function refreshCompanyAdminAuditHistory({
       "danger",
       escapeHtml(
         error?.message ||
-          "Administrative audit history could not be loaded.",
+        "Administrative audit history could not be loaded.",
       ),
     );
 
@@ -25912,7 +26826,7 @@ async function refreshCompanyAdminAuditHistory({
       "Audit history unavailable",
       escapeHtml(
         error?.message ||
-          "Administrative audit history could not be loaded.",
+        "Administrative audit history could not be loaded.",
       ),
     );
   } finally {
@@ -26011,7 +26925,7 @@ function updateOrganizationDepartmentSaveButtonState() {
   setPrimaryActionButtonReadyState(
     state.dom.saveOrganizationDepartmentBtn,
     canCurrentUserMaintainOrganizationSetupData() &&
-      isOrganizationDepartmentFormReadyForSubmit(),
+    isOrganizationDepartmentFormReadyForSubmit(),
   );
 }
 
@@ -26285,19 +27199,18 @@ function renderOrganizationDepartmentsTable() {
     row.innerHTML = `
       <td>
         <div class="fw-semibold">${escapeHtml(department.department_name || "--")}</div>
-        ${
-          getVisibleOrganizationSetupNote(department.notes)
-            ? `<div class="text-secondary small">${escapeHtml(
-                getVisibleOrganizationSetupNote(department.notes),
-              )}</div>`
-            : ""
-        }
+        ${getVisibleOrganizationSetupNote(department.notes)
+        ? `<div class="text-secondary small">${escapeHtml(
+          getVisibleOrganizationSetupNote(department.notes),
+        )}</div>`
+        : ""
+      }
       </td>
 
       <td class="bexhr-status-cell" data-label="Status">
         ${renderBexhrStatusPill(
-          formatStatusLabel(department.status),
-        )}
+        formatStatusLabel(department.status),
+      )}
       </td>
 
       <td class="text-nowrap">
@@ -26450,7 +27363,7 @@ function updateOrganizationJobTitleSaveButtonState() {
   setPrimaryActionButtonReadyState(
     state.dom.saveOrganizationJobTitleBtn,
     canCurrentUserMaintainOrganizationSetupData() &&
-      isOrganizationJobTitleFormReadyForSubmit(),
+    isOrganizationJobTitleFormReadyForSubmit(),
   );
 }
 
@@ -26561,21 +27474,20 @@ function renderOrganizationJobTitlesTable() {
         <!-- ORGANIZATION HR SETUP VALUES - STEP 4B-3
              Show seeded or manually created Job Title name with optional note. -->
         <div class="fw-semibold">${escapeHtml(jobTitle.job_title || "--")}</div>
-        ${
-          getVisibleOrganizationSetupNote(jobTitle.notes)
-            ? `<div class="text-secondary small">${escapeHtml(
-                getVisibleOrganizationSetupNote(jobTitle.notes),
-              )}</div>`
-            : ""
-        }
+        ${getVisibleOrganizationSetupNote(jobTitle.notes)
+        ? `<div class="text-secondary small">${escapeHtml(
+          getVisibleOrganizationSetupNote(jobTitle.notes),
+        )}</div>`
+        : ""
+      }
       </td>
 
       <td>${escapeHtml(departmentName)}</td>
 
       <td class="bexhr-status-cell" data-label="Status">
         ${renderBexhrStatusPill(
-          formatStatusLabel(jobTitle.status),
-        )}
+        formatStatusLabel(jobTitle.status),
+      )}
       </td>
 
       <td class="text-nowrap">
@@ -27081,7 +27993,7 @@ function updateOrganizationSettingsSaveButtonState() {
   setPrimaryActionButtonReadyState(
     state.dom.saveOrganizationSettingsBtn,
     canCurrentUserMaintainOrganizationSetupData() &&
-      isOrganizationSettingsFormReadyForSubmit(),
+    isOrganizationSettingsFormReadyForSubmit(),
   );
 }
 
@@ -27292,7 +28204,7 @@ async function handleOrganizationSettingsSave() {
     showPageAlert(
       "danger",
       error.message ||
-        "Organization details could not be saved.",
+      "Organization details could not be saved.",
     );
 
     showDashboardToast(
@@ -27300,7 +28212,7 @@ async function handleOrganizationSettingsSave() {
       "Organization save failed",
       escapeHtml(
         error.message ||
-          "Organization details could not be saved.",
+        "Organization details could not be saved.",
       ),
     );
     showDashboardToast(
@@ -27367,20 +28279,37 @@ async function loadAuthProfilesForLinkage() {
   const supabase = getSupabaseClient();
 
   try {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(
-        "id, email, full_name, role, hr_access_level, tenant_id, is_active",
-      );
+    // HR ACCESS LABEL CLARITY - TENANT PROFILE LINKAGE RPC
+    // Use the protected tenant-scoped RPC instead of reading profiles directly.
+    // This gives every authorised HR browser the same tenant profile data.
+    const { data, error } = await supabase.rpc(
+      "hr_list_tenant_profile_linkage",
+    );
 
     if (error) throw error;
-    state.authProfiles = Array.isArray(data) ? data : [];
+
+    // Preserve the existing frontend profile shape used by employee linkage.
+    state.authProfiles = (Array.isArray(data) ? data : []).map(
+      (profile) => ({
+        id: profile.profile_id,
+        email: profile.email,
+        full_name: profile.full_name,
+        role: profile.profile_role,
+        hr_access_level: profile.hr_access_level,
+        tenant_id: profile.tenant_id,
+        is_active: profile.is_active,
+      }),
+    );
+
     syncEmployeeCompanyAdminAccessBadge(
       state.currentEditingEmployee,
     );
   } catch (error) {
-    console.error("Error loading auth profiles for linkage:", error);
+    console.error("Error loading tenant profile linkage:", error);
+
+    // Fail closed rather than falling back to inconsistent direct profile reads.
     state.authProfiles = [];
+
     syncEmployeeCompanyAdminAccessBadge(
       state.currentEditingEmployee,
     );
@@ -27502,7 +28431,7 @@ function downloadEmployeeListCsv() {
       employee.department || "",
       employee.job_title || "",
       formatStatusLabel(employee.status || ""),
-      formatEmployeeSystemRoleLabel(employee.system_role || ""),
+      formatEmployeeAccessRoleLabel(employee),
       employee.line_manager || "",
       employee.approver_email || "",
       formatDate(employee.employment_date),
@@ -27624,7 +28553,8 @@ function getEmployeeAccountLinkage(employee) {
     return {
       code: "linked",
       label: "Linked",
-      badgeClass: "text-bg-success",
+      chipVariant: "success",
+      iconClass: "bi-person-check",
       matchedEmail: linkedProfile?.email || employee.work_email || "--",
       helperText: "This employee already has a user account linked.",
     };
@@ -27639,7 +28569,8 @@ function getEmployeeAccountLinkage(employee) {
     return {
       code: "matched",
       label: "Profile Found",
-      badgeClass: "text-bg-warning",
+      chipVariant: "warning",
+      iconClass: "bi-person-exclamation",
       matchedEmail: matchedProfile.email || "--",
       helperText: "A matching user profile exists for this work email.",
     };
@@ -27648,7 +28579,8 @@ function getEmployeeAccountLinkage(employee) {
   return {
     code: "unlinked",
     label: "No User Account",
-    badgeClass: "text-bg-secondary",
+    chipVariant: "neutral",
+    iconClass: "bi-person-dash",
     matchedEmail: "--",
     helperText: "No user account exists yet for this employee.",
   };
@@ -29816,7 +30748,7 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
         renderEmployeeFilledFormField("Phone Number", employee.phone_number),
         renderEmployeeFilledFormField("Alternative Phone Number", employee.alternative_phone_number),
         renderEmployeeFilledFormField("Status", formatStatusLabel(employee.status)),
-        renderEmployeeFilledFormField("System Role", formatEmployeeSystemRoleLabel(employee.system_role)),
+        renderEmployeeFilledFormField("System Role", formatEmployeeAccessRoleLabel(employee)),
         renderEmployeeFilledFormField("Account Linkage", accountLinkage.label),
       ].join(""),
       "Primary employee identity and contact information.",
@@ -30170,14 +31102,28 @@ function renderEmployeeRecords(employees) {
       : "";
 
     const canMaintainPeople = canCurrentUserMaintainPeopleData();
-    const quickRoleAction = getManagerQuickActionState(employee);
-    const canToggleRole = canMaintainPeople && quickRoleAction.canUseQuickAction;
-    const isManager = quickRoleAction.isQuickManager;
-    const quickRoleActionLabel = canToggleRole
-      ? isManager
-        ? "Remove manager"
-        : "Make manager"
-      : "Change role";
+    const isHrAdmin = canCurrentUserAssignHrOfficerAccess();
+
+    // HR ACCESS / REPORTING RESPONSIBILITY DECOUPLING - PHASE 1
+    // The row action no longer treats Manager dashboard access as the same thing
+    // as being assigned as a Primary or Secondary reporting manager.
+    const peopleAction = isHrAdmin
+      ? {
+        handler: "hrManageEmployeeAccess",
+        buttonClass: "btn-warning",
+        iconClass: "bi-shield-lock",
+        label: "Access",
+        title: "Manage employee access",
+        ariaLabel: `Manage employee access for ${employeeDisplayName}`,
+      }
+      : {
+        handler: "hrManageReportingManagers",
+        buttonClass: "btn-outline-primary",
+        iconClass: "bi-people",
+        label: "Managers",
+        title: "Manage reporting managers",
+        ariaLabel: `Manage reporting managers for ${employeeDisplayName}`,
+      };
 
     const shouldShowLoginInviteRecovery =
       canMaintainPeople && Boolean(String(employee.work_email || "").trim());
@@ -30246,7 +31192,7 @@ function renderEmployeeRecords(employees) {
           ${escapeHtml(employee.job_title || "No job title")}
         </div>
         <span class="hr-employee-role-badge">
-          ${escapeHtml(formatEmployeeSystemRoleLabel(employee.system_role))}
+          ${escapeHtml(formatEmployeeAccessRoleLabel(employee))}
         </span>
       </td>
 
@@ -30303,19 +31249,14 @@ function renderEmployeeRecords(employees) {
 
           <button
             type="button"
-            class="btn btn-sm ${quickRoleAction.buttonClass} hr-employee-action-btn"
-            title="${canToggleRole
-        ? quickRoleAction.title
-        : canMaintainPeople
-          ? "Use the employee form to change this role"
-          : "People role changes are restricted for this role"
-      }"
-            aria-label="${quickRoleAction.ariaLabel}"
-            ${canToggleRole ? "" : "disabled"}
-            onclick="window.hrToggleManagerRole('${safeEmployeeId}')"
+            class="btn btn-sm ${peopleAction.buttonClass} hr-employee-action-btn"
+            title="${canMaintainPeople ? peopleAction.title : "People maintenance is restricted for this role"}"
+            aria-label="${escapeHtml(peopleAction.ariaLabel)}"
+            ${canMaintainPeople ? "" : "disabled"}
+            onclick="window.${peopleAction.handler}('${safeEmployeeId}')"
           >
-            <i class="bi ${quickRoleAction.iconClass}" aria-hidden="true"></i>
-            <span>${escapeHtml(quickRoleActionLabel)}</span>
+            <i class="bi ${peopleAction.iconClass}" aria-hidden="true"></i>
+            <span>${escapeHtml(peopleAction.label)}</span>
           </button>
         </div>
       </td>
@@ -30418,7 +31359,10 @@ function resetEmployeeForm() {
 
   // HR SELF-ROLE PROTECTION - STEP 1
   // Reset/create mode has no employee object, so clear and unlock System Role.
-  setEmployeeSystemRoleFieldValue("");
+  // EMPLOYEE SYSTEM ROLE UX CONSISTENCY
+  // New employee records default visibly to Employee.
+  // Existing records still load their saved role in edit mode.
+  setEmployeeSystemRoleFieldValue("employee");
   syncHrSelfRoleProtectionState();
 
   // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1F
@@ -30480,9 +31424,12 @@ function resetEmployeeForm() {
   }
 
   if (state.dom.employeeFormModeBadge) {
-    state.dom.employeeFormModeBadge.textContent = "Create Mode";
+    state.dom.employeeFormModeBadge.innerHTML = `
+      <i class="bi bi-person-plus" aria-hidden="true"></i>
+      <span>Create Mode</span>
+    `;
     state.dom.employeeFormModeBadge.className =
-      "badge rounded-pill text-bg-light border px-3 py-2";
+      "hr-employee-form-chip hr-employee-form-chip--neutral";
   }
 
   if (state.dom.saveEmployeeBtn) {
@@ -30502,6 +31449,10 @@ function resetEmployeeForm() {
   if (state.dom.cancelEditBtn) {
     state.dom.cancelEditBtn.classList.add("d-none");
   }
+
+  // EMPLOYEE BIODATA INTERNAL WORKSPACE - STEP 1
+  // A clean/create form always starts from Core Details.
+  setEmployeeBiodataTab("core", { resetScroll: true });
 
   // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1D FIX
   // After clearing or returning to create mode, the form is incomplete,
@@ -30641,9 +31592,12 @@ function enterEmployeeEditMode(employee) {
   }
 
   if (state.dom.employeeFormModeBadge) {
-    state.dom.employeeFormModeBadge.textContent = "Edit Mode";
+    state.dom.employeeFormModeBadge.innerHTML = `
+      <i class="bi bi-pencil-square" aria-hidden="true"></i>
+      <span>Edit Mode</span>
+    `;
     state.dom.employeeFormModeBadge.className =
-      "badge rounded-pill text-bg-primary px-3 py-2";
+      "hr-employee-form-chip hr-employee-form-chip--info";
   }
 
   if (state.dom.saveEmployeeBtn) {
@@ -30672,6 +31626,10 @@ function enterEmployeeEditMode(employee) {
   openEmployeeFormCard();
 
   void loadEmployeeDocuments(employee.id);
+
+  // EMPLOYEE BIODATA INTERNAL WORKSPACE - STEP 1
+  // Normal employee edits open from Core Details.
+  setEmployeeBiodataTab("core", { resetScroll: true });
 
   // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1D FIX
   // Edit mode loads existing values into the form, so recalculate whether
@@ -30752,6 +31710,10 @@ function startEmployeeEdit(employeeId, options = {}) {
   loadEmployeeDependantRecordsForEdit(employee.id);
 
   if (options.focusDocuments) {
+    // EMPLOYEE BIODATA INTERNAL WORKSPACE - STEP 1
+    // Document actions must reveal Documents before scrolling to the list.
+    setEmployeeBiodataTab("documents", { resetScroll: true });
+
     setTimeout(() => {
       state.dom.attachedDocumentsList?.scrollIntoView({
         behavior: "smooth",
@@ -30932,8 +31894,8 @@ function validateEmployeeForm() {
     );
   }
 
-  if (!isValid && firstInvalidField?.focus) {
-    firstInvalidField.focus();
+  if (!isValid && firstInvalidField) {
+    focusEmployeeBiodataField(firstInvalidField);
   }
 
   return isValid;
@@ -32097,7 +33059,12 @@ function getExistingEmployeeLoginMessage(workEmail = "") {
 // - A successfully repaired existing login is also treated as linked account access.
 // - A failed backend response is not falsely shown as Linked.
 // - The employee record itself is still preserved if the login invite fails.
-async function provisionEmployeeLogin({ workEmail, fullName, companyName }) {
+async function provisionEmployeeLogin({
+  workEmail,
+  fullName,
+  companyName,
+  systemRole,
+}) {
   try {
     const supabase = getSupabaseClient();
     const tenantContext = getCurrentTenantContext();
@@ -32107,6 +33074,11 @@ async function provisionEmployeeLogin({ workEmail, fullName, companyName }) {
       fullName: String(fullName || "").trim(),
       companyName: String(companyName || tenantContext?.companyName || "").trim(),
       tenantId: tenantContext?.tenantId || null,
+
+      // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
+      // Pass the intended Employee or Manager route to secure provisioning.
+      // Existing HR profiles remain authoritative and cannot be granted here.
+      systemRole: String(systemRole || "employee").trim().toLowerCase(),
     };
 
     if (!payload.workEmail) {
@@ -32252,6 +33224,1939 @@ async function syncEmployeeFormRoleToDashboardRoute(employeeId, selectedSystemRo
   }
 
   return roleSyncResult;
+}
+
+// HR STANDARD SUPPORTING MANAGER MODAL - PHASE 1
+// HR Standard manages Secondary/Supporting Manager assignments in a focused
+// modal. Dashboard access, Primary Manager assignments, and the full employee
+// profile remain unchanged by this action.
+function getHrSupportingManagerModal() {
+  let modalElement = document.getElementById("hrSupportingManagerModal");
+  if (modalElement) return modalElement;
+
+  modalElement = document.createElement("div");
+  modalElement.id = "hrSupportingManagerModal";
+  modalElement.className = "hr-employee-access-overlay d-none";
+  modalElement.tabIndex = -1;
+  modalElement.setAttribute("role", "dialog");
+  modalElement.setAttribute("aria-modal", "true");
+  modalElement.setAttribute("aria-labelledby", "hrSupportingManagerModalLabel");
+  modalElement.setAttribute("aria-hidden", "true");
+
+  modalElement.innerHTML = `
+    <div class="hr-employee-access-dialog">
+      <section class="hr-employee-access-modal" aria-describedby="hrSupportingManagerModalDescription">
+        <header class="hr-access-modal-header">
+          <div class="hr-access-modal-heading">
+            <span class="hr-access-modal-kicker">REPORTING RESPONSIBILITY</span>
+            <h2 id="hrSupportingManagerModalLabel">Manage supporting manager</h2>
+            <p id="hrSupportingManagerModalDescription">
+              Add or remove Secondary Managers without changing dashboard access or the Primary Manager.
+            </p>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <button type="button"
+              id="hrSupportingManagerBackToAccessBtn"
+              class="hr-access-back-link d-none">
+              <i class="bi bi-arrow-left" aria-hidden="true"></i>
+              <span>Employee access</span>
+            </button>
+
+            <button type="button"
+              class="hr-access-modal-close"
+              aria-label="Close supporting manager modal"
+              data-close-supporting-manager-modal>
+              <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+          </div>
+        </header>
+
+        <div class="hr-access-modal-body hr-supporting-manager-modal-body">
+          <input type="hidden" id="hrSupportingManagerEmployeeId" />
+
+          <div class="hr-access-employee-summary">
+            <span class="hr-access-employee-icon" aria-hidden="true">
+              <i class="bi bi-people"></i>
+            </span>
+            <div class="hr-access-employee-copy">
+              <strong id="hrSupportingManagerEmployeeName">Employee</strong>
+              <span id="hrSupportingManagerEmployeeMeta"></span>
+            </div>
+          </div>
+
+          <section class="hr-access-section-card hr-access-section-card--primary">
+            <div class="hr-access-section-heading">
+              <span class="hr-access-section-step" aria-hidden="true">
+                <i class="bi bi-person-check"></i>
+              </span>
+              <div>
+                <strong>Primary Manager</strong>
+                <span>The employee's current line manager.</span>
+              </div>
+            </div>
+
+            <div id="hrSupportingManagerPrimarySummary">
+              <div class="text-secondary small">
+                Loading Primary Manager...
+              </div>
+            </div>
+          </section>
+
+          <section class="hr-access-section-card hr-access-section-card--primary">
+            <div class="hr-access-section-heading">
+              <span class="hr-access-section-step" aria-hidden="true">2</span>
+              <div>
+                <strong>Current supporting managers</strong>
+                <span>Remove an existing Secondary Manager when the reporting relationship no longer applies.</span>
+              </div>
+            </div>
+            <div id="hrSupportingManagerCurrentList" class="mt-3"></div>
+          </section>
+
+          <section class="hr-access-section-card mt-3">
+            <div class="hr-access-section-heading">
+              <span class="hr-access-section-step" aria-hidden="true">3</span>
+              <div>
+                <strong>Add supporting manager</strong>
+                <span>Select an active employee to add as a Secondary Manager.</span>
+              </div>
+            </div>
+            <div class="mt-3">
+              <label for="hrSupportingManagerSelect" class="form-label">Supporting manager</label>
+              <select id="hrSupportingManagerSelect" class="form-select">
+                <option value="">Select manager</option>
+              </select>
+            </div>
+          </section>
+        </div>
+
+        <footer class="hr-access-modal-footer">
+          <p>
+            <i class="bi bi-shield-check" aria-hidden="true"></i>
+            This action changes reporting responsibility only.
+          </p>
+          <div class="hr-access-modal-actions">
+            <button type="button" class="btn btn-outline-secondary" data-close-supporting-manager-modal>Cancel</button>
+            <button type="button" id="hrSupportingManagerAddBtn" class="btn btn-primary">
+              <i class="bi bi-person-plus me-2"></i>Add supporting manager
+            </button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  `;
+
+  document.body.appendChild(modalElement);
+
+  document
+    .getElementById("hrSupportingManagerBackToAccessBtn")
+    ?.addEventListener("click", () => {
+      const employeeId = String(
+        document.body.dataset.hrEmployeeAccessReturnEmployeeId || "",
+      ).trim();
+
+      closeHrSupportingManagerModal();
+
+      if (employeeId) {
+        openHrEmployeeAccessModal(employeeId);
+      }
+    });
+
+  modalElement
+    .querySelectorAll("[data-close-supporting-manager-modal]")
+    .forEach((button) => {
+      button.addEventListener("click", closeHrSupportingManagerModal);
+    });
+
+  modalElement.addEventListener("click", (event) => {
+    if (event.target === modalElement) closeHrSupportingManagerModal();
+  });
+
+  document
+    .getElementById("hrSupportingManagerAddBtn")
+    ?.addEventListener("click", addHrSupportingManagerFromModal);
+
+  return modalElement;
+}
+
+function closeHrSupportingManagerModal() {
+  const modalElement = document.getElementById("hrSupportingManagerModal");
+  if (!modalElement) return;
+
+  modalElement.classList.add("d-none");
+  modalElement.setAttribute("aria-hidden", "true");
+  document.body?.classList.remove("hr-employee-access-modal-open");
+
+  document
+    .getElementById("hrSupportingManagerBackToAccessBtn")
+    ?.classList.add("d-none");
+
+  delete document.body.dataset.hrEmployeeAccessReturnEmployeeId;
+}
+
+function getSupportingManagerDisplayName(employee = {}) {
+  return [employee.first_name, employee.middle_name, employee.last_name]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(" ") || "Employee";
+}
+
+function canEmployeeBeAssignedAsManager(employee = {}) {
+  if (normalizeText(employee?.status || "") !== "active") {
+    return false;
+  }
+
+  const linkedProfile = getEmployeeLinkedAuthProfile(employee);
+
+  const employeeRole = normaliseHrBusinessRole(
+    employee?.system_role || "",
+  );
+
+  const profileRole = normaliseHrBusinessRole(
+    linkedProfile?.role || "",
+  );
+
+  const hasActiveProfile =
+    !linkedProfile || linkedProfile.is_active === true;
+
+  const managerRoles = new Set([
+    "manager",
+    "hr",
+    "hr_manager",
+  ]);
+
+  return Boolean(
+    hasActiveProfile &&
+    (
+      managerRoles.has(profileRole) ||
+      (!linkedProfile && managerRoles.has(employeeRole))
+    )
+  );
+}
+
+function populateHrPrimaryManagerOptions(
+  employeeId,
+  excludedManagerIds = [],
+) {
+  const select = document.getElementById("hrPrimaryManagerSelect");
+  if (!select) return;
+
+  const employeeKey = String(employeeId || "").trim();
+
+  const excludedIds = new Set(
+    (excludedManagerIds || [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean),
+  );
+
+  const candidates = sortEmployeeRecordsByEmployeeNumber(
+    (state.employees || []).filter((employee) => {
+      const candidateId = String(employee?.id || "").trim();
+
+      return Boolean(
+        candidateId &&
+        candidateId !== employeeKey &&
+        !excludedIds.has(candidateId) &&
+        canEmployeeBeAssignedAsManager(employee)
+      );
+    }),
+  );
+
+  select.innerHTML = "";
+
+  const placeholderOption = document.createElement("option");
+  placeholderOption.value = "";
+  placeholderOption.textContent = candidates.length
+    ? "Select Primary Manager"
+    : "No eligible managers available";
+
+  select.appendChild(placeholderOption);
+
+  candidates.forEach((employee) => {
+    const option = document.createElement("option");
+    const displayName = getSupportingManagerDisplayName(employee);
+
+    const meta = [
+      employee.employee_number,
+      employee.job_title,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" - ");
+
+    option.value = String(employee.id || "").trim();
+    option.textContent = meta
+      ? `${displayName} - ${meta}`
+      : displayName;
+
+    select.appendChild(option);
+  });
+
+  select.disabled = candidates.length === 0;
+}
+
+function populateHrSupportingManagerOptions(employeeId, assignedManagerIds = []) {
+  const select = document.getElementById("hrSupportingManagerSelect");
+  if (!select) return;
+
+  const employeeKey = String(employeeId || "").trim();
+  const assignedIds = new Set(
+    (assignedManagerIds || []).map((value) => String(value || "").trim()),
+  );
+
+  const candidates = sortEmployeeRecordsByEmployeeNumber(
+    (state.employees || []).filter((employee) => {
+      const candidateId = String(employee?.id || "").trim();
+      return (
+        candidateId &&
+        candidateId !== employeeKey &&
+        !assignedIds.has(candidateId) &&
+        canEmployeeBeAssignedAsManager(employee)
+      );
+    }),
+  );
+
+  select.innerHTML = [
+    '<option value="">Select manager</option>',
+    ...candidates.map((employee) => {
+      const candidateId = String(employee.id || "").trim();
+      const displayName = getSupportingManagerDisplayName(employee);
+      const meta = [employee.employee_number, employee.job_title]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(" - ");
+
+      return `<option value="${escapeHtml(candidateId)}">${escapeHtml(displayName)}${meta ? ` - ${escapeHtml(meta)}` : ""}</option>`;
+    }),
+  ].join(" - ");
+}
+
+async function loadHrSupportingManagersForModal(employeeId) {
+  const employeeKey = String(employeeId || "").trim();
+  const list = document.getElementById("hrSupportingManagerCurrentList");
+  if (!employeeKey || !list) return;
+
+  list.innerHTML = `
+    <div class="text-secondary small py-2">
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Loading supporting managers...
+    </div>
+  `;
+
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("employee_reporting_lines")
+    .select("id, manager_employee_id, manager_type, status")
+    .eq("tenant_id", tenantId)
+    .eq("employee_id", employeeKey)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+
+  const activeRows = (data || []).filter(
+    (row) => normalizeText(row?.status || "active") === "active",
+  );
+
+  const primaryRow = activeRows.find(
+    (row) => normalizeText(row?.manager_type || "") === "primary",
+  );
+
+  const rows = activeRows.filter(
+    (row) => normalizeText(row?.manager_type || "") === "secondary",
+  );
+
+  const primarySummary = document.getElementById(
+    "hrSupportingManagerPrimarySummary",
+  );
+
+  const primaryManager = primaryRow
+    ? (state.employees || []).find(
+      (employee) =>
+        String(employee?.id || "") ===
+        String(primaryRow.manager_employee_id || ""),
+    )
+    : null;
+
+  const primaryManagerName = primaryManager
+    ? getSupportingManagerDisplayName(primaryManager)
+    : "";
+
+  const primaryManagerMeta = [
+    primaryManager?.employee_number,
+    primaryManager?.job_title,
+    primaryManager?.department,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" - ");
+
+  const openedFromHrAdminAccess = Boolean(
+    String(
+      document.body.dataset.hrEmployeeAccessReturnEmployeeId || "",
+    ).trim() === employeeKey,
+  );
+
+  if (primarySummary) {
+    // REPORTING MANAGER MANAGEMENT REPAIR - PRIMARY MANAGER ACCESS
+    // Primary/Secondary reporting relationships belong to People maintenance,
+    // not dashboard-access administration.
+    // HR Standard and HR Admin can therefore maintain reporting managers.
+    const canChangePrimaryManager =
+      Boolean(primaryManager) &&
+      canCurrentUserMaintainPeopleData();
+
+    primarySummary.innerHTML = primaryManager
+      ? `
+      <div class="border rounded-3 p-3">
+        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+          <div class="d-flex align-items-start gap-3">
+            <span class="hr-access-employee-icon" aria-hidden="true">
+              <i class="bi bi-person-check"></i>
+            </span>
+
+            <div>
+              <strong class="d-block">
+                ${escapeHtml(primaryManagerName)}
+              </strong>
+
+              ${primaryManagerMeta
+        ? `<span class="text-secondary small">${escapeHtml(primaryManagerMeta)}</span>`
+        : ""
+      }
+
+              <div class="small text-secondary mt-2">
+                ${escapeHtml(primaryManagerName)} is this employee's current
+                Primary Manager.
+              </div>
+            </div>
+          </div>
+
+${canChangePrimaryManager
+        ? `
+        <div class="d-flex flex-wrap gap-2">
+          <button
+            type="button"
+            id="hrChangePrimaryManagerBtn"
+            class="btn btn-sm btn-outline-primary"
+          >
+            <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+            Change Primary Manager
+          </button>
+
+          <button
+            type="button"
+            id="hrRemovePrimaryManagerBtn"
+            class="btn btn-sm btn-outline-danger"
+          >
+            <i class="bi bi-trash me-1" aria-hidden="true"></i>
+            Remove Primary Manager
+          </button>
+        </div>
+      `
+        : ""
+      }
+        </div>
+      </div>
+    `
+      : canCurrentUserMaintainPeopleData()
+        ? `
+    <div class="alert alert-warning mb-3">
+      <strong>No Primary Manager assigned.</strong>
+      <div class="small mt-1">
+        Select an eligible employee below to assign the Primary Manager.
+      </div>
+    </div>
+
+    <div class="border rounded-3 p-3">
+      <label for="hrPrimaryManagerSelect" class="form-label fw-semibold">
+        Primary Manager
+      </label>
+
+      <select
+        id="hrPrimaryManagerSelect"
+        class="form-select"
+      >
+        <option value="">Select Primary Manager</option>
+      </select>
+
+      <div class="form-text">
+        The employee, inactive employees, and existing Supporting Managers are excluded.
+      </div>
+
+      <div class="d-flex justify-content-end mt-3">
+        <button
+          type="button"
+          id="hrPrimaryManagerAssignBtn"
+          class="btn btn-primary"
+        >
+          <i class="bi bi-person-check me-1" aria-hidden="true"></i>
+          Assign Primary Manager
+        </button>
+      </div>
+    </div>
+  `
+        : `
+    <div class="alert alert-warning mb-0">
+      <strong>No Primary Manager assigned.</strong>
+    </div>
+  `;
+  }
+  // REPORTING MANAGER MANAGEMENT REPAIR - PRIMARY MANAGER REMOVE BUTTON
+  // Bind the remove action after the Primary Manager summary HTML has been
+  // rendered, while primaryRow and primaryManagerName are still in scope.
+  document
+    .getElementById("hrRemovePrimaryManagerBtn")
+    ?.addEventListener("click", async () => {
+      await removeHrPrimaryManagerFromModal(
+        primaryRow?.id,
+        primaryManagerName,
+      );
+    });
+
+  if (primaryManager && canCurrentUserMaintainPeopleData()) {
+    document
+      .getElementById("hrChangePrimaryManagerBtn")
+      ?.addEventListener("click", () => {
+
+        const secondaryManagerIds = rows
+          .map((row) => String(row?.manager_employee_id || "").trim())
+          .filter(Boolean);
+
+        const currentPrimaryManagerId = String(
+          primaryRow?.manager_employee_id || "",
+        ).trim();
+
+        primarySummary.innerHTML = `
+        <div class="alert alert-warning mb-3">
+          <strong>Change Primary Manager</strong>
+          <div class="small mt-1">
+            Select a different Primary Manager for
+            ${escapeHtml(getSupportingManagerDisplayName(
+          (state.employees || []).find(
+            (employee) => String(employee?.id || "") === employeeKey,
+          ) || {},
+        ))}.
+            Supporting Manager assignments will not be changed.
+          </div>
+        </div>
+
+        <div class="border rounded-3 p-3">
+          <label for="hrPrimaryManagerSelect" class="form-label fw-semibold">
+            New Primary Manager
+          </label>
+
+          <select
+            id="hrPrimaryManagerSelect"
+            class="form-select"
+          >
+            <option value="">Select new Primary Manager</option>
+          </select>
+
+          <div class="form-text">
+            The employee, current Primary Manager, inactive employees, and
+            existing Supporting Managers are excluded.
+          </div>
+
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button
+              type="button"
+              id="hrCancelPrimaryManagerChangeBtn"
+              class="btn btn-outline-secondary"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              id="hrPrimaryManagerAssignBtn"
+              class="btn btn-primary"
+            >
+              <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+              Confirm Primary Manager Change
+            </button>
+          </div>
+        </div>
+      `;
+
+        populateHrPrimaryManagerOptions(
+          employeeKey,
+          [
+            currentPrimaryManagerId,
+            ...secondaryManagerIds,
+          ].filter(Boolean),
+        );
+
+        document
+          .getElementById("hrCancelPrimaryManagerChangeBtn")
+          ?.addEventListener("click", async () => {
+            await loadHrSupportingManagersForModal(employeeKey);
+          });
+
+        document
+          .getElementById("hrPrimaryManagerAssignBtn")
+          ?.addEventListener("click", async () => {
+            await assignHrPrimaryManagerFromModal();
+          });
+
+        document
+          .getElementById("hrPrimaryManagerSelect")
+          ?.focus();
+      });
+  }
+
+  if (!primaryManager && canCurrentUserMaintainPeopleData()) {
+    const secondaryManagerIds = rows
+      .map((row) => String(row?.manager_employee_id || "").trim())
+      .filter(Boolean);
+
+    populateHrPrimaryManagerOptions(
+      employeeKey,
+      secondaryManagerIds,
+    );
+
+    document
+      .getElementById("hrPrimaryManagerAssignBtn")
+      ?.addEventListener("click", async () => {
+        await assignHrPrimaryManagerFromModal();
+      });
+  }
+
+  const assignedManagerIds = [
+    primaryRow?.manager_employee_id,
+    ...rows.map((row) => row.manager_employee_id),
+  ].filter(Boolean);
+
+  if (!rows.length) {
+    list.innerHTML = `
+      <div class="alert alert-light border mb-0">
+        No supporting manager is currently assigned.
+      </div>
+    `;
+  } else {
+    list.innerHTML = rows
+      .map((row) => {
+        const manager = (state.employees || []).find(
+          (employee) => String(employee?.id || "") === String(row.manager_employee_id || ""),
+        );
+        const managerName = manager
+          ? getSupportingManagerDisplayName(manager)
+          : "Supporting manager";
+        const managerMeta = [manager?.employee_number, manager?.job_title]
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+          .join(" - ");
+
+        return `
+          <div class="d-flex align-items-center justify-content-between gap-3 border rounded-3 p-3 mb-2"
+            data-supporting-manager-row="${escapeHtml(String(row.id || ""))}">
+            <div>
+              <strong class="d-block">${escapeHtml(managerName)}</strong>
+              ${managerMeta ? `<span class="text-secondary small">${escapeHtml(managerMeta)}</span>` : ""}
+            </div>
+            <button type="button" class="btn btn-outline-danger btn-sm"
+              data-remove-supporting-manager="${escapeHtml(String(row.id || ""))}"
+              data-manager-name="${escapeHtml(managerName)}">
+              <i class="bi bi-trash me-1" aria-hidden="true"></i>Remove
+            </button>
+          </div>
+        `;
+      })
+      .join(" - ");
+
+    list.querySelectorAll("[data-remove-supporting-manager]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        await removeHrSupportingManagerFromModal(
+          button.dataset.removeSupportingManager,
+          button.dataset.managerName,
+        );
+      });
+    });
+  }
+
+  populateHrSupportingManagerOptions(employeeKey, assignedManagerIds);
+}
+
+async function openEmployeeReportingManagerWorkspace(employeeId) {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const employee = (state.employees || []).find(
+    (item) => String(item?.id || "") === String(employeeId || ""),
+  );
+
+  if (!employee) {
+    showPageAlert(
+      "warning",
+      "The selected employee record could not be found. Please refresh and try again.",
+    );
+    return;
+  }
+
+  const modalElement = getHrSupportingManagerModal();
+  const employeeIdInput = document.getElementById("hrSupportingManagerEmployeeId");
+  const employeeName = document.getElementById("hrSupportingManagerEmployeeName");
+  const employeeMeta = document.getElementById("hrSupportingManagerEmployeeMeta");
+
+  if (!modalElement || !employeeIdInput) {
+    showPageAlert(
+      "danger",
+      "The supporting-manager controls could not be opened. Please refresh and try again.",
+    );
+    return;
+  }
+
+  employeeIdInput.value = String(employee.id || "");
+  if (employeeName) employeeName.textContent = getSupportingManagerDisplayName(employee);
+  if (employeeMeta) {
+    employeeMeta.textContent = [
+      employee.employee_number,
+      employee.job_title,
+      employee.department,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" - ");
+  }
+
+  const backButton = document.getElementById(
+    "hrSupportingManagerBackToAccessBtn",
+  );
+
+  const returnEmployeeId = String(
+    document.body.dataset.hrEmployeeAccessReturnEmployeeId || "",
+  ).trim();
+
+  backButton?.classList.toggle(
+    "d-none",
+    !returnEmployeeId,
+  );
+
+  modalElement.classList.remove("d-none");
+  modalElement.setAttribute("aria-hidden", "false");
+  document.body?.classList.add("hr-employee-access-modal-open");
+
+  try {
+    await loadHrSupportingManagersForModal(employee.id);
+    window.requestAnimationFrame(() => {
+      document.getElementById("hrSupportingManagerSelect")?.focus();
+    });
+  } catch (error) {
+    console.error("Error loading supporting managers:", error);
+    closeHrSupportingManagerModal();
+    showPageAlert(
+      "danger",
+      error?.message || "Supporting managers could not be loaded. Please try again.",
+    );
+  }
+}
+
+// HR STANDARD MANAGER MODAL - FIRST CLICK FIX
+// Make the employee-table action available before the long dashboard startup finishes.
+window.hrManageReportingManagers = (employeeId) => {
+  openEmployeeReportingManagerWorkspace(employeeId);
+};
+
+async function assignHrPrimaryManagerFromModal() {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const employeeId = String(
+    document.getElementById("hrSupportingManagerEmployeeId")?.value || "",
+  ).trim();
+
+  const managerEmployeeId = String(
+    document.getElementById("hrPrimaryManagerSelect")?.value || "",
+  ).trim();
+
+  const assignButton = document.getElementById(
+    "hrPrimaryManagerAssignBtn",
+  );
+
+  if (!employeeId || !managerEmployeeId) {
+    showPageAlert(
+      "warning",
+      "Select a Primary Manager before saving.",
+    );
+    return;
+  }
+
+  if (employeeId === managerEmployeeId) {
+    showPageAlert(
+      "warning",
+      "An employee cannot be assigned as their own Primary Manager.",
+    );
+    return;
+  }
+
+  const employee = (state.employees || []).find(
+    (record) =>
+      String(record?.id || "").trim() === employeeId,
+  );
+
+  const manager = (state.employees || []).find(
+    (record) =>
+      String(record?.id || "").trim() === managerEmployeeId,
+  );
+
+  if (!employee || !manager) {
+    showPageAlert(
+      "warning",
+      "The employee or selected manager could not be resolved. Please refresh and try again.",
+    );
+    return;
+  }
+
+  if (!canEmployeeBeAssignedAsManager(manager)) {
+    showPageAlert(
+      "warning",
+      `${getSupportingManagerDisplayName(manager)} does not currently have Manager or HR access and cannot be assigned as a manager.`,
+    );
+    return;
+  }
+
+  const employeeName = getSupportingManagerDisplayName(employee);
+  const managerName = getSupportingManagerDisplayName(manager);
+
+  const originalButtonHtml = assignButton?.innerHTML || "";
+
+  // PRIMARY MANAGER CONTROLLED CHANGE
+  // Track whether this action inserts a new Primary row or changes an existing
+  // one so the reporting line can be restored if the employee snapshot update fails.
+  let insertedReportingLineId = "";
+  let updatedPrimaryReportingLineId = "";
+  let previousPrimaryManagerEmployeeId = "";
+
+  try {
+    if (assignButton) {
+      assignButton.disabled = true;
+      assignButton.innerHTML = `
+        <span
+          class="spinner-border spinner-border-sm me-2"
+          aria-hidden="true"
+        ></span>
+        Assigning...
+      `;
+    }
+
+    const tenantId = getRequiredTenantIdForHrEmployeeData();
+    const supabase = getSupabaseClient();
+
+    const { data: currentRows, error: currentRowsError } =
+      await supabase
+        .from("employee_reporting_lines")
+        .select("id, manager_employee_id, manager_type, status")
+        .eq("tenant_id", tenantId)
+        .eq("employee_id", employeeId);
+
+    if (currentRowsError) throw currentRowsError;
+
+    const activeRows = (currentRows || []).filter(
+      (row) =>
+        normalizeText(row?.status || "active") === "active",
+    );
+
+    const existingPrimary = activeRows.find(
+      (row) =>
+        normalizeText(row?.manager_type || "") === "primary",
+    );
+
+    const existingSecondary = activeRows.find(
+      (row) =>
+        String(row?.manager_employee_id || "").trim() ===
+        managerEmployeeId &&
+        normalizeText(row?.manager_type || "") !== "primary",
+    );
+
+    if (existingSecondary) {
+      showPageAlert(
+        "warning",
+        `${managerName} is already assigned as a Supporting Manager. Remove that assignment before making them the Primary Manager.`,
+      );
+      return;
+    }
+
+    let confirmationMessage =
+      `Assign ${managerName} as the Primary Manager for ${employeeName}?`;
+
+    if (existingPrimary) {
+      const currentPrimaryManagerId = String(
+        existingPrimary.manager_employee_id || "",
+      ).trim();
+
+      const currentPrimaryManager = (state.employees || []).find(
+        (record) =>
+          String(record?.id || "").trim() === currentPrimaryManagerId,
+      );
+
+      const currentPrimaryManagerName = currentPrimaryManager
+        ? getSupportingManagerDisplayName(currentPrimaryManager)
+        : "the current Primary Manager";
+
+      confirmationMessage =
+        `Change Primary Manager for ${employeeName} from ` +
+        `${currentPrimaryManagerName} to ${managerName}?\n\n` +
+        "Supporting Manager assignments will remain unchanged.";
+    }
+
+    const confirmed = window.confirm(confirmationMessage);
+
+    if (!confirmed) {
+      return;
+    }
+
+    if (existingPrimary) {
+      previousPrimaryManagerEmployeeId = String(
+        existingPrimary.manager_employee_id || "",
+      ).trim();
+
+      if (previousPrimaryManagerEmployeeId === managerEmployeeId) {
+        showPageAlert(
+          "warning",
+          `${managerName} is already the employee's Primary Manager.`,
+        );
+        return;
+      }
+
+      const { error: updatePrimaryError } = await supabase
+        .from("employee_reporting_lines")
+        .update({
+          manager_employee_id: managerEmployeeId,
+          manager_type: "Primary",
+          status: "Active",
+          notes:
+            "Primary manager changed from HR reporting workspace",
+          updated_by: state.currentUser?.id || null,
+        })
+        .eq("id", existingPrimary.id)
+        .eq("employee_id", employeeId)
+        .eq("tenant_id", tenantId);
+
+      if (updatePrimaryError) throw updatePrimaryError;
+
+      updatedPrimaryReportingLineId = String(
+        existingPrimary.id || "",
+      ).trim();
+    } else {
+      const { data: insertedRow, error: insertError } =
+        await supabase
+          .from("employee_reporting_lines")
+          .insert({
+            employee_id: employeeId,
+            tenant_id: tenantId,
+            manager_employee_id: managerEmployeeId,
+            manager_type: "Primary",
+            status: "Active",
+            notes:
+              "Primary manager assigned from HR reporting workspace",
+            created_by: state.currentUser?.id || null,
+            updated_by: state.currentUser?.id || null,
+          })
+          .select("id")
+          .single();
+
+      if (insertError) throw insertError;
+
+      insertedReportingLineId = String(
+        insertedRow?.id || "",
+      ).trim();
+    }
+
+    const managerEmail = String(
+      manager.work_email || "",
+    )
+      .trim()
+      .toLowerCase();
+
+    const { error: employeeUpdateError } = await supabase
+      .from("employees")
+      .update({
+        line_manager: managerName,
+        approver_email: managerEmail || null,
+      })
+      .eq("id", employeeId)
+      .eq("tenant_id", tenantId);
+
+    if (employeeUpdateError) {
+      let rollbackError = null;
+
+      // New Primary assignment: remove the newly inserted reporting-line row.
+      if (insertedReportingLineId) {
+        const { error: deleteRollbackError } = await supabase
+          .from("employee_reporting_lines")
+          .delete()
+          .eq("id", insertedReportingLineId)
+          .eq("employee_id", employeeId)
+          .eq("tenant_id", tenantId);
+
+        rollbackError = deleteRollbackError || rollbackError;
+      }
+
+      // Existing Primary change: restore the previous manager on the same row.
+      if (
+        updatedPrimaryReportingLineId &&
+        previousPrimaryManagerEmployeeId
+      ) {
+        const { error: updateRollbackError } = await supabase
+          .from("employee_reporting_lines")
+          .update({
+            manager_employee_id: previousPrimaryManagerEmployeeId,
+            manager_type: "Primary",
+            status: "Active",
+            notes:
+              "Primary manager change rolled back because the employee manager snapshot could not be updated",
+            updated_by: state.currentUser?.id || null,
+          })
+          .eq("id", updatedPrimaryReportingLineId)
+          .eq("employee_id", employeeId)
+          .eq("tenant_id", tenantId);
+
+        rollbackError = updateRollbackError || rollbackError;
+      }
+
+      if (rollbackError) {
+        console.error(
+          "Primary Manager rollback failed:",
+          rollbackError,
+        );
+
+        throw new Error(
+          "The employee manager details could not be updated, and the reporting-line rollback also failed. Refresh the employee record and verify the Primary Manager before continuing.",
+        );
+      }
+
+      throw employeeUpdateError;
+    }
+
+    employee.line_manager = managerName;
+    employee.approver_email = managerEmail || null;
+
+    // Refresh the employee workspace so the employee list and edit form
+    // immediately use the newly saved Primary Manager details.
+    await refreshEmployeeWorkspace();
+
+    await loadHrSupportingManagersForModal(employeeId);
+
+    // LIVE HR RESPONSIBILITY BADGE REFRESH - v1.0.0
+    // Re-run the signed-in HR user's protected tenant-scoped reporting lookup
+    // so Primary, Secondary, or Mixed Manager coverage appears immediately.
+    await updateHrAccountResponsibilityTitle(
+      state.currentProfile || {},
+    );
+
+    const primaryManagerWasChanged = Boolean(
+      updatedPrimaryReportingLineId,
+    );
+
+    showPageAlert(
+      "success",
+      primaryManagerWasChanged
+        ? `${managerName} is now the Primary Manager for ${employeeName}. The employee form manager details were updated and Supporting Managers were preserved.`
+        : `${managerName} was assigned as the Primary Manager for ${employeeName}.`,
+    );
+
+    showDashboardToast(
+      "success",
+      primaryManagerWasChanged
+        ? "Primary Manager changed"
+        : "Primary Manager assigned",
+      primaryManagerWasChanged
+        ? `${managerName} replaced the previous Primary Manager for ${employeeName}. Supporting Manager assignments were preserved.`
+        : `${managerName} is now the Primary Manager for ${employeeName}.`,
+    );
+  } catch (error) {
+    console.error(
+      "Error assigning Primary Manager:",
+      error,
+    );
+
+    showPageAlert(
+      "danger",
+      error?.message ||
+      "The Primary Manager could not be assigned. Please try again.",
+    );
+  } finally {
+    if (assignButton?.isConnected) {
+      assignButton.disabled = false;
+      assignButton.innerHTML = originalButtonHtml;
+    }
+  }
+}
+
+// REPORTING MANAGER MANAGEMENT REPAIR - PRIMARY MANAGER REMOVE
+// Removes only the active Primary reporting relationship for this employee.
+// Secondary managers remain untouched.
+// The employee's legacy manager snapshot is also cleared so the biodata form
+// does not continue displaying a manager who is no longer assigned.
+async function removeHrPrimaryManagerFromModal(
+  reportingLineId,
+  managerName = "",
+) {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const rowId = String(reportingLineId || "").trim();
+
+  const employeeId = String(
+    document.getElementById("hrSupportingManagerEmployeeId")?.value || "",
+  ).trim();
+
+  if (!rowId || !employeeId) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Remove ${String(managerName || "this employee")} as the Primary Manager? Supporting Manager assignments will remain unchanged.`,
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const tenantId = getRequiredTenantIdForHrEmployeeData();
+    const supabase = getSupabaseClient();
+
+    // Read the Primary row first so we can restore the employee snapshot
+    // if the reporting-line delete unexpectedly fails.
+    const { data: primaryRow, error: primaryReadError } =
+      await supabase
+        .from("employee_reporting_lines")
+        .select("id, manager_employee_id, manager_type, status")
+        .eq("id", rowId)
+        .eq("tenant_id", tenantId)
+        .eq("employee_id", employeeId)
+        .ilike("manager_type", "primary")
+        .maybeSingle();
+
+    if (primaryReadError) {
+      throw primaryReadError;
+    }
+
+    if (!primaryRow) {
+      throw new Error(
+        "The Primary Manager assignment could not be found. Refresh the employee record and try again.",
+      );
+    }
+
+    const previousManager = (state.employees || []).find(
+      (employee) =>
+        String(employee?.id || "").trim() ===
+        String(primaryRow.manager_employee_id || "").trim(),
+    );
+
+    const previousManagerName = previousManager
+      ? getSupportingManagerDisplayName(previousManager)
+      : String(managerName || "").trim();
+
+    const previousManagerEmail = String(
+      previousManager?.work_email || "",
+    )
+      .trim()
+      .toLowerCase();
+
+    // Clear the employee-level Primary Manager snapshot first.
+    const { error: employeeUpdateError } = await supabase
+      .from("employees")
+      .update({
+        line_manager: null,
+        approver_email: null,
+      })
+      .eq("id", employeeId)
+      .eq("tenant_id", tenantId);
+
+    if (employeeUpdateError) {
+      throw employeeUpdateError;
+    }
+
+    const { error: deleteError } = await supabase
+      .from("employee_reporting_lines")
+      .delete()
+      .eq("id", rowId)
+      .eq("tenant_id", tenantId)
+      .eq("employee_id", employeeId)
+      .ilike("manager_type", "primary");
+
+    if (deleteError) {
+      // Best-effort rollback of the employee snapshot.
+      const { error: rollbackError } = await supabase
+        .from("employees")
+        .update({
+          line_manager: previousManagerName || null,
+          approver_email: previousManagerEmail || null,
+        })
+        .eq("id", employeeId)
+        .eq("tenant_id", tenantId);
+
+      if (rollbackError) {
+        console.error(
+          "Primary Manager snapshot rollback failed:",
+          rollbackError,
+        );
+      }
+
+      throw deleteError;
+    }
+
+    // Keep the People table, biodata manager fields and dropdowns current.
+    await refreshEmployeeWorkspace();
+
+    // Re-render the manager modal so the new "Assign Primary Manager"
+    // control appears immediately.
+    await loadHrSupportingManagersForModal(employeeId);
+
+    // LIVE HR RESPONSIBILITY BADGE REFRESH
+    // Mirrors the already-working Secondary Manager add/remove behaviour.
+    await updateHrAccountResponsibilityTitle(
+      state.currentProfile || {},
+    );
+
+    showPageAlert(
+      "success",
+      `${previousManagerName || "The Primary Manager"} was removed. Supporting Manager assignments were preserved.`,
+    );
+
+    showDashboardToast(
+      "success",
+      "Primary Manager removed",
+      "The Primary Manager assignment has been removed.",
+    );
+  } catch (error) {
+    console.error(
+      "Error removing Primary Manager:",
+      error,
+    );
+
+    showPageAlert(
+      "danger",
+      error?.message ||
+      "The Primary Manager could not be removed. Please try again.",
+    );
+  }
+}
+
+async function addHrSupportingManagerFromModal() {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const employeeId = String(
+    document.getElementById("hrSupportingManagerEmployeeId")?.value || "",
+  ).trim();
+  const managerEmployeeId = String(
+    document.getElementById("hrSupportingManagerSelect")?.value || "",
+  ).trim();
+  const addButton = document.getElementById("hrSupportingManagerAddBtn");
+
+  if (!employeeId || !managerEmployeeId) {
+    showPageAlert("warning", "Select a supporting manager before saving.");
+    return;
+  }
+
+  if (employeeId === managerEmployeeId) {
+    showPageAlert("warning", "An employee cannot be assigned as their own manager.");
+    return;
+  }
+
+  const originalButtonHtml = addButton?.innerHTML || "";
+
+  try {
+    if (addButton) {
+      addButton.disabled = true;
+      addButton.innerHTML = `
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+        Saving...
+      `;
+    }
+
+    const tenantId = getRequiredTenantIdForHrEmployeeData();
+    const supabase = getSupabaseClient();
+
+    const { data: existingRows, error: existingError } = await supabase
+      .from("employee_reporting_lines")
+      .select("id, manager_employee_id, manager_type, status")
+      .eq("tenant_id", tenantId)
+      .eq("employee_id", employeeId)
+      .eq("manager_employee_id", managerEmployeeId);
+
+    if (existingError) throw existingError;
+
+    const alreadyAssigned = (existingRows || []).some(
+      (row) => normalizeText(row?.status || "active") === "active",
+    );
+
+    if (alreadyAssigned) {
+      showPageAlert(
+        "warning",
+        "This employee is already assigned as a Primary or Secondary Manager.",
+      );
+      return;
+    }
+
+    const { error: insertError } = await supabase
+      .from("employee_reporting_lines")
+      .insert({
+        employee_id: employeeId,
+        tenant_id: tenantId,
+        manager_employee_id: managerEmployeeId,
+        manager_type: "Secondary",
+        status: "Active",
+        notes: "Supporting manager assigned from HR People workspace",
+        created_by: state.currentUser?.id || null,
+        updated_by: state.currentUser?.id || null,
+      });
+
+    if (insertError) throw insertError;
+
+    await loadHrSupportingManagersForModal(employeeId);
+
+    // LIVE HR RESPONSIBILITY BADGE REFRESH - v1.0.0
+    // Refresh the signed-in HR account pills after Secondary assignment.
+    await updateHrAccountResponsibilityTitle(
+      state.currentProfile || {},
+    );
+
+    showDashboardToast(
+      "success",
+      "Supporting manager added",
+      "The Secondary Manager assignment is now active.",
+    );
+  } catch (error) {
+    console.error("Error adding supporting manager:", error);
+    showPageAlert(
+      "danger",
+      error?.message || "The supporting manager could not be added. Please try again.",
+    );
+  } finally {
+    if (addButton) {
+      addButton.disabled = false;
+      addButton.innerHTML = originalButtonHtml;
+    }
+  }
+}
+
+async function removeHrSupportingManagerFromModal(reportingLineId, managerName = "") {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const rowId = String(reportingLineId || "").trim();
+  const employeeId = String(
+    document.getElementById("hrSupportingManagerEmployeeId")?.value || "",
+  ).trim();
+  if (!rowId || !employeeId) return;
+
+  const confirmed = window.confirm(
+    `Remove ${String(managerName || "this employee")} as a supporting manager?`,
+  );
+  if (!confirmed) return;
+
+  try {
+    const tenantId = getRequiredTenantIdForHrEmployeeData();
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from("employee_reporting_lines")
+      .delete()
+      .eq("id", rowId)
+      .eq("tenant_id", tenantId)
+      .eq("employee_id", employeeId)
+      .ilike("manager_type", "secondary");
+
+    if (error) throw error;
+
+    await loadHrSupportingManagersForModal(employeeId);
+
+    // LIVE HR RESPONSIBILITY BADGE REFRESH - v1.0.0
+    // Refresh the signed-in HR account pills after Secondary removal.
+    await updateHrAccountResponsibilityTitle(
+      state.currentProfile || {},
+    );
+
+    showDashboardToast(
+      "success",
+      "Supporting manager removed",
+      "The Secondary Manager assignment has been removed.",
+    );
+  } catch (error) {
+    console.error("Error removing supporting manager:", error);
+    showPageAlert(
+      "danger",
+      error?.message || "The supporting manager could not be removed. Please try again.",
+    );
+  }
+}
+
+function clearHrEmployeeAccessStatus() {
+  const status = document.getElementById("hrEmployeeAccessStatus");
+
+  if (!status) return;
+
+  status.className = "alert d-none mt-3 mb-3";
+  status.innerHTML = "";
+}
+
+function showHrEmployeeAccessStatus(
+  type = "warning",
+  message = "",
+) {
+  const status = document.getElementById("hrEmployeeAccessStatus");
+
+  if (!status) {
+    showPageAlert(type, message);
+    return;
+  }
+
+  status.className = `alert alert-${type} mt-3 mb-3`;
+  status.innerHTML = message;
+  status.classList.remove("d-none");
+
+  status.scrollIntoView({
+    behavior: "smooth",
+    block: "nearest",
+  });
+}
+
+function getHrEmployeeAccessModal() {
+  return document.getElementById("hrEmployeeAccessModal");
+}
+
+function closeHrEmployeeAccessModal() {
+  const modalElement = getHrEmployeeAccessModal();
+  if (!modalElement) return;
+
+  modalElement.classList.add("d-none");
+  modalElement.setAttribute("aria-hidden", "true");
+  document.body?.classList.remove("hr-employee-access-modal-open");
+}
+
+// HR Admin access control is intentionally separate from reporting lines.
+// Changing Employee / Manager / HR Standard access preserves every existing
+// Primary and Secondary Manager assignment.
+function openHrEmployeeAccessModal(employeeId) {
+  if (!canCurrentUserAssignHrOfficerAccess()) {
+    showPageAlert(
+      "warning",
+      "Only an HR Admin can manage employee dashboard access from this action.",
+    );
+    return;
+  }
+
+  const employee = (state.employees || []).find(
+    (item) => String(item?.id || "") === String(employeeId || ""),
+  );
+
+  if (!employee) {
+    showPageAlert(
+      "warning",
+      "The selected employee record could not be found. Please refresh and try again.",
+    );
+    return;
+  }
+
+  const modalElement = getHrEmployeeAccessModal();
+  const employeeIdInput = document.getElementById(
+    "hrEmployeeAccessEmployeeId",
+  );
+  const employeeName = document.getElementById(
+    "hrEmployeeAccessEmployeeName",
+  );
+  const employeeMeta = document.getElementById(
+    "hrEmployeeAccessEmployeeMeta",
+  );
+  const accessSelect = document.getElementById(
+    "hrEmployeeAccessRole",
+  );
+  const saveButton = document.getElementById(
+    "hrEmployeeAccessSaveBtn",
+  );
+  const selfNotice = document.getElementById(
+    "hrEmployeeAccessSelfNotice",
+  );
+  const managedEmployeeSelect = document.getElementById(
+    "hrEmployeeAccessManagedEmployee",
+  );
+  const managerTypeSelect = document.getElementById(
+    "hrEmployeeAccessManagerType",
+  );
+
+  if (!modalElement || !employeeIdInput || !accessSelect) {
+    showPageAlert(
+      "danger",
+      "The employee access controls could not be opened. Please refresh and try again.",
+    );
+    return;
+  }
+
+  clearHrEmployeeAccessStatus();
+
+  const displayName = [
+    employee.first_name,
+    employee.middle_name,
+    employee.last_name,
+  ]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(" ") || "Employee";
+
+  const savedRole = normaliseHrBusinessRole(
+    employee.system_role || "employee",
+  );
+
+  // HR ADMIN EMPLOYEE ACCESS PRESENTATION - v1.0.0
+  // employees.system_role identifies the HR dashboard route, while the linked
+  // profiles.hr_access_level identifies whether that HR account is Standard
+  // or Admin. Display the protected Admin tier without making it editable here.
+  const linkedProfile = getEmployeeLinkedAuthProfile(employee);
+
+  const linkedProfileRole = normaliseHrBusinessRole(
+    linkedProfile?.role || "",
+  );
+
+  const linkedHrAccessLevel = normaliseHrBusinessRole(
+    linkedProfile?.hr_access_level || "",
+  );
+
+  const employeeTenantId = String(employee?.tenant_id || "").trim();
+  const profileTenantId = String(linkedProfile?.tenant_id || "").trim();
+
+  const isSameTenant =
+    !employeeTenantId ||
+    !profileTenantId ||
+    employeeTenantId === profileTenantId;
+
+  const isProtectedHrAdmin = Boolean(
+    linkedProfile &&
+    linkedProfile.is_active === true &&
+    linkedProfileRole === "hr" &&
+    linkedHrAccessLevel === "tenant_admin" &&
+    isSameTenant,
+  );
+
+  let hrAdminOption = Array.from(accessSelect.options).find(
+    (option) => option.value === "hr_admin",
+  );
+
+  if (isProtectedHrAdmin && !hrAdminOption) {
+    hrAdminOption = document.createElement("option");
+    hrAdminOption.value = "hr_admin";
+    hrAdminOption.textContent = "HR Admin";
+    hrAdminOption.disabled = true;
+    accessSelect.appendChild(hrAdminOption);
+  }
+
+  if (!isProtectedHrAdmin && hrAdminOption) {
+    hrAdminOption.remove();
+  }
+
+  employeeIdInput.value = String(employee.id || "");
+  if (employeeName) employeeName.textContent = displayName;
+  if (employeeMeta) {
+    employeeMeta.textContent = [
+      employee.employee_number,
+      employee.job_title,
+      employee.department,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" - ");
+  }
+
+  accessSelect.value = isProtectedHrAdmin
+    ? "hr_admin"
+    : ["employee", "manager", "hr"].includes(savedRole)
+      ? savedRole
+      : "employee";
+
+  if (accessSelect.dataset.accessStatusBound !== "true") {
+    accessSelect.dataset.accessStatusBound = "true";
+
+    accessSelect.addEventListener("change", () => {
+      clearHrEmployeeAccessStatus();
+    });
+  }
+
+  populateHrEmployeeAccessManagedEmployeeOptions(employee.id);
+  if (managedEmployeeSelect) managedEmployeeSelect.value = "";
+  if (managerTypeSelect) managerTypeSelect.value = "Primary";
+
+  const isOwnRecord = isCurrentSignedInEmployeeRecord(employee);
+  const isAccessProtected = isOwnRecord || isProtectedHrAdmin;
+
+  accessSelect.disabled = isAccessProtected;
+  accessSelect.setAttribute(
+    "aria-disabled",
+    String(isAccessProtected),
+  );
+
+  if (saveButton) {
+    saveButton.disabled = isAccessProtected;
+  }
+
+  if (selfNotice) {
+    selfNotice.classList.toggle("d-none", !isAccessProtected);
+
+    selfNotice.textContent = isProtectedHrAdmin
+      ? "HR Admin access is protected and remains controlled by Platform Admin. Reporting responsibilities can still be reviewed or changed where permitted."
+      : "You cannot change your own dashboard access from the employee list. Reporting responsibilities remain available.";
+  }
+
+  modalElement.classList.remove("d-none");
+  modalElement.setAttribute("aria-hidden", "false");
+  document.body?.classList.add("hr-employee-access-modal-open");
+
+  window.requestAnimationFrame(() => {
+    accessSelect.focus();
+  });
+}
+
+// HR ADMIN ACCESS MODAL - FIRST CLICK FIX
+// Make the employee-table Admin action available before the long dashboard
+// startup finishes loading payroll, setup, audit, and communication data.
+window.hrManageEmployeeAccess = (employeeId) => {
+  if (!canCurrentUserManageHrEmployeeAccess()) {
+    showHrEmployeeAccessAdminRequiredMessage();
+    return;
+  }
+
+  openHrEmployeeAccessModal(employeeId);
+};
+
+// HR ACCESS / REPORTING RESPONSIBILITY DECOUPLING - PHASE 2
+// Populate the inverse reporting setup without writing directly to the database.
+// HR chooses who the current employee will manage and whether they will act as
+// Primary or Secondary Manager. The existing employee form then opens with the
+// reporting line pre-filled so HR can review and save through the established,
+// tenant-scoped reporting-line workflow.
+function populateHrEmployeeAccessManagedEmployeeOptions(managerEmployeeId = "") {
+  const select = document.getElementById("hrEmployeeAccessManagedEmployee");
+  if (!select) return;
+
+  const managerKey = String(managerEmployeeId || "").trim();
+  const employees = sortEmployeeRecordsByEmployeeNumber(
+    (state.employees || []).filter((employee) => {
+      const employeeId = String(employee?.id || "").trim();
+      return employeeId && employeeId !== managerKey;
+    }),
+  );
+
+  select.innerHTML = [
+    '<option value="">Select employee</option>',
+    ...employees.map((employee) => {
+      const employeeId = String(employee.id || "").trim();
+      const displayName = [
+        employee.first_name,
+        employee.middle_name,
+        employee.last_name,
+      ]
+        .map((part) => String(part || "").trim())
+        .filter(Boolean)
+        .join(" ") || "Employee";
+      const meta = [employee.employee_number, employee.department]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(" · ");
+
+      return `<option value="${escapeHtml(employeeId)}">${escapeHtml(displayName)}${meta ? ` — ${escapeHtml(meta)}` : ""}</option>`;
+    }),
+  ].join("");
+}
+
+function prepareEmployeeAsReportingManagerFromAccess() {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const managerEmployeeId = String(
+    document.getElementById("hrEmployeeAccessEmployeeId")?.value || "",
+  ).trim();
+  const managedEmployeeId = String(
+    document.getElementById("hrEmployeeAccessManagedEmployee")?.value || "",
+  ).trim();
+  const managerType = String(
+    document.getElementById("hrEmployeeAccessManagerType")?.value || "Primary",
+  ).trim();
+
+  if (!managerEmployeeId || !managedEmployeeId) {
+    showPageAlert(
+      "warning",
+      "Select the employee this person will manage before continuing.",
+    );
+    return;
+  }
+
+  if (managerEmployeeId === managedEmployeeId) {
+    showPageAlert("warning", "An employee cannot be assigned as their own manager.");
+    return;
+  }
+
+  const managerEmployee = (state.employees || []).find(
+    (employee) => String(employee?.id || "") === managerEmployeeId,
+  );
+  const managedEmployee = (state.employees || []).find(
+    (employee) => String(employee?.id || "") === managedEmployeeId,
+  );
+
+  if (!managerEmployee || !managedEmployee) {
+    showPageAlert(
+      "warning",
+      "The selected reporting assignment could not be resolved. Please refresh and try again.",
+    );
+    return;
+  }
+
+  closeHrEmployeeAccessModal();
+  startEmployeeEdit(managedEmployee.id);
+
+  window.setTimeout(() => {
+    const reportingSection = document.getElementById("employeeReportingLinesSection");
+
+    if (normalizeText(managerType) === "primary") {
+      const primarySelect = state.dom.assignedLineManagerEmployeeId;
+      if (primarySelect) {
+        primarySelect.value = managerEmployee.id;
+        primarySelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    } else {
+      addEmployeeReportingLineRow({
+        managerEmployeeId: managerEmployee.id,
+      });
+    }
+
+    reportingSection?.classList.add("hr-reporting-lines-focus");
+    reportingSection?.scrollIntoView({ behavior: "smooth", block: "center" });
+    updateEmployeeSaveButtonState();
+
+    const managerName = [
+      managerEmployee.first_name,
+      managerEmployee.middle_name,
+      managerEmployee.last_name,
+    ]
+      .map((part) => String(part || "").trim())
+      .filter(Boolean)
+      .join(" ") || "The selected employee";
+
+    showDashboardToast(
+      "info",
+      "Reporting setup prepared",
+      `${managerName} has been preselected as ${managerType} Manager. Review the reporting lines and update the employee profile to save.`,
+    );
+
+    window.setTimeout(() => {
+      reportingSection?.classList.remove("hr-reporting-lines-focus");
+    }, 3000);
+  }, 650);
+}
+
+async function getActiveReportingResponsibilitiesForManager(
+  managerEmployeeId,
+) {
+  const managerKey = String(managerEmployeeId || "").trim();
+
+  if (!managerKey) {
+    return [];
+  }
+
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from("employee_reporting_lines")
+    .select("id, employee_id, manager_employee_id, manager_type, status")
+    .eq("tenant_id", tenantId)
+    .eq("manager_employee_id", managerKey);
+
+  if (error) throw error;
+
+  return (data || [])
+    .filter(
+      (row) =>
+        normalizeText(row?.status || "active") === "active",
+    )
+    .map((row) => {
+      const managedEmployee = (state.employees || []).find(
+        (employee) =>
+          String(employee?.id || "").trim() ===
+          String(row?.employee_id || "").trim(),
+      );
+
+      return {
+        ...row,
+        managedEmployee,
+        managedEmployeeName: managedEmployee
+          ? getSupportingManagerDisplayName(managedEmployee)
+          : "Unknown employee",
+        managerType:
+          normalizeText(row?.manager_type || "") === "primary"
+            ? "Primary Manager"
+            : "Secondary Manager",
+      };
+    });
+}
+
+async function saveHrEmployeeAccessFromModal() {
+  if (!canCurrentUserAssignHrOfficerAccess()) {
+    showPageAlert(
+      "warning",
+      "Only an HR Admin can manage employee dashboard access from this action.",
+    );
+    return;
+  }
+
+  const employeeId = String(
+    document.getElementById("hrEmployeeAccessEmployeeId")?.value || "",
+  ).trim();
+  const selectedRole = String(
+    document.getElementById("hrEmployeeAccessRole")?.value || "",
+  ).trim();
+  const saveButton = document.getElementById("hrEmployeeAccessSaveBtn");
+
+  const employee = (state.employees || []).find(
+    (item) => String(item?.id || "") === employeeId,
+  );
+
+  if (!employee || !["employee", "manager", "hr"].includes(selectedRole)) {
+    showPageAlert(
+      "warning",
+      "Select a valid employee access level and try again.",
+    );
+    return;
+  }
+
+  if (selectedRole === "employee") {
+    try {
+      const responsibilities =
+        await getActiveReportingResponsibilitiesForManager(employee.id);
+
+      if (responsibilities.length) {
+        const employeeName =
+          getSupportingManagerDisplayName(employee);
+
+        const responsibilityItems = responsibilities
+          .map(
+            (responsibility) => `
+              <li>
+                <strong>${escapeHtml(
+              responsibility.managedEmployeeName,
+            )}</strong>
+                - ${escapeHtml(responsibility.managerType)}
+              </li>
+            `,
+          )
+          .join("");
+
+        showHrEmployeeAccessStatus(
+          "warning",
+          `
+            <strong>${escapeHtml(employeeName)} cannot be changed to Employee yet.</strong>
+            <div class="mt-2">
+              This person still has active reporting responsibilities:
+            </div>
+            <ul class="mb-2 mt-2">
+              ${responsibilityItems}
+            </ul>
+            <div>
+              Reassign or remove these relationships under
+              <strong>Manage managers</strong>, then save Employee access again.
+            </div>
+          `,
+        );
+
+        showDashboardToast(
+          "warning",
+          "Reporting responsibilities must be resolved",
+          `${escapeHtml(employeeName)} still manages ${responsibilities.length} employee${responsibilities.length === 1 ? "" : "s"}.`,
+        );
+
+        return;
+      }
+    } catch (error) {
+      console.error(
+        "Error validating reporting responsibilities before access downgrade:",
+        error,
+      );
+
+      showPageAlert(
+        "danger",
+        error?.message ||
+        "BexHR could not verify this employee's reporting responsibilities. Access was not changed.",
+      );
+
+      return;
+    }
+  }
+
+  if (isCurrentSignedInEmployeeRecord(employee)) {
+    showPageAlert(
+      "warning",
+      "You cannot change your own dashboard access from the employee list.",
+    );
+    return;
+  }
+
+  const originalButtonHtml = saveButton?.innerHTML || "";
+
+  try {
+    if (saveButton) {
+      saveButton.disabled = true;
+      saveButton.innerHTML = `
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+        Saving access
+      `;
+    }
+
+    const result = await syncEmployeeFormRoleToDashboardRoute(
+      employee.id,
+      selectedRole,
+    );
+
+    // LIVE EMPLOYEE ACCESS + RESPONSIBILITY BADGE REFRESH
+    // Reload People badges first, then immediately recalculate the signed-in
+    // HR user's Primary/Secondary Manager responsibility pills.
+    // This matches the standalone Manager behaviour and removes the need
+    // for a manual browser refresh.
+    await refreshEmployeeWorkspace();
+
+    await updateHrAccountResponsibilityTitle(
+      state.currentProfile || {},
+    );
+
+    closeHrEmployeeAccessModal();
+
+    const accessLabel =
+      selectedRole === "hr"
+        ? "HR Standard"
+        : formatEmployeeSystemRoleLabel(selectedRole);
+
+    const message = result?.message ||
+      `${accessLabel} access was saved. Existing Primary and Secondary Manager assignments were preserved.`;
+
+    showPageAlert(result?.profile_found === false ? "warning" : "success", message);
+    showDashboardToast(
+      result?.profile_found === false ? "warning" : "success",
+      "Employee access updated",
+      message,
+    );
+  } catch (error) {
+    console.error("saveHrEmployeeAccessFromModal error:", error);
+    showPageAlert(
+      "danger",
+      error?.message || "Employee access could not be updated.",
+    );
+  } finally {
+    if (saveButton) {
+      saveButton.disabled = false;
+      saveButton.innerHTML = originalButtonHtml;
+    }
+  }
 }
 
 // MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1F FIX
@@ -32412,6 +35317,87 @@ async function handleEmployeeSave() {
     return;
   }
 
+  // =========================================================
+// MANAGER DOWNGRADE / REPORTING RESPONSIBILITY PARITY - v1.0.0
+//
+// Apply the same reporting-responsibility protection used by
+// Manage Employee Access when HR changes System Role through
+// the full Employee Edit form.
+//
+// Business rule:
+// - ordinary biodata edits remain unrestricted;
+// - a role change to Employee is allowed only when this person
+//   no longer has active Primary / Secondary Manager duties;
+// - existing reporting relationships are never removed silently.
+// =========================================================
+if (state.currentEditingEmployee) {
+  const savedSystemRole = normaliseHrBusinessRole(
+    state.currentEditingEmployee.system_role || "",
+  );
+
+  const selectedSystemRole = normaliseHrBusinessRole(
+    getSelectedEmployeeSystemRoleValue(),
+  );
+
+  const isDowngradingToEmployee =
+    selectedSystemRole === "employee" &&
+    selectedSystemRole !== savedSystemRole;
+
+  if (isDowngradingToEmployee) {
+    try {
+      const responsibilities =
+        await getActiveReportingResponsibilitiesForManager(
+          state.currentEditingEmployee.id,
+        );
+
+      if (responsibilities.length) {
+        const employeeName =
+          getSupportingManagerDisplayName(
+            state.currentEditingEmployee,
+          );
+
+        const responsibilitySummary = responsibilities
+          .map(
+            (responsibility) =>
+              `${responsibility.managedEmployeeName} (${responsibility.managerType})`,
+          )
+          .join(", ");
+
+        showPageAlert(
+          "warning",
+          `<strong>${escapeHtml(employeeName)} cannot be changed to Employee yet.</strong>
+          This person still has active reporting responsibilities:
+          ${escapeHtml(responsibilitySummary)}.
+          Reassign or remove these relationships under Manage managers first.`,
+        );
+
+        showDashboardToast(
+          "warning",
+          "Reporting responsibilities must be resolved",
+          `${employeeName} still manages ${responsibilities.length} employee${
+            responsibilities.length === 1 ? "" : "s"
+          }.`,
+        );
+
+        return;
+      }
+    } catch (error) {
+      console.error(
+        "Error validating reporting responsibilities before employee-form role downgrade:",
+        error,
+      );
+
+      showPageAlert(
+        "danger",
+        error?.message ||
+          "BexHR could not verify this employee's reporting responsibilities. The role was not changed.",
+      );
+
+      return;
+    }
+  }
+}
+
   // EMPLOYEE BIODATA COMPLETION - STEP 3G
   // Keep the existing employee line_manager / approver_email snapshot aligned
   // with the selected Primary Line Manager before validation and save.
@@ -32466,6 +35452,31 @@ async function handleEmployeeSave() {
 
   try {
     setEmployeeSaveLoading(true, isEditMode);
+
+    // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
+    // A registered HR Standard or HR Admin may create their own employee
+    // record even though their protected HR role is not assignable here.
+    const currentProfileEmail = String(
+      state.currentProfile?.email || state.currentUser?.email || "",
+    ).trim().toLowerCase();
+
+    const currentProfileTenantId = String(
+      state.currentProfile?.tenant_id || "",
+    ).trim();
+
+    const isCurrentHrSelfOnboarding =
+      !isEditMode &&
+      normaliseHrBusinessRole(state.currentProfile?.role || "") === "hr" &&
+      Boolean(currentProfileEmail) &&
+      currentProfileEmail === employeePayload.work_email &&
+      Boolean(currentProfileTenantId) &&
+      currentProfileTenantId === String(employeePayload.tenant_id || "").trim();
+
+    if (isCurrentHrSelfOnboarding) {
+      // Preserve both HR Standard and HR Admin. The existing
+      // profiles.hr_access_level remains untouched.
+      employeePayload.system_role = "hr";
+    }
 
     const duplicateEmployee = await checkDuplicateEmployee(
       employeePayload.work_email,
@@ -32607,6 +35618,10 @@ async function handleEmployeeSave() {
         workEmail: employeePayload.work_email,
         fullName: savedEmployeeName,
         companyName: getCurrentTenantContext()?.companyName || "",
+
+        // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
+        // Supply the intended initial dashboard route.
+        systemRole: employeePayload.system_role || "employee",
       });
 
       // HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 2C
@@ -32642,28 +35657,19 @@ async function handleEmployeeSave() {
     // Save multiple reporting lines after the employee record exists.
     // Create mode needs the newly returned employee id before child rows can be inserted.
     // Called once — the delete-then-insert pattern handles both create and edit correctly.
-    await saveEmployeeReportingLinesForEmployee(savedEmployeeId);
+    // EMPLOYEE SAVE PERFORMANCE - STEP 1
+    // Independent child biodata tables save concurrently after the
+    // employee record exists. Validation and tenant controls remain unchanged.
+    await Promise.all([
+      saveEmployeeReportingLinesForEmployee(savedEmployeeId),
+      saveEmployeeAddressesForEmployee(savedEmployeeId),
+      saveEmployeeNextOfKinForEmployee(savedEmployeeId),
+      saveEmployeeEducationRecordsForEmployee(savedEmployeeId),
+      saveEmployeeDependantRecordsForEmployee(savedEmployeeId),
+    ]);
 
-    // EMPLOYEE BIODATA COMPLETION - STEP 4G
-    // Save Current/Permanent address records after the employee record exists.
-    await saveEmployeeAddressesForEmployee(savedEmployeeId);
-
-    // EMPLOYEE BIODATA COMPLETION - STEP 5G
-    // Save primary Next of Kin after the employee record exists.
-    await saveEmployeeNextOfKinForEmployee(savedEmployeeId);
-
-    // EMPLOYEE BIODATA COMPLETION - STEP 6C-3B
-    // Save structured Education / Academic Qualification records after the employee exists.
-    await saveEmployeeEducationRecordsForEmployee(savedEmployeeId);
-
-    // DYNAMIC EDUCATION SUGGESTIONS - STEP 1A
-    // Refresh School / Institution and Course suggestions after save so newly
-    // typed values become available for future employee records.
+    // Refresh Education suggestions after Education records have saved.
     await refreshEducationSuggestionLists();
-
-    // EMPLOYEE BIODATA COMPLETION - STEP 6D-3
-    // Save Beneficiaries / Dependants after the employee exists.
-    await saveEmployeeDependantRecordsForEmployee(savedEmployeeId);
 
     if (state.pendingFiles.length) {
       await uploadPendingFilesForEmployee(savedEmployeeId);
@@ -32672,8 +35678,6 @@ async function handleEmployeeSave() {
       renderAttachedDocuments();
     }
 
-    await loadAllEmployeeDocuments();
-    await loadAuthProfilesForLinkage();
 
     // EMPLOYEE LIST STABLE ORDER - STEP 1
     // Keep the saved employee in its serial Employee Number position,
@@ -32681,7 +35685,14 @@ async function handleEmployeeSave() {
     state.lastSavedEmployeeRecordId = String(savedEmployeeId || "").trim();
     state.lastSavedEmployeeRecordAction = isEditMode ? "updated" : "created";
 
-    await loadEmployees();
+    // EMPLOYEE SAVE PERFORMANCE - STEP 1
+    // Independent tenant-scoped reads run concurrently after the save.
+    await Promise.all([
+      loadAllEmployeeDocuments(),
+      loadAuthProfilesForLinkage(),
+      loadEmployees(),
+    ]);
+
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
     // Keep payroll-related employee dropdowns aligned after employee create/update.
@@ -33876,8 +36887,8 @@ function renderEmployeeBankDetailsTable(records) {
 
             <div class="hr-payment-record-actions">
               ${renderBexhrStatusPill(
-                formatStatusLabel(record.status || "Inactive"),
-              )}
+      formatStatusLabel(record.status || "Inactive"),
+    )}
 
               <button
                 type="button"
@@ -34933,9 +37944,11 @@ function renderPayslipEmailLogs(records = []) {
       </td>
 
       <td data-label="Status">
-        <span class="badge ${getPayslipEmailLogStatusBadgeClass(record.status)}">
-          ${escapeHtml(formatStatusLabel(record.status || "Pending"))}
-        </span>
+<!-- HR PAYROLL STATUS CHIP REFRESH - v1.0.1
+     Reuse the shared icon-based status language in delivery monitoring. -->
+${renderBexhrStatusPill(
+      formatStatusLabel(record.status || "Pending"),
+    )}
       </td>
 
       <td data-label="Sent At">
@@ -35416,7 +38429,7 @@ function getPayrollSummaryScopeText() {
   const scopeParts = [payCycleLabel, statusLabel];
 
   if (searchTerm) {
-    scopeParts.push(`Search: “${searchTerm}”`);
+    scopeParts.push(`Search: "${searchTerm}"`);
   }
 
   return `Scope: ${scopeParts.join(" • ")}`;
@@ -35755,8 +38768,8 @@ ${recentlyEditedPayrollBadgeHtml}
         <div class="bexhr-status-stack">
           ${renderBexhrStatusPill(formatStatusLabel(record.status))}
           ${renderBexhrStatusPill(
-            record.is_finalised ? "Finalised" : "Not Finalised"
-          )}
+          record.is_finalised ? "Finalised" : "Not Finalised"
+        )}
         </div>
       </td>
 
@@ -36263,7 +39276,7 @@ function buildPayrollPayslipBrandHeaderHtml({
     ? `<span class="bexhr-payslip-brand-mark bexhr-payslip-brand-mark--image" aria-hidden="true">
          <img src="assets/alpatech-flame.png" alt="" />
        </span>`
-    : `<span class="bexhr-payslip-brand-mark" aria-hidden="true">B</span>`;
+    : "";
 
   const referenceHtml = payrollReference
     ? `<span class="bexhr-payslip-reference">Ref: ${escapeHtml(payrollReference)}</span>`
@@ -36274,15 +39287,17 @@ function buildPayrollPayslipBrandHeaderHtml({
       <div class="bexhr-payslip-brand-block">
         <div class="bexhr-payslip-brand-line">
           ${brandMarkHtml}
-          <span class="bexhr-payslip-brand-divider" aria-hidden="true"></span>
+          ${brandMarkHtml
+      ? `<span class="bexhr-payslip-brand-divider" aria-hidden="true"></span>`
+      : ""}
           <div>
             <div class="bexhr-payslip-brand-name">${escapeHtml(brandName)}</div>
             <div class="bexhr-payslip-document-label">Confidential Payroll Payslip</div>
+            ${!isAlpatech && organizationName && normalizeText(organizationName) !== "bexhr"
+      ? `<div class="bexhr-payslip-platform-label">Prepared securely with BexHR</div>`
+      : ""}
           </div>
         </div>
-        ${!isAlpatech && organizationName && normalizeText(organizationName) !== "bexhr"
-          ? `<div class="bexhr-payslip-platform-label">Prepared securely with BexHR</div>`
-          : ""}
       </div>
 
       <div class="bexhr-payslip-document-meta">
@@ -36337,15 +39352,15 @@ function renderPayslipStructureItems(items = []) {
 
       <div class="bexhr-payslip-structure-grid">
         ${visibleItems
-          .map(
-            (item) => `
+      .map(
+        (item) => `
               <div class="bexhr-payslip-structure-item ${item.emphasis ? "bexhr-payslip-structure-item--emphasis" : ""}">
                 <span>${escapeHtml(item.label)}</span>
                 <strong>${escapeHtml(item.value)}</strong>
               </div>
             `,
-          )
-          .join("")}
+      )
+      .join("")}
       </div>
     </section>
   `;
@@ -36563,8 +39578,10 @@ function renderPayslipPreview(payrollRecord) {
       <footer class="bexhr-payslip-footer-note">
         <span class="bexhr-payslip-footer-icon" aria-hidden="true"><i class="bi bi-shield-lock"></i></span>
         <div>
+          <!-- HR OPERATIONAL PAYSLIP TENANT FOOTER - v1.0.0 -->
           <strong>Confidential employee document</strong>
           <p>This payslip is intended only for the named employee. Salary, deduction, and payroll information must be handled securely and shared only through approved company channels.</p>
+          <p>Generated from an authorised payroll record for ${escapeHtml(isAlpatechPayslip ? "ALPATECH" : organizationName || "BexHR")}.</p>
         </div>
       </footer>
     </article>
@@ -36674,7 +39691,7 @@ function printCurrentPayslipPreview() {
           .bexhr-payslip-brand-divider { width: 1px; height: 26px; background: rgba(255,255,255,.45); }
           .bexhr-payslip-brand-name { font-size: 15px; font-weight: 800; letter-spacing: .08em; }
           .bexhr-payslip-document-label, .bexhr-payslip-platform-label { font-size: 8px; opacity: .82; }
-          .bexhr-payslip-platform-label { margin: 4px 0 0 47px; }
+          .bexhr-payslip-platform-label { margin: 2px 0 0; }
           .bexhr-payslip-document-meta { display: grid; justify-items: end; gap: 2px; text-align: right; font-size: 8.5px; }
           .bexhr-payslip-document-meta strong { font-size: 12px; }
           .bexhr-payslip-status-badge {
@@ -39997,7 +43014,7 @@ function initHrSelfServiceOnFirstOpen() {
     );
 
     const employeeName = visibleLines[0] || "Employee";
-    const employeeContext = visibleLines.slice(1).join(" â€¢ ");
+    const employeeContext = visibleLines.slice(1).join(" • ");
 
     const identity = makeElement("div", "hr-payroll-record-identity");
     const avatar = makeElement(
@@ -40083,8 +43100,7 @@ function initHrSelfServiceOnFirstOpen() {
     metrics.forEach((metric) => {
       const item = makeElement(
         "div",
-        `hr-payroll-record-summary-item${
-          metric.isNet ? " hr-payroll-record-summary-item--net" : ""
+        `hr-payroll-record-summary-item${metric.isNet ? " hr-payroll-record-summary-item--net" : ""
         }`,
       );
       item.append(

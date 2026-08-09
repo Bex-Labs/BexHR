@@ -1,8 +1,8 @@
 // js/session.js
 
 (function () {
-  const IDLE_WARNING_MS = 25444 * 60 * 1000; // 25 minutes
-  const IDLE_TIMEOUT_MS = 30444 * 60 * 1000; // 30 minutes
+  const IDLE_WARNING_MS = 25 * 60 * 1000; // 25 minutes
+  const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
   const IDLE_WARNING_REMAINING_MINUTES = 5;
 
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1F-5
@@ -63,7 +63,7 @@
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, email, full_name, role, department, is_active, must_change_password",
+        "id, email, full_name, role, hr_access_level, department, is_active, must_change_password",
       )
       .eq("id", userId)
       .single();
@@ -394,6 +394,275 @@
     return data?.currentLevel === "aal2";
   }
 
+  // MULTI-WORKSPACE ACCESS - HR / MANAGER DECOUPLING - v1.0.1
+  // System access and reporting-line responsibility are independent.
+  // An HR user with an active Primary or Secondary Manager assignment may
+  // enter the Manager workspace without changing their HR system role.
+  async function hasManagerWorkspaceAccess(profile = {}) {
+    const role = String(profile.role || "").trim().toLowerCase();
+
+    if (role === "manager") return true;
+    if (role !== "hr") return false;
+
+    const supabase = getSupabaseClient();
+    if (!supabase) return false;
+
+    const { data, error } = await supabase.rpc(
+      "get_manager_reporting_line_assignments",
+    );
+
+    if (error) {
+      console.warn(
+        "Manager workspace availability could not be resolved:",
+        error.message || error,
+      );
+      return false;
+    }
+
+    return Array.isArray(data) && data.length > 0;
+  }
+
+  function getCurrentWorkspaceKey() {
+    const path = String(window.location.pathname || "").toLowerCase();
+    const params = new URLSearchParams(window.location.search || "");
+
+    if (path.endsWith("manager-dashboard.html")) return "manager";
+    if (
+      path.endsWith("hr-dashboard.html") &&
+      String(params.get("workspace") || "").toLowerCase() === "selfservice"
+    ) {
+      return "selfservice";
+    }
+    if (path.endsWith("hr-dashboard.html")) return "hr";
+    if (path.endsWith("employee-dashboard.html")) return "selfservice";
+    return "";
+  }
+
+  function closeWorkspaceSwitcher() {
+    document
+      .querySelectorAll("[data-bexhr-workspace-menu]")
+      .forEach((menu) => {
+        menu.hidden = true;
+      });
+
+    document
+      .querySelectorAll("[data-bexhr-workspace-trigger]")
+      .forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
+  }
+
+  function buildWorkspaceMenuOption(option, currentWorkspace) {
+    const isCurrent = option.key === currentWorkspace;
+    const activeClass = isCurrent ? " is-current" : "";
+    const currentText = isCurrent
+      ? '<span class="bexhr-workspace-menu-current">Current</span>'
+      : "";
+
+    return `
+      <a class="bexhr-workspace-menu-option${activeClass}"
+        href="${option.href}"
+        ${isCurrent ? 'aria-current="page"' : ""}>
+        <span class="bexhr-workspace-menu-option-icon">
+          <i class="${option.icon}" aria-hidden="true"></i>
+        </span>
+        <span class="bexhr-workspace-menu-option-copy">
+          <strong>${option.label}</strong>
+          <small>${option.description}</small>
+        </span>
+        ${currentText}
+      </a>
+    `;
+  }
+
+  // LIVE WORKSPACE SWITCHER ELIGIBILITY REFRESH - v1.0.0
+  // This function may run at startup and again after reporting assignments
+  // change. Existing menu markup is rebuilt without duplicating event handlers.
+  async function initialiseWorkspaceSwitcher(profile = {}) {
+    const trigger =
+      document.querySelector(".hr-modern-account-button") ||
+      document.querySelector(".manager-modern-account-button");
+
+    if (!trigger) return;
+
+    const accountArea = trigger.parentElement;
+    if (!accountArea) return;
+
+    // WORKSPACE SWITCHER PROFILE ACTION RESTORE - v1.0.0
+    // Preserve the account button's normal Profile action before temporarily
+    // converting it into a multi-workspace switcher trigger.
+    const currentOnclick = String(
+      trigger.getAttribute("onclick") || "",
+    ).trim();
+
+    if (
+      currentOnclick &&
+      !trigger.dataset.workspaceSwitcherOriginalOnclick
+    ) {
+      trigger.dataset.workspaceSwitcherOriginalOnclick = currentOnclick;
+    }
+
+    // The current HR page may already have had its inline action removed by an
+    // earlier switcher build. Keep the established HR Profile action recoverable.
+    if (
+      trigger.classList.contains("hr-modern-account-button") &&
+      !trigger.dataset.workspaceSwitcherOriginalOnclick
+    ) {
+      trigger.dataset.workspaceSwitcherOriginalOnclick =
+        "document.getElementById('hrTabProfileBtn')?.click()";
+    }
+
+    const role = String(profile.role || "").trim().toLowerCase();
+    const managerAvailable = await hasManagerWorkspaceAccess(profile);
+    const options = [];
+
+    if (role === "hr") {
+      const normalizedHrAccessLevel = String(profile.hr_access_level || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_");
+
+      const accessLabel = new Set([
+        "admin",
+        "hr_admin",
+        "tenant_admin",
+        "company_admin",
+      ]).has(normalizedHrAccessLevel)
+        ? "HR Administration"
+        : "HR Workspace";
+
+      options.push({
+        key: "hr",
+        label: accessLabel,
+        description: "People, HR review, payroll, and organisation setup.",
+        icon: "bi bi-people",
+        href: "hr-dashboard.html",
+      });
+    }
+
+    if (managerAvailable) {
+      options.push({
+        key: "manager",
+        label: "Manager Workspace",
+        description: "Assigned employees, leave decisions, and team coverage.",
+        icon: "bi bi-diagram-3",
+        href: "manager-dashboard.html",
+      });
+    }
+
+    accountArea
+      .querySelectorAll("[data-bexhr-workspace-menu]")
+      .forEach((existingMenu) => existingMenu.remove());
+
+    closeWorkspaceSwitcher();
+
+    if (options.length < 2) {
+      accountArea.classList.remove("bexhr-workspace-account-area");
+
+      delete trigger.dataset.workspaceSwitcherReady;
+      delete trigger.dataset.bexhrWorkspaceTrigger;
+
+      trigger.removeAttribute("aria-haspopup");
+      trigger.removeAttribute("aria-expanded");
+
+      const originalOnclick = String(
+        trigger.dataset.workspaceSwitcherOriginalOnclick || "",
+      ).trim();
+
+      if (originalOnclick) {
+        trigger.setAttribute("onclick", originalOnclick);
+      }
+
+      trigger.setAttribute(
+        "aria-label",
+        trigger.classList.contains("hr-modern-account-button")
+          ? "Open my profile"
+          : "Open my profile",
+      );
+
+      return;
+    }
+
+    accountArea.classList.add("bexhr-workspace-account-area");
+
+    trigger.removeAttribute("onclick");
+    trigger.dataset.workspaceSwitcherReady = "true";
+    trigger.dataset.bexhrWorkspaceTrigger = "true";
+    trigger.setAttribute("aria-haspopup", "menu");
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.setAttribute("aria-label", "Open workspace switcher");
+
+    const menu = document.createElement("div");
+    menu.className = "bexhr-workspace-menu";
+    menu.dataset.bexhrWorkspaceMenu = "true";
+    menu.setAttribute("role", "menu");
+    menu.hidden = true;
+
+    const currentWorkspace = getCurrentWorkspaceKey();
+
+    menu.innerHTML = `
+      <div class="bexhr-workspace-menu-heading">
+        <span>Switch workspace</span>
+        <small>Your access and reporting responsibilities stay unchanged.</small>
+      </div>
+      <div class="bexhr-workspace-menu-options">
+        ${options
+          .map((option) => buildWorkspaceMenuOption(option, currentWorkspace))
+          .join("")}
+      </div>
+    `;
+
+    accountArea.appendChild(menu);
+
+    menu.addEventListener("click", (event) => event.stopPropagation());
+
+    if (trigger.dataset.workspaceSwitcherBound !== "true") {
+      trigger.dataset.workspaceSwitcherBound = "true";
+
+      trigger.addEventListener("click", (event) => {
+        if (trigger.dataset.workspaceSwitcherReady !== "true") {
+          return;
+        }
+
+        const currentMenu = trigger.parentElement?.querySelector(
+          "[data-bexhr-workspace-menu]",
+        );
+
+        if (!currentMenu) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const willOpen = currentMenu.hidden;
+
+        closeWorkspaceSwitcher();
+
+        currentMenu.hidden = !willOpen;
+        trigger.setAttribute("aria-expanded", String(willOpen));
+      });
+    }
+
+    if (
+      document.documentElement.dataset.workspaceSwitcherEventsBound !== "true"
+    ) {
+      document.documentElement.dataset.workspaceSwitcherEventsBound = "true";
+
+      document.addEventListener("click", closeWorkspaceSwitcher);
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+
+        closeWorkspaceSwitcher();
+
+        const activeTrigger = document.querySelector(
+          "[data-bexhr-workspace-trigger]",
+        );
+
+        activeTrigger?.focus();
+      });
+    }
+  }
+
   /* =========================================================
      Flexible role matching
      ---------------------------------------------------------
@@ -428,7 +697,17 @@
       }
     }
 
-    if (!roleMatches(expectedRole, profile.role)) {
+    let hasExpectedAccess = roleMatches(expectedRole, profile.role);
+
+    if (
+      !hasExpectedAccess &&
+      expectedRole === "manager" &&
+      String(profile.role || "").trim().toLowerCase() === "hr"
+    ) {
+      hasExpectedAccess = await hasManagerWorkspaceAccess(profile);
+    }
+
+    if (!hasExpectedAccess) {
       redirectToRoleDashboard(profile.role);
       return null;
     }
@@ -451,6 +730,12 @@
 
     startIdleTimeout();
     attachAuthStateListener();
+
+    try {
+      await initialiseWorkspaceSwitcher(result.profile);
+    } catch (error) {
+      console.warn("Workspace switcher could not be initialised:", error);
+    }
 
     return result;
   }
@@ -486,5 +771,7 @@
     resetIdleTimer,
     logoutUser,
     redirectToRoleDashboard,
+    hasManagerWorkspaceAccess,
+    initialiseWorkspaceSwitcher,
   };
 })();

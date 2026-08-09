@@ -2209,17 +2209,38 @@ ${isCancelledAudit
   // presentation-only and keeps the existing authorised payroll query,
   // employee identity resolution, filters, and PDF action unchanged.
   function getSsPayslipCompanyName() {
+    let tenantContext = null;
+
+    try {
+      const rawTenantContext = window.localStorage.getItem(
+        "hrPayrollTenantContext",
+      );
+
+      tenantContext = rawTenantContext
+        ? JSON.parse(rawTenantContext)
+        : null;
+    } catch (error) {
+      console.warn(
+        "[SS] Payslip tenant context could not be read.",
+        error,
+      );
+    }
+
     const isAlpatech = isSsAlpatechWorkspace();
 
-    return (
+    return String(
+      tenantContext?.companyName ||
+      tenantContext?.company_name ||
+      tenantContext?.tenantName ||
+      tenantContext?.tenant_name ||
       ssState.currentProfile?.company_name ||
       ssState.currentProfile?.organization_name ||
       ssState.currentProfile?.tenant_name ||
       ssState.employeeRecord?.company_name ||
       ssState.employeeRecord?.organization_name ||
       ssState.employeeRecord?.tenant_name ||
-      (isAlpatech ? "ALPATECH" : "BexHR")
-    );
+      (isAlpatech ? "ALPATECH" : "BexHR"),
+    ).trim() || (isAlpatech ? "ALPATECH" : "BexHR");
   }
 
   function buildSsPayslipBrandHeaderHtml(record = {}) {
@@ -2230,14 +2251,16 @@ ${isCancelledAudit
       ? `<span class="bexhr-payslip-brand-mark bexhr-payslip-brand-mark--image" aria-hidden="true">
            <img src="assets/alpatech-flame.png" alt="" />
          </span>`
-      : `<span class="bexhr-payslip-brand-mark" aria-hidden="true">B</span>`;
+      : "";
 
     return `
       <header class="bexhr-payslip-letterhead ${isAlpatech ? "bexhr-payslip-letterhead--alpatech" : ""}">
         <div class="bexhr-payslip-brand-block">
           <div class="bexhr-payslip-brand-line">
             ${brandMarkHtml}
-            <span class="bexhr-payslip-brand-divider" aria-hidden="true"></span>
+            ${brandMarkHtml
+            ? `<span class="bexhr-payslip-brand-divider" aria-hidden="true"></span>`
+            : ""}
             <div>
               <div class="bexhr-payslip-brand-name">${ssEscapeHtml(brandName || "BexHR")}</div>
               <div class="bexhr-payslip-document-label">Confidential Payroll Payslip</div>
@@ -2744,9 +2767,10 @@ ${isCancelledAudit
       brandName: isAlpatech ? "ALPATECH" : companyName || "BexHR",
       companyName: companyName || (isAlpatech ? "ALPATECH" : "BexHR"),
       documentLabel: "Confidential Payroll Payslip",
-      footerText: isAlpatech
-        ? "Generated from an authorised Alpatech payroll record in BexHR."
-        : "Generated from an authorised payroll record in BexHR.",
+            // PAYSLIP TENANT-SCOPED PDF FOOTER - v1.0.0
+      // Use the resolved tenant/company name throughout the generated PDF.
+      // BexHR is used only when no tenant company name can be resolved.
+      footerText: `Generated from an authorised payroll record for ${isAlpatech ? "ALPATECH" : companyName || "BexHR"}.`,
       filePrefix: isAlpatech ? "Alpatech" : "",
       primaryRgb: isAlpatech ? [11, 95, 149] : [15, 118, 110],
       primaryDarkRgb: isAlpatech ? [8, 68, 109] : [17, 94, 89],
@@ -2789,6 +2813,9 @@ ${isCancelledAudit
     }
   }
 
+  // SHARED PAYSLIP PDF GENERIC B REMOVAL - v1.0.0
+  // Preserve Alpatech tenant-owned branding. Other tenants receive
+  // a clean company-name letterhead without a generic B badge.
   function drawSsPayslipPdfHeader(doc, branding = {}, alpatechLogoDataUrl = "") {
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 12;
@@ -2798,41 +2825,67 @@ ${isCancelledAudit
     doc.setFillColor(primary[0], primary[1], primary[2]);
     drawSsPdfRoundedRect(doc, margin, 10, width, 28, 4, "F");
 
-    doc.setFillColor(255, 255, 255);
-    drawSsPdfRoundedRect(doc, margin + 5, 15, 17, 18, 3, "F");
+    if (branding.isAlpatech) {
+      doc.setFillColor(255, 255, 255);
+      drawSsPdfRoundedRect(doc, margin + 5, 15, 17, 18, 3, "F");
 
-    if (branding.isAlpatech && alpatechLogoDataUrl) {
-      try {
-        doc.addImage(alpatechLogoDataUrl, "PNG", margin + 10, 17.5, 7, 13);
-      } catch (error) {
-        console.warn("[SS] Alpatech PDF logo could not be added.", error);
+      if (alpatechLogoDataUrl) {
+        try {
+          doc.addImage(alpatechLogoDataUrl, "PNG", margin + 10, 17.5, 7, 13);
+        } catch (error) {
+          console.warn("[SS] Alpatech PDF logo could not be added.", error);
+        }
+      } else {
+        doc.setTextColor(primary[0], primary[1], primary[2]);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(13);
+        doc.text("A", margin + 13.5, 26.8, { align: "center" });
       }
-    } else {
-      doc.setTextColor(primary[0], primary[1], primary[2]);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text(branding.isAlpatech ? "A" : "B", margin + 13.5, 26.8, { align: "center" });
     }
+
+    const brandTextX = branding.isAlpatech ? margin + 27 : margin + 5;
 
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
-    doc.text(String(branding.brandName || "BexHR"), margin + 27, 20.5);
+    doc.text(
+      String(branding.brandName || branding.companyName || "BexHR"),
+      brandTextX,
+      20.5,
+    );
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.text(String(branding.documentLabel || "Confidential Payroll Payslip"), margin + 27, 27);
+    doc.text(
+      String(branding.documentLabel || "Confidential Payroll Payslip"),
+      brandTextX,
+      27,
+    );
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    doc.text(String(branding.payCycle || "Payroll"), pageWidth - margin - 5, 19, { align: "right" });
+    doc.text(
+      String(branding.payCycle || "Payroll"),
+      pageWidth - margin - 5,
+      19,
+      { align: "right" },
+    );
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
-    doc.text(`Pay date: ${branding.payDate || "--"}`, pageWidth - margin - 5, 24.5, { align: "right" });
-    doc.text(`Status: ${branding.status || "Authorised"}`, pageWidth - margin - 5, 29.5, { align: "right" });
+    doc.text(
+      `Pay date: ${branding.payDate || "--"}`,
+      pageWidth - margin - 5,
+      24.5,
+      { align: "right" },
+    );
+    doc.text(
+      `Status: ${branding.status || "Authorised"}`,
+      pageWidth - margin - 5,
+      29.5,
+      { align: "right" },
+    );
   }
-
   function drawSsPayslipPdfInfoCard(doc, x, y, width, height, title, rows, branding, options = {}) {
     const border = branding.borderRgb;
     const soft = options.softRgb || branding.softRgb;

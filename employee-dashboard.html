@@ -11,15 +11,21 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+<link rel="stylesheet" href="css/styles.css" />
+  <!-- EMPLOYEE DASHBOARD APPROVED VISUAL REFRESH - v1.0.0 -->
+  <link rel="stylesheet" href="css/employee-dashboard-refresh.css?v=20260806" />
+  <!-- EMPLOYEE SYSTEM-WIDE LEAVE CARD PARITY - v1.0.1
+     Applies to the shared Employee workspace across all tenants.
+     Desktop Request Leave and My Leave History use controlled heights
+     with independent inner scrolling. Collapsing History shrinks only
+     History while Request Leave remains contained and scrollable.
 
-  <link rel="stylesheet" href="css/styles.css" />
-  <link rel="icon" type="image/x-icon" href="assets/favicon.png" />
-
+     Presentation only:
+     - no leave submission changes;
+     - no manager decision changes;
+     - no tenant or Alpatech-specific logic;
+     - no payroll, profile, Supabase, session or permission changes. -->
   <style>
-    /* EMPLOYEE DASHBOARD FINAL QA - STEP 1R-C
-       Mobile/tablet stays natural. Desktop uses a measured card height
-       so Request Leave and My Leave History align without allowing the
-       history records to stretch the whole page. */
     .employee-leave-history-scroll-area {
       max-height: none;
       overflow: visible;
@@ -27,62 +33,206 @@
     }
 
     @media (min-width: 1200px) {
-      .employee-leave-main-row {
-        align-items: flex-start;
-      }
-
-      .employee-leave-main-row>[class*="col-"] {
+      .employee-leave-main-row:has(#leaveHistoryCardCollapse:not(.d-none))>[class*="col-"] {
         display: flex;
+        align-self: stretch;
       }
 
-      .employee-leave-equal-card {
+      .employee-leave-main-row:has(#leaveHistoryCardCollapse:not(.d-none)) .employee-leave-equal-card {
         width: 100%;
+        height: clamp(520px, calc(100vh - 150px), 620px) !important;
+        min-height: 520px !important;
+        max-height: 620px !important;
+        overflow: hidden !important;
       }
 
-      .employee-leave-main-row[data-leave-card-height] .employee-leave-equal-card {
-        height: var(--employee-leave-card-height);
-      }
-
-      #employeeLeaveHistoryCard.employee-leave-equal-card {
+      .employee-leave-main-row:has(#leaveHistoryCardCollapse:not(.d-none)) .employee-leave-equal-card>.card-body {
+        display: flex;
+        flex-direction: column;
+        height: 100% !important;
+        min-height: 0 !important;
         overflow: hidden;
       }
 
-      #employeeLeaveHistoryCard>.card-body {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
+      .employee-leave-main-row:has(#leaveHistoryCardCollapse:not(.d-none)) .hr-self-service-card-heading {
+        flex: 0 0 auto;
+      }
+
+      .employee-leave-main-row:has(#leaveHistoryCardCollapse:not(.d-none)) #leaveRequestForm {
+        /* EMPLOYEE LEAVE INNER-SCROLL REPAIR - v1.0.2
+   Use a zero flex basis and zero working height so the form becomes
+   the scroll container rather than allowing its content to be clipped. */
+        flex: 1 1 0;
+        height: 0;
         min-height: 0;
+        max-height: 100%;
+        overflow-x: hidden;
+        overflow-y: auto !important;
+        overscroll-behavior: contain;
+        padding-right: 0.45rem;
+        scrollbar-width: thin;
+        scrollbar-color:
+          rgba(14, 116, 144, 0.36) rgba(148, 163, 184, 0.1);
+      }
+
+      #leaveRequestForm::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      #leaveRequestForm::-webkit-scrollbar-track {
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.1);
+      }
+
+      #leaveRequestForm::-webkit-scrollbar-thumb {
+        border: 2px solid transparent;
+        border-radius: 999px;
+        background: rgba(14, 116, 144, 0.36);
+        background-clip: padding-box;
       }
 
       #leaveHistoryCardCollapse:not(.d-none) {
         display: flex;
-        flex-direction: column;
         flex: 1 1 auto;
+        flex-direction: column;
         min-height: 0;
+        overflow: hidden;
+      }
+
+      #leaveHistoryCardCollapse:not(.d-none)>.d-flex {
+        flex: 0 0 auto;
       }
 
       .employee-leave-history-scroll-area {
         flex: 1 1 auto;
         min-height: 0;
-        max-height: none;
-        overflow-y: auto;
+        max-height: none !important;
         overflow-x: hidden;
+        overflow-y: auto;
         overscroll-behavior: contain;
-        padding-right: 0.25rem;
+        padding-right: 0.45rem;
       }
-    }
 
-    /* EMPLOYEE DASHBOARD FINAL QA - STEP 1R-C
-       Keep keyboard focus visible without creating a permanent card border. */
-    .employee-leave-history-scroll-area:focus {
-      outline: 2px solid rgba(13, 110, 253, 0.25);
-      outline-offset: 2px;
-      border-radius: 0.5rem;
+      /* =========================================================
+   EMPLOYEE SYSTEM-WIDE COMPACT LEAVE COLLAPSE - v1.0.4
+
+   When My Leave History is collapsed, both paired cards return
+   to compact header-only presentation for every Employee tenant.
+
+   Presentation only:
+   - no leave submission, calculation, status or approval changes;
+   - no tenant, RLS, Supabase or manager workflow changes.
+   ========================================================= */
+
+      .employee-leave-main-row:has(#leaveHistoryCardCollapse.d-none)>[class*="col-"] {
+        display: flex;
+        align-self: flex-start;
+      }
+
+      .employee-leave-main-row:has(#leaveHistoryCardCollapse.d-none) .employee-leave-equal-card {
+        width: 100%;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: hidden !important;
+      }
+
+      .employee-leave-main-row:has(#leaveHistoryCardCollapse.d-none) .employee-leave-equal-card>.card-body {
+        display: block;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: hidden !important;
+      }
+
+      .employee-leave-main-row:has(#leaveHistoryCardCollapse.d-none) #leaveRequestForm {
+        display: none !important;
+      }
+
+      .employee-leave-main-row:has(#leaveHistoryCardCollapse.d-none) #leaveHistoryCardCollapse {
+        display: none !important;
+      }
+
+      .employee-leave-main-row:has(#leaveHistoryCardCollapse.d-none) .hr-self-service-card-heading {
+        margin-bottom: 0 !important;
+      }
+
+      @media (max-width: 1199.98px) {
+        .employee-leave-equal-card {
+          height: auto !important;
+          min-height: 0 !important;
+          max-height: none !important;
+        }
+
+        #leaveRequestForm,
+        .employee-leave-history-scroll-area {
+          max-height: none !important;
+          overflow: visible;
+        }
+      }
+
+      /* Keep keyboard focus visible without a permanent card border. */
+      .employee-leave-history-scroll-area:focus {
+        outline: 2px solid rgba(13, 110, 253, 0.25);
+        outline-offset: 2px;
+        border-radius: 0.5rem;
+      }
+  </style>
+  <!-- BEXHR UNIVERSAL FAVICON SET - v1.0.0 -->
+  <link rel="icon" type="image/svg+xml" href="assets/favicon/favicon.svg?v=20260731" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png?v=20260731" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png?v=20260731" />
+  <link rel="icon" type="image/x-icon" href="assets/favicon/favicon.ico?v=20260731" />
+  <link rel="shortcut icon" href="assets/favicon/favicon.ico?v=20260731" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png?v=20260731" />
+  <link rel="manifest" href="assets/favicon/site.webmanifest?v=20260731" />
+  <meta name="msapplication-config" content="assets/favicon/browserconfig.xml?v=20260731" />
+  <meta name="theme-color" content="#087f7a" />
+  <style id="employeeWorkspaceFirstPaintGate">
+    body.employee-workspace-booting .bexhr-sidebar,
+    body.employee-workspace-booting main {
+      visibility: hidden !important;
     }
   </style>
 </head>
 
-<body class="dashboard-page bexhr-has-sidebar">
+<body class="dashboard-page bexhr-has-sidebar bexhr-employee-visual-refresh employee-workspace-booting"
+  aria-busy="true">
+  <!-- EMPLOYEE WORKSPACE LOADER PARITY - STEP 1
+       Uses the approved favicon-based BexHR loader while the authenticated
+       Employee Self-Service shell restores its saved workspace. -->
+  <div id="bexhrWorkspaceLoader" class="bexhr-workspace-loader" role="status" aria-live="polite" aria-atomic="true">
+    <div class="bexhr-workspace-loader-panel">
+      <div class="bexhr-workspace-loader-brand" aria-hidden="true">
+        <span class="bexhr-workspace-loader-logo-shell">
+          <img class="bexhr-workspace-loader-logo" src="assets/favicon/favicon.svg?v=20260731" alt="" />
+        </span>
+
+        <span class="bexhr-workspace-loader-brand-copy">
+          <strong>BexHR</strong>
+          <small>People and payroll workspace</small>
+        </span>
+      </div>
+
+      <div class="bexhr-workspace-loader-progress" aria-hidden="true">
+        <span class="bexhr-workspace-loader-spinner"></span>
+
+        <span class="bexhr-workspace-loader-progress-line">
+          <span></span>
+        </span>
+      </div>
+
+      <div class="bexhr-workspace-loader-message">
+        <strong>BexHR is preparing your workspace</strong>
+        <span>Restoring your last employee workspace securely.</span>
+      </div>
+
+      <div class="bexhr-workspace-loader-status">
+        <span class="bexhr-workspace-loader-status-dot" aria-hidden="true"></span>
+        <span>Checking your secure employee access</span>
+      </div>
+    </div>
+  </div>
   <!-- ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
        Pre-apply Alpatech branding from the already validated tenant context.
 
@@ -130,7 +280,7 @@
             sidebarBrand.className = "bexhr-sidebar-brand alpatech-sidebar-brand";
             sidebarBrand.innerHTML =
               '<span class="alpatech-brand-mark" aria-hidden="true">' +
-                '<img src="assets/alpatech-flame.png" alt="" />' +
+              '<img src="assets/alpatech-flame.png" alt="" />' +
               '</span>';
           }
 
@@ -138,22 +288,22 @@
           if (heroBrandingBlock) {
             heroBrandingBlock.innerHTML =
               '<div class="alpatech-hero-content">' +
-                '<div class="alpatech-hero-kicker-row">' +
-                  '<div class="alpatech-hero-brand" aria-label="Alpatech Employee Self-Service">' +
-                    '<span class="alpatech-brand-mark alpatech-hero-mark" aria-hidden="true">' +
-                      '<img src="assets/alpatech-flame.png" alt="" />' +
-                    '</span>' +
-                    '<span class="alpatech-brand-wordmark">ALPATECH</span>' +
-                  '</div>' +
-                  '<div class="hero-badge alpatech-hero-badge">' +
-                    '<i class="bi bi-person-badge"></i>' +
-                    ' Employee Self-Service' +
-                  '</div>' +
-                '</div>' +
-                '<h1 class="display-6 fw-bold mb-2">My Alpatech Self-Service</h1>' +
-                '<p class="mb-0 alpatech-hero-copy">' +
-                  'Access your Alpatech profile, leave requests, payroll history, payslip details, and authorised payslip PDFs from one secure workspace.' +
-                '</p>' +
+              '<div class="alpatech-hero-kicker-row">' +
+              '<div class="alpatech-hero-brand" aria-label="Alpatech Employee Self-Service">' +
+              '<span class="alpatech-brand-mark alpatech-hero-mark" aria-hidden="true">' +
+              '<img src="assets/alpatech-flame.png" alt="" />' +
+              '</span>' +
+              '<span class="alpatech-brand-wordmark">ALPATECH</span>' +
+              '</div>' +
+              '<div class="hero-badge alpatech-hero-badge">' +
+              '<i class="bi bi-person-badge"></i>' +
+              ' Employee Self-Service' +
+              '</div>' +
+              '</div>' +
+              '<h1 class="display-6 fw-bold mb-2">My Alpatech Self-Service</h1>' +
+              '<p class="mb-0 alpatech-hero-copy">' +
+              'Access your Alpatech profile, leave requests, payroll history, payslip details, and authorised payslip PDFs from one secure workspace.' +
+              '</p>' +
               '</div>';
           }
 
@@ -202,10 +352,11 @@
 
     <ul class="bexhr-sidebar-nav">
       <li>
-        <button class="bexhr-sidebar-item active" id="sidebarEmployeeProfileBtn"
-          onclick="document.getElementById('navProfileBtn')?.click()" title="Profile">
-          <i class="bi bi-person-circle"></i>
-          <span>Profile</span>
+        <button class="bexhr-sidebar-item active" id="sidebarEmployeeOverviewBtn"
+          onclick="document.getElementById('navOverviewBtn')?.click()" title="Overview">
+          <!-- Use the approved dashboard-style Overview icon. -->
+          <i class="bi bi-grid-1x2"></i>
+          <span>Overview</span>
         </button>
       </li>
 
@@ -227,72 +378,94 @@
     </ul>
 
     <div class="bexhr-sidebar-footer">
+      <!-- EMPLOYEE PROFILE FOOTER ACCESS - v1.0.0 -->
+      <button type="button" class="bexhr-sidebar-item" id="sidebarEmployeeProfileFooterBtn"
+        onclick="document.getElementById('navProfileBtn')?.click()" title="My Profile">
+        <i class="bi bi-person-circle"></i>
+        <span>My Profile</span>
+      </button>
+
       <!-- GUIDED HELP LAYER - EMPLOYEE STEP 1U
            Desktop sidebar access for the Employee operating guide.
            This is system-wide employee guidance. It does not change
            Alpatech branding, profile, leave, payroll, payslip, PDF,
            Supabase, session, or role/access behaviour. -->
-      <button type="button" class="bexhr-sidebar-item" id="openEmployeeOperatingGuideSidebarBtn"
-        title="Help Guide">
+      <button type="button" class="bexhr-sidebar-item" id="openEmployeeOperatingGuideSidebarBtn" title="Help Guide">
         <i class="bi bi-question-circle"></i>
         <span>Help Guide</span>
-      </button>
-
-      <button class="bexhr-sidebar-item" onclick="document.getElementById('logoutBtn')?.click()" title="Sign out">
-        <i class="bi bi-box-arrow-left"></i>
-        <span>Sign out</span>
       </button>
     </div>
   </nav>
   <main class="container py-4 py-lg-5">
-    <section class="dashboard-hero mb-4">
-      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-4">
+    <!-- EMPLOYEE MODERN APPLICATION HEADER - HR PARITY STEP 1 -->
+    <section class="employee-modern-app-header mb-4" aria-label="Employee workspace header">
+      <div class="employee-modern-app-header-main">
+        <div class="employee-modern-page-heading">
+          <div class="employee-modern-context-line">
+            <span class="employee-modern-company-name" id="employeeModernCompanyName">
+              BexHR Workspace
+            </span>
+
+            <span class="employee-modern-context-separator" aria-hidden="true"></span>
+
+            <span id="heroModuleValue">Overview</span>
+          </div>
+
+          <h1 id="employeeModernPageTitle">
+            Employee Overview
+          </h1>
+
+          <p id="employeeModernPageSubtitle">
+            Review your profile, HR requests, leave activity,
+            payroll information, and recent updates.
+          </p>
+        </div>
+
+        <div class="employee-modern-account-area">
+          <button type="button" class="employee-modern-account-button"
+            onclick="document.getElementById('navProfileBtn')?.click()" aria-label="Open my profile">
+            <span class="employee-modern-avatar-wrap">
+              <span class="dashboard-avatar" id="employeeInitials">
+                EM
+              </span>
+
+              <img id="employeeHeroImage" src="" alt="Employee profile avatar" class="dashboard-avatar d-none" />
+            </span>
+
+            <span class="employee-modern-account-copy">
+              <strong id="employeeModernUserName">
+                Employee
+              </strong>
+
+              <small id="heroRoleValue">
+                <span class="skeleton">&nbsp;</span>
+              </small>
+            </span>
+
+            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+          </button>
+
+          <button id="logoutBtn" type="button" class="btn btn-outline-secondary employee-modern-logout-button"
+            aria-label="Sign out" title="Sign out">
+            <i class="bi bi-box-arrow-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Existing IDs retained for current identity and tenant-branding logic. -->
+      <div class="d-none" aria-hidden="true">
+        <span id="employeeDisplayEmail">
+          <span class="skeleton skeleton-wide">&nbsp;</span>
+        </span>
+
         <div id="tenantHeroBrandingBlock">
           <div class="hero-badge">
             <i class="bi bi-person-badge"></i>
             Employee Self Service
           </div>
-          <h1 class="display-6 fw-bold mb-2">Employee Dashboard</h1>
-          <p class="mb-0" style="max-width: 760px">
-            View your profile information, monitor leave balances, submit
-            leave requests, review payroll history, view payslip details,
-            download payslip PDFs, and track manager leave decisions.
-          </p>
-        </div>
-
-        <div class="d-flex flex-column align-items-lg-end gap-2">
-          <div id="employeeInitials" class="dashboard-avatar" aria-label="Employee initials avatar">
-            EM
-          </div>
-
-          <img id="employeeHeroImage" src="" alt="Employee profile image" class="dashboard-avatar d-none" />
-
-          <button id="logoutBtn" class="btn btn-light dashboard-action-btn">
-            <i class="bi bi-box-arrow-right me-2"></i>Logout
-          </button>
-        </div>
-      </div>
-
-      <div class="hero-meta-grid">
-        <div class="hero-meta-card">
-          <div class="hero-meta-label">Signed in as</div>
-          <div class="hero-meta-value" id="employeeDisplayEmail">
-            <span class="skeleton skeleton-wide">&nbsp;</span>
-          </div>
-        </div>
-
-        <div class="hero-meta-card">
-          <div class="hero-meta-label">Role</div>
-          <div class="hero-meta-value" id="heroRoleValue"><span class="skeleton">&nbsp;</span></div>
-        </div>
-
-        <div class="hero-meta-card">
-          <div class="hero-meta-label">Current Module</div>
-          <div class="hero-meta-value" id="heroModuleValue">Profile</div>
         </div>
       </div>
     </section>
-
     <div id="pageAlert" class="alert d-none mb-4" role="alert"></div>
 
     <!-- EMPLOYEE UI CLEANUP - STEP 1K
@@ -311,7 +484,10 @@
           </div>
 
           <div class="d-flex flex-wrap gap-2">
-            <button type="button" class="btn btn-primary dashboard-action-btn" id="navProfileBtn">
+            <button type="button" class="btn btn-primary dashboard-action-btn" id="navOverviewBtn">
+              <i class="bi bi-grid me-2"></i>Overview
+            </button>
+            <button type="button" class="btn btn-outline-primary dashboard-action-btn" id="navProfileBtn">
               <i class="bi bi-person-circle me-2"></i>Profile
             </button>
 
@@ -336,102 +512,397 @@
       </div>
     </section>
 
-    <section id="profileSection" class="dashboard-section">
-      <section class="card dashboard-section-card mb-4">
-        <div class="card-body p-4 p-lg-5">
-          <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <!-- EMPLOYEE OPERATIONAL OVERVIEW - STEP 1
+         Presentation shell only. Existing profile, requests, leave,
+         payroll, authentication, tenant, and permission logic remain unchanged. -->
+    <section id="overviewSection" class="dashboard-section employee-operations-overview">
+      <!-- Compatibility IDs retained for existing or future bindings. -->
+      <div class="d-none" aria-hidden="true">
+        <span id="overviewEmployeeInitials">EM</span>
+        <span id="overviewEmployeeName">Employee</span>
+        <button type="button" id="overviewLogoutBtn" tabindex="-1"></button>
+      </div>
+      <section class="employee-overview-welcome mb-4">
+        <div class="employee-overview-welcome-kicker">
+          EMPLOYEE OPERATIONS
+        </div>
+
+        <h3 class="employee-overview-welcome-title mb-3">
+          Good to see you,
+          <span id="overviewWelcomeName">Employee</span>.
+        </h3>
+
+        <p class="employee-overview-welcome-copy mb-0">
+          Here is your current position across profile information,
+          HR requests, leave activity, and authorised payroll.
+        </p>
+      </section>
+
+      <section class="row g-3 mb-4" aria-label="Employee operational summary">
+        <div class="col-12 col-md-6 col-xl-3">
+          <article class="employee-overview-stat-card h-100">
+            <div class="employee-overview-stat-icon employee-overview-stat-icon-profile">
+              <i class="bi bi-person-check"></i>
+            </div>
+
             <div>
-              <h2 class="section-heading h4 mb-1">Profile Information</h2>
+              <div class="employee-overview-stat-label">
+                PROFILE STATUS
+              </div>
+
+              <div class="employee-overview-stat-value" id="overviewProfileStatus">
+                Available
+              </div>
+
+              <div class="employee-overview-stat-copy">
+                Review your employee and HR-held information
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-3">
+          <article class="employee-overview-stat-card h-100">
+            <div class="employee-overview-stat-icon employee-overview-stat-icon-requests">
+              <i class="bi bi-inbox"></i>
+            </div>
+
+            <div>
+              <div class="employee-overview-stat-label">
+                OPEN HR REQUESTS
+              </div>
+
+              <div class="employee-overview-stat-value" id="overviewOpenRequestCount">
+                0
+              </div>
+
+              <div class="employee-overview-stat-copy">
+                Requests currently awaiting completion
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-3">
+          <article class="employee-overview-stat-card h-100">
+            <div class="employee-overview-stat-icon employee-overview-stat-icon-leave">
+              <i class="bi bi-calendar-check"></i>
+            </div>
+
+            <div>
+              <div class="employee-overview-stat-label">
+                LEAVE REQUESTS
+              </div>
+
+              <div class="employee-overview-stat-value" id="overviewLeaveRequestCount">
+                0
+              </div>
+
+              <div class="employee-overview-stat-copy">
+                Submitted leave activity in your workspace
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-3">
+          <article class="employee-overview-stat-card h-100">
+            <div class="employee-overview-stat-icon employee-overview-stat-icon-payroll">
+              <i class="bi bi-receipt"></i>
+            </div>
+
+            <div>
+              <div class="employee-overview-stat-label">
+                LATEST PAY CYCLE
+              </div>
+
+              <div class="employee-overview-stat-value" id="overviewLatestPayCycle">
+                --
+              </div>
+
+              <div class="employee-overview-stat-copy">
+                Most recent authorised payroll record
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="employee-overview-action-panel">
+        <div class="employee-overview-action-heading">
+          <div class="employee-overview-action-icon">
+            <i class="bi bi-lightning-charge"></i>
+          </div>
+
+          <div>
+            <div class="employee-overview-action-kicker">
+              QUICK ACTIONS
+            </div>
+
+            <h3 class="h5 mb-0">
+              Continue your employee tasks
+            </h3>
+          </div>
+        </div>
+
+        <div class="employee-overview-action-grid">
+          <button type="button" class="employee-overview-action-btn" data-employee-overview-target="profile">
+            <i class="bi bi-person-circle"></i>
+            <span>View Profile</span>
+          </button>
+
+          <button type="button" class="employee-overview-action-btn" data-employee-overview-target="requests">
+            <i class="bi bi-flag"></i>
+            <span>Raise HR Request</span>
+          </button>
+
+          <button type="button" class="employee-overview-action-btn" data-employee-overview-target="leave">
+            <i class="bi bi-calendar-plus"></i>
+            <span>Request Leave</span>
+          </button>
+
+          <button type="button" class="employee-overview-action-btn" data-employee-overview-target="payroll">
+            <i class="bi bi-file-earmark-text"></i>
+            <span>View Payroll</span>
+          </button>
+        </div>
+      </section>
+    </section>
+    <section id="profileSection" class="dashboard-section d-none">
+      <!-- EMPLOYEE PROFILE HR-LAYOUT PARITY - v1.0.0
+       Presentation structure adapted from the approved HR My Profile layout.
+
+       Safety:
+       - retains every existing Employee profile data ID;
+       - retains profile image upload behaviour;
+       - retains the safe Remove Picture capability;
+       - retains all HR Profile Review and correction-request content below;
+       - does not change Supabase, tenant, role, session, employee or access logic. -->
+      <section class="card dashboard-section-card employee-profile-workspace-card mb-4">
+        <div class="card-body p-4 p-lg-5">
+
+          <div class="employee-profile-card-header mb-4">
+            <div>
+              <div class="employee-profile-eyebrow">My account</div>
+
+              <h2 class="section-heading h4 mb-1">
+                My Profile
+              </h2>
+
               <p class="section-subtext mb-0">
-                Your employee account details currently available in the
-                system.
+                Review your employee account, profile photo, reporting line,
+                and HR-held information.
               </p>
             </div>
 
-            <span class="badge text-bg-light border px-3 py-2">Employee Profile</span>
+            <span class="employee-profile-security-badge">
+              <i class="bi bi-shield-check"></i>
+              Secure employee profile
+            </span>
           </div>
 
-          <!-- EMPLOYEE PROFILE REVIEW - STEP 1C
-     Keep the profile image/upload card compact. The HR Profile Review tabs
-     can be taller on the right, but the left employee summary card should not
-     stretch into a large empty panel. -->
-          <div class="row g-4 align-items-start">
-            <div class="col-12 col-xl-4">
-              <!-- EMPLOYEE PROFILE REVIEW - STEP 1C
-     Compact employee summary card. Do not use h-100 or vertical centering here,
-     otherwise the upload area stretches awkwardly beside the HR review tabs. -->
-              <div class="info-tile text-center">
-                <div class="mb-3">
-                  <img id="profileImage" src="https://placehold.co/120x120?text=EMP" alt="Employee Profile"
-                    class="profile-avatar" />
+          <div class="employee-profile-layout">
+
+            <aside class="employee-profile-identity-panel" aria-label="Employee identity and profile photo">
+              <div class="employee-profile-avatar-stage">
+                <img id="profileImage" src="https://placehold.co/120x120?text=EMP" alt="Employee profile"
+                  class="employee-profile-main-image" />
+
+                <span class="employee-profile-avatar-status" title="Active profile" aria-label="Active profile"></span>
+              </div>
+
+              <h3 class="employee-profile-name mb-1" id="profileFullName">
+                Loading...
+              </h3>
+
+              <p class="employee-profile-job-title mb-3" id="profileJobTitle">
+                Employee
+              </p>
+
+              <span class="employee-profile-member-pill">
+                <i class="bi bi-person-check"></i>
+                Employee workspace member
+              </span>
+
+              <div class="employee-profile-meta">
+                <div id="profileDepartment">
+                  Department: --
                 </div>
 
-                <!-- EMPLOYEE PROFILE REVIEW - STEP 1C
-     Compact upload controls. This keeps the profile card as a summary area,
-     not a large upload panel. -->
-                <div class="d-grid gap-2 mb-2">
-                  <input type="file" id="profileImageInput" class="form-control form-control-sm"
-                    accept="image/png,image/jpeg,image/webp" />
-                  <!-- EMPLOYEE UI CLEANUP - STEP 1J
-       Upload button starts disabled because there is no selected image yet. -->
-                  <button type="button" id="saveProfileImageBtn"
-                    class="btn btn-sm btn-outline-primary dashboard-action-btn" disabled>
-                    <i class="bi bi-cloud-upload me-2"></i>Upload Picture
-                  </button>
-                </div>
-
-                <div class="small text-secondary mb-2">
-                  PNG, JPG, or WEBP only. Maximum 5MB.
-                </div>
-
-                <div class="info-tile-value mb-1" id="profileFullName">
-                  Loading...
-                </div>
-                <div class="info-tile-label mb-3" id="profileJobTitle">
-                  Employee
-                </div>
-
-                <div class="small text-secondary">
-                  <div id="profileDepartment">Department: --</div>
-                  <div id="profileEmployeeId">Employee ID: --</div>
+                <div id="profileEmployeeId">
+                  Employee ID: --
                 </div>
               </div>
-            </div>
 
-            <div class="col-12 col-xl-8">
-              <div class="row g-3">
+              <div class="employee-profile-photo-panel">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                  <div>
+                    <label for="profileImageInput" class="employee-profile-photo-title mb-1">
+                      Profile photo
+                    </label>
+
+                    <div class="employee-profile-photo-help">
+                      PNG, JPG, JPEG or WEBP. Maximum 5MB.
+                    </div>
+                  </div>
+
+                  <i class="bi bi-camera employee-profile-photo-icon" aria-hidden="true"></i>
+                </div>
+
+                <input type="file" id="profileImageInput" class="form-control"
+                  accept="image/png,image/jpeg,image/webp" />
+
+                <div class="d-grid gap-2 mt-2">
+                  <button type="button" id="saveProfileImageBtn" class="btn btn-secondary dashboard-action-btn"
+                    disabled>
+                    <i class="bi bi-cloud-arrow-up me-2"></i>
+                    Upload Picture
+                  </button>
+
+                  <!-- EMPLOYEE PROFILE SAFE REMOVE PICTURE
+                   Existing ID is retained so the current delete-image
+                   JavaScript continues to clear the stored image reference
+                   and restore the fallback presentation. -->
+                  <button type="button" id="removeProfileImageBtn" class="btn btn-outline-danger dashboard-action-btn"
+                    disabled>
+                    <i class="bi bi-trash3 me-2"></i>
+                    Remove Picture
+                  </button>
+                </div>
+              </div>
+            </aside>
+
+            <div class="employee-profile-details-panel">
+              <div class="employee-profile-details-heading mb-4">
+                <div>
+                  <div class="employee-profile-eyebrow">
+                    Account details
+                  </div>
+
+                  <h3 class="h5 fw-bold mb-1">
+                    Personal information
+                  </h3>
+
+                  <p class="text-secondary small mb-0">
+                    Your employee details are shown for reference. Submit a
+                    correction request when HR-held information appears incorrect.
+                  </p>
+                </div>
+
+                <span class="employee-profile-details-icon" aria-hidden="true">
+                  <i class="bi bi-person-vcard"></i>
+                </span>
+              </div>
+
+              <div class="row g-3 g-xl-4">
                 <div class="col-md-6">
-                  <label class="form-label fw-semibold">First Name</label>
+                  <label for="firstName" class="form-label fw-semibold">
+                    First Name
+                  </label>
+
                   <input type="text" id="firstName" class="form-control" readonly />
                 </div>
 
                 <div class="col-md-6">
-                  <label class="form-label fw-semibold">Last Name</label>
+                  <label for="lastName" class="form-label fw-semibold">
+                    Last Name
+                  </label>
+
                   <input type="text" id="lastName" class="form-control" readonly />
                 </div>
 
                 <div class="col-md-6">
-                  <label class="form-label fw-semibold">Email</label>
+                  <label for="emailAddress" class="form-label fw-semibold">
+                    Email
+                  </label>
+
                   <input type="email" id="emailAddress" class="form-control" readonly />
                 </div>
 
                 <div class="col-md-6">
-                  <label class="form-label fw-semibold">Phone</label>
+                  <label for="phoneNumber" class="form-label fw-semibold">
+                    Phone
+                  </label>
+
                   <input type="text" id="phoneNumber" class="form-control" readonly />
                 </div>
 
                 <div class="col-md-6">
-                  <label class="form-label fw-semibold">Role</label>
+                  <label for="roleName" class="form-label fw-semibold">
+                    Role
+                  </label>
+
                   <input type="text" id="roleName" class="form-control" readonly />
                 </div>
 
                 <div class="col-md-6">
-                  <label class="form-label fw-semibold">Manager / Supervisor</label>
+                  <label for="managerName" class="form-label fw-semibold">
+                    Manager / Supervisor
+                  </label>
+
                   <input type="text" id="managerName" class="form-control" readonly />
                 </div>
               </div>
+
+              <div class="employee-profile-system-note">
+                <i class="bi bi-lock"></i>
+
+                <span>
+                  Employee role, department, reporting line and HR-held records
+                  are managed through authorised HR processes.
+                </span>
+              </div>
+
+              <!-- EMPLOYEE ASSIGNED MANAGERS VISIBILITY - STEP 1
+     Read-only reporting-line visibility for the signed-in employee.
+     Data comes from the protected employee reporting-manager RPC.
+     No manager assignment, removal, delegation, or authority controls
+     are exposed through Employee Self-Service. -->
+              <section id="employeeReportingManagersCard" class="border rounded-4 bg-white p-3 p-lg-4 mt-4"
+                aria-labelledby="employeeReportingManagersTitle">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+                  <div class="d-flex align-items-start gap-3">
+                    <span class="employee-profile-details-icon flex-shrink-0" aria-hidden="true">
+                      <i class="bi bi-people"></i>
+                    </span>
+
+                    <div>
+                      <div class="employee-profile-eyebrow">
+                        Reporting line
+                      </div>
+
+                      <h3 id="employeeReportingManagersTitle" class="h5 fw-bold mb-1">
+                        Your Managers
+                      </h3>
+
+                      <p class="small text-secondary mb-0">
+                        View the Primary and Secondary Managers currently assigned to you.
+                      </p>
+                    </div>
+                  </div>
+
+                  <span class="bexhr-status-pill bexhr-status-pill--neutral">
+                    <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                    <span>Read-only</span>
+                  </span>
+                </div>
+
+                <div id="employeeReportingManagersLoading" class="small text-secondary py-2">
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Loading reporting managers...
+                </div>
+
+                <div id="employeeReportingManagersEmpty" class="alert alert-light border mb-0 d-none">
+                  No active reporting managers are currently assigned.
+                </div>
+
+                <div id="employeeReportingManagersList" class="d-grid gap-3 d-none"></div>
+              </section>
+
             </div>
           </div>
+
+          <!-- Keep the existing HR Profile Review block immediately below. -->
 
           <!-- EMPLOYEE PROFILE REVIEW - STEP 1D
                HR Profile Review sits below the whole profile summary row.
@@ -444,157 +915,42 @@
                    self-service professional and avoids a long, awkward form
                    block beside the profile picture. Employees can review
                    HR-held data but cannot edit controlled HR records here. -->
-            <div class="border rounded-4 bg-light-subtle p-3 p-lg-4 mt-4">
-              <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
-                <div>
-                  <h3 class="h6 fw-bold mb-1">HR Profile Review</h3>
-                  <p class="small text-secondary mb-0">
-                    Review the information HR currently holds for you.
-                  </p>
+            <div class="employee-profile-review-panel mt-4">
+              <!-- EMPLOYEE HR PROFILE REVIEW VISUAL PARITY - v1.0.0
+       Presentation structure only.
+       Existing review fields, tabs, correction requests and request history
+       remain unchanged. -->
+              <div class="employee-profile-review-header">
+                <div class="employee-profile-review-heading">
+                  <span class="employee-profile-review-icon" aria-hidden="true">
+                    <i class="bi bi-clipboard2-check"></i>
+                  </span>
+
+                  <div>
+                    <div class="employee-profile-eyebrow">
+                      HR-held information
+                    </div>
+
+                    <h3 class="h5 fw-bold mb-1">
+                      HR Profile Review
+                    </h3>
+
+                    <p class="small text-secondary mb-0">
+                      Review the employee information currently held by HR.
+                    </p>
+                  </div>
                 </div>
 
-                <span class="badge text-bg-light border">
+                <span class="employee-profile-review-status">
+                  <i class="bi bi-lock"></i>
                   Read-only
                 </span>
               </div>
 
-              <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
-     Employees must not edit HR-controlled records directly.
-     This opens a formal correction request form that saves to Supabase. -->
-              <div class="alert alert-info border small mb-3">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-                  <div>
-                    If any information is incorrect, submit a correction request for HR review.
-                  </div>
-
-                  <button type="button" id="openProfileCorrectionRequestBtn"
-                    class="btn btn-sm btn-outline-primary dashboard-action-btn align-self-start align-self-md-center">
-                    <i class="bi bi-flag me-1"></i>
-                    Request Correction
-                  </button>
-                </div>
-              </div>
-
-              <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
-     Real correction request form. It is hidden until the employee chooses
-     Request Correction. The employee can flag HR-held data without editing
-     the employee master record. -->
-              <div id="profileCorrectionRequestPanel" class="border rounded-4 bg-white p-3 p-lg-4 d-none mb-3">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
-                  <div>
-                    <h4 class="h6 fw-bold mb-1">Profile Correction Request</h4>
-                    <p class="small text-secondary mb-0">
-                      Select the field that looks incorrect and explain what HR should review.
-                    </p>
-                  </div>
-
-                  <span class="badge text-bg-light border">
-                    HR review required
-                  </span>
-                </div>
-
-                <form id="profileCorrectionRequestForm" novalidate>
-                  <div class="row g-3">
-                    <div class="col-12 col-lg-6">
-                      <label for="profileCorrectionFieldKey" class="form-label fw-semibold">
-                        Field to Correct <span class="text-danger">*</span>
-                      </label>
-                      <select id="profileCorrectionFieldKey" class="form-select" required>
-                        <option value="">Select field</option>
-                      </select>
-                      <div class="invalid-feedback">
-                        Please select the field HR should review.
-                      </div>
-                    </div>
-
-                    <div class="col-12 col-lg-6">
-                      <label for="profileCorrectionCurrentValue" class="form-label fw-semibold">
-                        Current Value Shown
-                      </label>
-                      <input type="text" id="profileCorrectionCurrentValue" class="form-control bg-light" readonly />
-                      <div class="form-text">
-                        Sensitive values, such as NIN, stay masked.
-                      </div>
-                    </div>
-
-                    <div class="col-12">
-                      <label for="profileCorrectionRequestedValue" class="form-label fw-semibold">
-                        Suggested Correction
-                      </label>
-                      <textarea id="profileCorrectionRequestedValue" class="form-control" rows="3" maxlength="500"
-                        placeholder="Enter the correct value if it is safe to share here. For NIN, do not type the full number; ask HR to contact you."></textarea>
-                      <div class="form-text">
-                        Optional for sensitive fields. Maximum 500 characters.
-                      </div>
-                    </div>
-
-                    <div class="col-12">
-                      <label for="profileCorrectionReason" class="form-label fw-semibold">
-                        Reason / Explanation <span class="text-danger">*</span>
-                      </label>
-                      <textarea id="profileCorrectionReason" class="form-control" rows="3" maxlength="500"
-                        placeholder="Briefly explain what is wrong and what HR should check." required></textarea>
-                      <div class="invalid-feedback">
-                        Please explain why this correction is needed.
-                      </div>
-                      <div class="form-text">
-                        Maximum 500 characters.
-                      </div>
-                    </div>
-
-                    <div class="col-12">
-                      <div id="profileCorrectionRequestStatus" class="alert d-none mb-0" role="status"></div>
-                    </div>
-
-                    <div class="col-12">
-                      <div class="d-flex flex-wrap gap-2">
-                        <button type="submit" id="submitProfileCorrectionRequestBtn"
-                          class="btn btn-secondary dashboard-action-btn" disabled>
-                          <i class="bi bi-send-check me-2"></i>
-                          Submit Correction Request
-                        </button>
-
-                        <button type="button" id="cancelProfileCorrectionRequestBtn"
-                          class="btn btn-outline-secondary dashboard-action-btn">
-                          <i class="bi bi-x-circle me-2"></i>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </form>
-              </div>
-
-              <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
-                   Employee-side request tracking.
-                   Employees can see their submitted correction requests, HR status,
-                   and HR response/comment. This is read-only and does not update
-                   HR master data. -->
-              <div id="profileCorrectionRequestHistoryPanel" class="border rounded-4 bg-white p-3 p-lg-4 mb-3">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
-                  <div>
-                    <h4 class="h6 fw-bold mb-1">My Correction Requests</h4>
-                    <p class="small text-secondary mb-0">
-                      Track correction requests you have submitted to HR and review HR responses.
-                    </p>
-                  </div>
-
-                  <button type="button" id="refreshProfileCorrectionRequestHistoryBtn"
-                    class="btn btn-sm btn-outline-primary dashboard-action-btn align-self-start">
-                    <i class="bi bi-arrow-clockwise me-1"></i>
-                    Refresh Status
-                  </button>
-                </div>
-
-                <div id="profileCorrectionRequestHistoryEmptyState" class="alert alert-light border mb-0">
-                  No profile correction requests submitted yet.
-                </div>
-
-                <div id="profileCorrectionRequestHistoryList" class="d-grid gap-2 d-none"></div>
-              </div>
-
-              <div class="d-flex flex-wrap gap-2 border-bottom pb-3 mb-3" role="tablist"
-                aria-label="HR profile review sections">
+              <!-- EMPLOYEE PROFILE REVIEW ORDER - v1.0.0
+                   Employees review HR-held information before opening
+                   correction actions or viewing request history. -->
+              <div class="employee-profile-review-tabs" role="tablist" aria-label="HR profile review sections">
                 <button type="button"
                   class="btn btn-sm btn-primary dashboard-action-btn employee-profile-review-tab-btn"
                   data-employee-profile-review-tab="core" aria-selected="true">
@@ -696,6 +1052,142 @@
                       Masked for privacy.
                     </div>
                   </div>
+
+                  <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+     Employees must not edit HR-controlled records directly.
+     This opens a formal correction request form that saves to Supabase. -->
+                  <div class="alert alert-info border small mb-3">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                      <div>
+                        If any information is incorrect, submit a correction request for HR review.
+                      </div>
+
+                      <button type="button" id="openProfileCorrectionRequestBtn"
+                        class="btn btn-sm btn-outline-primary dashboard-action-btn align-self-start align-self-md-center">
+                        <i class="bi bi-flag me-1"></i>
+                        Request Correction
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+     Real correction request form. It is hidden until the employee chooses
+     Request Correction. The employee can flag HR-held data without editing
+     the employee master record. -->
+                  <div id="profileCorrectionRequestPanel" class="border rounded-4 bg-white p-3 p-lg-4 d-none mb-3">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+                      <div>
+                        <h4 class="h6 fw-bold mb-1">Profile Correction Request</h4>
+                        <p class="small text-secondary mb-0">
+                          Select the field that looks incorrect and explain what HR should review.
+                        </p>
+                      </div>
+
+                      <span class="badge text-bg-light border">
+                        HR review required
+                      </span>
+                    </div>
+
+                    <form id="profileCorrectionRequestForm" novalidate>
+                      <div class="row g-3">
+                        <div class="col-12 col-lg-6">
+                          <label for="profileCorrectionFieldKey" class="form-label fw-semibold">
+                            Field to Correct <span class="text-danger">*</span>
+                          </label>
+                          <select id="profileCorrectionFieldKey" class="form-select" required>
+                            <option value="">Select field</option>
+                          </select>
+                          <div class="invalid-feedback">
+                            Please select the field HR should review.
+                          </div>
+                        </div>
+
+                        <div class="col-12 col-lg-6">
+                          <label for="profileCorrectionCurrentValue" class="form-label fw-semibold">
+                            Current Value Shown
+                          </label>
+                          <input type="text" id="profileCorrectionCurrentValue" class="form-control bg-light"
+                            readonly />
+                          <div class="form-text">
+                            Sensitive values, such as NIN, stay masked.
+                          </div>
+                        </div>
+
+                        <div class="col-12">
+                          <label for="profileCorrectionRequestedValue" class="form-label fw-semibold">
+                            Suggested Correction
+                          </label>
+                          <textarea id="profileCorrectionRequestedValue" class="form-control" rows="3" maxlength="500"
+                            placeholder="Enter the correct value if it is safe to share here. For NIN, do not type the full number; ask HR to contact you."></textarea>
+                          <div class="form-text">
+                            Optional for sensitive fields. Maximum 500 characters.
+                          </div>
+                        </div>
+
+                        <div class="col-12">
+                          <label for="profileCorrectionReason" class="form-label fw-semibold">
+                            Reason / Explanation <span class="text-danger">*</span>
+                          </label>
+                          <textarea id="profileCorrectionReason" class="form-control" rows="3" maxlength="500"
+                            placeholder="Briefly explain what is wrong and what HR should check." required></textarea>
+                          <div class="invalid-feedback">
+                            Please explain why this correction is needed.
+                          </div>
+                          <div class="form-text">
+                            Maximum 500 characters.
+                          </div>
+                        </div>
+
+                        <div class="col-12">
+                          <div id="profileCorrectionRequestStatus" class="alert d-none mb-0" role="status"></div>
+                        </div>
+
+                        <div class="col-12">
+                          <div class="d-flex flex-wrap gap-2">
+                            <button type="submit" id="submitProfileCorrectionRequestBtn"
+                              class="btn btn-secondary dashboard-action-btn" disabled>
+                              <i class="bi bi-send-check me-2"></i>
+                              Submit Correction Request
+                            </button>
+
+                            <button type="button" id="cancelProfileCorrectionRequestBtn"
+                              class="btn btn-outline-secondary dashboard-action-btn">
+                              <i class="bi bi-x-circle me-2"></i>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+
+                  <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+                   Employee-side request tracking.
+                   Employees can see their submitted correction requests, HR status,
+                   and HR response/comment. This is read-only and does not update
+                   HR master data. -->
+                  <div id="profileCorrectionRequestHistoryPanel" class="border rounded-4 bg-white p-3 p-lg-4 mb-3">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+                      <div>
+                        <h4 class="h6 fw-bold mb-1">My Correction Requests</h4>
+                        <p class="small text-secondary mb-0">
+                          Track correction requests you have submitted to HR and review HR responses.
+                        </p>
+                      </div>
+
+                      <button type="button" id="refreshProfileCorrectionRequestHistoryBtn"
+                        class="btn btn-sm btn-outline-primary dashboard-action-btn align-self-start">
+                        <i class="bi bi-arrow-clockwise me-1"></i>
+                        Refresh Status
+                      </button>
+                    </div>
+
+                    <div id="profileCorrectionRequestHistoryEmptyState" class="alert alert-light border mb-0">
+                      No profile correction requests submitted yet.
+                    </div>
+
+                    <div id="profileCorrectionRequestHistoryList" class="d-grid gap-2 d-none"></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -707,22 +1199,31 @@
     </section>
 
     <section id="leaveSection" class="dashboard-section d-none">
+      <!-- EMPLOYEE LEAVE STRUCTURAL HR MANAGER PARITY - v1.0.1
+           Approved self-service structure with Employee IDs preserved. -->
       <!-- EMPLOYEE UI CLEANUP - STEP 1L-C
            Leave Balances now has its own collapse behaviour.
            This is presentation-only and does not change leave balance data. -->
-      <section class="card dashboard-section-card mb-4" id="employeeLeaveBalancesCard">
+      <section class="card dashboard-section-card hr-self-service-card hr-self-service-balances-card mb-4"
+        id="employeeLeaveBalancesCard">
         <div class="card-body p-4 p-lg-5">
-          <div id="employeeLeaveBalancesHeader"
-            class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-            <div>
-              <h2 class="section-heading h4 mb-1">Leave Balances</h2>
-              <p class="section-subtext mb-0">
-                View your leave entitlement, used days, and remaining balance
-                by leave type.
-              </p>
+          <div id="employeeLeaveBalancesHeader" class="hr-card-heading hr-self-service-card-heading mb-4">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--self-service-balance" aria-hidden="true">
+                <i class="bi bi-pie-chart"></i>
+              </span>
+
+              <div class="hr-card-heading-copy">
+                <span class="hr-self-service-kicker">Leave availability</span>
+                <h2 class="section-heading h4 mb-1">Leave Balances</h2>
+                <p class="section-subtext mb-0">
+                  View your leave entitlement, used days, and remaining balance
+                  by leave type.
+                </p>
+              </div>
             </div>
 
-            <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+            <div class="hr-self-service-card-toolbar">
               <button type="button" id="toggleLeaveBalancesCardBtn"
                 class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
                 aria-expanded="false" aria-controls="leaveBalancesCardCollapse" title="Expand leave balances">
@@ -747,11 +1248,11 @@
               </button>
             </div>
 
-            <div id="leaveBalancesEmptyState" class="text-secondary">
+            <div id="leaveBalancesEmptyState" class="text-secondary hr-self-service-empty-state">
               No leave balances available yet.
             </div>
 
-            <div class="row g-4 d-none" id="leaveBalancesGrid"></div>
+            <div class="row g-4 d-none hr-self-service-balance-grid" id="leaveBalancesGrid"></div>
           </div>
         </div>
       </section>
@@ -759,19 +1260,27 @@
       <!-- EMPLOYEE UI CLEANUP - STEP 1N
            Latest Leave Decision now has card-level refresh and collapse.
            This is presentation/control only and does not change leave data. -->
-      <section class="card dashboard-section-card mb-4" id="employeeLatestDecisionCard">
+      <section class="card dashboard-section-card hr-self-service-card hr-self-service-decision-card mb-4"
+        id="employeeLatestDecisionCard">
         <div class="card-body p-4 p-lg-5">
-          <div id="employeeLatestDecisionHeader"
-            class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-            <div>
-              <h2 class="section-heading h4 mb-1">Latest Leave Decision</h2>
-              <p class="section-subtext mb-0">
-                Review the most recent leave decision recorded by your manager
-                or supervisor.
-              </p>
+          <div id="employeeLatestDecisionHeader" class="hr-card-heading hr-self-service-card-heading mb-4">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--self-service-decision" aria-hidden="true">
+                <i class="bi bi-calendar2-check"></i>
+              </span>
+
+              <div class="hr-card-heading-copy">
+                <span class="hr-self-service-kicker">Manager outcome</span>
+                <h2 class="section-heading h4 mb-1">
+                  Latest Leave Decision
+                </h2>
+                <p class="section-subtext mb-0">
+                  Review the most recent leave decision recorded by your manager.
+                </p>
+              </div>
             </div>
 
-            <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+            <div class="hr-self-service-card-toolbar">
               <button type="button" id="toggleLatestDecisionCardBtn"
                 class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
                 aria-expanded="false" aria-controls="latestDecisionCardCollapse" title="Expand latest leave decision">
@@ -795,11 +1304,11 @@
               </button>
             </div>
 
-            <div id="latestDecisionEmptyState" class="text-secondary">
+            <div id="latestDecisionEmptyState" class="text-secondary hr-self-service-empty-state">
               No leave decision updates available yet.
             </div>
 
-            <div id="latestDecisionCard" class="d-none">
+            <div id="latestDecisionCard" class="d-none hr-self-service-decision-content">
               <div class="info-tile">
                 <div class="d-flex flex-column flex-lg-row gap-3 gap-lg-5">
                   <div>
@@ -851,23 +1360,33 @@
       <!-- EMPLOYEE DASHBOARD FINAL QA - STEP 1R-B
            Desktop equal-height wrapper for Request Leave and My Leave History only.
            This keeps the two cards aligned while allowing Leave History to scroll internally. -->
-      <div class="row g-4 employee-leave-main-row">
+      <div class="row g-4 employee-leave-main-row ss-leave-main-row">
         <div class="col-12 col-xl-5">
           <!-- EMPLOYEE UI CLEANUP - STEP 1P-A
                Submit Leave Request should size to its form content instead
                of stretching to match the taller Leave History card. This
                removes the empty bottom space without changing submit logic. -->
-          <section class="card dashboard-section-card dashboard-form-card employee-leave-equal-card">
+          <section
+            class="card dashboard-section-card dashboard-form-card employee-leave-equal-card ss-leave-equal-card hr-self-service-card hr-self-service-request-card">
             <div class="card-body p-4 p-lg-5">
               <!-- EMPLOYEE UI CLEANUP - STEP 1P-E
                    Keeps the leave request heading clear and professional.
                    The detailed process guidance remains in What happens next,
                    so the form header stays compact. -->
-              <div class="mb-4">
-                <h2 class="section-heading h4 mb-1">Request Leave</h2>
-                <p class="section-subtext mb-0">
-                  Submit a leave request for your manager to review and approve.
-                </p>
+              <div class="hr-card-heading hr-self-service-card-heading mb-4">
+                <div class="hr-card-heading-main">
+                  <span class="hr-card-heading-icon hr-card-heading-icon--self-service-request" aria-hidden="true">
+                    <i class="bi bi-calendar2-plus"></i>
+                  </span>
+
+                  <div class="hr-card-heading-copy">
+                    <span class="hr-self-service-kicker">New request</span>
+                    <h2 class="section-heading h4 mb-1">Request Leave</h2>
+                    <p class="section-subtext mb-0">
+                      Submit a leave request for your manager to review and approve.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <form id="leaveRequestForm" novalidate>
@@ -937,7 +1456,7 @@
                      Uses the lower part of the form card for useful HR process
                      guidance instead of leaving the card visually under-weight
                      beside My Leave History. -->
-                <div class="border-top mt-4 pt-3">
+                <div class="hr-self-service-workflow-note mt-4">
                   <div class="small fw-semibold mb-2">What happens next?</div>
 
                   <div class="d-grid gap-2 small text-secondary">
@@ -967,19 +1486,27 @@
                My Leave History gets optional collapse after the history card cleanup.
                It stays expanded by default because recent leave decisions are
                high-value employee information. -->
-          <section class="card dashboard-section-card employee-leave-equal-card" id="employeeLeaveHistoryCard">
+          <section
+            class="card dashboard-section-card employee-leave-equal-card ss-leave-equal-card hr-self-service-card hr-self-service-history-card"
+            id="employeeLeaveHistoryCard">
             <div class="card-body p-4 p-lg-5">
-              <div id="employeeLeaveHistoryHeader"
-                class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-                <div>
-                  <h2 class="section-heading h4 mb-1">My Leave History</h2>
-                  <p class="section-subtext mb-0">
-                    Track submitted leave requests, manager decisions, and
-                    decision comments.
-                  </p>
+              <div id="employeeLeaveHistoryHeader" class="hr-card-heading hr-self-service-card-heading mb-4">
+                <div class="hr-card-heading-main">
+                  <span class="hr-card-heading-icon hr-card-heading-icon--self-service-history" aria-hidden="true">
+                    <i class="bi bi-clock-history"></i>
+                  </span>
+
+                  <div class="hr-card-heading-copy">
+                    <span class="hr-self-service-kicker">Request timeline</span>
+                    <h2 class="section-heading h4 mb-1">My Leave History</h2>
+                    <p class="section-subtext mb-0">
+                      Track submitted leave requests, manager decisions, and
+                      decision comments.
+                    </p>
+                  </div>
                 </div>
 
-                <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+                <div class="hr-self-service-card-toolbar">
                   <button type="button" id="toggleLeaveHistoryCardBtn"
                     class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
                     aria-expanded="true" aria-controls="leaveHistoryCardCollapse" title="Collapse leave history">
@@ -1010,11 +1537,11 @@
                   <!-- EMPLOYEE UI CLEANUP - STEP 1O-A
                        My Leave History now renders as employee-friendly request
                        cards instead of a horizontally scrolling admin-style table. -->
-                  <div id="leaveRequestsEmptyState" class="text-secondary">
+                  <div id="leaveRequestsEmptyState" class="text-secondary hr-self-service-empty-state">
                     No leave requests submitted yet.
                   </div>
 
-                  <div id="leaveRequestsList" class="d-none"></div>
+                  <div id="leaveRequestsList" class="d-none hr-self-service-record-list"></div>
                 </div>
               </div>
             </div>
@@ -1024,24 +1551,26 @@
     </section>
 
     <section id="payrollSection" class="dashboard-section d-none">
-      <section class="card dashboard-section-card mb-4">
+      <!-- EMPLOYEE CURRENT PAYROLL HR MANAGER PARITY - v1.0.0 -->
+      <section class="card dashboard-section-card hr-self-service-card hr-self-service-current-payroll-card mb-4"
+        id="employeeCurrentPayrollCard">
         <div class="card-body p-4 p-lg-5">
-          <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-            <div>
-              <h2 class="section-heading h4 mb-1">Current Payslip Summary</h2>
-              <p class="section-subtext mb-0">
-                Your latest authorised payslip summary for the most recent pay
-                cycle.
-              </p>
+          <div class="hr-card-heading hr-self-service-card-heading mb-4">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--self-service-payroll" aria-hidden="true">
+                <i class="bi bi-file-earmark-text"></i>
+              </span>
+
+              <div class="hr-card-heading-copy">
+                <span class="hr-self-service-kicker">Latest authorised pay</span>
+                <h2 class="section-heading h4 mb-1">Current Payslip Summary</h2>
+                <p class="section-subtext mb-0">
+                  Your latest authorised payslip summary for the most recent pay cycle.
+                </p>
+              </div>
             </div>
 
-            <!-- EMPLOYEE PAYROLL PRIVACY - STEP 1H
-                 Adds a bank-app style hide/show control for visible payroll figures.
-                 This only affects what the employee sees on screen. -->
-            <div class="d-flex flex-wrap gap-2 justify-content-md-end">
-              <!-- EMPLOYEE UI CLEANUP - STEP 1P-G
-     Makes the payroll figure visibility control icon-only to keep the
-     Current Payslip Summary header compact. This changes presentation only. -->
+            <div class="hr-self-service-card-toolbar">
               <button type="button"
                 class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center"
                 id="togglePayrollFiguresBtn" aria-pressed="false" aria-label="Hide payroll figures"
@@ -1049,9 +1578,6 @@
                 <i class="bi bi-eye-slash"></i>
               </button>
 
-              <!-- EMPLOYEE UI CLEANUP - STEP 1Q-A
-     Makes Refresh Payroll icon-only to match the payroll figure visibility
-     action. The title and aria-label keep the action clear and accessible. -->
               <button type="button"
                 class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center"
                 id="refreshPayrollBtn" aria-label="Refresh payroll" title="Refresh payroll">
@@ -1060,15 +1586,12 @@
             </div>
           </div>
 
-          <div id="currentPayrollEmptyState" class="text-secondary">
+          <div id="currentPayrollEmptyState" class="text-secondary hr-self-service-empty-state">
             No authorised payroll records available yet.
           </div>
 
-          <!-- EMPLOYEE UI CLEANUP - STEP 1Q-B
-               Polishes the Current Payslip Summary tiles into compact
-               employee self-service cards. Existing value IDs are preserved
-               so payroll loading, figure hiding, and refresh logic remain unchanged. -->
-          <div class="row g-3 d-none" id="currentPayrollSummaryGrid">
+          <div class="row g-3 d-none hr-self-service-payroll-summary-grid" id="currentPayrollSummaryGrid">
+
             <div class="col-md-6 col-xl-3">
               <div class="info-tile h-100">
                 <div class="d-flex justify-content-between align-items-start gap-3">
@@ -1076,7 +1599,6 @@
                     <div class="info-tile-label mb-1">Pay Cycle</div>
                     <div class="info-tile-value" id="currentPayCycle">--</div>
                   </div>
-
                   <i class="bi bi-calendar3 text-secondary"></i>
                 </div>
               </div>
@@ -1089,7 +1611,6 @@
                     <div class="info-tile-label mb-1">Gross Pay</div>
                     <div class="info-tile-value" id="currentGrossPay">--</div>
                   </div>
-
                   <i class="bi bi-cash-stack text-secondary"></i>
                 </div>
               </div>
@@ -1100,11 +1621,8 @@
                 <div class="d-flex justify-content-between align-items-start gap-3">
                   <div>
                     <div class="info-tile-label mb-1">Total Deductions</div>
-                    <div class="info-tile-value" id="currentTotalDeductions">
-                      --
-                    </div>
+                    <div class="info-tile-value" id="currentTotalDeductions">--</div>
                   </div>
-
                   <i class="bi bi-dash-circle text-secondary"></i>
                 </div>
               </div>
@@ -1117,7 +1635,6 @@
                     <div class="info-tile-label mb-1">Net Pay</div>
                     <div class="info-tile-value" id="currentNetPay">--</div>
                   </div>
-
                   <i class="bi bi-wallet2 text-secondary"></i>
                 </div>
               </div>
@@ -1130,20 +1647,23 @@
            Payroll History is the first employee card to receive the HR/Admin-style
            collapse treatment. This keeps long authorised payroll records contained
            without changing payroll data, payslip PDF generation, or breakdown logic. -->
-      <section class="card dashboard-section-card" id="employeePayrollHistoryCard">
+      <section class="card dashboard-section-card hr-self-service-card hr-self-service-payroll-history-card"
+        id="employeePayrollHistoryCard">
         <div class="card-body p-4 p-lg-5">
-          <div id="employeePayrollHistoryHeader"
-            class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-4">
-            <!-- EMPLOYEE UI CLEANUP - STEP 1Q-C
-     Tightens the collapsed Payroll History card copy so employees know
-     what is inside without overloading the card header. This is wording
-     only; payroll records, breakdowns, filters, and PDF download are unchanged. -->
-            <div>
-              <h2 class="section-heading h4 mb-1">Payroll History</h2>
-              <p class="section-subtext mb-0">
-                Review authorised pay cycles, payslip details, and downloadable
-                payslip PDFs.
-              </p>
+          <!-- EMPLOYEE PAYROLL HR MANAGER PRESENTATION PARITY - v1.0.0 -->
+          <div id="employeePayrollHistoryHeader" class="hr-card-heading hr-self-service-card-heading mb-4">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--self-service-history-payroll" aria-hidden="true">
+                <i class="bi bi-receipt-cutoff"></i>
+              </span>
+
+              <div class="hr-card-heading-copy">
+                <span class="hr-self-service-kicker">Authorised records</span>
+                <h2 class="section-heading h4 mb-1">Payroll History</h2>
+                <p class="section-subtext mb-0">
+                  Review authorised pay cycles and open or download payslip records.
+                </p>
+              </div>
             </div>
 
             <button type="button" id="togglePayrollHistoryCardBtn"
@@ -1162,7 +1682,8 @@
                  Keeps Payroll History filters employee-friendly and compact.
                  Existing input/button IDs are preserved so search, date filtering,
                  and clear-filter logic continue to work unchanged. -->
-            <div class="border rounded-3 bg-light-subtle p-3 mb-4">
+            <!-- EMPLOYEE PAYROLL FILTER PANEL PARITY - v1.0.0 -->
+            <div class="border rounded-3 bg-light-subtle p-3 mb-4 hr-self-service-filter-panel">
               <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
                 <div>
                   <div class="small fw-semibold">Filter payroll records</div>
@@ -1255,7 +1776,7 @@
     </button>
   </main>
 
-    <!-- GUIDED HELP LAYER - EMPLOYEE STEP 1U
+  <!-- GUIDED HELP LAYER - EMPLOYEE STEP 1U
        On-demand Employee workflow guide.
 
        Professional UX rule:
@@ -1263,115 +1784,273 @@
        - Help is available when needed.
        - This does not change profile, leave, payroll, payslip, PDF,
          Alpatech branding, tenant, Supabase, session, or access logic. -->
-  <div id="employeeOperatingGuideModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
-    style="z-index: 1058; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
-    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
-      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 920px; max-height: 92vh; overflow: auto;">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
-          <div>
-            <h2 class="h4 mb-1">How this Employee dashboard works</h2>
-            <p class="text-secondary mb-0">
-              A quick guide to your employee self-service tasks.
-            </p>
+
+  <!-- EMPLOYEE OPERATING GUIDE LINKED WORKFLOW - v1.1.0
+     Uses the same operational guide pattern as the authoritative
+     HR and Manager dashboards.
+
+     Workflow:
+     - Overview routes through navOverviewBtn;
+     - Leave routes through navLeaveBtn;
+     - Payroll routes through navPayrollBtn;
+     - My Profile routes through navProfileBtn.
+
+     Safety:
+     - retains all existing modal and close-control IDs;
+     - routes through existing Employee navigation buttons;
+     - does not duplicate showSection(), workspace memory or access logic;
+     - does not change profile, correction-request, leave, payroll,
+       payslip, PDF, Supabase, session, role, tenant or Alpatech behaviour. -->
+  <div id="employeeOperatingGuideModal"
+    class="d-none position-fixed top-0 start-0 w-100 h-100 employee-operating-guide-modal" role="dialog"
+    aria-modal="true" aria-labelledby="employeeOperatingGuideTitle" aria-describedby="employeeOperatingGuideSubtitle"
+    aria-hidden="true">
+    <div class="employee-operating-guide-stage">
+      <div class="employee-operating-guide-shell" tabindex="-1">
+        <header class="employee-operating-guide-header">
+          <div class="employee-operating-guide-heading">
+            <span class="employee-operating-guide-heading-icon" aria-hidden="true">
+              <i class="bi bi-compass"></i>
+            </span>
+
+            <div>
+              <span class="employee-operating-guide-kicker">
+                Employee workspace guide
+              </span>
+
+              <h2 id="employeeOperatingGuideTitle">
+                Find the right place for each task
+              </h2>
+
+              <p id="employeeOperatingGuideSubtitle">
+                Open a workspace below to continue directly from the guide.
+              </p>
+            </div>
           </div>
 
-          <button type="button" id="closeEmployeeOperatingGuideBtn" class="btn btn-sm btn-outline-secondary"
-            aria-label="Close Employee operating guide">
+          <button type="button" id="closeEmployeeOperatingGuideBtn" class="employee-operating-guide-close"
+            aria-label="Close Employee workspace guide">
             <i class="bi bi-x-lg"></i>
           </button>
-        </div>
+        </header>
 
-        <div class="card-body p-4">
-          <div class="row g-4">
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-person-circle me-2 text-primary"></i>Profile
-                </div>
-                <div class="small text-secondary">
-                  View your employee account details, profile photo, manager, role, department, and HR-held profile information.
-                </div>
-              </div>
-            </div>
+        <div class="employee-operating-guide-body">
+          <!-- The recommended starting point is a real workspace action,
+             not a decorative information card. -->
+          <button type="button" class="employee-guide-featured-card employee-guide-workspace-action"
+            data-employee-guide-target="navOverviewBtn" aria-label="Open Employee Overview workspace">
+            <span class="employee-guide-featured-icon" aria-hidden="true">
+              <i class="bi bi-grid-1x2"></i>
+            </span>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-flag me-2 text-primary"></i>Correction Requests
-                </div>
-                <div class="small text-secondary">
-                  Submit a correction request when HR-held profile information looks incorrect. HR reviews the request before records are changed.
-                </div>
-              </div>
-            </div>
+            <span class="employee-guide-featured-copy">
+              <span class="employee-guide-card-kicker">
+                Recommended starting point
+              </span>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-calendar-check me-2 text-primary"></i>Leave
-                </div>
-                <div class="small text-secondary">
-                  Review leave balances, submit leave requests, track request history, and check manager decisions.
-                </div>
-              </div>
-            </div>
+              <strong>Overview</strong>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-arrow-repeat me-2 text-primary"></i>Returned Leave
-                </div>
-                <div class="small text-secondary">
-                  If a manager returns a leave request for clarification, edit the returned request and resubmit it for review.
-                </div>
-              </div>
-            </div>
+              <small>
+                Review your profile status, open HR requests, leave activity,
+                latest authorised pay cycle and employee quick actions.
+              </small>
+            </span>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-cash-coin me-2 text-primary"></i>Payroll
-                </div>
-                <div class="small text-secondary">
-                  View your latest authorised payslip summary and refresh payroll information when needed.
-                </div>
-              </div>
-            </div>
+            <span class="employee-guide-featured-action">
+              <strong>Open Overview</strong>
+              <i class="bi bi-arrow-right"></i>
+            </span>
+          </button>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-file-earmark-pdf me-2 text-primary"></i>Payslip History
-                </div>
-                <div class="small text-secondary">
-                  Expand Payroll History to review authorised pay cycles, view payslip details, and download payslip PDFs.
-                </div>
-              </div>
+          <div class="employee-guide-section-heading">
+            <div>
+              <span class="employee-guide-section-kicker">
+                Employee self-service
+              </span>
+
+              <h3>Choose the workspace that matches your task</h3>
             </div>
           </div>
 
-          <div class="alert alert-light border rounded-4 mt-4 mb-0">
-            <div class="fw-semibold mb-1">Operating rule</div>
-            <div class="small text-secondary">
-              Use this dashboard for your own self-service only. Contact HR if your profile, leave eligibility, or payroll information appears incorrect.
-            </div>
+          <div class="employee-guide-workspace-grid employee-guide-workspace-grid-four">
+
+            <button type="button" class="employee-guide-workspace-card employee-guide-workspace-action"
+              data-employee-guide-target="navLeaveBtn" aria-label="Open Employee Leave workspace">
+              <span class="employee-guide-workspace-icon employee-guide-workspace-icon-leave" aria-hidden="true">
+                <i class="bi bi-calendar-check"></i>
+              </span>
+
+              <span class="employee-guide-workspace-copy">
+                <strong>Leave</strong>
+
+                <small>
+                  Review leave balances, submit requests, track decisions
+                  and amend requests returned for clarification.
+                </small>
+
+                <span class="employee-guide-open-action">
+                  Open workspace
+                  <i class="bi bi-arrow-up-right"></i>
+                </span>
+              </span>
+            </button>
+
+            <button type="button" class="employee-guide-workspace-card employee-guide-workspace-action"
+              data-employee-guide-target="navPayrollBtn" aria-label="Open Employee Payroll workspace">
+              <span class="employee-guide-workspace-icon employee-guide-workspace-icon-payroll" aria-hidden="true">
+                <i class="bi bi-cash-coin"></i>
+              </span>
+
+              <span class="employee-guide-workspace-copy">
+                <strong>Payroll</strong>
+
+                <small>
+                  Review authorised payroll summaries, payroll history,
+                  payslip details and available payslip PDFs.
+                </small>
+
+                <span class="employee-guide-open-action">
+                  Open workspace
+                  <i class="bi bi-arrow-up-right"></i>
+                </span>
+              </span>
+            </button>
+
+            <button type="button" class="employee-guide-workspace-card employee-guide-workspace-action"
+              data-employee-guide-target="navProfileBtn" aria-label="Open My Profile workspace">
+              <span class="employee-guide-workspace-icon employee-guide-workspace-icon-profile" aria-hidden="true">
+                <i class="bi bi-person-circle"></i>
+              </span>
+
+              <span class="employee-guide-workspace-copy">
+                <strong>My Profile</strong>
+
+                <!-- EMPLOYEE ASSIGNED MANAGERS VISIBILITY - GUIDE PARITY
+     Keep the Employee Help Guide aligned with the read-only
+     Primary and Secondary Manager visibility available in My Profile.
+     Guidance text only; no reporting-line, role, tenant or Supabase changes. -->
+                <small>
+                  Review your account, photo, Primary and Secondary Managers,
+                  HR-held information and correction-request history.
+                </small>
+
+                <span class="employee-guide-open-action">
+                  Open workspace
+                  <i class="bi bi-arrow-up-right"></i>
+                </span>
+              </span>
+            </button>
           </div>
+
+          <!-- EMPLOYEE GUIDE SUGGESTED OPERATING FLOW - v1.0.0
+     Mirrors the authoritative HR/Manager guide pattern while using
+     the real Employee Self-Service journey.
+
+     Presentation guidance only:
+     - does not submit requests;
+     - does not open or change employee data;
+     - does not alter workspace routing, access or tenant behaviour. -->
+          <section class="employee-guide-flow-panel">
+            <div class="employee-guide-flow-heading">
+              <span class="employee-guide-flow-icon" aria-hidden="true">
+                <i class="bi bi-signpost-split"></i>
+              </span>
+
+              <div>
+                <span class="employee-guide-section-kicker">
+                  Suggested operating flow
+                </span>
+
+                <h3>From review to self-service completion</h3>
+              </div>
+            </div>
+
+            <div class="employee-guide-flow-steps">
+              <article class="employee-guide-flow-step">
+                <span class="employee-guide-flow-number">1</span>
+
+                <div>
+                  <strong>Review</strong>
+
+                  <p>
+                    Start on Overview and check your profile, HR requests,
+                    leave activity and latest authorised pay status.
+                  </p>
+                </div>
+              </article>
+
+              <article class="employee-guide-flow-step">
+                <span class="employee-guide-flow-number">2</span>
+
+                <div>
+                  <strong>Request</strong>
+
+                  <p>
+                    Open My Profile for an HR correction request, or Leave
+                    to submit a new leave request.
+                  </p>
+                </div>
+              </article>
+
+              <article class="employee-guide-flow-step">
+                <span class="employee-guide-flow-number">3</span>
+
+                <div>
+                  <strong>Track</strong>
+
+                  <p>
+                    Return to My Profile or Leave to review HR responses,
+                    manager decisions and request history.
+                  </p>
+                </div>
+              </article>
+
+              <article class="employee-guide-flow-step">
+                <span class="employee-guide-flow-number">4</span>
+
+                <div>
+                  <strong>Review Pay</strong>
+
+                  <p>
+                    Open Payroll to review authorised pay cycles, payslip
+                    details and available payslip PDFs.
+                  </p>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <aside class="employee-guide-task-help">
+            <span class="employee-guide-task-help-icon" aria-hidden="true">
+              <i class="bi bi-lightbulb"></i>
+            </span>
+
+            <div>
+              <strong>Not sure where a task belongs?</strong>
+
+              <p>
+                Start on Overview. Your status cards and quick actions will
+                direct you to My Profile, Leave or Payroll.
+              </p>
+            </div>
+          </aside>
         </div>
 
-        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
+        <footer class="employee-operating-guide-footer">
+          <span>
+            <i class="bi bi-shield-lock"></i>
+            Employee information remains protected by your existing access.
+          </span>
+
           <button type="button" id="closeEmployeeOperatingGuideFooterBtn"
             class="btn btn-outline-secondary dashboard-action-btn">
             Close Guide
           </button>
-        </div>
+        </footer>
       </div>
     </div>
   </div>
 
-  <!-- EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
-     First-paint restore for Employee workspace.
-     This prevents a visible Profile flash when refreshing from Leave or Payroll.
-     It reads only the lightweight workspace key written by employee-dashboard.js. -->
   <script>
     (function () {
       try {
@@ -1379,12 +2058,14 @@
           window.history.scrollRestoration = "manual";
         }
 
-        var workspace = sessionStorage.getItem("hrPayroll:lastEmployeeWorkspace:last") || "profile";
+        var workspace = sessionStorage.getItem("hrPayroll:lastEmployeeWorkspace:last") || "overview";
 
+        var overviewSection = document.getElementById("overviewSection");
         var profileSection = document.getElementById("profileSection");
         var leaveSection = document.getElementById("leaveSection");
         var payrollSection = document.getElementById("payrollSection");
 
+        var overviewBtn = document.getElementById("navOverviewBtn");
         var profileBtn = document.getElementById("navProfileBtn");
         var leaveBtn = document.getElementById("navLeaveBtn");
         var payrollBtn = document.getElementById("navPayrollBtn");
@@ -1402,14 +2083,42 @@
           button.classList.add("btn-primary");
         }
 
-        if (workspace === "leave" || workspace === "payroll") {
-          if (profileSection) profileSection.classList.add("d-none");
-          if (leaveSection) leaveSection.classList.toggle("d-none", workspace !== "leave");
-          if (payrollSection) payrollSection.classList.toggle("d-none", workspace !== "payroll");
+        if (
+          workspace === "overview" ||
+          workspace === "profile" ||
+          workspace === "leave" ||
+          workspace === "payroll"
+        ) {
+          if (overviewSection) {
+            overviewSection.classList.toggle("d-none", workspace !== "overview");
+          }
 
+          if (profileSection) {
+            profileSection.classList.toggle("d-none", workspace !== "profile");
+          }
+
+          if (leaveSection) {
+            leaveSection.classList.toggle("d-none", workspace !== "leave");
+          }
+
+          if (payrollSection) {
+            payrollSection.classList.toggle("d-none", workspace !== "payroll");
+          }
+
+          setInactive(overviewBtn);
           setInactive(profileBtn);
           setInactive(leaveBtn);
           setInactive(payrollBtn);
+
+          if (workspace === "overview") {
+            setActive(overviewBtn);
+            if (moduleValue) moduleValue.textContent = "Overview";
+          }
+
+          if (workspace === "profile") {
+            setActive(profileBtn);
+            if (moduleValue) moduleValue.textContent = "Profile";
+          }
 
           if (workspace === "leave") {
             setActive(leaveBtn);

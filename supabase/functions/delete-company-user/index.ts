@@ -1,6 +1,6 @@
 // ADMIN COMPLETE USER REMOVAL
 //
-// Permanently removes an unused/test company user and releases:
+// Permanently force-deletes a company user and releases:
 // - the company employee number;
 // - the employee work email;
 // - the Supabase Auth email.
@@ -9,7 +9,7 @@
 // - callable only by an authenticated active platform Admin;
 // - service-role key remains inside the Edge Function;
 // - self-deletion and Admin deletion are blocked;
-// - deletion is blocked when payroll/history records exist.
+// - dependent employee records are purged transactionally before deletion.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -44,29 +44,6 @@ function normaliseEmail(value: unknown): string {
 
 function normaliseRole(value: unknown): string {
   return cleanText(value).toLowerCase();
-}
-
-async function countLinkedRows(
-  supabaseAdmin: ReturnType<typeof createClient>,
-  tableName: string,
-  columnName: string,
-  employeeId: string,
-): Promise<number> {
-  const { count, error } = await supabaseAdmin
-    .from(tableName)
-    .select("id", {
-      count: "exact",
-      head: true,
-    })
-    .eq(columnName, employeeId);
-
-  if (error) {
-    throw new Error(
-      `Could not verify ${tableName} dependencies: ${error.message}`,
-    );
-  }
-
-  return Number(count || 0);
 }
 
 serve(async (req) => {
@@ -191,21 +168,21 @@ serve(async (req) => {
       });
     }
 
-// ADMIN COMPLETE USER REMOVAL - EMPLOYEE RESOLUTION
-// The browser supplies only the selected profile and confirmation email.
-// The privileged backend resolves the linked employee record securely.
-const profileId = cleanText(payload.profileId);
-const confirmationEmail = normaliseEmail(
-  payload.confirmationEmail,
-);
+    // ADMIN COMPLETE USER REMOVAL - EMPLOYEE RESOLUTION
+    // The browser supplies only the selected profile and confirmation email.
+    // The privileged backend resolves the linked employee record securely.
+    const profileId = cleanText(payload.profileId);
+    const confirmationEmail = normaliseEmail(
+      payload.confirmationEmail,
+    );
 
-if (!profileId || !confirmationEmail) {
-  return jsonResponse(400, {
-    success: false,
-    error:
-      "Profile ID and confirmation email are required.",
-  });
-}
+    if (!profileId || !confirmationEmail) {
+      return jsonResponse(400, {
+        success: false,
+        error:
+          "Profile ID and confirmation email are required.",
+      });
+    }
 
     if (profileId === callerUser.id) {
       return jsonResponse(400, {
@@ -260,49 +237,112 @@ if (!profileId || !confirmationEmail) {
     }
 
     const {
-  data: linkedEmployees,
-  error: targetEmployeeError,
-} = await supabaseAdmin
-  .from("employees")
-  .select(
-    "id, employee_number, tenant_id, user_id, work_email, first_name, last_name",
-  )
-  .eq("user_id", profileId);
+      data: linkedEmployees,
+      error: targetEmployeeError,
+    } = await supabaseAdmin
+      .from("employees")
+      .select(
+        "id, employee_number, tenant_id, user_id, work_email, first_name, last_name",
+      )
+      .eq("user_id", profileId);
 
-if (targetEmployeeError) {
-  throw new Error(
-    `Employee lookup failed: ${targetEmployeeError.message}`,
-  );
-}
+    if (targetEmployeeError) {
+      throw new Error(
+        `Employee lookup failed: ${targetEmployeeError.message}`,
+      );
+    }
 
-const employeeRecords = Array.isArray(linkedEmployees)
-  ? linkedEmployees
-  : [];
+    const employeeRecords = Array.isArray(linkedEmployees)
+      ? linkedEmployees
+      : [];
 
+// ADMIN FORCE DELETE - UNLINKED / ORPHAN USER
+//
+// A Platform Admin must also be able to remove a profile/login that no
+// longer has an employee record. This commonly occurs after test data,
+// failed provisioning, or an incomplete historical cleanup.
+//
+// There is no employee data to purge in this branch, so we clean up the
+// Auth account when it still exists, then remove the orphan profile.
 if (!employeeRecords.length) {
-  return jsonResponse(404, {
-    success: false,
-    error:
-      "No employee record is linked to the selected user account.",
+  const {
+    data: targetAuthData,
+    error: targetAuthLookupError,
+  } = await supabaseAdmin.auth.admin.getUserById(profileId);
+
+  if (targetAuthLookupError) {
+    const authLookupMessage =
+      cleanText(targetAuthLookupError.message).toLowerCase();
+
+    const authUserAlreadyMissing =
+      authLookupMessage.includes("user not found") ||
+      authLookupMessage.includes("not found");
+
+    if (!authUserAlreadyMissing) {
+      throw new Error(
+        `Unlinked Auth account lookup failed: ${targetAuthLookupError.message}`,
+      );
+    }
+  }
+
+  // Remove the Auth identity when one still exists.
+  if (targetAuthData?.user?.id) {
+    const { error: unlinkedAuthDeleteError } =
+      await supabaseAdmin.auth.admin.deleteUser(
+        profileId,
+        false,
+      );
+
+    if (unlinkedAuthDeleteError) {
+      throw new Error(
+        `Unlinked Auth account deletion failed: ${unlinkedAuthDeleteError.message}`,
+      );
+    }
+  }
+
+  // Remove the remaining profile/company-access record.
+  const { error: unlinkedProfileDeleteError } =
+    await supabaseAdmin
+      .from("profiles")
+      .delete()
+      .eq("id", profileId);
+
+  if (unlinkedProfileDeleteError) {
+    throw new Error(
+      `Unlinked profile cleanup failed: ${unlinkedProfileDeleteError.message}`,
+    );
+  }
+
+  return jsonResponse(200, {
+    success: true,
+    message:
+      "The unlinked company user was permanently deleted. The email is now reusable.",
+    deletedUser: {
+      profileId,
+      employeeId: null,
+      email: profileEmail,
+      employeeNumber: null,
+      tenantId: cleanText(targetProfile.tenant_id),
+    },
   });
 }
 
-if (employeeRecords.length > 1) {
-  return jsonResponse(409, {
-    success: false,
-    error:
-      "Multiple employee records are linked to this user. Resolve the duplicate linkage before permanent deletion.",
-  });
-}
+    if (employeeRecords.length > 1) {
+      return jsonResponse(409, {
+        success: false,
+        error:
+          "Multiple employee records are linked to this user. Resolve the duplicate linkage before permanent deletion.",
+      });
+    }
 
-const targetEmployee = employeeRecords[0];
-const employeeId = cleanText(targetEmployee.id);
+    const targetEmployee = employeeRecords[0];
+    const employeeId = cleanText(targetEmployee.id);
 
-if (!employeeId) {
-  throw new Error(
-    "The linked employee record does not contain a valid employee ID.",
-  );
-}
+    if (!employeeId) {
+      throw new Error(
+        "The linked employee record does not contain a valid employee ID.",
+      );
+    }
 
     if (
       cleanText(targetEmployee.user_id) !== profileId
@@ -325,82 +365,37 @@ if (!employeeId) {
       });
     }
 
-    const protectedDependencies = [
+    // ADMIN FORCE DELETE - TRANSACTIONAL EMPLOYEE PURGE
+    //
+    // All relational employee data is removed inside one PostgreSQL RPC.
+    // If any unknown restricted dependency prevents deletion, PostgreSQL
+    // rolls the entire purge back instead of leaving a partially deleted user.
+    const {
+      data: purgeResult,
+      error: purgeError,
+    } = await supabaseAdmin.rpc(
+      "admin_force_purge_employee",
       {
-        tableName: "payroll_master_records",
-        columnName: "employee_id",
-        label: "payroll master",
+        p_employee_id: employeeId,
       },
-      {
-        tableName: "payroll_records",
-        columnName: "employee_id",
-        label: "payroll",
-      },
-      {
-        tableName: "payroll_employee_overrides",
-        columnName: "employee_id",
-        label: "payroll override",
-      },
-      {
-        tableName: "payslip_email_logs",
-        columnName: "employee_id",
-        label: "payslip email",
-      },
-      {
-        tableName: "employee_reporting_lines",
-        columnName: "employee_id",
-        label: "reporting-line",
-      },
-      {
-        tableName: "employee_reporting_lines",
-        columnName: "manager_employee_id",
-        label: "manager reporting-line",
-      },
-    ];
+    );
 
-    const blockingRecords: string[] = [];
-
-    for (const dependency of protectedDependencies) {
-      const count = await countLinkedRows(
-        supabaseAdmin,
-        dependency.tableName,
-        dependency.columnName,
-        employeeId,
-      );
-
-      if (count > 0) {
-        blockingRecords.push(
-          `${dependency.label}: ${count}`,
-        );
-      }
-    }
-
-    if (blockingRecords.length) {
-      return jsonResponse(409, {
-        success: false,
-        error:
-          "This employee has protected payroll or reporting history and cannot be permanently deleted.",
-        dependencies: blockingRecords,
-      });
-    }
-
-    const { error: employeeDeleteError } =
-      await supabaseAdmin
-        .from("employees")
-        .delete()
-        .eq("id", employeeId);
-
-    if (employeeDeleteError) {
+    if (purgeError) {
       throw new Error(
-        `Employee deletion failed: ${employeeDeleteError.message}`,
+        `Employee force purge failed: ${purgeError.message}`,
       );
     }
 
-    // The employee deletion releases employee_number and work_email.
-    // Existing ON DELETE CASCADE rules remove unused child records such
-    // as automatically-created leave balances.
+    if (!purgeResult) {
+      throw new Error(
+        "Employee force purge did not return a result.",
+      );
+    }
 
-    const { error: authDeleteError } =
+// The transactional employee purge releases employee_number and work_email.
+// Supabase Auth cleanup below releases the login email separately.
+
+const { error: authDeleteError } =
       await supabaseAdmin.auth.admin.deleteUser(
         profileId,
         false,

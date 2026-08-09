@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Match the HR dashboard first-paint gate: reveal the exact remembered
     // Manager workspace as soon as profile, tenant branding, navigation,
     // title, and subtitle are restored. Longer team/leave loads continue progressively.
-    revealRestoredManagerWorkspace();
+
 
     initialiseDecisionModal();
     initialiseManagerLeaveDelegationUi();
@@ -52,7 +52,30 @@ document.addEventListener("DOMContentLoaded", async () => {
       openManagerEmployeeDetails(employeeId);
     };
 
-    await refreshManagerWorkspace();
+    // SYSTEM-WIDE WORKSPACE LOADER UPGRADE - MANAGER STEP 2
+    // Start the existing Manager data refresh, but do not keep the entire
+    // application shell hidden while team, leave, schedule, and coverage data load.
+    //
+    // Security and behaviour remain unchanged:
+    // - protectPage("manager") has already completed;
+    // - the latest authenticated Manager profile is already loaded;
+    // - tenant branding and remembered navigation are already restored;
+    // - existing reporting-line, leave, delegation, RLS, and Supabase logic
+    //   continues through refreshManagerWorkspace().
+    const managerWorkspaceRefreshPromise = refreshManagerWorkspace();
+
+    // Reveal the authenticated Manager shell immediately after profile,
+    // tenant branding, navigation, title, and subtitle are ready.
+    // Dashboard values and the responsibility badge continue progressively.
+    revealRestoredManagerWorkspace();
+
+    // Wait for the existing Manager refresh to finish so startup failures
+    // still flow through the surrounding error handler.
+    await managerWorkspaceRefreshPromise;
+
+    if (state.dom.managerRole) {
+      state.dom.managerRole.setAttribute("aria-busy", "false");
+    }
   } catch (error) {
     console.error("Error initialising manager dashboard:", error);
 
@@ -386,7 +409,7 @@ function getManagerWorkspaceMemoryKey() {
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Save only the active workspace key. Do not store leave, employee, team,
 // decision, comment, or manager-sensitive data in browser storage.
-// In-memory fallback ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â survives the page session even when
+// In-memory fallback survives the page session even when
 // sessionStorage is blocked by browser tracking prevention.
 let _managerWorkspaceInMemory = null;
 
@@ -618,6 +641,23 @@ function cacheDomElements() {
       "saveManagerProfileImageBtn",
     ),
 
+    // MANAGER PROFILE IMAGE REMOVAL - v1.0.0
+    // References only the new Manager Profile controls.
+    // This does not change profile access, tenant scope, or storage permissions.
+    removeManagerProfileImageBtn: document.getElementById(
+      "removeManagerProfileImageBtn",
+    ),
+
+    // MANAGER PROFILE AUTHORITY PARITY - v1.0.0
+    // Displays the reporting-line authority already calculated for this Manager.
+    // These elements are presentation-only and do not grant decision permissions.
+    managerProfileAuthorityPill: document.getElementById(
+      "managerProfileAuthorityPill",
+    ),
+    managerProfileAuthorityText: document.getElementById(
+      "managerProfileAuthorityText",
+    ),
+
     leaveDecisionModal: document.getElementById("leaveDecisionModal"),
     leaveDecisionModalLabel: document.getElementById("leaveDecisionModalLabel"),
     leaveDecisionModalSubtext: document.getElementById("leaveDecisionModalSubtext"),
@@ -628,6 +668,12 @@ function cacheDomElements() {
     decisionTotalDays: document.getElementById("decisionTotalDays"),
     decisionConflictStatus: document.getElementById("decisionConflictStatus"),
     decisionActionBadge: document.getElementById("decisionActionBadge"),
+
+    // EMPLOYEE LEAVE REASON VISIBILITY - v1.0.0
+    decisionEmployeeReason: document.getElementById(
+      "decisionEmployeeReason",
+    ),
+
     decisionCommentInput: document.getElementById("decisionCommentInput"),
     decisionCommentHelpText: document.getElementById("decisionCommentHelpText"),
     decisionCommentRequiredMarker: document.getElementById("decisionCommentRequiredMarker"),
@@ -1398,15 +1444,10 @@ function bindEvents() {
     await saveManagerOwnProfile();
   });
 
-  // MANAGER PROFILE UI CLEANUP - STEP 1A
-  // Keep Save Profile Changes grey until Full Name is actually changed.
-  // Department is read-only (sourced from the employee record) and excluded.
-  [
-    state.dom.managerProfileFullName,
-  ].forEach((field) => {
-    field?.addEventListener("input", updateManagerProfileSaveButtonState);
-    field?.addEventListener("change", updateManagerProfileSaveButtonState);
-  });
+// SYSTEM-WIDE MANAGER EMPLOYEE IDENTITY AUTHORITY - v1.0.0
+// Manager profile identity fields are read-only.
+// Name changes are maintained through the HR People record.
+updateManagerProfileSaveButtonState();
 
   updateManagerProfileSaveButtonState();
 
@@ -1415,9 +1456,19 @@ function bindEvents() {
     handlePendingProfileImage(file);
   });
 
-  state.dom.saveManagerProfileImageBtn?.addEventListener("click", async () => {
-    await uploadManagerProfileImage();
-  });
+state.dom.saveManagerProfileImageBtn?.addEventListener("click", async () => {
+  await uploadManagerProfileImage();
+});
+
+// MANAGER PROFILE IMAGE REMOVAL - v1.0.0
+// Remove only the signed-in Manager's stored profile-picture reference.
+// This does not affect another employee, tenant, role, or reporting line.
+state.dom.removeManagerProfileImageBtn?.addEventListener(
+  "click",
+  async () => {
+    await removeManagerProfileImage();
+  },
+);
 
   state.dom.confirmDecisionBtn?.addEventListener("click", async () => {
     await submitLeaveDecisionFromModal();
@@ -1828,19 +1879,54 @@ function resetDecisionModalState() {
   state.pendingDecisionRequest = null;
   state.pendingDecisionButton = null;
 
-  if (state.dom.decisionEmployeeName) state.dom.decisionEmployeeName.textContent = "--";
-  if (state.dom.decisionLeaveType) state.dom.decisionLeaveType.textContent = "--";
-  if (state.dom.decisionStartDate) state.dom.decisionStartDate.textContent = "--";
-  if (state.dom.decisionEndDate) state.dom.decisionEndDate.textContent = "--";
-  if (state.dom.decisionTotalDays) state.dom.decisionTotalDays.textContent = "--";
-  if (state.dom.decisionConflictStatus) state.dom.decisionConflictStatus.innerHTML = "--";
-  if (state.dom.decisionActionBadge) state.dom.decisionActionBadge.innerHTML = "--";
-  if (state.dom.decisionCommentInput) state.dom.decisionCommentInput.value = "";
-  if (state.dom.decisionCommentRequiredMarker) state.dom.decisionCommentRequiredMarker.classList.add("d-none");
+  if (state.dom.decisionEmployeeName) {
+    state.dom.decisionEmployeeName.textContent = "--";
+  }
+
+  if (state.dom.decisionLeaveType) {
+    state.dom.decisionLeaveType.textContent = "--";
+  }
+
+  if (state.dom.decisionStartDate) {
+    state.dom.decisionStartDate.textContent = "--";
+  }
+
+  if (state.dom.decisionEndDate) {
+    state.dom.decisionEndDate.textContent = "--";
+  }
+
+  if (state.dom.decisionTotalDays) {
+    state.dom.decisionTotalDays.textContent = "--";
+  }
+
+  if (state.dom.decisionConflictStatus) {
+    state.dom.decisionConflictStatus.innerHTML = "--";
+  }
+
+  if (state.dom.decisionActionBadge) {
+    state.dom.decisionActionBadge.innerHTML = "--";
+  }
+
+  if (state.dom.decisionEmployeeReason) {
+    state.dom.decisionEmployeeReason.textContent =
+      "No reason provided.";
+  }
+
+  if (state.dom.decisionCommentInput) {
+    state.dom.decisionCommentInput.value = "";
+  }
+
+  if (state.dom.decisionCommentRequiredMarker) {
+    state.dom.decisionCommentRequiredMarker.classList.add(
+      "d-none",
+    );
+  }
+
   if (state.dom.decisionCommentHelpText) {
     state.dom.decisionCommentHelpText.textContent =
       "Approval comments are optional. Reject and return actions require a comment.";
   }
+
   setDecisionModalLoading(false);
 }
 
@@ -1916,13 +2002,44 @@ function openDecisionModal(leaveId, action, buttonElement) {
   state.pendingDecisionRequest = request;
   state.pendingDecisionButton = buttonElement || null;
 
-  if (state.dom.decisionEmployeeName) state.dom.decisionEmployeeName.textContent = request.employeeName || "--";
-  if (state.dom.decisionLeaveType) state.dom.decisionLeaveType.textContent = request.leaveTypeName || "--";
-  if (state.dom.decisionStartDate) state.dom.decisionStartDate.textContent = formatDate(request.start_date);
-  if (state.dom.decisionEndDate) state.dom.decisionEndDate.textContent = formatDate(request.end_date);
-  if (state.dom.decisionTotalDays) state.dom.decisionTotalDays.textContent = String(request.total_days || "--");
+  if (state.dom.decisionEmployeeName) {
+    state.dom.decisionEmployeeName.textContent =
+      request.employeeName || "--";
+  }
+
+  if (state.dom.decisionLeaveType) {
+    state.dom.decisionLeaveType.textContent =
+      request.leaveTypeName || "--";
+  }
+
+  if (state.dom.decisionStartDate) {
+    state.dom.decisionStartDate.textContent =
+      formatDate(request.start_date);
+  }
+
+  if (state.dom.decisionEndDate) {
+    state.dom.decisionEndDate.textContent =
+      formatDate(request.end_date);
+  }
+
+  if (state.dom.decisionTotalDays) {
+    state.dom.decisionTotalDays.textContent =
+      String(request.total_days || "--");
+  }
+
+  // EMPLOYEE LEAVE REASON VISIBILITY - v1.0.0
+  if (state.dom.decisionEmployeeReason) {
+    const employeeReason = String(
+      request.reason || "",
+    ).trim();
+
+    state.dom.decisionEmployeeReason.textContent =
+      employeeReason || "No reason provided.";
+  }
+
   if (state.dom.decisionConflictStatus) {
-    state.dom.decisionConflictStatus.innerHTML = buildOverlapCellHtml(request);
+    state.dom.decisionConflictStatus.innerHTML =
+      buildOverlapCellHtml(request);
   }
   if (state.dom.decisionActionBadge) {
     state.dom.decisionActionBadge.innerHTML = `<span class="${config.badgeClass}">${config.badgeLabel}</span>`;
@@ -2274,7 +2391,7 @@ function getInitials(fullName, fallback = "MG") {
 // Resolves the manager's department from their employees record (set by HR
 // from the controlled organization_departments list). Syncs the value into
 // profiles.department if the profile department is blank or out of date.
-// Does not insert into organization_departments ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â department setup is owned
+// Does not insert into organization_departments because department setup is owned
 // by HR/Admin through Manage Organization.
 async function ensureManagerProfileDepartment(supabase, profileData) {
   if (!profileData) return profileData;
@@ -2398,6 +2515,27 @@ function clearPageAlert() {
   state.dom.pageAlert.textContent = "";
 }
 
+// MANAGER HEADER RESPONSIBILITY BADGE - v1.0.0
+function renderManagerHeaderResponsibilityBadge(
+  label = "Manager",
+  mode = "manager",
+) {
+  const container = state.dom.managerRole;
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  const badge = document.createElement("span");
+  badge.className =
+    "manager-modern-account-responsibility-pill " +
+    `manager-modern-account-responsibility-pill--${mode}`;
+
+  badge.textContent = label;
+
+  container.appendChild(badge);
+  container.setAttribute("aria-label", label);
+}
+
 function renderManagerProfile(profile, user) {
   const fullName = profile?.full_name || "Manager";
   const email = profile?.email || user?.email || "No email";
@@ -2406,7 +2544,17 @@ function renderManagerProfile(profile, user) {
   const initials = getInitials(fullName, "MG");
 
   if (state.dom.managerEmail) state.dom.managerEmail.textContent = email;
-  if (state.dom.managerRole) state.dom.managerRole.textContent = role;
+  // MANAGER HEADER COVERAGE FIRST PAINT - v1.0.0
+  // Keep the account responsibility area neutral while the authenticated
+  // manager's Primary and Secondary coverage is being resolved.
+  if (state.dom.managerRole) {
+    state.dom.managerRole.innerHTML = "";
+    state.dom.managerRole.setAttribute(
+      "aria-label",
+      "Manager coverage loading",
+    );
+    state.dom.managerRole.setAttribute("aria-busy", "true");
+  }
   if (state.dom.managerInitials) {
     state.dom.managerInitials.textContent = initials;
     state.dom.managerInitials.classList.remove("d-none");
@@ -2479,24 +2627,23 @@ function setPrimaryActionButtonReadyState(button, canSubmit) {
   button.classList.toggle("btn-secondary", !canSubmit);
 }
 
-// MANAGER PROFILE UI CLEANUP - STEP 1A
-// Capture only fields the manager can edit from My Profile.
-// Department is read-only (sourced from the employee record) and excluded.
+// SYSTEM-WIDE MANAGER EMPLOYEE IDENTITY AUTHORITY - v1.0.0
+// Manager My Profile no longer owns employee-name changes.
+//
+// The authoritative name comes from the linked employees record and is
+// synchronised into profiles.full_name by the shared database name sync.
+//
+// This applies to every Manager tenant, including Alpatech.
 function getManagerProfileEditableSnapshot() {
-  return {
-    full_name: String(state.dom.managerProfileFullName?.value || "").trim(),
-  };
+  return {};
 }
 
-// MANAGER PROFILE UI CLEANUP - STEP 1A
-// Detect whether the manager changed an editable profile field.
 function hasManagerProfileEditableChanges() {
-  const currentSnapshot = getManagerProfileEditableSnapshot();
-  const baselineSnapshot = state.currentProfileEditableBaseline || {};
+  return false;
+}
 
-  return Object.keys(currentSnapshot).some(
-    (key) => currentSnapshot[key] !== String(baselineSnapshot[key] || ""),
-  );
+function isManagerProfileFormReadyForSubmit() {
+  return false;
 }
 
 // MANAGER PROFILE UI CLEANUP - STEP 1A
@@ -2518,55 +2665,16 @@ function updateManagerProfileSaveButtonState() {
   );
 }
 
+// SYSTEM-WIDE MANAGER EMPLOYEE IDENTITY AUTHORITY - v1.0.0
+// Prevent My Profile from creating a second employee-name source.
+// The structured HR People record remains authoritative.
 async function saveManagerOwnProfile() {
-  const fullName = String(state.dom.managerProfileFullName?.value || "").trim();
+  showPageAlert(
+    "info",
+    "Your name is maintained from your HR employee record.",
+  );
 
-  if (!fullName) {
-    showPageAlert("warning", "Full name is required before saving your profile.");
-    state.dom.managerProfileFullName?.focus();
-    return;
-  }
-
-  // MANAGER PROFILE UI CLEANUP - STEP 1A
-  // Pressing Enter inside the form should not save when no editable value changed.
-  if (!hasManagerProfileEditableChanges()) {
-    updateManagerProfileSaveButtonState();
-    return;
-  }
-
-  try {
-    setProfileSaveLoading(true);
-
-    const supabase = getSupabaseClient();
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .update({
-        full_name: fullName,
-      })
-      .eq("id", state.currentUser.id)
-      .select("*")
-      .maybeSingle();
-
-    if (error) throw error;
-
-    state.currentProfile = {
-      ...state.currentProfile,
-      ...(data || {}),
-      full_name: fullName,
-    };
-
-    renderManagerProfile(state.currentProfile, state.currentUser);
-    showPageAlert("success", "Your profile was updated successfully.");
-  } catch (error) {
-    console.error("Error updating manager profile:", error);
-    showPageAlert(
-      "danger",
-      error.message || "Your profile could not be updated.",
-    );
-  } finally {
-    setProfileSaveLoading(false);
-  }
+  updateManagerProfileSaveButtonState();
 }
 
 function setProfileImageSaveLoading(isLoading) {
@@ -2666,6 +2774,13 @@ function handlePendingProfileImage(file) {
 }
 
 async function loadManagerProfileImages(profileImagePath, initials) {
+  // MANAGER PROFILE IMAGE REMOVAL - v1.0.0
+  // Enable Remove Picture only when the current profile has a stored image.
+  if (state.dom.removeManagerProfileImageBtn) {
+    state.dom.removeManagerProfileImageBtn.disabled =
+      !String(profileImagePath || "").trim();
+  }
+
   if (!profileImagePath) {
     if (state.dom.managerProfileAvatar) {
       state.dom.managerProfileAvatar.textContent = initials;
@@ -2768,6 +2883,125 @@ async function uploadManagerProfileImage() {
     );
   } finally {
     setProfileImageSaveLoading(false);
+  }
+}
+
+// MANAGER PROFILE IMAGE REMOVAL - v1.0.0
+// Clears the signed-in Manager's profile-image reference first, restores the
+// initials fallback, then attempts best-effort storage cleanup.
+async function removeManagerProfileImage() {
+  if (!state.currentUser?.id) {
+    showPageAlert(
+      "warning",
+      "Your Manager profile is not ready yet.",
+    );
+    return;
+  }
+
+  const existingImagePath = String(
+    state.currentProfile?.profile_image_path || "",
+  ).trim();
+
+  if (!existingImagePath) {
+    await loadManagerProfileImages(
+      "",
+      getInitials(
+        state.currentProfile?.full_name || "Manager",
+        "MG",
+      ),
+    );
+    return;
+  }
+
+  const button = state.dom.removeManagerProfileImageBtn;
+  const originalHtml = button?.innerHTML || "";
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = `
+        <span
+          class="spinner-border spinner-border-sm me-2"
+          aria-hidden="true"
+        ></span>
+        Removing...
+      `;
+    }
+
+    const supabase = getSupabaseClient();
+
+    // Clear the profile reference first so refresh cannot restore the image.
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({
+        profile_image_path: null,
+      })
+      .eq("id", state.currentUser.id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) throw error;
+
+    state.currentProfile = {
+      ...state.currentProfile,
+      ...(data || {}),
+      profile_image_path: "",
+    };
+
+    state.pendingProfileImageFile = null;
+
+    if (state.dom.managerProfileImageInput) {
+      state.dom.managerProfileImageInput.value = "";
+    }
+
+    if (state.dom.managerProfileImagePreview) {
+      state.dom.managerProfileImagePreview.src = "";
+      state.dom.managerProfileImagePreview.classList.add("d-none");
+    }
+
+    const initials = getInitials(
+      state.currentProfile?.full_name || "Manager",
+      "MG",
+    );
+
+    await loadManagerProfileImages("", initials);
+    updateManagerProfileImageButtonState();
+
+    // Storage deletion is best-effort. The profile reference has already
+    // been cleared safely even if object cleanup is unavailable.
+    const { error: storageError } = await supabase.storage
+      .from(PROFILE_IMAGES_BUCKET)
+      .remove([existingImagePath]);
+
+    if (storageError) {
+      console.warn(
+        "Manager profile image reference was cleared, but storage cleanup failed:",
+        storageError,
+      );
+    }
+
+    showPageAlert(
+      "success",
+      "Profile picture removed successfully.",
+    );
+  } catch (error) {
+    console.error(
+      "Error removing Manager profile image:",
+      error,
+    );
+
+    showPageAlert(
+      "danger",
+      error.message ||
+        "Profile picture could not be removed.",
+    );
+  } finally {
+    if (button) {
+      button.innerHTML = originalHtml;
+      button.disabled = !String(
+        state.currentProfile?.profile_image_path || "",
+      ).trim();
+    }
   }
 }
 
@@ -3899,7 +4133,7 @@ function openManagerEmployeeDetails(employeeId = "") {
 
   setManagerEmployeeDetailsText(
     "managerEmployeeDetailsRoleDepartment",
-    `${jobTitle} Ã‚Â· ${department}`,
+    `${jobTitle} - ${department}`,
   );
 
   setManagerEmployeeDetailsText(
@@ -4645,6 +4879,8 @@ function notifyLeaveDecisionChanged() {
 }
 
 async function refreshManagerWorkspace() {
+  setManagerCoverageModeLoading(true);
+
   renderPendingRequestsLoadingState();
   renderProcessedRequestsLoadingState();
   renderTeamScheduleLoadingState();
@@ -4955,6 +5191,34 @@ function applyTeamFilter() {
   renderTeamTable(state.filteredTeamMembers);
 }
 
+// MANAGER COVERAGE BADGE STARTUP FLASH FIX
+// Show a neutral loading state until reporting-line assignments are resolved.
+function setManagerCoverageModeLoading(isLoading) {
+  const modeBadge = document.getElementById(
+    "managerCoverageModeBadge",
+  );
+
+  if (!modeBadge) return;
+
+  if (isLoading) {
+    modeBadge.className =
+      "manager-coverage-mode-badge manager-coverage-mode-badge--loading";
+
+    modeBadge.innerHTML = `
+      <span
+        class="spinner-border spinner-border-sm me-2"
+        aria-hidden="true"
+      ></span>
+      Checking coverage
+    `;
+
+    modeBadge.setAttribute("aria-busy", "true");
+    return;
+  }
+
+  modeBadge.setAttribute("aria-busy", "false");
+}
+
 // MANAGER ACTION AND COVERAGE CENTRE - v1.0.0
 // Presentation-only aggregation of data already loaded for this manager.
 // No new Supabase query, permission, session, or decision path is introduced.
@@ -5047,7 +5311,7 @@ function renderManagerActionCoverageCentre() {
     coverageMode = "Secondary Manager";
     coverageModeKey = "secondary";
     coverageDescription =
-      "You can monitor leave activity and team coverage. Pending decisions remain with each employeeÃ¢â‚¬â„¢s Primary Manager.";
+      "You can monitor leave activity and team coverage. Pending decisions remain with each employee's Primary Manager.";
     decisionAuthority = "Primary Manager action required";
   } else if (primaryRelationshipCount > 0) {
     coverageMode = "Primary Manager";
@@ -5066,12 +5330,51 @@ function renderManagerActionCoverageCentre() {
     modeBadge.className =
       `manager-coverage-mode-badge ` +
       `manager-coverage-mode-badge--${coverageModeKey}`;
+
+    setManagerCoverageModeLoading(false);
   }
 
-  setManagerActionCentreText(
-    "managerCoverageModeDescription",
-    coverageDescription,
-  );
+  let headerCoverageLabel = "Manager";
+
+  if (coverageModeKey === "mixed") {
+    headerCoverageLabel = "Mixed Manager Coverage";
+  } else if (coverageModeKey === "primary") {
+    headerCoverageLabel = "Primary Manager";
+  } else if (coverageModeKey === "secondary") {
+    headerCoverageLabel = "Secondary Manager";
+  } else if (coverageModeKey === "acting") {
+    headerCoverageLabel = "Acting Manager";
+  }
+
+renderManagerHeaderResponsibilityBadge(
+  headerCoverageLabel,
+  coverageModeKey || "manager",
+);
+
+// MANAGER PROFILE AUTHORITY PARITY - v1.0.0
+// Show the reporting-line authority already calculated for this Manager.
+// Display-only: this does not grant roles, decision rights, or delegation.
+if (state.dom.managerProfileAuthorityText) {
+  state.dom.managerProfileAuthorityText.textContent =
+    `${coverageMode} workspace member`;
+}
+
+if (state.dom.managerProfileAuthorityPill) {
+  state.dom.managerProfileAuthorityPill.dataset.managerAuthority =
+    coverageModeKey;
+}
+
+// Keep the read-only Profile Role field aligned with the Manager's resolved
+// responsibility rather than showing only the generic stored "manager" role.
+if (state.dom.managerProfileRole) {
+  state.dom.managerProfileRole.value = coverageMode;
+  state.dom.managerProfileRole.removeAttribute("placeholder");
+}
+
+setManagerActionCentreText(
+  "managerCoverageModeDescription",
+  coverageDescription,
+);
 
   setManagerActionCentreText(
     "managerDecisionAuthority",
@@ -5952,8 +6255,12 @@ function renderManagerLeaveDelegationUi() {
   // Only a manager with Primary assignments may grant temporary approval access.
   // Delegated Secondary Managers receive request-level action controls but never
   // the authority-management control itself.
-  const canManageDelegation =
-    context.eligible_delegates.length > 0 || context.active_granted.length > 0;
+  const hasPrimaryAssignments = (
+    Array.isArray(state.teamMembers) ? state.teamMembers : []
+  ).some((member) =>
+    isPrimaryReportingManagerRelationship(member.relationshipLabel),
+  );
+  const canManageDelegation = hasPrimaryAssignments;
   actionHost.classList.toggle("d-none", !canManageDelegation);
   button.classList.toggle("d-none", !canManageDelegation);
 }
@@ -6798,10 +7105,10 @@ function buildProcessedDecisionAuditCardHtml(request = {}) {
       <span class="manager-processed-card-audit-chip">
         <i class="bi bi-calendar2-check" aria-hidden="true"></i>
         ${escapeHtml(
-          hasRestoredDays
-            ? `${restoredDays} day(s) restored`
-            : "Balance restoration not recorded",
-        )}
+      hasRestoredDays
+        ? `${restoredDays} day(s) restored`
+        : "Balance restoration not recorded",
+    )}
       </span>
     `
     : "";
@@ -6825,8 +7132,8 @@ function buildProcessedDecisionAuditCardHtml(request = {}) {
           <span class="manager-processed-card-audit-chip">
             <i class="bi bi-person-check" aria-hidden="true"></i>
             ${escapeHtml(
-              `${request.decisionAuthorityActorName || actor} acted using temporary approval access granted by ${request.decisionAuthorityPrimaryName || "the Primary Manager"}.`,
-            )}
+        `${request.decisionAuthorityActorName || actor} acted using temporary approval access granted by ${request.decisionAuthorityPrimaryName || "the Primary Manager"}.`,
+      )}
           </span>
         </div>
       `
@@ -6892,13 +7199,13 @@ function buildProcessedDecisionAuditCardHtml(request = {}) {
       ${delegatedAuthorityHtml}
 
       ${isCancelled
-        ? `
+      ? `
           <div class="manager-processed-card-audit-chips">
             ${originalDecisionHtml}
             ${restoredBalanceHtml}
           </div>
         `
-        : ""}
+      : ""}
 
       <section class="manager-processed-card-comment" aria-label="Decision comment">
         <span class="manager-processed-card-comment-label">Comment</span>

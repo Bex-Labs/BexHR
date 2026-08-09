@@ -39,6 +39,32 @@ const EMPLOYEE_DASHBOARD_WORKSPACE_MEMORY_PREFIX = "hrPayroll:lastEmployeeWorksp
 // Profile flash before employee-dashboard.js completes authentication startup.
 const EMPLOYEE_DASHBOARD_WORKSPACE_BOOT_KEY = "hrPayroll:lastEmployeeWorkspace:last";
 
+// EMPLOYEE WORKSPACE LOADER PARITY - STEP 1
+// Reveal the authenticated Employee shell as soon as tenant branding,
+// account identity, and the intended top-level workspace are ready.
+// Slower profile, request, image, leave, and payroll reads continue
+// progressively after the shell becomes visible.
+function releaseEmployeeWorkspaceLoader() {
+  const body = document.body;
+  const loader = document.getElementById("bexhrWorkspaceLoader");
+  const firstPaintGate = document.getElementById(
+    "employeeWorkspaceFirstPaintGate",
+  );
+
+  body?.classList.remove("employee-workspace-booting");
+  body?.removeAttribute("aria-busy");
+  firstPaintGate?.remove();
+
+  if (!loader) return;
+
+  loader.setAttribute("aria-hidden", "true");
+  loader.style.pointerEvents = "none";
+
+  window.setTimeout(() => {
+    loader.remove();
+  }, 220);
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   try {
     cacheDomElements();
@@ -116,10 +142,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     // showInitialEmployeeDashboardSection().
     showInitialEmployeeDashboardSection();
 
+    // EMPLOYEE WORKSPACE LOADER REGRESSION FIX - v1.0.0
+    // Keep the workspace loader visible while the authenticated employee's
+    // essential self-service data is still being prepared.
+    //
+    // Safety:
+    // - authentication and tenant branding remain unchanged;
+    // - profile, reporting-manager, leave and payroll queries are unchanged;
+    // - only the point at which the existing loader is released is corrected.
     await loadEmployeeRecord(
       authResult.session.user.id,
       authResult.session.user.email,
     );
+
+    // EMPLOYEE ASSIGNED MANAGERS VISIBILITY - STEP 1
+    // The employee record must resolve first because reporting relationships
+    // belong to employees.id. The RPC performs the final authenticated lookup
+    // and tenant restriction independently.
+    await loadEmployeeReportingManagers();
 
     // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
     // Load employee-visible correction request status after the employee row
@@ -132,6 +172,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadEmployeeLeaveRequests();
     await loadEmployeePayroll();
 
+    // EMPLOYEE WORKSPACE LOADER REGRESSION FIX - v1.0.0
+    // The authenticated Employee workspace is now fully ready for first use.
+    // Release the existing loader only after the initial employee, reporting-line,
+    // profile, leave and payroll data has completed loading.
+    releaseEmployeeWorkspaceLoader();
+
     // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
     // Workspace restore already happened early after authentication.
     // Keep the final startup step focused on leave auto-refresh only.
@@ -139,6 +185,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     startLeaveAutoRefresh();
   } catch (error) {
+    // EMPLOYEE WORKSPACE LOADER PARITY - STEP 1
+    // Never leave the authenticated page permanently covered when startup
+    // fails after the Employee shell has begun initialising.
+    releaseEmployeeWorkspaceLoader();
+
     console.error("Error initialising employee dashboard:", error);
     showPageAlert(
       "danger",
@@ -189,7 +240,9 @@ const state = {
 // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Only these Employee top-level workspaces are safe to restore after refresh.
 function isValidEmployeeWorkspaceKey(workspace = "") {
-  return ["profile", "leave", "payroll"].includes(String(workspace || "").trim());
+  return ["overview", "profile", "leave", "payroll"].includes(
+    String(workspace || "").trim(),
+  );
 }
 
 // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
@@ -255,20 +308,35 @@ function isCurrentEmployeeTenantAlpatechWorkspace() {
 }
 
 // ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
-// Browser tab icon only. The icon changes only for Alpatech employees.
+// Browser tab icon only. Update every declared favicon link so the browser
+// cannot retain a different BexHR icon from the universal favicon set.
+// Tenant branding only; no session, access, data, tenant-filter or role changes.
 function applyEmployeeTenantFaviconBranding() {
-  const favicon = document.querySelector("link[rel~='icon']");
+  const faviconLinks = Array.from(
+    document.querySelectorAll(
+      'link[rel~="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]',
+    ),
+  );
 
-  if (!favicon) return;
+  if (!faviconLinks.length) return;
 
-  if (isCurrentEmployeeTenantAlpatechWorkspace()) {
-    favicon.type = "image/png";
-    favicon.href = "assets/alpatech-favicon-large.png";
-    return;
-  }
+  const isAlpatech =
+    isCurrentEmployeeTenantAlpatechWorkspace();
 
-  favicon.type = "image/x-icon";
-  favicon.href = "assets/favicon.png";
+  const faviconHref = isAlpatech
+    ? "assets/alpatech-favicon-large.png?v=20260804"
+    : "assets/favicon/favicon.svg?v=20260801";
+
+  faviconLinks.forEach((faviconLink) => {
+    faviconLink.href = faviconHref;
+    faviconLink.type = isAlpatech
+      ? "image/png"
+      : "image/svg+xml";
+
+    if (isAlpatech) {
+      faviconLink.removeAttribute("sizes");
+    }
+  });
 }
 
 // ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
@@ -276,6 +344,30 @@ function applyEmployeeTenantFaviconBranding() {
 // This changes visible branding only. It does not change profile, leave,
 // payroll, payslip PDF, Supabase, session, or role/access behaviour.
 function applyEmployeeTenantWorkspaceShellBranding() {
+  // EMPLOYEE MODERN TENANT HEADER BINDING - v1.0.0
+  // Presentation only. Uses the tenant context already validated during login.
+  // This does not query, change, or broaden tenant access boundaries.
+  const tenantContext = getEmployeeTenantContextForBranding();
+
+  const tenantCompanyName = String(
+    tenantContext?.companyName ||
+    tenantContext?.tenantName ||
+    tenantContext?.tenantCode ||
+    state.currentProfile?.company_name ||
+    state.currentProfile?.tenant_name ||
+    state.currentProfile?.tenant_code ||
+    "BexHR Workspace",
+  ).trim();
+
+  const modernCompanyName = document.getElementById(
+    "employeeModernCompanyName",
+  );
+
+  if (modernCompanyName) {
+    modernCompanyName.textContent =
+      tenantCompanyName || "BexHR Workspace";
+  }
+
   const sidebarBrand = document.getElementById("tenantSidebarBrand");
   const heroBrandingBlock = document.getElementById("tenantHeroBrandingBlock");
 
@@ -388,9 +480,9 @@ function getRememberedEmployeeWorkspace() {
   try {
     const scopedWorkspace = sessionStorage.getItem(getEmployeeWorkspaceMemoryKey());
     const bootWorkspace = sessionStorage.getItem(EMPLOYEE_DASHBOARD_WORKSPACE_BOOT_KEY);
-    const workspace = scopedWorkspace || bootWorkspace || "profile";
+    const workspace = scopedWorkspace || bootWorkspace || "overview";
 
-    return isValidEmployeeWorkspaceKey(workspace) ? workspace : "profile";
+    return isValidEmployeeWorkspaceKey(workspace) ? workspace : "overview";
   } catch (error) {
     console.warn("Employee workspace memory could not be read.", error);
     return "profile";
@@ -398,7 +490,7 @@ function getRememberedEmployeeWorkspace() {
 }
 
 // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
-// Logout must reset the next Employee session to Profile.
+// Logout must reset the next Employee session to Overview.
 function clearRememberedEmployeeWorkspace() {
   try {
     sessionStorage.removeItem(getEmployeeWorkspaceMemoryKey());
@@ -676,10 +768,28 @@ function cacheDomElements() {
     // Floating Back-to-Top button used only for page navigation.
     scrollToTopBtn: document.getElementById("scrollToTopBtn"),
 
+    navOverviewBtn: document.getElementById("navOverviewBtn"),
     navProfileBtn: document.getElementById("navProfileBtn"),
     navLeaveBtn: document.getElementById("navLeaveBtn"),
     navPayrollBtn: document.getElementById("navPayrollBtn"),
     logoutBtn: document.getElementById("logoutBtn"),
+
+    overviewSection: document.getElementById("overviewSection"),
+    overviewWelcomeName: document.getElementById("overviewWelcomeName"),
+
+    /* EMPLOYEE OVERVIEW LIVE METRICS - v1.0.0
+       Display-only bindings for existing employee state.
+       No additional Supabase queries or access changes. */
+    overviewProfileStatus: document.getElementById("overviewProfileStatus"),
+    overviewOpenRequestCount: document.getElementById(
+      "overviewOpenRequestCount",
+    ),
+    overviewLeaveRequestCount: document.getElementById(
+      "overviewLeaveRequestCount",
+    ),
+    overviewLatestPayCycle: document.getElementById(
+      "overviewLatestPayCycle",
+    ),
 
     profileSection: document.getElementById("profileSection"),
     leaveSection: document.getElementById("leaveSection"),
@@ -688,12 +798,14 @@ function cacheDomElements() {
     employeeDisplayEmail: document.getElementById("employeeDisplayEmail"),
     employeeInitials: document.getElementById("employeeInitials"),
     employeeHeroImage: document.getElementById("employeeHeroImage"),
+    employeeModernUserName: document.getElementById("employeeModernUserName"),
     heroRoleValue: document.getElementById("heroRoleValue"),
     heroModuleValue: document.getElementById("heroModuleValue"),
 
     profileImage: document.getElementById("profileImage"),
     profileImageInput: document.getElementById("profileImageInput"),
     saveProfileImageBtn: document.getElementById("saveProfileImageBtn"),
+    removeProfileImageBtn: document.getElementById("removeProfileImageBtn"),
     profileFullName: document.getElementById("profileFullName"),
     profileJobTitle: document.getElementById("profileJobTitle"),
     profileDepartment: document.getElementById("profileDepartment"),
@@ -705,6 +817,16 @@ function cacheDomElements() {
     phoneNumber: document.getElementById("phoneNumber"),
     roleName: document.getElementById("roleName"),
     managerName: document.getElementById("managerName"),
+    // EMPLOYEE ASSIGNED MANAGERS VISIBILITY - STEP 1
+    // Read-only Profile bindings for authoritative Primary/Secondary manager data.
+    employeeReportingManagersCard:
+      document.getElementById("employeeReportingManagersCard"),
+    employeeReportingManagersLoading:
+      document.getElementById("employeeReportingManagersLoading"),
+    employeeReportingManagersEmpty:
+      document.getElementById("employeeReportingManagersEmpty"),
+    employeeReportingManagersList:
+      document.getElementById("employeeReportingManagersList"),
 
     // EMPLOYEE PROFILE REVIEW - STEP 1A
     // Read-only HR-prepared profile fields. These let employees check
@@ -840,6 +962,10 @@ function cacheDomElements() {
 }
 
 function bindNavigationEvents() {
+  state.dom.navOverviewBtn?.addEventListener("click", () => {
+    rememberEmployeeWorkspace("overview");
+    showSection("overview");
+  });
   state.dom.navProfileBtn?.addEventListener("click", () => {
     // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
     // Remember Profile only for refresh in the current browser session.
@@ -860,6 +986,34 @@ function bindNavigationEvents() {
     rememberEmployeeWorkspace("payroll");
     showSection("payroll");
   });
+
+  // EMPLOYEE OVERVIEW QUICK ACTIONS - v1.0.0
+  // Reuse the existing Employee workspace and correction-request flows.
+  document
+    .querySelectorAll("[data-employee-overview-target]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const target = String(
+          button.getAttribute("data-employee-overview-target") || "",
+        ).trim();
+
+        if (target === "requests") {
+          rememberEmployeeWorkspace("profile");
+          showSection("profile");
+          setEmployeeProfileCorrectionPanelVisible(true);
+          return;
+        }
+
+        if (!["profile", "leave", "payroll"].includes(target)) {
+          return;
+        }
+
+        rememberEmployeeWorkspace(target);
+        showSection(target);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    });
+
 }
 
 function bindUtilityEvents() {
@@ -879,6 +1033,56 @@ function bindUtilityEvents() {
   state.dom.openEmployeeOperatingGuideSidebarBtn?.addEventListener("click", openEmployeeOperatingGuide);
   state.dom.closeEmployeeOperatingGuideBtn?.addEventListener("click", closeEmployeeOperatingGuide);
   state.dom.closeEmployeeOperatingGuideFooterBtn?.addEventListener("click", closeEmployeeOperatingGuide);
+
+  // EMPLOYEE OPERATING GUIDE LINKED WORKFLOW - v1.1.0
+  // Route guide actions through the existing Employee navigation buttons.
+  // This preserves showSection(), workspace memory, active navigation state,
+  // tenant boundaries, access behaviour and all existing workspace logic.
+  state.dom.employeeOperatingGuideModal
+    ?.querySelectorAll("[data-employee-guide-target]")
+    .forEach((guideAction) => {
+      guideAction.addEventListener("click", () => {
+        const targetButtonId = String(
+          guideAction.getAttribute("data-employee-guide-target") || "",
+        ).trim();
+
+        const allowedTargets = new Set([
+          "navOverviewBtn",
+          "navProfileBtn",
+          "navLeaveBtn",
+          "navPayrollBtn",
+        ]);
+
+        if (!allowedTargets.has(targetButtonId)) {
+          console.warn(
+            "Employee guide target was blocked because it is not an approved workspace.",
+            targetButtonId,
+          );
+          return;
+        }
+
+        const targetButton = document.getElementById(targetButtonId);
+
+        if (!targetButton) {
+          console.warn(
+            "Employee guide target button could not be found.",
+            targetButtonId,
+          );
+          return;
+        }
+
+        closeEmployeeOperatingGuide();
+        targetButton.click();
+
+        window.requestAnimationFrame(() => {
+          window.scrollTo({
+            top: 0,
+            left: 0,
+            behavior: "auto",
+          });
+        });
+      });
+    });
 
   state.dom.employeeOperatingGuideModal?.addEventListener("click", (event) => {
     if (event.target === state.dom.employeeOperatingGuideModal) {
@@ -1287,6 +1491,10 @@ function bindProfileImageEvents() {
   state.dom.saveProfileImageBtn?.addEventListener("click", async () => {
     await uploadEmployeeProfileImage();
   });
+
+  state.dom.removeProfileImageBtn?.addEventListener("click", async () => {
+    await removeEmployeeProfileImage();
+  });
 }
 
 function bindSyncEvents() {
@@ -1489,7 +1697,12 @@ function setRefreshButtonLoading(button, isLoading) {
 // Only known section names are allowed, so the URL cannot trigger
 // unexpected behaviour or expose payroll-sensitive values.
 function getInitialEmployeeDashboardSectionFromUrl() {
-  const allowedSections = new Set(["profile", "leave", "payroll"]);
+  const allowedSections = new Set([
+    "overview",
+    "profile",
+    "leave",
+    "payroll",
+  ]);
 
   try {
     const params = new URLSearchParams(window.location.search);
@@ -1551,15 +1764,78 @@ function showInitialEmployeeDashboardSection() {
 }
 
 function showSection(sectionName) {
+  const isOverview = sectionName === "overview";
   const isProfile = sectionName === "profile";
   const isLeave = sectionName === "leave";
   const isPayroll = sectionName === "payroll";
 
+  // EMPLOYEE DYNAMIC WORKSPACE HEADER - v1.0.0
+  // Keep the application header aligned with the active Employee workspace.
+  // Presentation text only:
+  // - no navigation, tenant, role, profile, leave or payroll logic changes;
+  // - existing section visibility and workspace-memory behaviour remain intact.
+  const workspaceHeaderContent = {
+    overview: {
+      module: "Overview",
+      title: "Employee Overview",
+      subtitle:
+        "Review your profile, HR requests, leave activity, payroll information, and recent updates.",
+    },
+    profile: {
+      module: "My Profile",
+      title: "My Profile",
+      subtitle:
+        "Review your employee account, profile photo, reporting line, and HR-held information.",
+    },
+    leave: {
+      module: "Leave Management",
+      title: "Leave Management",
+      subtitle:
+        "Review balances, submit leave requests, and track manager decisions.",
+    },
+    payroll: {
+      module: "Payroll",
+      title: "Payroll & Payslips",
+      subtitle:
+        "Review authorised pay cycles, payroll history, and available payslip records.",
+    },
+  };
+
+  const activeHeaderContent =
+    workspaceHeaderContent[sectionName] ||
+    workspaceHeaderContent.overview;
+
+  const heroModuleValue =
+    state.dom.heroModuleValue ||
+    document.getElementById("heroModuleValue");
+
+  const employeeModernPageTitle =
+    state.dom.employeeModernPageTitle ||
+    document.getElementById("employeeModernPageTitle");
+
+  const employeeModernPageSubtitle =
+    state.dom.employeeModernPageSubtitle ||
+    document.getElementById("employeeModernPageSubtitle");
+
+  if (heroModuleValue) {
+    heroModuleValue.textContent = activeHeaderContent.module;
+  }
+
+  if (employeeModernPageTitle) {
+    employeeModernPageTitle.textContent = activeHeaderContent.title;
+  }
+
+  if (employeeModernPageSubtitle) {
+    employeeModernPageSubtitle.textContent = activeHeaderContent.subtitle;
+  }
+
+  state.dom.overviewSection?.classList.toggle("d-none", !isOverview);
   state.dom.profileSection?.classList.toggle("d-none", !isProfile);
   state.dom.leaveSection?.classList.toggle("d-none", !isLeave);
   state.dom.payrollSection?.classList.toggle("d-none", !isPayroll);
 
   [
+    state.dom.navOverviewBtn,
     state.dom.navProfileBtn,
     state.dom.navLeaveBtn,
     state.dom.navPayrollBtn,
@@ -1569,22 +1845,24 @@ function showSection(sectionName) {
     btn.classList.add("btn-outline-primary");
   });
 
+  if (isOverview && state.dom.navOverviewBtn) {
+    state.dom.navOverviewBtn.classList.remove("btn-outline-primary");
+    state.dom.navOverviewBtn.classList.add("btn-primary");
+  }
+
   if (isProfile && state.dom.navProfileBtn) {
     state.dom.navProfileBtn.classList.remove("btn-outline-primary");
     state.dom.navProfileBtn.classList.add("btn-primary");
-    if (state.dom.heroModuleValue) state.dom.heroModuleValue.textContent = "Profile";
   }
 
   if (isLeave && state.dom.navLeaveBtn) {
     state.dom.navLeaveBtn.classList.remove("btn-outline-primary");
     state.dom.navLeaveBtn.classList.add("btn-primary");
-    if (state.dom.heroModuleValue) state.dom.heroModuleValue.textContent = "Leave Management";
   }
 
   if (isPayroll && state.dom.navPayrollBtn) {
     state.dom.navPayrollBtn.classList.remove("btn-outline-primary");
     state.dom.navPayrollBtn.classList.add("btn-primary");
-    if (state.dom.heroModuleValue) state.dom.heroModuleValue.textContent = "Payroll";
   }
 
   // CROSS-DASHBOARD SIDEBAR REPLICATION - EMPLOYEE STEP 1C-3
@@ -1592,7 +1870,10 @@ function showSection(sectionName) {
   // Employee workspace buttons. This does not change profile, leave, payroll,
   // payslip, PDF, or workspace-memory logic.
   [
-    { id: "sidebarEmployeeProfileBtn", active: isProfile },
+    { id: "sidebarEmployeeOverviewBtn", active: isOverview },
+    // Profile now lives in the Employee sidebar footer.
+    // Keep the active state aligned with the existing footer button ID.
+    { id: "sidebarEmployeeProfileFooterBtn", active: isProfile },
     { id: "sidebarEmployeeLeaveBtn", active: isLeave },
     { id: "sidebarEmployeePayrollBtn", active: isPayroll },
   ].forEach(({ id, active }) => {
@@ -1727,6 +2008,210 @@ async function loadEmployeeRecord(userId, userEmail) {
   renderEmployeeRecord(employee);
 }
 
+// EMPLOYEE ASSIGNED MANAGERS VISIBILITY - STEP 1
+// Load only reporting managers belonging to the currently signed-in employee.
+//
+// Security:
+// - Supabase resolves the employee from auth.uid()/authenticated email;
+// - the RPC enforces employee + tenant scope;
+// - no direct employee_reporting_lines read is performed here;
+// - this is display-only and cannot modify manager assignments.
+async function loadEmployeeReportingManagers() {
+  const list = state.dom.employeeReportingManagersList;
+  const loading = state.dom.employeeReportingManagersLoading;
+  const empty = state.dom.employeeReportingManagersEmpty;
+
+  if (!list || !loading || !empty) return;
+
+  loading.classList.remove("d-none");
+  empty.classList.add("d-none");
+  list.classList.add("d-none");
+  list.innerHTML = "";
+
+  try {
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.rpc(
+      "get_employee_reporting_manager_assignments",
+    );
+
+    if (error) throw error;
+
+    const rows = Array.isArray(data) ? data : [];
+
+    // Keep the resolved manager list available to Employee Profile rendering
+    // without introducing any write or authority behaviour.
+    state.reportingManagers = rows;
+
+    renderEmployeeReportingManagers(rows);
+  } catch (error) {
+    console.error(
+      "Error loading employee reporting managers:",
+      error,
+    );
+
+    state.reportingManagers = [];
+
+    loading.classList.add("d-none");
+    list.classList.add("d-none");
+    empty.classList.remove("d-none");
+
+    empty.textContent =
+      "Your reporting managers could not be loaded right now.";
+  }
+}
+
+
+// EMPLOYEE ASSIGNED MANAGERS VISIBILITY - STEP 1
+// Render authoritative reporting relationships in Primary-first order.
+// No buttons or mutation controls are intentionally included.
+function renderEmployeeReportingManagers(reportingManagers = []) {
+  const list = state.dom.employeeReportingManagersList;
+  const loading = state.dom.employeeReportingManagersLoading;
+  const empty = state.dom.employeeReportingManagersEmpty;
+
+  if (!list || !loading || !empty) return;
+
+  const rows = Array.isArray(reportingManagers)
+    ? [...reportingManagers]
+    : [];
+
+  rows.sort((left, right) => {
+    const leftType = normalizeText(left?.manager_type);
+    const rightType = normalizeText(right?.manager_type);
+
+    const priority = {
+      primary: 1,
+      secondary: 2,
+    };
+
+    return (
+      (priority[leftType] || 3) -
+      (priority[rightType] || 3)
+    );
+  });
+
+  loading.classList.add("d-none");
+  list.innerHTML = "";
+
+  if (!rows.length) {
+    list.classList.add("d-none");
+    empty.classList.remove("d-none");
+    empty.textContent =
+      "No active reporting managers are currently assigned.";
+    return;
+  }
+
+  empty.classList.add("d-none");
+  list.classList.remove("d-none");
+
+  rows.forEach((manager) => {
+    const managerType =
+      normalizeText(manager.manager_type) === "primary"
+        ? "Primary Manager"
+        : "Secondary Manager";
+
+    const fullName =
+      [
+        manager.manager_first_name,
+        manager.manager_last_name,
+      ]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(" ") ||
+      manager.manager_work_email ||
+      "Manager";
+
+    const jobTitle =
+      String(manager.manager_job_title || "").trim();
+
+    const department =
+      String(manager.manager_department || "").trim();
+
+    const workEmail =
+      String(manager.manager_work_email || "").trim();
+
+    const relationshipTone =
+      managerType === "Primary Manager"
+        ? "bexhr-status-pill--success"
+        : "bexhr-status-pill--neutral";
+
+    const item = document.createElement("article");
+
+    item.className =
+      "border rounded-4 bg-light p-3";
+
+    item.innerHTML = `
+      <div
+        class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3"
+      >
+        <div class="d-flex align-items-start gap-3 min-w-0">
+          <span
+            class="rounded-circle bg-white border d-inline-flex align-items-center justify-content-center flex-shrink-0"
+            style="width: 42px; height: 42px;"
+            aria-hidden="true"
+          >
+            <i class="bi bi-person-badge"></i>
+          </span>
+
+          <div class="min-w-0">
+            <div class="fw-semibold">
+              ${escapeHtml(fullName)}
+            </div>
+
+            ${jobTitle
+        ? `
+                  <div class="small text-secondary mt-1">
+                    ${escapeHtml(jobTitle)}
+                  </div>
+                `
+        : ""
+      }
+
+            ${department
+        ? `
+                  <div class="small text-secondary">
+                    ${escapeHtml(department)}
+                  </div>
+                `
+        : ""
+      }
+
+            ${workEmail
+        ? `
+                  <div class="small mt-2">
+                    <i
+                      class="bi bi-envelope me-1 text-secondary"
+                      aria-hidden="true"
+                    ></i>
+                    ${escapeHtml(workEmail)}
+                  </div>
+                `
+        : ""
+      }
+          </div>
+        </div>
+
+        <span
+          class="bexhr-status-pill ${relationshipTone} flex-shrink-0"
+        >
+          <i
+            class="bi ${managerType === "Primary Manager"
+        ? "bi-person-check-fill"
+        : "bi-people-fill"
+      }"
+            aria-hidden="true"
+          ></i>
+
+          <span>${escapeHtml(managerType)}</span>
+        </span>
+      </div>
+    `;
+
+    list.appendChild(item);
+  });
+}
+
 function getEmployeeManagerDisplayName(employee) {
   return (
     employee.manager_name ||
@@ -1790,10 +2275,10 @@ function getMaskedEmployeeNin(value) {
   if (!digits) return "--";
 
   if (digits.length <= 4) {
-    return `••••${digits}`;
+    return `\u2022\u2022\u2022\u2022${digits}`;
   }
 
-  return `•••••••${digits.slice(-4)}`;
+  return `\u2022\u2022\u2022\u2022\u2022\u2022\u2022${digits.slice(-4)}`;
 }
 
 // EMPLOYEE PROFILE REVIEW - STEP 1A
@@ -2384,6 +2869,7 @@ async function loadEmployeeProfileCorrectionRequests() {
   if (!employee.id || !employee.tenant_id) {
     state.profileCorrectionRequests = [];
     renderEmployeeProfileCorrectionRequestHistory([]);
+    renderEmployeeOverviewMetrics();
     return;
   }
 
@@ -2399,7 +2885,10 @@ async function loadEmployeeProfileCorrectionRequests() {
   if (error) throw error;
 
   state.profileCorrectionRequests = Array.isArray(data) ? data : [];
-  renderEmployeeProfileCorrectionRequestHistory(state.profileCorrectionRequests);
+  renderEmployeeProfileCorrectionRequestHistory(
+    state.profileCorrectionRequests,
+  );
+  renderEmployeeOverviewMetrics();
 }
 
 // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
@@ -2581,6 +3070,87 @@ function bindEmployeeProfileCorrectionRequestEvents() {
   );
 }
 
+/* =========================================================
+   EMPLOYEE OVERVIEW LIVE METRICS - v1.0.0
+
+   Uses only state already loaded for the signed-in employee:
+   - employeeRecord;
+   - profileCorrectionRequests;
+   - leaveRequests;
+   - payrollRecords.
+
+   This does not query Supabase, broaden employee identity matching,
+   change tenant filtering, alter payroll authorisation, or mutate data.
+   ========================================================= */
+
+function renderEmployeeOverviewMetrics() {
+  const employee = state.employeeRecord || null;
+
+  const correctionRequests = Array.isArray(
+    state.profileCorrectionRequests,
+  )
+    ? state.profileCorrectionRequests
+    : [];
+
+  const leaveRequests = Array.isArray(state.leaveRequests)
+    ? state.leaveRequests
+    : [];
+
+  const payrollRecords = Array.isArray(state.payrollRecords)
+    ? state.payrollRecords
+    : [];
+
+  /* Profile status reflects whether the signed-in user resolved to an
+     employee record. It does not infer HR approval or data completeness. */
+  if (state.dom.overviewProfileStatus) {
+    state.dom.overviewProfileStatus.textContent = employee
+      ? "Available"
+      : "Unavailable";
+  }
+
+  /* Open means HR work has not reached a terminal outcome.
+     Approved remains open until HR completes or closes the request. */
+  const terminalCorrectionStatuses = new Set([
+    "completed",
+    "closed",
+    "rejected",
+  ]);
+
+  const openCorrectionRequestCount = correctionRequests.filter(
+    (request) => {
+      const status = normalizeEmployeeProfileCorrectionStatus(
+        request?.status || "Pending",
+      );
+
+      return !terminalCorrectionStatuses.has(status);
+    },
+  ).length;
+
+  if (state.dom.overviewOpenRequestCount) {
+    state.dom.overviewOpenRequestCount.textContent = String(
+      openCorrectionRequestCount,
+    );
+  }
+
+  /* The card label says Leave Requests and its supporting copy says
+     submitted activity, so show the employee's complete loaded history. */
+  if (state.dom.overviewLeaveRequestCount) {
+    state.dom.overviewLeaveRequestCount.textContent = String(
+      leaveRequests.length,
+    );
+  }
+
+  /* loadEmployeePayroll already restricts this state to Authorised and
+     finalised records ordered by descending pay date. */
+  const latestPayrollRecord = payrollRecords[0] || null;
+
+  if (state.dom.overviewLatestPayCycle) {
+    state.dom.overviewLatestPayCycle.textContent = String(
+      latestPayrollRecord?.pay_cycle || "--",
+    ).trim();
+  }
+}
+
 function renderEmployeeRecord(employee) {
   const firstName = employee.first_name || "";
   const lastName = employee.last_name || "";
@@ -2602,6 +3172,18 @@ function renderEmployeeRecord(employee) {
 
   if (state.dom.employeeDisplayEmail) {
     state.dom.employeeDisplayEmail.textContent = email || "No email";
+  }
+
+
+  // EMPLOYEE HEADER IDENTITY BINDING - v1.0.0
+  if (state.dom.employeeModernUserName) {
+    state.dom.employeeModernUserName.textContent = fullName;
+  }
+
+  // EMPLOYEE OVERVIEW PERSONAL WELCOME - v1.0.0
+  if (state.dom.overviewWelcomeName) {
+    state.dom.overviewWelcomeName.textContent =
+      String(firstName || fullName || "Employee").trim();
   }
 
   if (state.dom.heroRoleValue) {
@@ -2641,6 +3223,8 @@ function renderEmployeeRecord(employee) {
   // EMPLOYEE PROFILE REVIEW - STEP 1A
   // Populate the extended read-only HR profile review block.
   renderEmployeeHrProfileReview(employee);
+
+  renderEmployeeOverviewMetrics();
 }
 
 /* =========================================================
@@ -2701,6 +3285,10 @@ async function renderEmployeeProfileImage() {
   )}`;
 
   const imagePath = state.currentProfile?.profile_image_path || "";
+
+  if (state.dom.removeProfileImageBtn) {
+    state.dom.removeProfileImageBtn.disabled = !imagePath;
+  }
 
   if (!imagePath) {
     profileImageElement.src = fallbackImageUrl;
@@ -2909,6 +3497,91 @@ async function uploadEmployeeProfileImage() {
   }
 }
 
+async function removeEmployeeProfileImage() {
+  if (!state.currentUser?.id) {
+    showPageAlert("danger", "No active employee session found.");
+    return;
+  }
+
+  const existingImagePath = String(
+    state.currentProfile?.profile_image_path || "",
+  ).trim();
+
+  if (!existingImagePath) {
+    await renderEmployeeProfileImage();
+    return;
+  }
+
+  const button = state.dom.removeProfileImageBtn;
+  const originalHtml = button?.innerHTML || "";
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = `
+        <span
+          class="spinner-border spinner-border-sm me-2"
+          aria-hidden="true"
+        ></span>
+        Removing...
+      `;
+    }
+
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({
+        profile_image_path: null,
+      })
+      .eq("id", state.currentUser.id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) throw error;
+
+    state.currentProfile = {
+      ...state.currentProfile,
+      ...(data || {}),
+      profile_image_path: "",
+    };
+
+    state.pendingProfileImageFile = null;
+
+    if (state.dom.profileImageInput) {
+      state.dom.profileImageInput.value = "";
+    }
+
+    updateProfileImageUploadButtonState();
+    await renderEmployeeProfileImage();
+
+    const { error: storageError } = await supabase.storage
+      .from(PROFILE_IMAGES_BUCKET)
+      .remove([existingImagePath]);
+
+    if (storageError) {
+      console.warn(
+        "Profile image reference was cleared, but storage cleanup failed:",
+        storageError,
+      );
+    }
+
+    showPageAlert("success", "Profile picture removed successfully.");
+  } catch (error) {
+    console.error("Error removing employee profile image:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "Profile picture could not be removed.",
+    );
+  } finally {
+    if (button) {
+      button.innerHTML = originalHtml;
+    }
+
+    await renderEmployeeProfileImage();
+  }
+}
 /* =========================================================
    Leave balances
 ========================================================= */
@@ -3035,7 +3708,7 @@ function renderLeaveBalances(balances) {
     // - Progress bar showing used entitlement
     // This changes presentation only; leave balance data is not mutated.
     card.innerHTML = `
-      <div class="info-tile leave-entitlement-tile h-100">
+      <div class="info-tile h-100">
         <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
           <div>
             <div class="info-tile-label mb-1">Leave Type</div>
@@ -3044,9 +3717,7 @@ function renderLeaveBalances(balances) {
             </div>
           </div>
 
-          <span class="badge ${statusClass}">
-            ${escapeHtml(statusLabel)}
-          </span>
+          ${renderEmployeeModernLeaveStatusPill(statusLabel)}
         </div>
 
         <div class="row g-3 mb-3">
@@ -3784,6 +4455,7 @@ async function loadEmployeeLeaveRequests() {
 
   if (!employeeIdentityCandidates.length) {
     state.leaveRequests = [];
+    renderEmployeeOverviewMetrics();
     renderLeaveRequests([]);
     renderLatestDecisionCard([]);
     updateLeaveRequestBlockNotice();
@@ -3843,6 +4515,7 @@ async function loadEmployeeLeaveRequests() {
   // EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
   // Keep loaded leave requests available to the Request Leave form.
   state.leaveRequests = requests;
+  renderEmployeeOverviewMetrics();
 
   renderLeaveRequests(requests);
   renderLatestDecisionCard(requests);
@@ -4068,7 +4741,7 @@ function renderLeaveRequests(requests) {
     // Employee-friendly request history card.
     // This replaces the table row layout only; no leave request data is changed.
     item.innerHTML = `
-            <div class="border ${toneClass} border-start border-4 rounded-3 bg-white px-3 py-2">
+            <div class="border rounded-3 bg-white p-3">
                <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-2">
           <div class="d-flex align-items-start gap-3">
                         <div class="fs-6 lh-1">
@@ -4077,16 +4750,14 @@ function renderLeaveRequests(requests) {
 
             <div>
               <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-                <span class="badge ${statusBadgeClass}">
-                  ${escapeHtml(statusText)}
-                </span>
+                ${renderEmployeeModernLeaveStatusPill(statusText)}
                 <span class="fw-semibold">
                   ${escapeHtml(leaveTypeName)}
                 </span>
               </div>
 
               <div class="small text-secondary lh-sm">
-                ${escapeHtml(startDate)} to ${escapeHtml(endDate)} • ${totalDays} day(s)
+                ${escapeHtml(startDate)} to ${escapeHtml(endDate)} &bull; ${totalDays} day(s)
               </div>
             </div>
           </div>
@@ -4231,9 +4902,7 @@ function renderLatestDecisionCard(requests) {
               ${isCancelledAudit ? "Latest Leave Update" : "Latest Decision"}
             </div>
             <div class="d-flex flex-wrap align-items-center gap-2">
-              <span class="badge ${statusBadgeClass} fs-6">
-                ${escapeHtml(statusText)}
-              </span>
+              ${renderEmployeeModernLeaveStatusPill(statusText)}
               <span class="fw-semibold">
                 ${escapeHtml(leaveTypeName)}
               </span>
@@ -4353,7 +5022,7 @@ function updateEmployeePayrollFigureVisibilityButton() {
 }
 
 function getEmployeePayrollFigureDisplay(displayValue) {
-  return state.isPayrollFiguresHidden ? "••••••" : displayValue;
+  return state.isPayrollFiguresHidden ? "\u2022\u2022\u2022\u2022\u2022\u2022" : displayValue;
 }
 
 /* =========================================================
@@ -4858,209 +5527,498 @@ function buildEmployeeAlpatechDocumentBrandHeaderHtml({
   `;
 }
 
-function buildEmployeePayslipPreviewContent(record) {
-  const currency = record.currency || "NGN";
-  const sections = buildPayrollBreakdownSections(record);
+// EMPLOYEE PAYSLIP PREVIEW HR SELF-SERVICE PARITY - v1.0.0
+// Presentation-only parity with the approved HR/Manager self-service payslip.
+// Existing authorised payroll records, PDF generation, calculations,
+// permissions, tenant scope and employee identity remain unchanged.
+function buildEmployeePayslipBrandHeaderHtml(record = {}) {
+  const isAlpatech = isCurrentEmployeeTenantAlpatechWorkspace();
+  const companyName = getEmployeePayslipCompanyName();
+  const brandName = isAlpatech ? "ALPATECH" : companyName;
 
-  const employeeName =
-    `${state.employeeRecord?.first_name || ""} ${state.employeeRecord?.last_name || ""}`.trim() ||
-    "Employee";
-
-  const employeeEmail =
-    state.employeeRecord?.work_email ||
-    state.currentProfile?.email ||
-    state.currentUser?.email ||
-    "--";
-
-  const employeeId = getEmployeeIdDisplayValue(state.employeeRecord || {});
-  const department = state.employeeRecord?.department || "--";
-  const jobTitle =
-    state.employeeRecord?.job_title ||
-    state.employeeRecord?.position ||
-    "Employee";
-
-  // ALPATECH EMPLOYEE PAYSLIP PREVIEW BRANDING - STEP 1C-FIX
-  // Use the same compact document-header pattern as HR payslip preview.
-  // Do not use a second blue banner inside the modal.
-  const isAlpatechPayslipPreview =
-    typeof isCurrentEmployeeTenantAlpatechWorkspace === "function" &&
-    isCurrentEmployeeTenantAlpatechWorkspace();
-
-  const alpatechPayslipPreviewHeaderHtml = isAlpatechPayslipPreview
-    ? buildEmployeeAlpatechDocumentBrandHeaderHtml({
-      documentLabel: "Confidential employee payslip",
-      rightTitle: "Payslip",
-      rightLine1: record.pay_cycle || "--",
-      rightLine2: `Pay Date: ${formatDate(record.pay_date)}`,
-    })
+  const brandMarkHtml = isAlpatech
+    ? `<span class="bexhr-payslip-brand-mark bexhr-payslip-brand-mark--image" aria-hidden="true">
+         <img src="assets/alpatech-flame.png" alt="" />
+       </span>`
     : "";
 
-  const renderPayslipModalItems = (items = []) => {
-    const visibleItems = Array.isArray(items) ? items : [];
-
-    if (!visibleItems.length) {
-      return `
-        <div class="text-secondary small border rounded-3 p-3">
-          No payroll line items recorded.
-        </div>
-      `;
-    }
-
-    return visibleItems
-      .map((item) => {
-        const valueClass = item.emphasis ? "fw-bold" : "fw-semibold";
-
-        return `
-          <div class="d-flex justify-content-between gap-3 border-bottom py-2">
-            <span>${escapeHtml(item.label)}</span>
-            <span class="${valueClass} text-end">
-              ${escapeHtml(item.displayValue)}
-            </span>
-          </div>
-        `;
-      })
-      .join("");
-  };
-
-  const sectionCardsHtml = sections
-    .map((section) => {
-      const isHalfWidth =
-        section.title === "Earnings" ||
-        section.title === "Deductions" ||
-        section.title === "Payroll Breakdown";
-
-      return `
-        <div class="${isHalfWidth ? "col-lg-6" : "col-12"}">
-          <div class="border rounded-4 p-4 h-100">
-            <h3 class="h6 fw-bold mb-3">${escapeHtml(section.title)}</h3>
-            ${renderPayslipModalItems(section.items)}
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-
   return `
-        ${alpatechPayslipPreviewHeaderHtml}
-
-    <div class="border rounded-4 p-3 p-lg-4 mb-4">
-      <div class="d-flex flex-column flex-md-row justify-content-between gap-4">
-        <div>
-          <div class="text-secondary small">Employee</div>
-          <div class="h5 mb-1">${escapeHtml(employeeName)}</div>
-          <div class="text-secondary small text-break">
-            ${escapeHtml(employeeEmail)}
-          </div>
-          <div class="text-secondary small">
-            ${escapeHtml(department)} • ${escapeHtml(jobTitle)}
-          </div>
-        </div>
-
-        <div class="text-md-end">
-          <div class="text-secondary small">Employee No.</div>
-          <div class="fw-semibold">${escapeHtml(employeeId)}</div>
-
-          <div class="text-secondary small mt-3">Pay Cycle</div>
-          <div class="fw-semibold">${escapeHtml(record.pay_cycle || "--")}</div>
-
-          <div class="text-secondary small mt-3">Pay Date</div>
-          <div class="fw-semibold">${formatDate(record.pay_date)}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="row g-3 mb-4">
-      <div class="col-md-4">
-        <div class="border rounded-4 p-3 h-100">
-          <div class="text-secondary small">Gross Pay</div>
-          <div class="h5 mb-0">
-            ${escapeHtml(formatCurrency(record.gross_pay, currency))}
+    <header class="bexhr-payslip-letterhead ${isAlpatech ? "bexhr-payslip-letterhead--alpatech" : ""}">
+      <div class="bexhr-payslip-brand-block">
+        <div class="bexhr-payslip-brand-line">
+          ${brandMarkHtml}
+          ${brandMarkHtml
+      ? `<span class="bexhr-payslip-brand-divider" aria-hidden="true"></span>`
+      : ""}
+          <div>
+            <div class="bexhr-payslip-brand-name">
+              ${escapeHtml(brandName || "BexHR")}
+            </div>
+            <div class="bexhr-payslip-document-label">
+              Confidential Payroll Payslip
+            </div>
+            ${!isAlpatech &&
+      companyName &&
+      normalizeText(companyName) !== "bexhr"
+      // Keep the platform attribution readable for non-Alpatech tenant payslips.
+      ? `<div class="bexhr-payslip-platform-label">Prepared securely with BexHR</div>`
+      : ""}
           </div>
         </div>
       </div>
 
-      <div class="col-md-4">
-        <div class="border rounded-4 p-3 h-100">
-          <div class="text-secondary small">Total Deductions</div>
-          <div class="h5 mb-0">
-            ${escapeHtml(formatCurrency(record.total_deductions, currency))}
-          </div>
-        </div>
-      </div>
+      <div class="bexhr-payslip-document-meta">
+        <span class="bexhr-payslip-status-badge">
+          <span aria-hidden="true"></span>
+          ${escapeHtml(record.status || "Authorised")}
+        </span>
 
-      <div class="col-md-4">
-        <div class="border rounded-4 p-3 h-100">
-          <div class="text-secondary small">Net Pay</div>
-          <div class="h5 mb-0">
-            ${escapeHtml(formatCurrency(record.net_pay, currency))}
-          </div>
-        </div>
-      </div>
-    </div>
+        <strong>${escapeHtml(record.pay_cycle || "Payroll")}</strong>
 
-    <div class="row g-4">
-      ${sectionCardsHtml}
-    </div>
-
-    <div class="alert alert-light border mt-4 mb-0">
-      <div class="fw-semibold mb-1">Authorised payslip details</div>
-      <div class="small text-secondary">
-        This is a read-only view of your authorised payslip details. Use the PDF action in Payroll History to download a payslip copy.
+        <span>
+          Pay date: ${escapeHtml(formatDate(record.pay_date))}
+        </span>
       </div>
-    </div>
+    </header>
   `;
 }
 
+function buildEmployeePayslipPreviewRows(
+  rows = [],
+  emptyText = "No items recorded.",
+) {
+  const visibleRows = rows.filter((row) => row && row.label);
 
-// EMPLOYEE UI CLEANUP - STEP 1Q-F FIX
-// Create the payslip preview modal from JavaScript so employee-dashboard.html
-// does not need another structural patch. This mirrors the HR payslip preview
-// modal pattern while keeping Employee self-service scoped and read-only.
+  if (!visibleRows.length) {
+    return `
+      <div class="bexhr-payslip-empty-line">
+        ${escapeHtml(emptyText)}
+      </div>
+    `;
+  }
+
+  return visibleRows
+    .map(
+      (row) => `
+        <div class="bexhr-payslip-line-item">
+          <span>${escapeHtml(row.label)}</span>
+          <strong>${escapeHtml(row.value)}</strong>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function buildEmployeePayslipStructureHtml(items = []) {
+  const visibleItems = items.filter((item) => {
+    if (!item || !item.label) return false;
+
+    const value = String(item.value ?? "").trim();
+
+    return (
+      value &&
+      value !== "--" &&
+      value !== "0.0%" &&
+      value !== "NGN 0.00"
+    );
+  });
+
+  if (!visibleItems.length) return "";
+
+  return `
+    <section class="bexhr-payslip-structure-card">
+      <div class="bexhr-payslip-section-heading">
+        <span class="bexhr-payslip-section-icon" aria-hidden="true">
+          <i class="bi bi-diagram-3"></i>
+        </span>
+
+        <div>
+          <span>Payroll basis</span>
+          <h3>Salary Structure</h3>
+        </div>
+      </div>
+
+      <div class="bexhr-payslip-structure-grid">
+        ${visibleItems
+      .map(
+        (item) => `
+              <div class="bexhr-payslip-structure-item ${item.emphasis
+            ? "bexhr-payslip-structure-item--emphasis"
+            : ""
+          }">
+                <span>${escapeHtml(item.label)}</span>
+                <strong>${escapeHtml(item.value)}</strong>
+              </div>
+            `,
+      )
+      .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function buildEmployeePayslipPreviewContent(record = {}) {
+  const currency = record.currency || "NGN";
+  const employee = getEmployeePayslipPdfEmployeeContext();
+  const companyName = getEmployeePayslipCompanyName();
+
+  const money = (value) => formatCurrency(value, currency);
+
+  const percent = (value) => {
+    const numericValue = Number(value || 0);
+
+    if (!Number.isFinite(numericValue) || numericValue === 0) {
+      return "0.0%";
+    }
+
+    const percentage =
+      Math.abs(numericValue) <= 1
+        ? numericValue * 100
+        : numericValue;
+
+    return `${percentage.toFixed(1)}%`;
+  };
+
+  const earningsRows = [
+    {
+      label: "Basic Pay",
+      value: money(record.basic_pay),
+      amount: record.basic_pay,
+    },
+    {
+      label: "Housing Allowance",
+      value: money(record.housing_allowance),
+      amount: record.housing_allowance,
+    },
+    {
+      label: "Transport Allowance",
+      value: money(record.transport_allowance),
+      amount: record.transport_allowance,
+    },
+    {
+      label: "Utility Allowance",
+      value: money(record.utility_allowance),
+      amount: record.utility_allowance,
+    },
+    {
+      label: "Medical Allowance",
+      value: money(record.medical_allowance),
+      amount: record.medical_allowance,
+    },
+    {
+      label: "Other Allowance",
+      value: money(record.other_allowance),
+      amount: record.other_allowance,
+    },
+    {
+      label: "Bonus",
+      value: money(record.bonus),
+      amount: record.bonus,
+    },
+    {
+      label: "Overtime",
+      value: money(record.overtime),
+      amount: record.overtime,
+    },
+    {
+      label: "Logistics Allowance",
+      value: money(record.logistics_allowance),
+      amount: record.logistics_allowance,
+    },
+    {
+      label: "Data / Airtime Allowance",
+      value: money(record.data_airtime_allowance),
+      amount: record.data_airtime_allowance,
+    },
+  ].filter((row) => Number(row.amount || 0) > 0);
+
+  const deductionRows = [
+    {
+      label: "PAYE Tax",
+      value: money(record.paye_tax),
+      amount: record.paye_tax,
+    },
+    {
+      label: "WHT Tax",
+      value: money(record.wht_tax),
+      amount: record.wht_tax,
+    },
+    {
+      label: "Employee Pension",
+      value: money(record.employee_pension),
+      amount: record.employee_pension,
+    },
+    {
+      label: "Other Deductions",
+      value: money(record.other_deductions),
+      amount: record.other_deductions,
+    },
+  ].filter((row) => Number(row.amount || 0) > 0);
+
+  const structureHtml = buildEmployeePayslipStructureHtml([
+    {
+      label: "Pay Type",
+      value:
+        record.employee_group ||
+        record.payroll_model ||
+        "Regular",
+    },
+    {
+      label: "Increment",
+      value: percent(record.increment_percent),
+    },
+    {
+      label: "Monthly Gross Salary",
+      value: money(record.gross_pay),
+      emphasis: true,
+    },
+  ]);
+
+  return `
+    <article class="bexhr-payslip-document bexhr-payslip-document--self-service">
+      ${buildEmployeePayslipBrandHeaderHtml(record)}
+
+      <section class="bexhr-payslip-party-grid">
+        <article class="bexhr-payslip-party-card">
+          <div class="bexhr-payslip-party-label">Company</div>
+
+          <h3>${escapeHtml(companyName || "BexHR")}</h3>
+
+          <div class="bexhr-payslip-contact-lines">
+            <span>Authorised payroll record</span>
+            <span>
+              ${escapeHtml(record.pay_cycle || "Payroll")} payroll cycle
+            </span>
+          </div>
+        </article>
+
+        <article class="bexhr-payslip-party-card bexhr-payslip-party-card--employee">
+          <div class="bexhr-payslip-party-label">Employee</div>
+
+          <h3>${escapeHtml(employee.employeeName)}</h3>
+
+          <div class="bexhr-payslip-contact-lines">
+            <span>${escapeHtml(employee.employeeEmail)}</span>
+            <span>
+              ${escapeHtml(employee.department)} ·
+              ${escapeHtml(employee.jobTitle)}
+            </span>
+          </div>
+
+          <div class="bexhr-payslip-employee-number">
+            <span>Employee No.</span>
+            <strong>${escapeHtml(employee.employeeId)}</strong>
+          </div>
+        </article>
+      </section>
+
+      <section
+        class="bexhr-payslip-summary-grid"
+        aria-label="Payslip totals"
+      >
+        <article class="bexhr-payslip-summary-card bexhr-payslip-summary-card--gross">
+          <span class="bexhr-payslip-summary-icon" aria-hidden="true">
+            <i class="bi bi-wallet2"></i>
+          </span>
+
+          <div>
+            <span>Gross Pay</span>
+            <strong>${escapeHtml(money(record.gross_pay))}</strong>
+          </div>
+        </article>
+
+        <article class="bexhr-payslip-summary-card bexhr-payslip-summary-card--deductions">
+          <span class="bexhr-payslip-summary-icon" aria-hidden="true">
+            <i class="bi bi-dash-circle"></i>
+          </span>
+
+          <div>
+            <span>Total Deductions</span>
+            <strong>
+              ${escapeHtml(money(record.total_deductions))}
+            </strong>
+          </div>
+        </article>
+
+        <article class="bexhr-payslip-summary-card bexhr-payslip-summary-card--net">
+          <span class="bexhr-payslip-summary-icon" aria-hidden="true">
+            <i class="bi bi-check2-circle"></i>
+          </span>
+
+          <div>
+            <span>Net Pay</span>
+            <strong>${escapeHtml(money(record.net_pay))}</strong>
+          </div>
+        </article>
+      </section>
+
+      ${structureHtml}
+
+      <section class="bexhr-payslip-breakdown-grid">
+        <article class="bexhr-payslip-breakdown-card bexhr-payslip-breakdown-card--earnings">
+          <div class="bexhr-payslip-section-heading">
+            <span class="bexhr-payslip-section-icon" aria-hidden="true">
+              <i class="bi bi-plus-circle"></i>
+            </span>
+
+            <div>
+              <span>Income</span>
+              <h3>Earnings</h3>
+            </div>
+          </div>
+
+          <div class="bexhr-payslip-line-items">
+            ${buildEmployeePayslipPreviewRows(
+    earningsRows,
+    "No earnings breakdown recorded.",
+  )}
+          </div>
+
+          <div class="bexhr-payslip-section-total">
+            <span>Gross Pay</span>
+            <strong>${escapeHtml(money(record.gross_pay))}</strong>
+          </div>
+        </article>
+
+        <article class="bexhr-payslip-breakdown-card bexhr-payslip-breakdown-card--deductions">
+          <div class="bexhr-payslip-section-heading">
+            <span class="bexhr-payslip-section-icon" aria-hidden="true">
+              <i class="bi bi-dash-circle"></i>
+            </span>
+
+            <div>
+              <span>Withheld</span>
+              <h3>Deductions</h3>
+            </div>
+          </div>
+
+          <div class="bexhr-payslip-line-items">
+            ${buildEmployeePayslipPreviewRows(
+    deductionRows,
+    "No deductions recorded.",
+  )}
+          </div>
+
+          <div class="bexhr-payslip-section-total">
+            <span>Total Deductions</span>
+            <strong>
+              ${escapeHtml(money(record.total_deductions))}
+            </strong>
+          </div>
+        </article>
+      </section>
+
+      <section class="bexhr-payslip-net-panel">
+        <div>
+          <span>Amount payable</span>
+          <strong>Net Pay</strong>
+        </div>
+
+        <div class="bexhr-payslip-net-amount">
+          ${escapeHtml(money(record.net_pay))}
+        </div>
+      </section>
+
+      <footer class="bexhr-payslip-footer-note">
+        <span class="bexhr-payslip-footer-icon" aria-hidden="true">
+          <i class="bi bi-shield-lock"></i>
+        </span>
+
+        <div>
+          <strong>Confidential employee document</strong>
+          <p>
+            This read-only payslip is intended only for the named employee.
+            Use the Download PDF action to keep an authorised copy.
+          </p>
+        </div>
+      </footer>
+    </article>
+  `;
+}
+
 function ensureEmployeePayslipPreviewModal() {
-  let modal = document.getElementById("employeePayslipPreviewModal");
+  let modal = document.getElementById(
+    "employeePayslipPreviewModal",
+  );
 
   if (modal) return modal;
 
   modal = document.createElement("div");
   modal.id = "employeePayslipPreviewModal";
-  modal.className = "d-none position-fixed top-0 start-0 w-100 h-100";
+  modal.className =
+    "d-none position-fixed top-0 start-0 w-100 h-100 bexhr-payslip-modal employee-payslip-preview-modal";
+
   modal.style.zIndex = "1060";
-  modal.style.background = "rgba(15, 23, 42, 0.45)";
   modal.setAttribute("aria-hidden", "true");
 
   modal.innerHTML = `
-    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
-      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 880px; max-height: 92vh; overflow: auto;">
-        <div id="employeePayslipPreviewHeader" class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
+    <div class="container h-100 d-flex align-items-center justify-content-center py-4 bexhr-payslip-modal-container">
+      <section
+        class="card border-0 shadow-lg rounded-4 w-100 bexhr-payslip-modal-shell"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="employeePayslipPreviewTitle"
+      >
+        <header
+          id="employeePayslipPreviewHeader"
+          class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4 bexhr-payslip-modal-header"
+        >
           <div>
-            <h2 id="employeePayslipPreviewTitle" class="h4 mb-1">
-              Payslip Details
+            <h2
+              id="employeePayslipPreviewTitle"
+              class="h4 mb-1"
+            >
+              Payslip Preview
             </h2>
-            <p id="employeePayslipPreviewSubtitle" class="text-secondary mb-0">
-              Review your authorised payslip details for this pay cycle.
+
+            <p
+              id="employeePayslipPreviewSubtitle"
+              class="text-secondary mb-0"
+            >
+              Review your authorised payroll document or download a PDF copy.
             </p>
           </div>
 
-          <button type="button" id="closeEmployeePayslipPreviewBtn"
+          <button
+            type="button"
+            id="closeEmployeePayslipPreviewBtn"
             class="btn btn-sm btn-outline-secondary"
-            aria-label="Close payslip details">
+            aria-label="Close payslip preview"
+          >
             <i class="bi bi-x-lg"></i>
           </button>
-        </div>
+        </header>
 
-        <div id="employeePayslipPreviewContent" class="card-body p-4">
+        <div
+          id="employeePayslipPreviewContent"
+          class="card-body p-4 bexhr-payslip-modal-content"
+        >
           <div class="text-center text-secondary py-4">
             Select a payroll record to view payslip details.
           </div>
         </div>
 
-        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
-          <button type="button" id="closeEmployeePayslipPreviewFooterBtn"
-            class="btn btn-outline-secondary dashboard-action-btn">
-            Close
+        <footer
+          class="card-footer bg-light border-0 d-flex flex-wrap justify-content-end gap-2 p-4 bexhr-payslip-modal-footer"
+        >
+          <button
+            type="button"
+            id="downloadEmployeePayslipPreviewBtn"
+            class="btn btn-primary dashboard-action-btn"
+          >
+            <i class="bi bi-file-earmark-pdf me-2"></i>
+            Download PDF
           </button>
-        </div>
-      </div>
+
+          <button
+            type="button"
+            id="closeEmployeePayslipPreviewFooterBtn"
+            class="btn btn-outline-secondary dashboard-action-btn"
+          >
+            Close Preview
+          </button>
+        </footer>
+      </section>
     </div>
   `;
 
@@ -5068,11 +6026,35 @@ function ensureEmployeePayslipPreviewModal() {
 
   modal
     .querySelector("#closeEmployeePayslipPreviewBtn")
-    ?.addEventListener("click", closeEmployeePayslipPreviewModal);
+    ?.addEventListener(
+      "click",
+      closeEmployeePayslipPreviewModal,
+    );
 
   modal
     .querySelector("#closeEmployeePayslipPreviewFooterBtn")
-    ?.addEventListener("click", closeEmployeePayslipPreviewModal);
+    ?.addEventListener(
+      "click",
+      closeEmployeePayslipPreviewModal,
+    );
+
+  modal
+    .querySelector("#downloadEmployeePayslipPreviewBtn")
+    ?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      const payrollId = button?.dataset?.payrollId || "";
+
+      if (!payrollId) {
+        showPageAlert(
+          "warning",
+          "Select an authorised payroll record before downloading a payslip PDF.",
+        );
+
+        return;
+      }
+
+      await downloadPayslipPdf(payrollId, button);
+    });
 
   modal.addEventListener("click", (event) => {
     if (event.target === modal) {
@@ -5081,7 +6063,10 @@ function ensureEmployeePayslipPreviewModal() {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
+    if (
+      event.key === "Escape" &&
+      !modal.classList.contains("d-none")
+    ) {
       closeEmployeePayslipPreviewModal();
     }
   });
@@ -5089,8 +6074,6 @@ function ensureEmployeePayslipPreviewModal() {
   return modal;
 }
 
-// EMPLOYEE UI CLEANUP - STEP 1Q-F FIX
-// Open the Employee payslip preview modal and prevent page scroll behind it.
 function showEmployeePayslipPreviewModal() {
   const modal = ensureEmployeePayslipPreviewModal();
 
@@ -5099,10 +6082,11 @@ function showEmployeePayslipPreviewModal() {
   document.body.classList.add("overflow-hidden");
 }
 
-// EMPLOYEE UI CLEANUP - STEP 1Q-F FIX
-// Close the Employee payslip preview modal and restore page scroll.
 function closeEmployeePayslipPreviewModal() {
-  const modal = document.getElementById("employeePayslipPreviewModal");
+  const modal = document.getElementById(
+    "employeePayslipPreviewModal",
+  );
+
   if (!modal) return;
 
   modal.classList.add("d-none");
@@ -5110,8 +6094,6 @@ function closeEmployeePayslipPreviewModal() {
   document.body.classList.remove("overflow-hidden");
 }
 
-// EMPLOYEE UI CLEANUP - STEP 1Q-F FIX
-// Render one authorised payroll record into the modal card.
 function openEmployeePayslipPreview(payrollId) {
   const payrollRecord = (state.payrollRecords || []).find(
     (record) => String(record.id) === String(payrollId),
@@ -5122,57 +6104,61 @@ function openEmployeePayslipPreview(payrollId) {
       "warning",
       "The selected payroll record could not be found. Please refresh payroll history and try again.",
     );
+
     return;
   }
 
-  if (normalizeText(payrollRecord.status) !== "authorised" || !payrollRecord.is_finalised) {
+  if (
+    normalizeText(payrollRecord.status) !== "authorised" ||
+    !payrollRecord.is_finalised
+  ) {
     showPageAlert(
       "warning",
       "Payslip details are only available for authorised payroll records.",
     );
+
     return;
   }
 
   clearPageAlert();
 
   const modal = ensureEmployeePayslipPreviewModal();
-  const header = modal.querySelector("#employeePayslipPreviewHeader");
-  const title = modal.querySelector("#employeePayslipPreviewTitle");
-  const subtitle = modal.querySelector("#employeePayslipPreviewSubtitle");
-  const closeButton = modal.querySelector("#closeEmployeePayslipPreviewBtn");
-  const content = modal.querySelector("#employeePayslipPreviewContent");
-
-  // ALPATECH EMPLOYEE PAYSLIP PREVIEW BRANDING - STEP 1C-FIX
-  // Keep the modal shell consistent with HR: white header, branded document
-  // letterhead inside the payslip content.
-  if (header) {
-    header.className =
-      "card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4";
-    header.style.background = "";
-  }
+  const title = modal.querySelector(
+    "#employeePayslipPreviewTitle",
+  );
+  const subtitle = modal.querySelector(
+    "#employeePayslipPreviewSubtitle",
+  );
+  const content = modal.querySelector(
+    "#employeePayslipPreviewContent",
+  );
+  const downloadButton = modal.querySelector(
+    "#downloadEmployeePayslipPreviewBtn",
+  );
 
   if (title) {
-    title.className = "h4 mb-1";
-    title.textContent = `Payslip Preview - ${payrollRecord.pay_cycle || "Payroll"}`;
+    title.textContent =
+      `Payslip Preview - ${payrollRecord.pay_cycle || "Payroll"}`;
   }
 
   if (subtitle) {
-    subtitle.className = "text-secondary mb-0";
     subtitle.textContent =
-      "Review your authorised payslip details for this pay cycle.";
-  }
-
-  if (closeButton) {
-    closeButton.className = "btn btn-sm btn-outline-secondary";
+      "Review your authorised payroll document or download a PDF copy.";
   }
 
   if (content) {
-    content.innerHTML = buildEmployeePayslipPreviewContent(payrollRecord);
+    content.innerHTML =
+      buildEmployeePayslipPreviewContent(payrollRecord);
+  }
+
+  if (downloadButton) {
+    downloadButton.dataset.payrollId = String(
+      payrollRecord.id || payrollId,
+    );
   }
 
   showEmployeePayslipPreviewModal();
 }
-
 
 /* =========================================================
    Payroll
@@ -5182,7 +6168,9 @@ async function loadEmployeePayroll() {
   const employeeIdentityCandidates = getEmployeeIdentityCandidates();
 
   if (!employeeIdentityCandidates.length) {
+    state.payrollRecords = [];
     renderPayroll([]);
+    renderEmployeeOverviewMetrics();
     return;
   }
 
@@ -5264,6 +6252,7 @@ async function loadEmployeePayroll() {
 
   state.payrollRecords = records;
   applyPayrollFilters();
+  renderEmployeeOverviewMetrics();
 }
 function renderPayroll(records) {
   const historyRecords = Array.isArray(records) ? records : [];
@@ -5522,374 +6511,624 @@ function renderPayrollHistory(records) {
   });
 }
 
-/* =========================================================
-   Download payslip PDF with jsPDF
-========================================================= */
-function buildGenericPayslipBreakdownRows(payrollRecord) {
-  const currency = payrollRecord.currency || "NGN";
-  const taxValue = getPayrollTaxValue(payrollRecord);
-  const taxLabel = getPayrollTaxLabel(payrollRecord);
+// EMPLOYEE PAYSLIP PDF HR PARITY - v1.0.0
+// Uses the confirmed HR/Manager payslip PDF document system.
+// Payroll values, authorisation, queries and tenant boundaries are unchanged.
+function getEmployeePayslipPdfEmployeeContext() {
+  const employeeName =
+    `${state.employeeRecord?.first_name || ""} ${state.employeeRecord?.last_name || ""}`.trim() ||
+    state.currentProfile?.full_name ||
+    "Employee";
 
-  const rawRows = [
-    ["Base Salary", Number(payrollRecord.base_salary || 0)],
-    ["Basic Pay", Number(payrollRecord.basic_pay || 0)],
-    ["Housing Allowance", Number(payrollRecord.housing_allowance || 0)],
-    ["Transport Allowance", Number(payrollRecord.transport_allowance || 0)],
-    ["Utility Allowance", Number(payrollRecord.utility_allowance || 0)],
-    ["Medical Allowance", Number(payrollRecord.medical_allowance || 0)],
-    ["Other Allowance", Number(payrollRecord.other_allowance || 0)],
-    ["Bonus", Number(payrollRecord.bonus || 0)],
-    ["Overtime", Number(payrollRecord.overtime || 0)],
-    ["Logistics Allowance", Number(payrollRecord.logistics_allowance || 0)],
-    ["Data & Airtime", Number(payrollRecord.data_airtime_allowance || 0)],
-    ["Gross Pay", Number(payrollRecord.gross_pay || 0)],
-    [taxLabel, Number(taxValue || 0)],
-    ["Employee Pension", Number(payrollRecord.employee_pension || 0)],
-    ["Employer Pension", Number(payrollRecord.employer_pension || 0)],
-    ["Other Deductions", Number(payrollRecord.other_deductions || 0)],
-    ["Total Deductions", Number(payrollRecord.total_deductions || 0)],
-    ["Net Pay", Number(payrollRecord.net_pay || 0)],
-  ];
-
-  return rawRows
-    .filter(([label, amount]) => {
-      const alwaysShow = ["Gross Pay", "Total Deductions", "Net Pay"];
-      if (alwaysShow.includes(label)) return true;
-      if (label === "No Tax") return false;
-      return Number(amount) !== 0;
-    })
-    .map(([label, amount]) => ({
-      label,
-      value: formatCurrency(amount, currency),
-      emphasis: ["Gross Pay", "Total Deductions", "Net Pay"].includes(label),
-    }));
+  return {
+    employeeName,
+    employeeEmail:
+      state.employeeRecord?.work_email ||
+      state.currentProfile?.email ||
+      state.currentUser?.email ||
+      "--",
+    employeeId: getEmployeeIdDisplayValue(state.employeeRecord || {}),
+    department: state.employeeRecord?.department || "--",
+    jobTitle:
+      state.employeeRecord?.job_title ||
+      state.employeeRecord?.position ||
+      "Employee",
+  };
 }
 
-function buildPayslipSections(payrollRecord) {
-  if (isRegularPayrollRecord(payrollRecord)) {
-    return buildRegularPayrollSections(payrollRecord).map((section) => ({
-      title: section.title,
-      rows: section.items.map((item) => ({
-        label: item.label,
-        value: item.displayValue,
-        emphasis: Boolean(item.emphasis),
-      })),
-    }));
-  }
+function getEmployeePayslipCompanyName() {
+  let tenantContext = null;
 
-  return [
-    {
-      title: "Payroll Breakdown",
-      rows: buildGenericPayslipBreakdownRows(payrollRecord),
-    },
-  ];
-}
-
-function ensurePdfVerticalSpace(doc, currentY, requiredHeight) {
-  if (currentY + requiredHeight <= 280) {
-    return currentY;
-  }
-
-  doc.addPage();
-  return 20;
-}
-
-function drawPdfSectionTable(doc, title, rows, startY) {
-  let y = ensurePdfVerticalSpace(doc, startY, 18);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12.5);
-  doc.setTextColor(17, 24, 39);
-  doc.text(title, 14, y);
-
-  y += 6;
-  y = ensurePdfVerticalSpace(doc, y, 12);
-
-  doc.setFillColor(243, 244, 246);
-  doc.rect(14, y, 182, 9, "F");
-  doc.setDrawColor(209, 213, 219);
-  doc.rect(14, y, 182, 9);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.text("Description", 18, y + 6);
-  doc.text("Amount / Value", 170, y + 6, { align: "right" });
-
-  y += 9;
-
-  rows.forEach((row) => {
-    y = ensurePdfVerticalSpace(doc, y, 10);
-
-    doc.rect(14, y, 182, 9);
-
-    doc.setFont("helvetica", row.emphasis ? "bold" : "normal");
-    doc.setFontSize(10);
-    doc.text(String(row.label || "--"), 18, y + 6);
-    doc.text(String(row.value || "--"), 170, y + 6, { align: "right" });
-
-    y += 9;
-  });
-
-  return y + 6;
-}
-
-// ALPATECH EMPLOYEE PDF BRANDING - STEP 1B
-// Load the Alpatech flame asset for the Employee Dashboard payslip PDF.
-// This is visual branding only. If the image cannot load, the PDF still
-// generates safely using a text fallback.
-async function getEmployeeAlpatechPdfLogoDataUrl() {
   try {
-    const response = await fetch("assets/alpatech-flame.png", {
-      cache: "force-cache",
-    });
+    const rawContext = window.localStorage.getItem("hrPayrollTenantContext");
+    tenantContext = rawContext ? JSON.parse(rawContext) : null;
+  } catch (error) {
+    console.warn(
+      "Employee payslip tenant context could not be read.",
+      error,
+    );
+  }
 
-    if (!response.ok) return "";
+  const isAlpatech =
+    typeof isCurrentEmployeeTenantAlpatechWorkspace === "function" &&
+    isCurrentEmployeeTenantAlpatechWorkspace();
 
+  return String(
+    tenantContext?.companyName ||
+    tenantContext?.company_name ||
+    tenantContext?.tenantName ||
+    tenantContext?.tenant_name ||
+    state.currentProfile?.company_name ||
+    state.currentProfile?.organization_name ||
+    state.currentProfile?.tenant_name ||
+    state.employeeRecord?.company_name ||
+    state.employeeRecord?.organization_name ||
+    state.employeeRecord?.tenant_name ||
+    (isAlpatech ? "ALPATECH" : "BexHR")
+  ).trim() || (isAlpatech ? "ALPATECH" : "BexHR");
+}
+// -----------------------------------------------------------------------
+// Payslip PDF
+// -----------------------------------------------------------------------
+
+// ALPATECH PDF BRANDING - STEP 4A
+// Tenant-safe detection for HR/Manager My Self-Service payslip downloads.
+// This only changes the generated PDF branding when the active company
+// workspace is Alpatech. Other tenants keep the existing BexHR PDF output.
+function isCurrentEmployeeTenantAlpatechWorkspace() {
+  let tenantContext = null;
+
+  try {
+    const rawContext = window.localStorage.getItem("hrPayrollTenantContext");
+    tenantContext = rawContext ? JSON.parse(rawContext) : null;
+  } catch (error) {
+    console.warn("[SS] Tenant context could not be read for PDF branding.", error);
+  }
+
+  const searchableTenantText = [
+    tenantContext?.tenantCode,
+    tenantContext?.tenantName,
+    tenantContext?.companyName,
+    tenantContext?.company_name,
+    state.currentProfile?.tenant_code,
+    state.currentProfile?.tenant_name,
+    state.currentProfile?.company_name,
+    state.currentProfile?.organization_name,
+    state.employeeRecord?.tenant_code,
+    state.employeeRecord?.tenant_name,
+    state.employeeRecord?.company_name,
+    state.employeeRecord?.organization_name,
+  ]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join(" ");
+
+  return searchableTenantText.includes("alpatech");
+}
+
+// ALPATECH PDF BRANDING - STEP 4A
+// Central PDF brand settings. Non-Alpatech values intentionally match the
+// existing BexHR PDF output so shared product behaviour is preserved.
+// PAYSLIP DOCUMENT SYSTEM - STEP 3
+// Tenant-safe A4 PDF presentation for Self-Service. The PDF is generated
+// from the already-loaded authorised payroll record; no payroll values,
+// calculations, status rules, queries, or permissions are changed.
+function getEmployeePayslipPdfBranding(record = {}) {
+  const isAlpatech = isCurrentEmployeeTenantAlpatechWorkspace();
+  const companyName = getEmployeePayslipCompanyName();
+
+  return {
+    isAlpatech,
+    brandName: isAlpatech ? "ALPATECH" : companyName || "BexHR",
+    companyName: companyName || (isAlpatech ? "ALPATECH" : "BexHR"),
+    documentLabel: "Confidential Payroll Payslip",
+    // PAYSLIP TENANT-SCOPED PDF FOOTER - v1.0.0
+    // Use the resolved tenant/company name throughout the generated PDF.
+    // BexHR is used only when no tenant company name can be resolved.
+    footerText: `Generated from an authorised payroll record for ${isAlpatech ? "ALPATECH" : companyName || "BexHR"}.`,
+    filePrefix: isAlpatech ? "Alpatech" : "",
+    primaryRgb: isAlpatech ? [11, 95, 149] : [15, 118, 110],
+    primaryDarkRgb: isAlpatech ? [8, 68, 109] : [17, 94, 89],
+    accentRgb: isAlpatech ? [54, 185, 207] : [45, 212, 191],
+    successRgb: [21, 128, 61],
+    warningRgb: [217, 119, 6],
+    textRgb: [16, 35, 63],
+    mutedRgb: [100, 116, 139],
+    borderRgb: [217, 227, 236],
+    softRgb: isAlpatech ? [244, 250, 252] : [242, 251, 249],
+    payCycle: record.pay_cycle || "Payroll",
+    payDate: formatDate(record.pay_date),
+    status: record.status || "Authorised",
+  };
+}
+
+async function loadEmployeePayslipImageAsDataUrl(assetPath) {
+  try {
+    const response = await fetch(assetPath, { cache: "force-cache" });
+    if (!response.ok) throw new Error(`Image request failed with status ${response.status}`);
     const blob = await response.blob();
 
     return await new Promise((resolve) => {
       const reader = new FileReader();
-
-      reader.onloadend = () => {
-        resolve(String(reader.result || ""));
-      };
-
-      reader.onerror = () => {
-        resolve("");
-      };
-
+      reader.onloadend = () => resolve(String(reader.result || ""));
+      reader.onerror = () => resolve("");
       reader.readAsDataURL(blob);
     });
   } catch (error) {
-    console.warn("Alpatech PDF logo could not be loaded:", error);
+    console.warn("[SS] PDF logo asset could not be loaded.", error);
     return "";
   }
 }
 
-async function downloadPayslipPdf(payrollId, buttonElement) {
-  try {
-    clearPageAlert();
-
-    const payrollRecord = state.payrollRecords.find(
-      (record) => record.id === payrollId,
-    );
-
-    if (!payrollRecord) {
-      showPageAlert(
-        "danger",
-        "Payslip could not be generated because the payroll record was not found.",
-      );
-      return;
-    }
-
-    if ((payrollRecord.status || "").toLowerCase() !== "authorised") {
-      showPageAlert(
-        "warning",
-        "Only authorised payroll records can be downloaded as payslips.",
-      );
-      return;
-    }
-
-    if (!window.jspdf || !window.jspdf.jsPDF) {
-      showPageAlert("danger", "jsPDF library is not available.");
-      return;
-    }
-
-    setPayslipDownloadLoading(buttonElement, true);
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF("p", "mm", "a4");
-
-    const employeeName =
-      `${state.employeeRecord?.first_name || ""} ${state.employeeRecord?.last_name || ""}`.trim() ||
-      "Employee";
-
-    const employeeEmail =
-      state.employeeRecord?.work_email ||
-      state.currentProfile?.email ||
-      state.currentUser?.email ||
-      "--";
-
-    const employeeId = getEmployeeIdDisplayValue(state.employeeRecord || {});
-    const department = state.employeeRecord?.department || "--";
-    // PAYROLL SECURE DELIVERY - STEP 2F-3B-2
-    // Use the same employee-friendly payroll group label in the PDF.
-    const employeeGroup = formatPayrollDisplayGroupLabel(
-      getPayrollDisplayGroup(payrollRecord),
-    );
-    const currency = (payrollRecord.currency || "NGN").toUpperCase();
-    const payslipSections = buildPayslipSections(payrollRecord);
-
-    // ALPATECH EMPLOYEE PDF BRANDING - STEP 1B
-    // Keep PDF branding tenant-scoped. Alpatech employees get the Alpatech
-    // payslip header; every other tenant keeps the existing BexHR PDF header.
-    const isAlpatechPayslip =
-      typeof isCurrentEmployeeTenantAlpatechWorkspace === "function" &&
-      isCurrentEmployeeTenantAlpatechWorkspace();
-
-    const alpatechLogoDataUrl = isAlpatechPayslip
-      ? await getEmployeeAlpatechPdfLogoDataUrl()
-      : "";
-
-    if (isAlpatechPayslip) {
-      doc.setFillColor(7, 59, 99);
-      doc.rect(0, 0, 210, 32, "F");
-
-      doc.setFillColor(255, 255, 255);
-      doc.roundedRect(14, 6.5, 17, 17, 2.5, 2.5, "F");
-
-      if (alpatechLogoDataUrl) {
-        doc.addImage(alpatechLogoDataUrl, "PNG", 18.2, 8.1, 8.5, 13.5);
-      } else {
-        doc.setTextColor(11, 95, 149);
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(12);
-        doc.text("A", 22.5, 17.7, { align: "center" });
-      }
-
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(17);
-      doc.text("ALPATECH", 36, 15.5);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9.5);
-      doc.text("Official Employee Payslip", 36, 22.2);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.text("Payslip", 196, 14, { align: "right" });
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      doc.text(String(payrollRecord.pay_cycle || "--"), 196, 20, {
-        align: "right",
-      });
-      doc.text(`Pay Date: ${formatDate(payrollRecord.pay_date)}`, 196, 25, {
-        align: "right",
-      });
-    } else {
-      doc.setFillColor(185, 106, 16);
-      doc.rect(0, 0, 210, 28, "F");
-
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(20);
-      doc.text("BexHR", 14, 14);
-
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text("Official Employee Payslip", 14, 21);
-    }
-
-    doc.setTextColor(17, 24, 39);
-
-    // ALPATECH EMPLOYEE PDF BRANDING - STEP 1B
-    // Alpatech header is slightly taller than the default BexHR header,
-    // so start the content a little lower only for Alpatech PDFs.
-    let y = isAlpatechPayslip ? 44 : 40;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.text("Employee Details", 14, y);
-
-    y += 8;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10.5);
-    doc.text(`Name: ${employeeName}`, 14, y);
-    y += 6;
-    doc.text(`Email: ${employeeEmail}`, 14, y);
-    y += 6;
-    doc.text(`Employee ID: ${employeeId}`, 14, y);
-    y += 6;
-    doc.text(`Department: ${department}`, 14, y);
-    y += 6;
-    doc.text(`Employee Group: ${employeeGroup}`, 14, y);
-
-    let rightY = isAlpatechPayslip ? 52 : 48;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.text("Pay Details", 120, isAlpatechPayslip ? 44 : 40);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10.5);
-    doc.text(`Pay Cycle: ${payrollRecord.pay_cycle || "--"}`, 120, rightY);
-    rightY += 6;
-    doc.text(`Pay Date: ${formatDate(payrollRecord.pay_date)}`, 120, rightY);
-    rightY += 6;
-    doc.text(`Status: ${payrollRecord.status || "--"}`, 120, rightY);
-    rightY += 6;
-    doc.text(`Currency: ${currency}`, 120, rightY);
-    if (!isRegularPayrollRecord(payrollRecord)) {
-      rightY += 6;
-      doc.text("Payroll Model: Generic", 120, rightY);
-    }
-
-    y = isAlpatechPayslip ? 92 : 86;
-    doc.setDrawColor(209, 213, 219);
-    doc.line(14, y, 196, y);
-    y += 10;
-
-    payslipSections.forEach((section) => {
-      y = drawPdfSectionTable(doc, section.title, section.rows, y);
-    });
-
-    y = ensurePdfVerticalSpace(doc, y + 6, 12);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(107, 114, 128);
-
-    // ALPATECH EMPLOYEE PDF BRANDING - STEP 1B
-    // Footer wording follows the tenant brand without changing payroll data.
-    doc.text(
-      isAlpatechPayslip
-        ? "This payslip was generated from an authorised Alpatech payroll record."
-        : "This payslip was generated from an authorised payroll record in BexHR.",
-      14,
-      y,
-    );
-
-    // ALPATECH EMPLOYEE PDF BRANDING - STEP 1B
-    // Add light page numbering to every generated page. This is presentation
-    // only and does not alter any payroll calculations or record values.
-    const totalPages = doc.getNumberOfPages();
-
-    for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
-      doc.setPage(pageNumber);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(107, 114, 128);
-      doc.text(
-        isAlpatechPayslip ? "Alpatech HR & Payroll" : "BexHR",
-        14,
-        290,
-      );
-      doc.text(`Page ${pageNumber} of ${totalPages}`, 196, 290, {
-        align: "right",
-      });
-    }
-
-    const safePayCycle = (payrollRecord.pay_cycle || "Payslip")
-      .replace(/\s+/g, "-")
-      .replace(/[^\w-]/g, "");
-
-    const safeEmployeeName =
-      employeeName.replace(/\s+/g, "-").replace(/[^\w-]/g, "") || "Employee";
-
-    const filename = isAlpatechPayslip
-      ? `Alpatech-${safeEmployeeName}-Payslip-${safePayCycle}.pdf`
-      : `Payslip_${safePayCycle}_${safeEmployeeName}.pdf`;
-
-    doc.save(filename);
-
-    showPageAlert("success", "Payslip PDF downloaded successfully.");
-  } catch (error) {
-    console.error("Error generating payslip PDF:", error);
-    showPageAlert("danger", error.message || "Unable to generate payslip PDF.");
-  } finally {
-    setPayslipDownloadLoading(buttonElement, false);
+function drawEmployeePdfRoundedRect(doc, x, y, width, height, radius = 3, style = "S") {
+  if (typeof doc.roundedRect === "function") {
+    doc.roundedRect(x, y, width, height, radius, radius, style);
+  } else {
+    doc.rect(x, y, width, height, style);
   }
 }
 
+// SHARED PAYSLIP PDF GENERIC B REMOVAL - v1.0.0
+// Preserve Alpatech tenant-owned branding. Other tenants receive
+// a clean company-name letterhead without a generic B badge.
+function drawEmployeePayslipPdfHeader(doc, branding = {}, alpatechLogoDataUrl = "") {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 12;
+  const width = pageWidth - margin * 2;
+  const primary = branding.primaryRgb || [15, 118, 110];
+
+  doc.setFillColor(primary[0], primary[1], primary[2]);
+  drawEmployeePdfRoundedRect(doc, margin, 10, width, 28, 4, "F");
+
+  if (branding.isAlpatech) {
+    doc.setFillColor(255, 255, 255);
+    drawEmployeePdfRoundedRect(doc, margin + 5, 15, 17, 18, 3, "F");
+
+    if (alpatechLogoDataUrl) {
+      try {
+        doc.addImage(alpatechLogoDataUrl, "PNG", margin + 10, 17.5, 7, 13);
+      } catch (error) {
+        console.warn("[SS] Alpatech PDF logo could not be added.", error);
+      }
+    } else {
+      doc.setTextColor(primary[0], primary[1], primary[2]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("A", margin + 13.5, 26.8, { align: "center" });
+    }
+  }
+
+  const brandTextX = branding.isAlpatech ? margin + 27 : margin + 5;
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text(
+    String(branding.brandName || branding.companyName || "BexHR"),
+    brandTextX,
+    20.5,
+  );
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text(
+    String(branding.documentLabel || "Confidential Payroll Payslip"),
+    brandTextX,
+    27,
+  );
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text(
+    String(branding.payCycle || "Payroll"),
+    pageWidth - margin - 5,
+    19,
+    { align: "right" },
+  );
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.text(
+    `Pay date: ${branding.payDate || "--"}`,
+    pageWidth - margin - 5,
+    24.5,
+    { align: "right" },
+  );
+  doc.text(
+    `Status: ${branding.status || "Authorised"}`,
+    pageWidth - margin - 5,
+    29.5,
+    { align: "right" },
+  );
+}
+function drawEmployeePayslipPdfInfoCard(doc, x, y, width, height, title, rows, branding, options = {}) {
+  const border = branding.borderRgb;
+  const soft = options.softRgb || branding.softRgb;
+
+  doc.setFillColor(soft[0], soft[1], soft[2]);
+  doc.setDrawColor(border[0], border[1], border[2]);
+  drawEmployeePdfRoundedRect(doc, x, y, width, height, 3, "FD");
+
+  doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.text(String(title || "Details").toUpperCase(), x + 5, y + 7);
+
+  let rowY = y + 13;
+  rows.filter(Boolean).forEach((row) => {
+    const label = String(row.label || "");
+    const value = String(row.value || "--");
+
+    doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.2);
+    doc.text(label, x + 5, rowY);
+
+    doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
+    doc.setFont("helvetica", row.bold ? "bold" : "normal");
+    doc.setFontSize(row.bold ? 9 : 8);
+    const valueLines = doc.splitTextToSize(value, width - 35);
+    doc.text(valueLines, x + width - 5, rowY, { align: "right" });
+    rowY += Math.max(5.2, valueLines.length * 4.1);
+  });
+}
+
+function drawEmployeePayslipPdfSummaryCard(doc, x, y, width, label, value, branding, type = "default") {
+  const fills = {
+    default: branding.softRgb,
+    warning: [255, 248, 235],
+    success: [238, 250, 244],
+  };
+  const borders = {
+    default: branding.borderRgb,
+    warning: [245, 205, 138],
+    success: [167, 220, 196],
+  };
+  const fill = fills[type] || fills.default;
+  const border = borders[type] || borders.default;
+
+  doc.setFillColor(fill[0], fill[1], fill[2]);
+  doc.setDrawColor(border[0], border[1], border[2]);
+  drawEmployeePdfRoundedRect(doc, x, y, width, 22, 3, "FD");
+
+  doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.2);
+  doc.text(String(label || "").toUpperCase(), x + 5, y + 7);
+
+  doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11.5);
+  doc.text(String(value || "--"), x + 5, y + 16);
+}
+
+function drawEmployeePayslipPdfStructureCard(doc, x, y, width, items, allocationText, branding) {
+  const visible = items.filter((item) => item && item.label);
+  const rowCount = Math.ceil(visible.length / 2);
+  const height = 16 + rowCount * 7 + (allocationText ? 10 : 0);
+
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+  drawEmployeePdfRoundedRect(doc, x, y, width, height, 3, "FD");
+
+  doc.setTextColor(branding.primaryDarkRgb[0], branding.primaryDarkRgb[1], branding.primaryDarkRgb[2]);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.text("Salary Structure", x + 5, y + 9);
+
+  const columnWidth = (width - 15) / 2;
+  visible.forEach((item, index) => {
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    const itemX = x + 5 + column * (columnWidth + 5);
+    const itemY = y + 17 + row * 7;
+
+    doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.8);
+    doc.text(String(item.label), itemX, itemY);
+
+    doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.8);
+    const value = doc.splitTextToSize(String(item.value || "--"), columnWidth - 2);
+    doc.text(value, itemX, itemY + 3.6);
+  });
+
+  if (allocationText) {
+    const allocationY = y + 17 + rowCount * 7;
+    doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+    doc.line(x + 5, allocationY - 2.5, x + width - 5, allocationY - 2.5);
+    doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.7);
+    doc.text("ALLOCATION SPLIT", x + 5, allocationY + 1.5);
+    doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
+    doc.setFont("helvetica", "normal");
+    doc.text(String(allocationText), x + 5, allocationY + 5.3);
+  }
+
+  return height;
+}
+
+function drawEmployeePayslipPdfBreakdownCard(doc, x, y, width, title, rows, totalLabel, totalValue, branding, accentRgb) {
+  const visibleRows = rows.length ? rows : [{ label: "No items recorded", value: "--", muted: true }];
+  const rowHeight = 5.2;
+  const height = 18 + visibleRows.length * rowHeight + 10;
+
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+  drawEmployeePdfRoundedRect(doc, x, y, width, height, 3, "FD");
+  doc.setFillColor(accentRgb[0], accentRgb[1], accentRgb[2]);
+  drawEmployeePdfRoundedRect(doc, x, y, width, 3, 3, "F");
+
+  doc.setTextColor(branding.primaryDarkRgb[0], branding.primaryDarkRgb[1], branding.primaryDarkRgb[2]);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.text(String(title), x + 5, y + 11);
+
+  let rowY = y + 18;
+  visibleRows.forEach((row, index) => {
+    doc.setTextColor(
+      row.muted ? branding.mutedRgb[0] : branding.textRgb[0],
+      row.muted ? branding.mutedRgb[1] : branding.textRgb[1],
+      row.muted ? branding.mutedRgb[2] : branding.textRgb[2],
+    );
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.4);
+    doc.text(String(row.label || ""), x + 5, rowY);
+    doc.setFont("helvetica", "bold");
+    doc.text(String(row.value || "--"), x + width - 5, rowY, { align: "right" });
+
+    if (index < visibleRows.length - 1) {
+      doc.setDrawColor(234, 240, 245);
+      doc.line(x + 5, rowY + 1.7, x + width - 5, rowY + 1.7);
+    }
+    rowY += rowHeight;
+  });
+
+  doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+  doc.line(x + 5, rowY - 1.5, x + width - 5, rowY - 1.5);
+  doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text(String(totalLabel), x + 5, rowY + 3.5);
+  doc.text(String(totalValue), x + width - 5, rowY + 3.5, { align: "right" });
+
+  return height;
+}
+
+function drawEmployeePayslipPdfPageFooter(doc, branding, employeeName) {
+  const pageCount = doc.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+    doc.line(12, pageHeight - 12, pageWidth - 12, pageHeight - 12);
+    doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.8);
+    doc.text(`${branding.footerText} Employee: ${employeeName}.`, 12, pageHeight - 7);
+    doc.text(`Page ${page} of ${pageCount}`, pageWidth - 12, pageHeight - 7, { align: "right" });
+  }
+}
+
+async function downloadPayslipPdf(payrollId, buttonElement) {
+  const originalButtonHtml = buttonElement?.innerHTML || "";
+
+  try {
+    clearPageAlert();
+
+    const record = state.payrollRecords.find((row) => String(row.id) === String(payrollId));
+    if (!record) {
+      showPageAlert("danger", "Payroll record not found.");
+      return;
+    }
+
+    if (!window.jspdf?.jsPDF) {
+      showPageAlert("danger", "PDF library (jsPDF) is not available. Please refresh the page.");
+      return;
+    }
+
+    if (buttonElement) {
+      buttonElement.disabled = true;
+      buttonElement.innerHTML = `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Preparing PDF...`;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF("p", "mm", "a4");
+    const employee = getEmployeePayslipPdfEmployeeContext();
+    const currency = (record.currency || "NGN").toUpperCase();
+    const money = (value) => formatCurrency(value, currency);
+    const branding = getEmployeePayslipPdfBranding(record);
+    const logoDataUrl = branding.isAlpatech
+      ? await loadEmployeePayslipImageAsDataUrl("assets/alpatech-flame.png")
+      : "";
+
+    drawEmployeePayslipPdfHeader(doc, branding, logoDataUrl);
+
+    const margin = 12;
+    const usableWidth = 186;
+    const gap = 4;
+    const halfWidth = (usableWidth - gap) / 2;
+
+    drawEmployeePayslipPdfInfoCard(
+      doc,
+      margin,
+      44,
+      halfWidth,
+      38,
+      "Employee",
+      [
+        { label: "Name", value: employee.employeeName, bold: true },
+        { label: "Employee No.", value: employee.employeeId },
+        { label: "Department", value: employee.department },
+        { label: "Job Title", value: employee.jobTitle },
+      ],
+      branding,
+    );
+
+    drawEmployeePayslipPdfInfoCard(
+      doc,
+      margin + halfWidth + gap,
+      44,
+      halfWidth,
+      38,
+      "Pay Details",
+      [
+        { label: "Pay Cycle", value: record.pay_cycle || "--", bold: true },
+        { label: "Pay Date", value: formatDate(record.pay_date) },
+        { label: "Status", value: record.status || "Authorised" },
+        { label: "Currency", value: currency },
+      ],
+      branding,
+      { softRgb: [248, 250, 252] },
+    );
+
+    const summaryWidth = (usableWidth - gap * 2) / 3;
+    drawEmployeePayslipPdfSummaryCard(doc, margin, 87, summaryWidth, "Gross Pay", money(record.gross_pay), branding, "default");
+    drawEmployeePayslipPdfSummaryCard(doc, margin + summaryWidth + gap, 87, summaryWidth, "Total Deductions", money(record.total_deductions), branding, "warning");
+    drawEmployeePayslipPdfSummaryCard(doc, margin + (summaryWidth + gap) * 2, 87, summaryWidth, "Net Pay", money(record.net_pay), branding, "success");
+
+    const percent = (value) => {
+      const numericValue = Number(value || 0);
+      if (!Number.isFinite(numericValue) || numericValue === 0) return "0.0%";
+      return `${(Math.abs(numericValue) <= 1 ? numericValue * 100 : numericValue).toFixed(1)}%`;
+    };
+
+    // EMPLOYEE-FACING PAYSLIP DATA MINIMISATION - STEP 3
+    // Keep the PDF business-readable and exclude technical model/version,
+    // structure-variant, layout, and allocation-configuration identifiers.
+    const structureHeight = drawEmployeePayslipPdfStructureCard(
+      doc,
+      margin,
+      114,
+      usableWidth,
+      [
+        {
+          label: "Pay Type",
+          value: record.employee_group || record.payroll_model || "Regular",
+        },
+        { label: "Increment", value: percent(record.increment_percent) },
+        { label: "Monthly Gross", value: money(record.gross_pay) },
+      ],
+      "",
+      branding,
+    );
+
+    const earningsRows = [
+      ["Basic Pay", record.basic_pay],
+      ["Housing Allowance", record.housing_allowance],
+      ["Transport Allowance", record.transport_allowance],
+      ["Utility Allowance", record.utility_allowance],
+      ["Medical Allowance", record.medical_allowance],
+      ["Other Allowance", record.other_allowance],
+      ["Bonus", record.bonus],
+      ["Overtime", record.overtime],
+      ["Logistics Allowance", record.logistics_allowance],
+      ["Data / Airtime", record.data_airtime_allowance],
+    ]
+      .filter(([, value]) => Number(value || 0) > 0)
+      .map(([label, value]) => ({ label, value: money(value) }));
+
+    const deductionRows = [
+      ["PAYE Tax", record.paye_tax],
+      ["WHT Tax", record.wht_tax],
+      ["Employee Pension", record.employee_pension],
+      ["Other Deductions", record.other_deductions],
+    ]
+      .filter(([, value]) => Number(value || 0) > 0)
+      .map(([label, value]) => ({ label, value: money(value) }));
+
+    const breakdownY = 114 + structureHeight + 5;
+    const earningsHeight = 18 + Math.max(earningsRows.length, 1) * 5.2 + 10;
+    const deductionsHeight = 18 + Math.max(deductionRows.length, 1) * 5.2 + 10;
+    const breakdownHeight = Math.max(earningsHeight, deductionsHeight);
+
+    drawEmployeePayslipPdfBreakdownCard(
+      doc,
+      margin,
+      breakdownY,
+      halfWidth,
+      "Earnings",
+      earningsRows,
+      "Gross Pay",
+      money(record.gross_pay),
+      branding,
+      branding.accentRgb,
+    );
+
+    drawEmployeePayslipPdfBreakdownCard(
+      doc,
+      margin + halfWidth + gap,
+      breakdownY,
+      halfWidth,
+      "Deductions",
+      deductionRows,
+      "Total Deductions",
+      money(record.total_deductions),
+      branding,
+      branding.warningRgb,
+    );
+
+    const netY = breakdownY + breakdownHeight + 5;
+    doc.setFillColor(branding.successRgb[0], branding.successRgb[1], branding.successRgb[2]);
+    drawEmployeePdfRoundedRect(doc, margin, netY, usableWidth, 18, 3, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text("AMOUNT PAYABLE", margin + 6, netY + 6.5);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Net Pay", margin + 6, netY + 13);
+    doc.setFontSize(15);
+    doc.text(money(record.net_pay), margin + usableWidth - 6, netY + 11.5, { align: "right" });
+
+    const noteY = netY + 23;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(branding.borderRgb[0], branding.borderRgb[1], branding.borderRgb[2]);
+    drawEmployeePdfRoundedRect(doc, margin, noteY, usableWidth, 14, 3, "FD");
+    doc.setTextColor(branding.textRgb[0], branding.textRgb[1], branding.textRgb[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.3);
+    doc.text("Confidential employee document", margin + 5, noteY + 5.5);
+    doc.setTextColor(branding.mutedRgb[0], branding.mutedRgb[1], branding.mutedRgb[2]);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.7);
+    doc.text(
+      "This payslip is intended only for the named employee and must be shared through approved company channels.",
+      margin + 5,
+      noteY + 10.2,
+    );
+
+    drawEmployeePayslipPdfPageFooter(doc, branding, employee.employeeName);
+
+    const safePayCycle = (record.pay_cycle || "Payslip").replace(/\s+/g, "-").replace(/[^\w-]/g, "");
+    const safeName = employee.employeeName.replace(/\s+/g, "-").replace(/[^\w-]/g, "") || "Staff";
+    const prefix = branding.filePrefix ? `${branding.filePrefix}-` : "";
+
+    doc.save(`${prefix}${safeName}-Payslip-${safePayCycle}.pdf`);
+    showPageAlert("success", "Payslip PDF downloaded successfully.");
+  } catch (error) {
+    console.error("[SS] PDF generation error:", error);
+    showPageAlert("danger", "Payslip PDF could not be generated.");
+  } finally {
+    if (buttonElement) {
+      buttonElement.disabled = false;
+      buttonElement.innerHTML = originalButtonHtml || `<i class="bi bi-file-earmark-pdf"></i>`;
+    }
+  }
+}
+
+
+
+
+// EMPLOYEE PAYROLL TEXT AND ACTION REPAIR - v1.0.0
+// Encoding-safe masking, payslip metadata separator, and action restoration.
+// Payroll queries, calculations, authorisation, tenant filtering and PDF
+// generation behaviour remain unchanged.
 function setPayslipDownloadLoading(buttonElement, isLoading) {
   if (!buttonElement) return;
 
@@ -5906,7 +7145,7 @@ function setPayslipDownloadLoading(buttonElement, isLoading) {
 
   // EMPLOYEE UI CLEANUP - STEP 1E
   // Restore icon-only PDF action after payslip generation completes.
-  buttonElement.innerHTML = `<i class="bi bi-file-earmark-pdf"></i>`;
+  buttonElement.innerHTML = `<i class="bi bi-file-earmark-pdf" aria-hidden="true"></i><span>Download PDF</span>`;
   buttonElement.title = "Download payslip PDF";
   buttonElement.setAttribute("aria-label", "Download payslip PDF");
 }
@@ -5914,6 +7153,79 @@ function setPayslipDownloadLoading(buttonElement, isLoading) {
 /* =========================================================
    Common helpers
 ========================================================= */
+// EMPLOYEE LEAVE DYNAMIC RENDER PARITY - v1.0.0
+// Match the approved HR/Manager outlined self-service status pill.
+// Presentation only. No leave status or workflow logic changes.
+function renderEmployeeModernLeaveStatusPill(status = "") {
+  const label = String(status || "Pending Approval").trim();
+  const normalized = normalizeText(label);
+
+  const successStates = new Set([
+    "active",
+    "approved",
+    "authorised",
+    "available",
+    "completed",
+    "finalised",
+    "paid",
+  ]);
+
+  const warningStates = new Set([
+    "low balance",
+    "pending",
+    "pending approval",
+    "returned",
+    "returned for clarification",
+  ]);
+
+  const dangerStates = new Set([
+    "cancelled",
+    "declined",
+    "failed",
+    "fully used",
+    "rejected",
+  ]);
+
+  const iconByStatus = {
+    active: "bi-check-circle-fill",
+    approved: "bi-check-circle-fill",
+    authorised: "bi-check-circle-fill",
+    available: "bi-check-circle-fill",
+    cancelled: "bi-x-circle-fill",
+    completed: "bi-check-circle-fill",
+    declined: "bi-x-circle-fill",
+    failed: "bi-x-circle-fill",
+    finalised: "bi-lock-fill",
+    "fully used": "bi-x-circle-fill",
+    "low balance": "bi-exclamation-circle-fill",
+    paid: "bi-cash-coin",
+    pending: "bi-clock-fill",
+    "pending approval": "bi-clock-fill",
+    rejected: "bi-x-circle-fill",
+    returned: "bi-arrow-return-left",
+    "returned for clarification": "bi-arrow-return-left",
+  };
+
+  let toneClass = "bexhr-status-pill--neutral";
+
+  if (successStates.has(normalized)) {
+    toneClass = "bexhr-status-pill--success";
+  } else if (warningStates.has(normalized)) {
+    toneClass = "bexhr-status-pill--warning";
+  } else if (dangerStates.has(normalized)) {
+    toneClass = "bexhr-status-pill--danger";
+  }
+
+  return `
+    <span class="bexhr-status-pill ${toneClass}">
+      <i
+        class="bi ${iconByStatus[normalized] || "bi-circle-fill"}"
+        aria-hidden="true"
+      ></i>
+      <span>${escapeHtml(label)}</span>
+    </span>
+  `;
+}
 function getDecisionStatusBadgeClass(status) {
   switch ((status || "").toLowerCase()) {
     case "approved":

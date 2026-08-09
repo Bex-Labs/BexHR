@@ -96,16 +96,24 @@ async function upsertProfileAndLinkEmployeeAccount({
   workEmail,
   fullName,
   tenantId,
+  systemRole,
 }: {
   supabaseAdmin: any;
   userId: string;
   workEmail: string;
   fullName: string;
   tenantId: string | null;
+  systemRole: string;
 }) {
   const cleanUserId = cleanText(userId);
   const cleanEmail = cleanText(workEmail).toLowerCase();
   const cleanFullName = cleanText(fullName);
+
+  // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
+  // Secure provisioning may create only Employee or Manager access.
+  // An existing profile role always remains authoritative.
+  const cleanSystemRole =
+    normaliseRole(systemRole) === "manager" ? "manager" : "employee";
 
   if (!cleanUserId || !cleanEmail) {
     return {
@@ -130,7 +138,9 @@ async function upsertProfileAndLinkEmployeeAccount({
     id: cleanUserId,
     email: cleanEmail,
     full_name: cleanText(existingProfile?.full_name) || cleanFullName,
-    role: cleanText(existingProfile?.role) || "employee",
+    // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
+    // Preserve an existing HR Standard or HR Admin profile.
+    role: cleanText(existingProfile?.role) || cleanSystemRole,
     is_active: true,
     must_change_password: false,
   };
@@ -290,6 +300,13 @@ serve(async (req: Request) => {
     const tenantId = cleanText(payload.tenantId) || null;
     const companyName = cleanText(payload.companyName) || "Your Company";
 
+    // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
+    // Only Employee or Manager may be provisioned as a new profile.
+    const requestedSystemRole =
+      normaliseRole(payload.systemRole) === "manager"
+        ? "manager"
+        : "employee";
+
     if (!workEmail) {
       return jsonResponse(400, { error: "workEmail is required." });
     }
@@ -317,7 +334,9 @@ serve(async (req: Request) => {
         data: {
           full_name: fullName,
           company_name: companyName,
-          role: "employee",
+          // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
+          // Keep Auth metadata aligned with the intended route.
+          role: requestedSystemRole,
         },
         redirectTo,
       });
@@ -355,6 +374,9 @@ serve(async (req: Request) => {
         workEmail,
         fullName,
         tenantId,
+
+        // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
+        systemRole: requestedSystemRole,
       });
 
       if (!linkResult.success || linkResult.linkedEmployeeCount < 1) {
@@ -420,6 +442,9 @@ serve(async (req: Request) => {
       workEmail,
       fullName,
       tenantId,
+
+        // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
+        systemRole: requestedSystemRole,
     });
 
     if (!linkResult.success || linkResult.linkedEmployeeCount < 1) {

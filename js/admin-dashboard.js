@@ -8,6 +8,32 @@ try {
 } catch (error) {
   console.warn("Admin dashboard scroll restoration could not be set to manual.", error);
 }
+// ADMIN WORKSPACE LOADER - v1.0.2
+// Presentation only. Releases the first-paint gate after the
+// existing authenticated Admin startup sequence completes.
+function releaseAdminWorkspaceLoader() {
+  const body = document.body;
+  const loader = document.getElementById("bexhrWorkspaceLoader");
+  const firstPaintGate = document.getElementById(
+    "adminWorkspaceFirstPaintGate",
+  );
+
+  body?.classList.remove("admin-workspace-booting");
+  body?.removeAttribute("aria-busy");
+
+  firstPaintGate?.remove();
+
+  if (!loader) return;
+
+  loader.setAttribute("aria-hidden", "true");
+  loader.style.opacity = "0";
+  loader.style.pointerEvents = "none";
+
+  window.setTimeout(() => {
+    loader.remove();
+  }, 220);
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   try {
     cacheDomElements();
@@ -49,6 +75,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Workspace was already restored early. Re-assert top after async startup loads.
     forceAdminDashboardToTopAfterRefresh();
 
+    // ADMIN WORKSPACE LOADER - v1.0.2
+    // Existing authenticated Admin startup data is now ready.
+    releaseAdminWorkspaceLoader();
+
     // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
     // Expose tenant edit action for the Tenant Records table.
     window.adminEditTenantRecord = (tenantId) => {
@@ -60,6 +90,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.adminDeleteTenantRecord = async (tenantId) => {
       await deleteTenantRecord(tenantId);
     };
+
+    // ADMIN RESET WORKSPACE - v1.0.0
+    // Opens the controlled Reset Workspace confirmation flow.
+    // The protected PostgreSQL RPC remains the destructive boundary.
+    window.adminResetTenantWorkspace = (tenantId) => {
+      openResetWorkspaceModal(tenantId);
+    };
+
     // ADMIN EMAIL SETUP - STEP 1D
     // Expose approved validation recipient edit action for the records table.
     window.adminEditEmailRecipientRecord = (recipientId) => {
@@ -110,7 +148,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     ) => {
       await setHrAccessLevel(profileId, targetAccessLevel, actionButton);
     };
+
+    // ADMIN COMPANIES SUB-WORKSPACE NAVIGATION - v1.0.0
+    // UI-only navigation inside the already authenticated Admin page.
+    window.adminOpenCompanyIdentityWorkspace = () => {
+      rememberAdminWorkspace("tenants");
+      switchAdminWorkspace("tenants");
+      openAdminCompanyIdentityPanel();
+    };
+
+    window.adminOpenEmailSetupWorkspace = () => {
+      rememberAdminWorkspace("tenants");
+      switchAdminWorkspace("tenants");
+      openAdminEmailSetupPanel();
+    };
+
+    window.adminOpenUserAccessWorkspace = () => {
+      rememberAdminWorkspace("tenants");
+      switchAdminWorkspace("tenants");
+      openAdminUserCompanyAssignmentPanel();
+    };
   } catch (error) {
+    // ADMIN WORKSPACE LOADER - v1.0.2
+    // Reveal the existing Admin error state instead of leaving
+    // the browser trapped behind the first-paint loader.
+    releaseAdminWorkspaceLoader();
     console.error("Error initialising admin dashboard:", error);
     showPageAlert(
       "danger",
@@ -145,6 +207,10 @@ const state = {
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
   // Tracks the tenant currently being edited.
   currentEditingTenant: null,
+  // ADMIN RESET WORKSPACE - v1.0.0
+  // Holds only the company currently selected for workspace reset.
+  // The tenant/company and employee records themselves are preserved.
+  currentResetWorkspaceTarget: null,
   // ADMIN EMAIL SETUP - STEP 1D
   // Admin-owned approved validation recipients and company-scoped email history.
   // HR Setup > Email Integration reads these tenant-scoped recipient records.
@@ -178,8 +244,19 @@ const state = {
   // Timer id for floating dashboard notification auto-hide.
   dashboardToastTimeoutId: null,
 
+  // ADMIN REMOVE COMPANY ACCESS MODAL - v1.0.0
+  // Holds only the profile selected for company-access removal.
+  currentRemoveCompanyAccessTarget: null,
+
+  // ADMIN FORCE DELETE USER MODAL - v1.0.0
+  // Holds only the profile currently selected for permanent deletion.
+  // The actual destructive operation remains inside delete-company-user.
+  currentPermanentDeleteTarget: null,
+
+
   // ADMIN PASSWORD RESET
   // Holds the profile currently targeted for a password reset.
+
   currentResetTarget: null,
 
   // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
@@ -226,22 +303,30 @@ function rememberAdminWorkspace(workspace = "") {
 
 // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Read the remembered Admin workspace for this browser session.
-// Fresh login naturally falls back to Profile after logout clears the keys.
+// Fresh login falls back to Overview after logout clears the keys.
 function getRememberedAdminWorkspace() {
   try {
     const scopedWorkspace = sessionStorage.getItem(getAdminWorkspaceMemoryKey());
     const bootWorkspace = sessionStorage.getItem(ADMIN_DASHBOARD_WORKSPACE_BOOT_KEY);
-    const workspace = scopedWorkspace || bootWorkspace || "profile";
+    // ADMIN AUTHORITATIVE OVERVIEW LANDING - v1.0.0
+    // A fresh Admin session opens the operational Overview.
+    // A remembered workspace still wins during normal browser refresh.
+    const workspace =
+      scopedWorkspace ||
+      bootWorkspace ||
+      "overview";
 
-    return isValidAdminWorkspaceKey(workspace) ? workspace : "profile";
+    return isValidAdminWorkspaceKey(workspace)
+      ? workspace
+      : "overview";
   } catch (error) {
     console.warn("Admin workspace memory could not be read.", error);
-    return "profile";
+    return "overview";
   }
 }
 
 // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
-// Logout must reset the next Admin session to Profile.
+// Logout clears workspace memory so the next Admin session opens Overview.
 function clearRememberedAdminWorkspace() {
   try {
     sessionStorage.removeItem(getAdminWorkspaceMemoryKey());
@@ -325,11 +410,24 @@ function cacheDomElements() {
 
     adminTenantsSection: document.getElementById("adminTenantsSection"),
 
+    // ADMIN COMPANIES SUB-WORKSPACE NAVIGATION - v1.0.0
+    // Presentation-only references for the three Companies operational areas.
+    adminCompanyIdentityWorkspace: document.getElementById("adminCompanyIdentityWorkspace"),
+    adminEmailSetupWorkspace: document.getElementById("adminEmailSetupWorkspace"),
+    adminUserAccessWorkspace: document.getElementById("adminUserAccessWorkspace"),
+    sidebarAdminCompanyIdentityBtn: document.getElementById("sidebarAdminCompanyIdentityBtn"),
+    sidebarAdminEmailSetupBtn: document.getElementById("sidebarAdminEmailSetupBtn"),
+    sidebarAdminUserAccessBtn: document.getElementById("sidebarAdminUserAccessBtn"),
+
     // ADMIN UI CLEANUP - STEP 1I
     // Collapse controls for long Admin Company Setup panels.
     toggleAdminCompanyIdentityCardBtn: document.getElementById("toggleAdminCompanyIdentityCardBtn"),
     adminCompanyIdentityCollapse: document.getElementById("adminCompanyIdentityCollapse"),
-    toggleAdminUserCompanyAssignmentCardBtn: document.getElementById("toggleAdminUserCompanyAssignmentCardBtn"),
+    // ADMIN USER ACCESS COLLAPSE CONTROL - v1.0.2
+    // Controls only the operational User Access cards beneath the persistent header.
+    toggleAdminUserCompanyAssignmentCardBtn: document.getElementById(
+      "toggleAdminUserCompanyAssignmentCardBtn",
+    ),
     adminUserCompanyAssignmentCollapse: document.getElementById("adminUserCompanyAssignmentCollapse"),
 
     adminInitials: document.getElementById("adminInitials"),
@@ -360,7 +458,6 @@ function cacheDomElements() {
     adminOverviewAccessHealthPanel: document.getElementById("adminOverviewAccessHealthPanel"),
     adminOverviewAccessHealthTitle: document.getElementById("adminOverviewAccessHealthTitle"),
     adminOverviewAccessHealthMessage: document.getElementById("adminOverviewAccessHealthMessage"),
-    adminOverviewOpenCompaniesBtn: document.getElementById("adminOverviewOpenCompaniesBtn"),
 
     adminProfileAvatar: document.getElementById("adminProfileAvatar"),
     adminProfileCardName: document.getElementById("adminProfileCardName"),
@@ -371,6 +468,10 @@ function cacheDomElements() {
     adminProfileImageInput: document.getElementById("adminProfileImageInput"),
     adminProfileImagePreview: document.getElementById("adminProfileImagePreview"),
     saveAdminProfileImageBtn: document.getElementById("saveAdminProfileImageBtn"),
+
+    // ADMIN PROFILE PHOTO PARITY - REMOVE PICTURE
+    // Enabled only when the signed-in Admin has a saved profile image.
+    removeAdminProfileImageBtn: document.getElementById("removeAdminProfileImageBtn"),
 
     adminProfileForm: document.getElementById("adminProfileForm"),
     adminProfileFullName: document.getElementById("adminProfileFullName"),
@@ -397,6 +498,20 @@ function cacheDomElements() {
     tenantRecordsEmptyState: document.getElementById("tenantRecordsEmptyState"),
     tenantRecordsTableWrapper: document.getElementById("tenantRecordsTableWrapper"),
     tenantRecordsTableBody: document.getElementById("tenantRecordsTableBody"),
+    // ADMIN RESET WORKSPACE MODAL - v1.0.0
+    // Two-stage controlled confirmation for tenant operational reset.
+    resetWorkspaceModal: document.getElementById("resetWorkspaceModal"),
+    resetWorkspaceStageOne: document.getElementById("resetWorkspaceStageOne"),
+    resetWorkspaceStageTwo: document.getElementById("resetWorkspaceStageTwo"),
+    resetWorkspaceTargetName: document.getElementById("resetWorkspaceTargetName"),
+    resetWorkspaceTargetCode: document.getElementById("resetWorkspaceTargetCode"),
+    resetWorkspaceFinalName: document.getElementById("resetWorkspaceFinalName"),
+    resetWorkspaceFinalCode: document.getElementById("resetWorkspaceFinalCode"),
+    resetWorkspaceConfirmationInput: document.getElementById("resetWorkspaceConfirmationInput"),
+    resetWorkspaceAlert: document.getElementById("resetWorkspaceAlert"),
+    resetWorkspaceBackBtn: document.getElementById("resetWorkspaceBackBtn"),
+    resetWorkspaceContinueBtn: document.getElementById("resetWorkspaceContinueBtn"),
+    resetWorkspaceConfirmBtn: document.getElementById("resetWorkspaceConfirmBtn"),
     // ADMIN EMAIL SETUP - STEP 1D
     // Admin controls company-scoped validation recipients used by HR Email Integration.
     toggleAdminEmailSetupCardBtn: document.getElementById("toggleAdminEmailSetupCardBtn"),
@@ -453,6 +568,32 @@ function cacheDomElements() {
     profileTenantLinksEmptyState: document.getElementById("profileTenantLinksEmptyState"),
     profileTenantLinksTableWrapper: document.getElementById("profileTenantLinksTableWrapper"),
     profileTenantLinksTableBody: document.getElementById("profileTenantLinksTableBody"),
+
+    // ADMIN REMOVE COMPANY ACCESS MODAL - v1.0.0
+    // Controlled replacement for the old browser confirm dialog.
+    // The existing protected RPC remains the authoritative removal path.
+    removeCompanyAccessModal: document.getElementById("removeCompanyAccessModal"),
+    removeCompanyAccessTargetName: document.getElementById("removeCompanyAccessTargetName"),
+    removeCompanyAccessTargetEmail: document.getElementById("removeCompanyAccessTargetEmail"),
+    removeCompanyAccessTargetCompany: document.getElementById("removeCompanyAccessTargetCompany"),
+    removeCompanyAccessAlert: document.getElementById("removeCompanyAccessAlert"),
+    removeCompanyAccessConfirmBtn: document.getElementById("removeCompanyAccessConfirmBtn"),
+
+    // ADMIN FORCE DELETE USER MODAL - v1.0.0
+    // Controlled two-stage replacement for the old browser prompt/confirm flow.
+    permanentDeleteUserModal: document.getElementById("permanentDeleteUserModal"),
+    permanentDeleteUserStageOne: document.getElementById("permanentDeleteUserStageOne"),
+    permanentDeleteUserStageTwo: document.getElementById("permanentDeleteUserStageTwo"),
+    permanentDeleteUserTargetName: document.getElementById("permanentDeleteUserTargetName"),
+    permanentDeleteUserTargetEmail: document.getElementById("permanentDeleteUserTargetEmail"),
+    permanentDeleteUserFinalName: document.getElementById("permanentDeleteUserFinalName"),
+    permanentDeleteUserFinalEmail: document.getElementById("permanentDeleteUserFinalEmail"),
+    permanentDeleteUserEmailInput: document.getElementById("permanentDeleteUserEmailInput"),
+    permanentDeleteUserAlert: document.getElementById("permanentDeleteUserAlert"),
+    permanentDeleteUserBackBtn: document.getElementById("permanentDeleteUserBackBtn"),
+    permanentDeleteUserContinueBtn: document.getElementById("permanentDeleteUserContinueBtn"),
+    permanentDeleteUserConfirmBtn: document.getElementById("permanentDeleteUserConfirmBtn"),
+
 
     // ADMIN PASSWORD RESET
     // Modal controls for the admin-initiated temporary password flow.
@@ -614,7 +755,15 @@ function bindAdminCardCollapseToggle(button, panel) {
     }
   });
 
-  const card = button.closest(".border");
+  // ADMIN COMPANY IDENTITY COLLAPSE RECOVERY - v1.0.0
+  // Company Identity now uses its authoritative custom card shell instead
+  // of the old Bootstrap .border wrapper.
+  //
+  // Keep .border as the fallback so Email Setup and User Access retain their
+  // existing double-click behaviour until their own visual refreshes are done.
+  const card = button.closest(
+    ".admin-company-identity-card, .border",
+  );
 
   if (!card) return;
 
@@ -656,7 +805,50 @@ function setAdminDashboardCardExpanded(button, panel, shouldExpand) {
   }
 }
 
+// =========================================================
+// ADMIN COMPANIES SUB-WORKSPACE NAVIGATION - v1.0.0
+//
+// Presentation only.
+// Authentication remains at admin-dashboard.html through protectPage("admin").
+// Existing Company, Email and User Access workflows remain unchanged.
+// =========================================================
+function switchAdminCompaniesSubWorkspace(subWorkspace = "identity") {
+  const validWorkspace = ["identity", "email", "access"].includes(
+    String(subWorkspace || "").trim(),
+  )
+    ? String(subWorkspace || "").trim()
+    : "identity";
+
+  const workspaceMap = {
+    identity: {
+      panel: state.dom.adminCompanyIdentityWorkspace,
+      button: state.dom.sidebarAdminCompanyIdentityBtn,
+    },
+    email: {
+      panel: state.dom.adminEmailSetupWorkspace,
+      button: state.dom.sidebarAdminEmailSetupBtn,
+    },
+    access: {
+      panel: state.dom.adminUserAccessWorkspace,
+      button: state.dom.sidebarAdminUserAccessBtn,
+    },
+  };
+
+  Object.entries(workspaceMap).forEach(([key, config]) => {
+    const isActive = key === validWorkspace;
+
+    config.panel?.classList.toggle("d-none", !isActive);
+    config.button?.classList.toggle("active", isActive);
+
+    if (config.button) {
+      config.button.setAttribute("aria-current", isActive ? "page" : "false");
+    }
+  });
+}
 function openAdminCompanyIdentityPanel() {
+  // ADMIN COMPANIES SUB-WORKSPACE NAVIGATION - v1.0.0
+  switchAdminCompaniesSubWorkspace("identity");
+
   setAdminDashboardCardExpanded(
     state.dom.toggleAdminCompanyIdentityCardBtn,
     state.dom.adminCompanyIdentityCollapse,
@@ -676,6 +868,10 @@ function openAdminCompanyRecordsPanel() {
 }
 
 function openAdminUserCompanyAssignmentPanel() {
+  // ADMIN USER ACCESS COLLAPSE CONTROL - v1.0.2
+  // Opening User Access must expose the operational cards.
+  switchAdminCompaniesSubWorkspace("access");
+
   setAdminDashboardCardExpanded(
     state.dom.toggleAdminUserCompanyAssignmentCardBtn,
     state.dom.adminUserCompanyAssignmentCollapse,
@@ -684,26 +880,24 @@ function openAdminUserCompanyAssignmentPanel() {
 }
 
 function collapseAdminDashboardWorkingCardsByDefault() {
-  // ADMIN UI CLEANUP - STEP 1K RECOVERY
-  // Match HR behaviour: long Admin working panels start collapsed by default.
-  // Company Identity and Company Records are now one combined setup card.
-  setAdminDashboardCardExpanded(
-    state.dom.toggleAdminCompanyIdentityCardBtn,
-    state.dom.adminCompanyIdentityCollapse,
-    false,
-  );
-
+  // ADMIN COMPANIES DEFAULT CARD STATE - v1.0.0
+  //
+  // Operational setup cards should be immediately available when Admin
+  // opens their workspace. Only the potentially long User Access Records
+  // history starts collapsed to keep the initial page focused.
+  // User Access working area starts open so Invite Company User and
+  // Reassign Existing User are immediately available.
   setAdminDashboardCardExpanded(
     state.dom.toggleAdminUserCompanyAssignmentCardBtn,
     state.dom.adminUserCompanyAssignmentCollapse,
-    false,
+    true,
   );
-  // ADMIN EMAIL SETUP - STEP 1D
-  // Start Email Setup collapsed so Company Setup remains scan-friendly.
+
+  // Email Setup starts open when its sub-workspace is selected.
   setAdminDashboardCardExpanded(
     state.dom.toggleAdminEmailSetupCardBtn,
     state.dom.adminEmailSetupCollapse,
-    false,
+    true,
   );
 }
 
@@ -823,6 +1017,8 @@ function bindEvents() {
     state.dom.adminCompanyIdentityCollapse,
   );
 
+  // ADMIN USER ACCESS COLLAPSE CONTROL - v1.0.2
+  // Keep standard Expand/Collapse behaviour while the header card stays visible.
   bindAdminCardCollapseToggle(
     state.dom.toggleAdminUserCompanyAssignmentCardBtn,
     state.dom.adminUserCompanyAssignmentCollapse,
@@ -837,6 +1033,50 @@ function bindEvents() {
   );
 
   collapseAdminDashboardWorkingCardsByDefault();
+  // ADMIN HELP GUIDE ROLE PARITY - v1.1.1
+  // Guide links proxy to the existing Admin navigation controls.
+  // No duplicate workspace or backend logic is introduced.
+  document
+    .getElementById("adminOperatingGuideModal")
+    ?.addEventListener("click", (event) => {
+      const route =
+        event.target.closest("[data-admin-guide-target]");
+
+      if (!route) return;
+
+      const targetId = String(
+        route.dataset.adminGuideTarget || "",
+      ).trim();
+
+      if (!targetId) return;
+
+      const targetButton =
+        document.getElementById(targetId);
+
+      if (!targetButton) return;
+
+      const modalElement =
+        document.getElementById("adminOperatingGuideModal");
+
+      const modalInstance =
+        window.bootstrap?.Modal?.getInstance(modalElement);
+
+      if (modalInstance && modalElement) {
+        modalElement.addEventListener(
+          "hidden.bs.modal",
+          () => {
+            targetButton.click();
+          },
+          { once: true },
+        );
+
+        modalInstance.hide();
+        return;
+      }
+
+      targetButton.click();
+    });
+  // END ADMIN HELP GUIDE ROLE PARITY - v1.1.1
 
   state.dom.dashboardToastCloseBtn?.addEventListener("click", () => {
     hideDashboardToast();
@@ -866,22 +1106,98 @@ function bindEvents() {
     // Remember Companies only for refresh. No company or user-access data is stored.
     rememberAdminWorkspace("tenants");
     switchAdminWorkspace("tenants");
+
+    // ADMIN COMPANIES SUB-WORKSPACE NAVIGATION - v1.0.0
+    // Opening Companies directly starts from Company Identity.
+    switchAdminCompaniesSubWorkspace("identity");
   });
 
 
-  // ADMIN UI CLEANUP - STEP 1G
-  // Let Admin jump from Overview access-health message to Company/User assignment.
-  state.dom.adminOverviewOpenCompaniesBtn?.addEventListener("click", () => {
-    // ADMIN UI CLEANUP - STEP 1J FINAL POLISH
-    // From Overview, Open Companies should land directly on opened Company Records,
-    // not just switch to the Companies tab with all panels collapsed.
-    redirectToAdminCompanyRecordsAfterSave();
+  // =========================================================
+  // ADMIN OVERVIEW OPERATIONAL NAVIGATION - v1.0.1
+  //
+  // Every Overview action lands on the operational area
+  // responsible for that metric.
+  //
+  // Existing helpers continue to control:
+  // - workspace memory;
+  // - Companies workspace switching;
+  // - panel expansion;
+  // - exact scroll destination.
+  // =========================================================
+
+  // Access readiness -> User Access Records.
+  state.dom.adminOverviewOpenCompaniesBtn?.addEventListener(
+    "click",
+    () => {
+      redirectToAdminUserCompanyLinksAfterSave();
+    },
+  );
+
+  // =========================================================
+  // ADMIN ACTION CENTRE - v1.0.0
+  // Reuse existing operational navigation helpers.
+  // =========================================================
+
+  // Company status / company management.
+  [
+    "adminOverviewInactiveCompaniesAction",
+    "adminOverviewManageCompaniesAction",
+  ].forEach((actionId) => {
+    document
+      .getElementById(actionId)
+      ?.addEventListener("click", () => {
+        redirectToAdminCompanyRecordsAfterSave();
+      });
   });
 
-  state.dom.tenantCreateForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    await saveTenantRecord();
+
+  // User access exceptions / access management.
+  [
+    "adminOverviewCompaniesWithoutUsersAction",
+    "adminOverviewUnlinkedAccessAction",
+    "adminOverviewManageAccessAction",
+  ].forEach((actionId) => {
+    document
+      .getElementById(actionId)
+      ?.addEventListener("click", () => {
+        redirectToAdminUserCompanyLinksAfterSave();
+      });
   });
+
+
+  // Email Setup.
+  document
+    .getElementById("adminOverviewManageEmailAction")
+    ?.addEventListener("click", () => {
+      rememberAdminWorkspace("tenants");
+      switchAdminWorkspace("tenants");
+
+      openAdminEmailSetupPanel();
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          openAdminEmailSetupPanel();
+
+          scrollToAdminOpenedPanel(
+            state.dom.toggleAdminEmailSetupCardBtn,
+            state.dom.adminEmailSetupCollapse,
+            150,
+          );
+        });
+      });
+    });
+
+  // EXISTING COMPANY CREATE / UPDATE WORKFLOW
+  // Restored after the Overview navigation block.
+  // Do not change the existing saveTenantRecord() workflow.
+  state.dom.tenantCreateForm?.addEventListener(
+    "submit",
+    async (event) => {
+      event.preventDefault();
+      await saveTenantRecord();
+    },
+  );
 
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1D
   // Only the required tenant setup fields control save readiness.
@@ -927,6 +1243,76 @@ function bindEvents() {
       setAdminActionButtonLoading(state.dom.refreshTenantsBtn, false);
     }
   });
+
+  // =========================================================
+  // ADMIN RESET WORKSPACE MODAL - v1.0.0
+  //
+  // Controlled two-stage destructive confirmation.
+  //
+  // Stage 1:
+  //   Admin must type the selected company name.
+  //
+  // Stage 2:
+  //   Admin explicitly confirms the irreversible workspace reset.
+  //
+  // The secure admin_reset_tenant_workspace RPC remains the
+  // authoritative destructive boundary.
+  // =========================================================
+
+  ["input", "keyup", "change"].forEach((eventName) => {
+    state.dom.resetWorkspaceConfirmationInput?.addEventListener(
+      eventName,
+      () => {
+        updateResetWorkspaceContinueButtonState();
+        clearResetWorkspaceAlert();
+      },
+    );
+  });
+
+  state.dom.resetWorkspaceContinueBtn?.addEventListener(
+    "click",
+    () => {
+      advanceResetWorkspaceModal();
+    },
+  );
+
+  state.dom.resetWorkspaceBackBtn?.addEventListener(
+    "click",
+    () => {
+      const isOnFinalStage =
+        !state.dom.resetWorkspaceStageTwo?.classList.contains(
+          "d-none",
+        );
+
+      if (isOnFinalStage) {
+        showResetWorkspaceStageOne();
+        return;
+      }
+
+      const modalEl =
+        state.dom.resetWorkspaceModal;
+
+      if (modalEl) {
+        bootstrap.Modal
+          .getOrCreateInstance(modalEl)
+          .hide();
+      }
+    },
+  );
+
+  state.dom.resetWorkspaceConfirmBtn?.addEventListener(
+    "click",
+    async () => {
+      await submitResetWorkspace();
+    },
+  );
+
+  state.dom.resetWorkspaceModal?.addEventListener(
+    "hidden.bs.modal",
+    () => {
+      clearResetWorkspaceModal();
+    },
+  );
 
   // ADMIN EMAIL SETUP - STEP 1D-2
   // Bind Email Setup directly during page startup.
@@ -1049,6 +1435,75 @@ function bindEvents() {
     }
   });
 
+  // =========================================================
+  // ADMIN REMOVE COMPANY ACCESS MODAL - v1.0.0
+  //
+  // Replaces only the old window.confirm() presentation.
+  // The protected admin_remove_profile_tenant_access RPC is unchanged.
+  // =========================================================
+  state.dom.removeCompanyAccessConfirmBtn?.addEventListener(
+    "click",
+    async () => {
+      await submitRemoveProfileTenantAccess();
+    },
+  );
+
+  state.dom.removeCompanyAccessModal?.addEventListener(
+    "hidden.bs.modal",
+    () => {
+      clearRemoveCompanyAccessModal();
+    },
+  );
+
+
+  // =========================================================
+  // ADMIN FORCE DELETE USER MODAL - v1.0.0
+  //
+  // Two-stage destructive confirmation:
+  // 1. Admin types the selected user's full email.
+  // 2. Admin explicitly confirms permanent deletion.
+  //
+  // The secure Edge Function remains the authoritative delete boundary.
+  // =========================================================
+  // ADMIN FORCE DELETE USER MODAL - INPUT STATE RECOVERY
+  // Re-evaluate confirmation on typing, paste, autofill and field change.
+  ["input", "keyup", "change"].forEach((eventName) => {
+    state.dom.permanentDeleteUserEmailInput?.addEventListener(
+      eventName,
+      () => {
+        updatePermanentDeleteUserContinueButtonState();
+        clearPermanentDeleteUserAlert();
+      },
+    );
+  });
+  state.dom.permanentDeleteUserContinueBtn?.addEventListener("click", () => {
+    advancePermanentDeleteUserModal();
+  });
+
+  state.dom.permanentDeleteUserBackBtn?.addEventListener("click", () => {
+    const isOnFinalStage =
+      !state.dom.permanentDeleteUserStageTwo?.classList.contains("d-none");
+
+    if (isOnFinalStage) {
+      showPermanentDeleteUserStageOne();
+      return;
+    }
+
+    const modalEl = state.dom.permanentDeleteUserModal;
+
+    if (modalEl) {
+      bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+    }
+  });
+
+  state.dom.permanentDeleteUserConfirmBtn?.addEventListener("click", async () => {
+    await submitPermanentDeleteCompanyUser();
+  });
+
+  state.dom.permanentDeleteUserModal?.addEventListener("hidden.bs.modal", () => {
+    clearPermanentDeleteUserModal();
+  });
+
   state.dom.adminProfileForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await saveAdminOwnProfile();
@@ -1074,11 +1529,17 @@ function bindEvents() {
     await saveAdminProfileImage();
   });
 
+  // ADMIN PROFILE PHOTO PARITY - REMOVE PICTURE
+  // Remove only the current Admin's own saved profile image.
+  state.dom.removeAdminProfileImageBtn?.addEventListener("click", async () => {
+    await removeAdminProfileImage();
+  });
+
   // ADMIN UI CLEANUP - STEP 1D RECOVERY
   // Start the upload button greyed out until a valid file is selected.
   updateAdminProfileImageSaveButtonState();
 
-  // ADMIN PASSWORD RESET — modal event bindings.
+  // ADMIN PASSWORD RESET - modal event bindings.
   state.dom.resetPasswordTempInput?.addEventListener("input", () => {
     updateResetPasswordSubmitButtonState();
     clearResetPasswordAlert();
@@ -1139,6 +1600,104 @@ function renderAdminOverviewSummary() {
 
   const unlinkedUsers = Math.max(profiles.length - linkedUsers, 0);
 
+  // =========================================================
+  // ADMIN OPERATIONS READINESS - v1.0.0
+  //
+  // Derived only from company/profile data already loaded by Admin.
+  // No additional Supabase request is introduced.
+  // =========================================================
+
+  const inactiveCompanies = Math.max(
+    totalCompanies - activeCompanies,
+    0,
+  );
+
+  const accessCoverage =
+    profiles.length > 0
+      ? Math.round((linkedUsers / profiles.length) * 100)
+      : 100;
+
+  // Build a set of company IDs that currently have at least one
+  // profile linked to them.
+  const companyIdsWithUsers = new Set(
+    profiles
+      .map((profile) =>
+        String(profile.tenant_id || "").trim(),
+      )
+      .filter(Boolean),
+  );
+
+  const companiesWithoutUsers = companies.filter(
+    (company) =>
+      !companyIdsWithUsers.has(
+        String(company.id || "").trim(),
+      ),
+  ).length;
+
+
+  // Update Platform Readiness presentation.
+  const accessCoverageValue =
+    document.getElementById(
+      "adminOverviewAccessCoverageValue",
+    );
+
+  const accessCoverageTrack =
+    document.getElementById(
+      "adminOverviewAccessCoverageTrack",
+    );
+
+  const accessCoverageBar =
+    document.getElementById(
+      "adminOverviewAccessCoverageBar",
+    );
+
+  const inactiveCompanyCount =
+    document.getElementById(
+      "adminOverviewInactiveCompanyCount",
+    );
+
+  const companiesWithoutUsersCount =
+    document.getElementById(
+      "adminOverviewCompaniesWithoutUsersCount",
+    );
+
+  const readinessUnlinkedCount =
+    document.getElementById(
+      "adminOverviewReadinessUnlinkedCount",
+    );
+
+
+  if (accessCoverageValue) {
+    accessCoverageValue.textContent =
+      `${accessCoverage}%`;
+  }
+
+  if (accessCoverageTrack) {
+    accessCoverageTrack.setAttribute(
+      "aria-valuenow",
+      String(accessCoverage),
+    );
+  }
+
+  if (accessCoverageBar) {
+    accessCoverageBar.style.width =
+      `${Math.min(Math.max(accessCoverage, 0), 100)}%`;
+  }
+
+  if (inactiveCompanyCount) {
+    inactiveCompanyCount.textContent =
+      String(inactiveCompanies);
+  }
+
+  if (companiesWithoutUsersCount) {
+    companiesWithoutUsersCount.textContent =
+      String(companiesWithoutUsers);
+  }
+
+  if (readinessUnlinkedCount) {
+    readinessUnlinkedCount.textContent =
+      String(unlinkedUsers);
+  }
   if (state.dom.adminOverviewCompanyCount) {
     state.dom.adminOverviewCompanyCount.textContent = totalCompanies;
   }
@@ -1161,9 +1720,13 @@ function renderAdminOverviewSummary() {
     const hasProfiles = profiles.length > 0;
     const hasUnlinkedUsers = unlinkedUsers > 0;
 
-    state.dom.adminOverviewAccessHealthPanel.className = hasUnlinkedUsers
-      ? "alert alert-warning border mt-4 mb-0"
-      : "alert alert-success border mt-4 mb-0";
+    // ADMIN OVERVIEW ACCESS READINESS - v1.0.2
+    // Preserve the dedicated operational layout.
+    // JavaScript changes only the health state.
+    state.dom.adminOverviewAccessHealthPanel.className =
+      hasUnlinkedUsers
+        ? "admin-overview-access-health admin-overview-access-health-warning mt-4"
+        : "admin-overview-access-health admin-overview-access-health-success mt-4";
 
     if (state.dom.adminOverviewAccessHealthTitle) {
       state.dom.adminOverviewAccessHealthTitle.textContent = hasUnlinkedUsers
@@ -1175,7 +1738,7 @@ function renderAdminOverviewSummary() {
       state.dom.adminOverviewAccessHealthMessage.textContent = !hasProfiles
         ? "No user profiles are currently available for access setup."
         : hasUnlinkedUsers
-          ? `${unlinkedUsers} user profile(s) do not have company workspace access yet. Open Companies to complete access setup.`
+          ? `${unlinkedUsers} user profile(s) still require company workspace access. Use Manage User Access below to complete setup.`
           : "All available user profiles have company workspace access.";
     }
   }
@@ -1211,12 +1774,53 @@ function switchAdminWorkspace(workspace) {
       : "btn btn-outline-primary dashboard-action-btn text-nowrap";
   }
 
+  // ADMIN AUTHORITATIVE APPLICATION HEADER - v1.0.0
+  // Keep the compact application header aligned with the active workspace.
+  // Presentation text only; existing section switching remains unchanged.
+  const workspaceHeaderContent = {
+    overview: {
+      module: "Overview",
+      title: "Admin Overview",
+      subtitle:
+        "Monitor company workspaces, platform access, and administrative setup.",
+    },
+
+    tenants: {
+      module: "Companies",
+      title: "Companies",
+      subtitle:
+        "Manage company workspaces, approved setup, and user-to-company access.",
+    },
+
+    profile: {
+      module: "My Profile",
+      title: "My Profile",
+      subtitle:
+        "Review your administrator account, profile photo, and platform profile information.",
+    },
+  };
+
+  const activeHeaderContent =
+    workspaceHeaderContent[workspace] ||
+    workspaceHeaderContent.overview;
+
   if (state.dom.adminModuleValue) {
-    state.dom.adminModuleValue.textContent = isProfile
-      ? "Profile"
-      : isOverview
-        ? "Overview"
-        : "Company Setup";
+    state.dom.adminModuleValue.textContent =
+      activeHeaderContent.module;
+  }
+
+  const pageTitle =
+    document.getElementById("adminModernPageTitle");
+
+  const pageSubtitle =
+    document.getElementById("adminModernPageSubtitle");
+
+  if (pageTitle) {
+    pageTitle.textContent = activeHeaderContent.title;
+  }
+
+  if (pageSubtitle) {
+    pageSubtitle.textContent = activeHeaderContent.subtitle;
   }
 
   // CROSS-DASHBOARD SIDEBAR REPLICATION - ADMIN STEP 1C-1
@@ -1230,6 +1834,22 @@ function switchAdminWorkspace(workspace) {
     const item = document.getElementById(id);
     if (item) item.classList.toggle("active", active);
   });
+
+  // ADMIN COMPANIES SUB-WORKSPACE NAVIGATION - v1.0.1
+  // Show Company Identity / Email Setup / User Access only while the
+  // authenticated Admin is inside the Companies parent workspace.
+  //
+  // This is presentation-only. It does not change Admin authentication,
+  // company access, Supabase, RPC, Edge Function, or tenant behaviour.
+  const companiesSubnav = document.getElementById(
+    "adminCompaniesSidebarSubnav",
+  );
+
+  companiesSubnav?.classList.toggle(
+    "d-none",
+    !isTenants,
+  );
+
 }
 
 function getInitials(fullName, fallback = "AD") {
@@ -1276,10 +1896,12 @@ function formatDate(value) {
   });
 }
 
+// ADMIN COMPANY IDENTITY AUTHORITATIVE UI - v1.0.0
+// Return Company Identity-specific status classes instead of Bootstrap badges.
 function getTenantStatusBadgeClass(status = "") {
   return String(status || "").toLowerCase() === "active"
-    ? "text-bg-success"
-    : "text-bg-secondary";
+    ? "admin-company-status-pill-active"
+    : "admin-company-status-pill-inactive";
 }
 
 // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
@@ -1473,13 +2095,16 @@ function renderTenantRecords(records = []) {
 </td>
 
       <td>
-        <span class="badge rounded-pill text-bg-light border">
+        <!-- ADMIN COMPANY IDENTITY AUTHORITATIVE UI - v1.0.0 -->
+        <span class="admin-company-code-pill">
           ${escapeHtml(record.tenant_code || "--")}
         </span>
       </td>
 
       <td>
-        <span class="badge ${getTenantStatusBadgeClass(record.status)}">
+        <!-- ADMIN COMPANY IDENTITY AUTHORITATIVE UI - v1.0.0 -->
+        <span class="admin-company-status-pill ${getTenantStatusBadgeClass(record.status)}">
+          <span class="admin-company-status-dot" aria-hidden="true"></span>
           ${escapeHtml(record.status || "--")}
         </span>
       </td>
@@ -1490,23 +2115,35 @@ function renderTenantRecords(records = []) {
         <div class="d-flex gap-1 justify-content-center">
           <!-- ADMIN DELETE ACTIONS - STEP 1
                Existing edit action remains unchanged. -->
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-primary"
-            title="Edit company"
-            onclick="window.adminEditTenantRecord('${escapeHtml(record.id)}')"
-          >
-            <i class="bi bi-pencil-square"></i>
-          </button>
+<!-- ADMIN COMPANY ACTIONS - RESET WORKSPACE v1.0.0
+     Reset Workspace is intentionally separate from Delete Company.
+     It preserves the company and employees while clearing operational data. -->
+<button
+  type="button"
+  class="btn btn-sm btn-outline-primary"
+  title="Edit company"
+  onclick="window.adminEditTenantRecord('${escapeHtml(record.id)}')"
+>
+  <i class="bi bi-pencil-square"></i>
+</button>
 
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-danger"
-            title="Delete company"
-            onclick="window.adminDeleteTenantRecord('${escapeHtml(record.id)}')"
-          >
-            <i class="bi bi-trash"></i>
-          </button>
+<button
+  type="button"
+  class="btn btn-sm btn-outline-warning"
+  title="Reset workspace"
+  onclick="window.adminResetTenantWorkspace('${escapeHtml(record.id)}')"
+>
+  <i class="bi bi-arrow-counterclockwise"></i>
+</button>
+
+<button
+  type="button"
+  class="btn btn-sm btn-outline-danger"
+  title="Delete company"
+  onclick="window.adminDeleteTenantRecord('${escapeHtml(record.id)}')"
+>
+  <i class="bi bi-trash"></i>
+</button>
         </div>
       </td>
     `;
@@ -1701,6 +2338,538 @@ async function deleteTenantRecord(tenantId = "") {
   }
 }
 
+// =========================================================
+// ADMIN RESET WORKSPACE MODAL - v1.0.0
+//
+// Controlled Super Admin workspace reset workflow.
+//
+// IMPORTANT:
+// - company/tenant record survives;
+// - employees survive;
+// - employee IDs survive;
+// - profiles/Auth linkage survive;
+// - operational tenant-owned data is reset by the proven
+//   admin_reset_tenant_workspace(uuid) PostgreSQL RPC;
+// - browser JavaScript never performs individual deletes.
+// =========================================================
+
+function normaliseResetWorkspaceConfirmation(value = "") {
+  // ADMIN RESET WORKSPACE CONFIRMATION - v1.0.0
+  // Keep the comparison predictable for copied/pasted company names.
+  // Internal whitespace is preserved because the visible company name
+  // itself is the destructive confirmation phrase.
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+
+function clearResetWorkspaceAlert() {
+  const alert =
+    state.dom.resetWorkspaceAlert;
+
+  if (!alert) return;
+
+  alert.className =
+    "alert d-none mt-3 mb-0";
+
+  alert.textContent = "";
+}
+
+
+function showResetWorkspaceAlert(
+  type,
+  message,
+) {
+  const alert =
+    state.dom.resetWorkspaceAlert;
+
+  if (!alert) {
+    showPageAlert(type, message);
+    return;
+  }
+
+  alert.className =
+    `alert alert-${type} mt-3 mb-0`;
+
+  alert.textContent =
+    message;
+}
+
+
+function updateResetWorkspaceContinueButtonState() {
+  const button =
+    state.dom.resetWorkspaceContinueBtn;
+
+  if (!button) return;
+
+  const expectedName =
+    normaliseResetWorkspaceConfirmation(
+      state.currentResetWorkspaceTarget
+        ?.company_name,
+    );
+
+  const enteredName =
+    normaliseResetWorkspaceConfirmation(
+      state.dom.resetWorkspaceConfirmationInput
+        ?.value,
+    );
+
+  const isMatch =
+    Boolean(expectedName) &&
+    Boolean(enteredName) &&
+    enteredName === expectedName;
+
+  button.disabled =
+    !isMatch;
+
+  button.className =
+    isMatch
+      ? "btn btn-warning dashboard-action-btn"
+      : "btn btn-secondary dashboard-action-btn";
+}
+
+
+function showResetWorkspaceStageOne() {
+  state.dom.resetWorkspaceStageOne
+    ?.classList.remove("d-none");
+
+  state.dom.resetWorkspaceStageTwo
+    ?.classList.add("d-none");
+
+  state.dom.resetWorkspaceContinueBtn
+    ?.classList.remove("d-none");
+
+  state.dom.resetWorkspaceConfirmBtn
+    ?.classList.add("d-none");
+
+  if (state.dom.resetWorkspaceBackBtn) {
+    state.dom.resetWorkspaceBackBtn.textContent =
+      "Cancel";
+  }
+
+  clearResetWorkspaceAlert();
+  updateResetWorkspaceContinueButtonState();
+
+  window.requestAnimationFrame(() => {
+    state.dom.resetWorkspaceConfirmationInput
+      ?.focus();
+
+    updateResetWorkspaceContinueButtonState();
+  });
+}
+
+
+function showResetWorkspaceStageTwo() {
+  const tenant =
+    state.currentResetWorkspaceTarget;
+
+  if (!tenant) return;
+
+  state.dom.resetWorkspaceStageOne
+    ?.classList.add("d-none");
+
+  state.dom.resetWorkspaceStageTwo
+    ?.classList.remove("d-none");
+
+  state.dom.resetWorkspaceContinueBtn
+    ?.classList.add("d-none");
+
+  state.dom.resetWorkspaceConfirmBtn
+    ?.classList.remove("d-none");
+
+  if (state.dom.resetWorkspaceBackBtn) {
+    state.dom.resetWorkspaceBackBtn.textContent =
+      "Go Back";
+  }
+
+  if (state.dom.resetWorkspaceFinalName) {
+    state.dom.resetWorkspaceFinalName.textContent =
+      String(
+        tenant.company_name || "",
+      ).trim();
+  }
+
+  if (state.dom.resetWorkspaceFinalCode) {
+    state.dom.resetWorkspaceFinalCode.textContent =
+      String(
+        tenant.tenant_code || "--",
+      ).trim();
+  }
+
+  clearResetWorkspaceAlert();
+}
+
+
+function clearResetWorkspaceModal() {
+  state.currentResetWorkspaceTarget =
+    null;
+
+  if (
+    state.dom
+      .resetWorkspaceConfirmationInput
+  ) {
+    state.dom
+      .resetWorkspaceConfirmationInput
+      .value = "";
+  }
+
+  state.dom.resetWorkspaceStageOne
+    ?.classList.remove("d-none");
+
+  state.dom.resetWorkspaceStageTwo
+    ?.classList.add("d-none");
+
+  state.dom.resetWorkspaceContinueBtn
+    ?.classList.remove("d-none");
+
+  state.dom.resetWorkspaceConfirmBtn
+    ?.classList.add("d-none");
+
+  if (state.dom.resetWorkspaceBackBtn) {
+    state.dom.resetWorkspaceBackBtn.textContent =
+      "Cancel";
+  }
+
+  if (
+    state.dom.resetWorkspaceContinueBtn
+  ) {
+    state.dom.resetWorkspaceContinueBtn.disabled =
+      true;
+
+    state.dom.resetWorkspaceContinueBtn.className =
+      "btn btn-secondary dashboard-action-btn";
+  }
+
+  if (
+    state.dom.resetWorkspaceConfirmBtn
+  ) {
+    state.dom.resetWorkspaceConfirmBtn.disabled =
+      false;
+  }
+
+  clearResetWorkspaceAlert();
+}
+
+
+function openResetWorkspaceModal(
+  tenantId = "",
+) {
+  const tenant =
+    getTenantById(tenantId);
+
+  if (!tenant) {
+    showPageAlert(
+      "warning",
+      "The selected company record could not be found. Refresh Companies and try again.",
+    );
+
+    return;
+  }
+
+  clearResetWorkspaceModal();
+
+  state.currentResetWorkspaceTarget =
+    tenant;
+
+  const companyName =
+    String(
+      tenant.company_name ||
+      "Unnamed company",
+    ).trim();
+
+  const companyCode =
+    String(
+      tenant.tenant_code ||
+      "--",
+    ).trim();
+
+  if (
+    state.dom.resetWorkspaceTargetName
+  ) {
+    state.dom.resetWorkspaceTargetName.textContent =
+      companyName;
+  }
+
+  if (
+    state.dom.resetWorkspaceTargetCode
+  ) {
+    state.dom.resetWorkspaceTargetCode.textContent =
+      companyCode;
+  }
+
+  if (
+    state.dom.resetWorkspaceFinalName
+  ) {
+    state.dom.resetWorkspaceFinalName.textContent =
+      companyName;
+  }
+
+  if (
+    state.dom.resetWorkspaceFinalCode
+  ) {
+    state.dom.resetWorkspaceFinalCode.textContent =
+      companyCode;
+  }
+
+  showResetWorkspaceStageOne();
+
+  const modalEl =
+    state.dom.resetWorkspaceModal;
+
+  if (!modalEl) {
+    showPageAlert(
+      "danger",
+      "Reset Workspace confirmation could not be opened.",
+    );
+
+    return;
+  }
+
+  bootstrap.Modal
+    .getOrCreateInstance(modalEl)
+    .show();
+}
+
+
+function advanceResetWorkspaceModal() {
+  const tenant =
+    state.currentResetWorkspaceTarget;
+
+  if (!tenant) {
+    showResetWorkspaceAlert(
+      "warning",
+      "The selected company could not be confirmed. Close this window and try again.",
+    );
+
+    return;
+  }
+
+  const expectedName =
+    normaliseResetWorkspaceConfirmation(
+      tenant.company_name,
+    );
+
+  const enteredName =
+    normaliseResetWorkspaceConfirmation(
+      state.dom
+        .resetWorkspaceConfirmationInput
+        ?.value,
+    );
+
+  if (
+    !expectedName ||
+    enteredName !== expectedName
+  ) {
+    showResetWorkspaceAlert(
+      "warning",
+      "Type the full company name exactly before continuing.",
+    );
+
+    updateResetWorkspaceContinueButtonState();
+
+    return;
+  }
+
+  showResetWorkspaceStageTwo();
+}
+
+
+async function submitResetWorkspace() {
+  const tenant =
+    state.currentResetWorkspaceTarget;
+
+  if (!tenant?.id) {
+    showResetWorkspaceAlert(
+      "warning",
+      "The selected company could not be confirmed. Close this window and try again.",
+    );
+
+    return;
+  }
+
+  const expectedName =
+    normaliseResetWorkspaceConfirmation(
+      tenant.company_name,
+    );
+
+  const enteredName =
+    normaliseResetWorkspaceConfirmation(
+      state.dom
+        .resetWorkspaceConfirmationInput
+        ?.value,
+    );
+
+  // ADMIN RESET WORKSPACE - FINAL CLIENT CHECK
+  // Re-check the typed company name immediately before calling
+  // the secure transactional RPC.
+  if (
+    !expectedName ||
+    enteredName !== expectedName
+  ) {
+    showResetWorkspaceStageOne();
+
+    showResetWorkspaceAlert(
+      "warning",
+      "The company-name confirmation no longer matches the selected company.",
+    );
+
+    return;
+  }
+
+  const confirmButton =
+    state.dom.resetWorkspaceConfirmBtn;
+
+  const companyName =
+    String(
+      tenant.company_name ||
+      "the selected company",
+    ).trim();
+
+  try {
+    clearResetWorkspaceAlert();
+
+    if (confirmButton) {
+      if (
+        !confirmButton.dataset.originalHtml
+      ) {
+        confirmButton.dataset.originalHtml =
+          confirmButton.innerHTML;
+      }
+
+      confirmButton.disabled = true;
+
+      confirmButton.innerHTML = `
+        <span
+          class="spinner-border spinner-border-sm me-2"
+          aria-hidden="true"
+        ></span>
+        Resetting Workspace...
+      `;
+    }
+
+    const supabase =
+      getSupabaseClient();
+
+    // ADMIN RESET WORKSPACE - SECURE TRANSACTIONAL RPC
+    //
+    // Browser does not delete individual records.
+    // PostgreSQL performs the complete reset transactionally.
+    const {
+      data,
+      error,
+    } = await supabase.rpc(
+      "admin_reset_tenant_workspace",
+      {
+        target_tenant_id:
+          String(
+            tenant.id || "",
+          ).trim(),
+      },
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    const result =
+      Array.isArray(data)
+        ? data[0]
+        : data;
+
+    if (
+      result &&
+      result.success === false
+    ) {
+      throw new Error(
+        result.message ||
+        "The company workspace could not be reset.",
+      );
+    }
+
+    const modalEl =
+      state.dom.resetWorkspaceModal;
+
+    if (modalEl) {
+      bootstrap.Modal
+        .getOrCreateInstance(modalEl)
+        .hide();
+    }
+
+    // Refresh only Admin-owned workspace views that can be
+    // affected by the reset.
+    await refreshTenantWorkspace();
+
+    await refreshAdminEmailSetupWorkspace({
+      preserveCompany: true,
+    });
+
+    await refreshProfileTenantLinkingWorkspace();
+
+    resetTenantForm();
+    openAdminCompanyIdentityPanel();
+
+    const employeesPreserved =
+      Number(
+        result?.employees_preserved || 0,
+      );
+
+    const successMessage =
+      result?.message ||
+      `Workspace reset completed for ${companyName}. ${employeesPreserved} employee record(s) were preserved.`;
+
+    showPageAlert(
+      "success",
+      successMessage,
+    );
+
+    showDashboardToast(
+      "success",
+      "Workspace reset complete",
+      successMessage,
+    );
+  } catch (error) {
+    console.error(
+      "Error resetting company workspace:",
+      error,
+    );
+
+    const message =
+      String(
+        error?.message || "",
+      ).trim() ||
+      "The company workspace could not be reset.";
+
+    // Keep the modal open so Admin retains the company context.
+    showResetWorkspaceAlert(
+      "danger",
+      message,
+    );
+
+    showDashboardToast(
+      "danger",
+      "Workspace reset failed",
+      message,
+    );
+  } finally {
+    if (
+      confirmButton?.dataset.originalHtml
+    ) {
+      confirmButton.innerHTML =
+        confirmButton.dataset.originalHtml;
+
+      delete confirmButton
+        .dataset.originalHtml;
+    }
+
+    if (confirmButton) {
+      confirmButton.disabled = false;
+    }
+  }
+}
+
 async function saveTenantRecord() {
   if (!validateTenantForm()) {
     updateTenantSaveButtonState();
@@ -1790,9 +2959,14 @@ async function saveTenantRecord() {
 }
 
 // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
-// Display name used in profile dropdowns and user tenant link records.
+// Display name used throughout Admin user-access workflows.
+//
+// Prefer the authoritative employee name maintained by HR.
+// Fall back to the existing profile name, then email, when a linked
+// employee record is not available.
 function getProfileDisplayName(profile = {}) {
   return (
+    String(profile.employee_full_name || "").trim() ||
     String(profile.full_name || "").trim() ||
     String(profile.email || "").trim() ||
     "Unnamed profile"
@@ -1830,7 +3004,9 @@ function populateProfileTenantProfileOptions() {
   profiles.forEach((profile) => {
     const option = document.createElement("option");
     option.value = profile.id;
-    option.textContent = `${getProfileDisplayName(profile)} — ${profile.email || "No email"}`;
+    // ADMIN MOJIBAKE CLEANUP
+    // Use an ASCII-safe separator for generated dropdown text.
+    option.textContent = `${getProfileDisplayName(profile)} - ${profile.email || "No email"}`;
     select.appendChild(option);
   });
 
@@ -1870,7 +3046,9 @@ function populateProfileTenantTenantOptions() {
   activeTenants.forEach((tenant) => {
     const option = document.createElement("option");
     option.value = tenant.id;
-    option.textContent = `${tenant.company_name || "Unnamed Company"} — ${tenant.tenant_code || "--"}`;
+    // ADMIN USER ACCESS AUTHORITATIVE UI - v1.0.0
+    // Use an ASCII separator so company labels render consistently.
+    option.textContent = `${tenant.company_name || "Unnamed Company"} - ${tenant.tenant_code || "--"}`;
     select.appendChild(option);
   });
 
@@ -1910,7 +3088,10 @@ function populateCompanyUserTenantOptions() {
   activeTenants.forEach((tenant) => {
     const option = document.createElement("option");
     option.value = tenant.id;
-    option.textContent = `${tenant.company_name || "Unnamed Company"} — ${tenant.tenant_code || "--"}`;
+    // ADMIN USER ACCESS AUTHORITATIVE UI - v1.0.0
+    // Keep generated company labels ASCII-safe and consistent
+    // across both User Access company selectors.
+    option.textContent = `${tenant.company_name || "Unnamed Company"} - ${tenant.tenant_code || "--"}`;
     select.appendChild(option);
   });
 
@@ -1944,7 +3125,7 @@ async function populateCompanyUserDepartmentOptions() {
     return;
   }
 
-  select.innerHTML = `<option value="">Loading departments…</option>`;
+  select.innerHTML = `<option value="">Loading departments...</option>`;
 
   try {
     const supabase = getSupabaseClient();
@@ -1963,7 +3144,7 @@ async function populateCompanyUserDepartmentOptions() {
     // No departments should not block first HR bootstrap.
     select.innerHTML = departments.length
       ? `<option value="">Select department</option>`
-      : `<option value="">No departments set up yet — optional for invite</option>`;
+      : `<option value="">No departments set up yet - optional for invite</option>`;
 
     departments.forEach((dept) => {
       const option = document.createElement("option");
@@ -1979,7 +3160,7 @@ async function populateCompanyUserDepartmentOptions() {
     // ADMIN COMPANY USER BOOTSTRAP - STEP 1E
     // Department lookup failure must not block Admin from inviting the first
     // HR/Manager/Employee user. The department can be completed later in HR setup.
-    select.innerHTML = `<option value="">Could not load departments — optional for invite</option>`;
+    select.innerHTML = `<option value="">Could not load departments - optional for invite</option>`;
     select.disabled = true;
   }
 
@@ -2009,7 +3190,7 @@ function populateAdminEmailSetupCompanyOptions() {
   activeTenants.forEach((tenant) => {
     const option = document.createElement("option");
     option.value = tenant.id;
-    option.textContent = `${tenant.company_name || "Unnamed Company"} — ${tenant.tenant_code || "--"}`;
+    option.textContent = `${tenant.company_name || "Unnamed Company"} - ${tenant.tenant_code || "--"}`;
     select.appendChild(option);
   });
 
@@ -2164,7 +3345,7 @@ function renderAdminEmailRecipients(records = []) {
       </td>
 
       <td>
-        <span class="badge ${getAdminEmailSetupStatusBadgeClass(recipient.status)}">
+        <span class="admin-email-status-pill ${getAdminEmailSetupStatusBadgeClass(recipient.status)}">
           ${escapeHtml(getAdminEmailSetupDisplayStatus(recipient.status))}
         </span>
       </td>
@@ -2326,7 +3507,7 @@ function renderAdminEmailDeliveryLogs(records = []) {
       </td>
 
       <td>
-        <span class="badge ${getAdminEmailSetupStatusBadgeClass(log.status)}">
+        <span class="admin-email-status-pill ${getAdminEmailSetupStatusBadgeClass(log.status)}">
           ${escapeHtml(getAdminEmailSetupDisplayStatus(log.status))}
         </span>
       </td>
@@ -2665,6 +3846,9 @@ function startAdminEmailRecipientEdit(recipientId) {
 }
 
 function openAdminEmailSetupPanel() {
+  // ADMIN COMPANIES SUB-WORKSPACE NAVIGATION - v1.0.0
+  switchAdminCompaniesSubWorkspace("email");
+
   setAdminDashboardCardExpanded(
     state.dom.toggleAdminEmailSetupCardBtn,
     state.dom.adminEmailSetupCollapse,
@@ -2902,7 +4086,7 @@ function validateCompanyUserInviteForm() {
 
   if (!fullName) {
     state.dom.companyUserFullName?.classList.add("is-invalid");
-    showCompanyUserInviteAlert("warning", "Enter the company user’s full name.");
+    showCompanyUserInviteAlert("warning", "Enter the company user's full name.");
     state.dom.companyUserFullName?.focus();
     return false;
   }
@@ -3289,10 +4473,12 @@ function resetProfileTenantLinkForm() {
   state.dom.cancelProfileTenantLinkEditBtn?.classList.add("d-none");
 
   if (state.dom.saveProfileTenantLinkBtn) {
+    // ADMIN USER ACCESS AUTHORITATIVE UI - v1.0.0
+    // Default state communicates the actual Admin operation.
     state.dom.saveProfileTenantLinkBtn.innerHTML = `
-      <i class="bi bi-link-45deg me-2"></i>
-<span id="saveProfileTenantLinkBtnText">Save Access Setup</span>
-    `;
+  <i class="bi bi-arrow-left-right me-2"></i>
+  <span id="saveProfileTenantLinkBtnText">Change Company Access</span>
+`;
     state.dom.saveProfileTenantLinkBtnText =
       document.getElementById("saveProfileTenantLinkBtnText");
   }
@@ -3389,7 +4575,7 @@ function renderProfileTenantLinks(records = []) {
         <button
           type="button"
           class="admin-access-company-toggle"
-          aria-expanded="true"
+          aria-expanded="false"
           aria-controls="${escapeHtml(companyContentRowId)}"
           onclick="
             const contentRow = document.getElementById('${escapeHtml(companyContentRowId)}');
@@ -3401,7 +4587,7 @@ function renderProfileTenantLinks(records = []) {
           "
         >
           <span class="admin-access-company-title">
-            <i class="bi bi-chevron-up text-secondary" data-company-toggle-icon></i>
+            <i class="bi bi-chevron-down text-secondary" data-company-toggle-icon></i>
             <span class="admin-access-company-name">${escapeHtml(companyGroup.companyName)}</span>
             <span class="admin-access-company-code">
               Company ID: ${escapeHtml(companyGroup.companyCode)}
@@ -3421,6 +4607,44 @@ function renderProfileTenantLinks(records = []) {
       .map((profile) => {
         const tenant = getTenantByTenantId(profile.tenant_id);
         const normalizedRole = String(profile.role || "").trim().toLowerCase();
+        // ADMIN SYSTEM ROLE REFLECTION - v1.0.0
+        // profiles.role is the secure dashboard/login route.
+        // employees.system_role is the HR-selected business role shown to Admin.
+        //
+        // Keep both concepts separate:
+        // - profile.role continues driving routing/security/MFA behaviour;
+        // - employeeSystemRole is presentation-only for the User Access role pill.
+        const employeeSystemRole = String(
+          profile.employee_system_role || profile.role || "",
+        )
+          .trim()
+          .toLowerCase();
+
+        const employeeSystemRoleLabel = (() => {
+          const roleLabels = {
+            employee: "Employee",
+            manager: "Manager",
+            supervisor: "Supervisor",
+            hr: "HR Standard",
+            hr_manager: "HR Manager",
+            payroll: "Payroll",
+            payroll_manager: "Payroll Manager",
+            leadership: "Leadership",
+            executive: "Executive",
+            auditor: "Auditor",
+            qa_analyst: "QA Analyst",
+            admin: "Admin",
+            system_admin: "System Admin",
+          };
+
+          return (
+            roleLabels[employeeSystemRole] ||
+            employeeSystemRole
+              .replace(/[_-]+/g, " ")
+              .replace(/\b\w/g, (character) => character.toUpperCase()) ||
+            "--"
+          );
+        })();
         const hrAccessRecord =
           normalizedRole === "hr"
             ? getHrAccessProfileById(profile.id)
@@ -3437,11 +4661,10 @@ function renderProfileTenantLinks(records = []) {
             ? hrAccessRecord
               ? `
                   <div class="mt-1">
-                    <span class="badge rounded-pill ${
-                      isTenantAdministrator
-                        ? "text-bg-success"
-                        : "text-bg-light border text-secondary"
-                    }">
+                    <span class="badge rounded-pill ${isTenantAdministrator
+                ? "text-bg-success"
+                : "text-bg-light border text-secondary"
+              }">
                       ${escapeHtml(hrAccessLabel)}
                     </span>
                   </div>
@@ -3466,18 +4689,16 @@ function renderProfileTenantLinks(records = []) {
             ? `
                 <button
                   type="button"
-                  class="btn btn-sm ${
-                    isTenantAdministrator
-                      ? "btn-outline-secondary"
-                      : "btn-outline-success"
-                  }"
-                  title="${
-                    isTenantAdministrator
-                      ? "Return to standard HR Officer access"
-                      : canChangeHrAccess
-                        ? "Make Company Admin"
-                        : "Inactive HR profiles cannot be promoted"
-                  }"
+                  class="btn btn-sm ${isTenantAdministrator
+              ? "btn-outline-secondary"
+              : "btn-outline-success"
+            }"
+                  title="${isTenantAdministrator
+              ? "Return to standard HR Officer access"
+              : canChangeHrAccess
+                ? "Make Company Admin"
+                : "Inactive HR profiles cannot be promoted"
+            }"
                   ${canChangeHrAccess ? "" : "disabled"}
                   onclick="window.adminSetHrAccessLevel(
                     '${escapeHtml(profile.id)}',
@@ -3485,11 +4706,10 @@ function renderProfileTenantLinks(records = []) {
                     this
                   )"
                 >
-                  <i class="bi ${
-                    isTenantAdministrator
-                      ? "bi-person-dash"
-                      : "bi-person-badge"
-                  }"></i>
+                  <i class="bi ${isTenantAdministrator
+              ? "bi-person-dash"
+              : "bi-person-badge"
+            }"></i>
                 </button>
               `
             : "";
@@ -3502,9 +4722,12 @@ function renderProfileTenantLinks(records = []) {
             </td>
 
             <td>
-              <span class="admin-access-role-pill">
-                ${escapeHtml(profile.role || "--")}
-              </span>
+<!-- ADMIN SYSTEM ROLE REFLECTION - v1.0.0
+     Display the authoritative HR-selected System Role.
+     profile.role remains unchanged for security/routing logic. -->
+<span class="admin-access-role-pill">
+  ${escapeHtml(employeeSystemRoleLabel)}
+</span>
               ${hrAccessBadgeHtml}
             </td>
 
@@ -3592,7 +4815,11 @@ function renderProfileTenantLinks(records = []) {
 
     const companyContentRow = document.createElement("tr");
     companyContentRow.id = companyContentRowId;
-    companyContentRow.className = "admin-access-company-content-row";
+    // ADMIN USER ACCESS COMPANY GROUP DEFAULT STATE - v1.0.0
+    // Keep each company header visible but hide its user rows until
+    // Platform Admin explicitly expands that company group.
+    companyContentRow.className =
+      "admin-access-company-content-row d-none";
 
     companyContentRow.innerHTML = `
       <td colspan="4" class="p-0">
@@ -3825,30 +5052,81 @@ function startProfileTenantLinkEdit(profileId) {
   state.dom.cancelProfileTenantLinkEditBtn?.classList.remove("d-none");
 
   if (state.dom.saveProfileTenantLinkBtn) {
+    // ADMIN USER ACCESS AUTHORITATIVE UI - v1.0.0
+    // Present the business operation clearly: this changes the user's
+    // assigned company rather than editing an abstract "profile link".
     state.dom.saveProfileTenantLinkBtn.innerHTML = `
-      <i class="bi bi-link-45deg me-2"></i>
-<span id="saveProfileTenantLinkBtnText">Update Access Setup</span>
-    `;
+  <i class="bi bi-arrow-left-right me-2"></i>
+  <span id="saveProfileTenantLinkBtnText">Update Company Access</span>
+`;
     state.dom.saveProfileTenantLinkBtnText =
       document.getElementById("saveProfileTenantLinkBtnText");
   }
 
   updateProfileTenantLinkSaveButtonState();
 
-  // ADMIN UI CLEANUP - STEP 1K
-  // Editing a user/company link should open User Company Assignment and
-  // scroll to the panel header cleanly without cutting it off.
+  // ADMIN USER ACCESS STANDALONE EDIT ROUTING - v1.0.0
+  // The User Access workspace is now a transparent container with separate
+  // operational cards. Editing access must land directly on the
+  // Reassign Existing User card, not at the top of Invite Company User.
   focusAdminFieldWithoutJump(state.dom.profileTenantTenantId);
-  scrollToAdminOpenedPanel(
-    state.dom.toggleAdminUserCompanyAssignmentCardBtn,
-    state.dom.adminUserCompanyAssignmentCollapse,
-    150,
+
+  scrollToAdminDashboardTarget(
+    state.dom.profileTenantLinkForm?.closest(
+      ".admin-user-access-reassign-card",
+    ) || state.dom.profileTenantLinkForm,
+    120,
   );
 }
 
-// ADMIN DELETE ACTIONS - STEP 1
-// Remove company access from a user profile.
-// This does not delete the Supabase Auth user. It removes the company link safely through RPC.
+// =========================================================
+// ADMIN REMOVE COMPANY ACCESS MODAL - v1.0.0
+//
+// Modern confirmation UI for removing company access.
+//
+// IMPORTANT:
+// - This does NOT delete the Auth account.
+// - This does NOT delete the employee record.
+// - This does NOT alter the existing protected RPC.
+// - Only the previous window.confirm() presentation is replaced.
+// =========================================================
+
+function clearRemoveCompanyAccessAlert() {
+  const alert = state.dom.removeCompanyAccessAlert;
+
+  if (!alert) return;
+
+  alert.className = "alert d-none mt-3 mb-0";
+  alert.textContent = "";
+}
+
+function showRemoveCompanyAccessAlert(type, message) {
+  const alert = state.dom.removeCompanyAccessAlert;
+
+  if (!alert) {
+    showPageAlert(type, message);
+    return;
+  }
+
+  alert.className = `alert alert-${type} mt-3 mb-0`;
+  alert.textContent = message;
+}
+
+function clearRemoveCompanyAccessModal() {
+  // Clear only modal state.
+  // No company/profile data is changed here.
+  state.currentRemoveCompanyAccessTarget = null;
+
+  clearRemoveCompanyAccessAlert();
+
+  if (state.dom.removeCompanyAccessConfirmBtn) {
+    state.dom.removeCompanyAccessConfirmBtn.disabled = false;
+  }
+}
+
+
+// Existing trash icon action.
+// This now opens the controlled modal instead of window.confirm().
 async function removeProfileTenantAccess(profileId = "") {
   const profile = getProfileForTenantLinkById(profileId);
 
@@ -3861,10 +5139,20 @@ async function removeProfileTenantAccess(profileId = "") {
   }
 
   const profileName = getProfileDisplayName(profile);
-  const profileEmail = String(profile.email || "--").trim();
-  const tenant = getTenantByTenantId(profile.tenant_id);
-  const companyName = String(tenant?.company_name || "the assigned company").trim();
 
+  const profileEmail = String(
+    profile.email || "--",
+  ).trim();
+
+  const tenant = getTenantByTenantId(
+    profile.tenant_id,
+  );
+
+  const companyName = String(
+    tenant?.company_name || "the assigned company",
+  ).trim();
+
+  // An already-unlinked user has nothing to remove.
   if (!String(profile.tenant_id || "").trim()) {
     showPageAlert(
       "info",
@@ -3873,32 +5161,132 @@ async function removeProfileTenantAccess(profileId = "") {
     return;
   }
 
-  const confirmed = window.confirm(
-    `Remove company access for "${profileName}"?\n\n` +
-    `${profileEmail}\n\n` +
-    `This will remove access to ${companyName}. The user account itself will not be deleted.`
-  );
+  // Clear any previous modal target before assigning this one.
+  clearRemoveCompanyAccessModal();
 
-  if (!confirmed) return;
+  state.currentRemoveCompanyAccessTarget = profile;
+
+  if (state.dom.removeCompanyAccessTargetName) {
+    state.dom.removeCompanyAccessTargetName.textContent =
+      profileName;
+  }
+
+  if (state.dom.removeCompanyAccessTargetEmail) {
+    state.dom.removeCompanyAccessTargetEmail.textContent =
+      profileEmail;
+  }
+
+  if (state.dom.removeCompanyAccessTargetCompany) {
+    state.dom.removeCompanyAccessTargetCompany.textContent =
+      companyName;
+  }
+
+  clearRemoveCompanyAccessAlert();
+
+  const modalEl =
+    state.dom.removeCompanyAccessModal;
+
+  if (!modalEl) {
+    showPageAlert(
+      "danger",
+      "Remove Company Access confirmation could not be opened.",
+    );
+    return;
+  }
+
+  bootstrap.Modal
+    .getOrCreateInstance(modalEl)
+    .show();
+}
+
+
+// Performs the existing protected company-access removal.
+//
+// The backend contract is intentionally unchanged:
+// admin_remove_profile_tenant_access(target_profile_id)
+async function submitRemoveProfileTenantAccess() {
+  const profile =
+    state.currentRemoveCompanyAccessTarget;
+
+  if (!profile?.id) {
+    showRemoveCompanyAccessAlert(
+      "warning",
+      "The selected user could not be confirmed. Close this window and try again.",
+    );
+    return;
+  }
+
+  const profileName =
+    getProfileDisplayName(profile);
+
+  const tenant =
+    getTenantByTenantId(profile.tenant_id);
+
+  const companyName = String(
+    tenant?.company_name || "the assigned company",
+  ).trim();
+
+  const button =
+    state.dom.removeCompanyAccessConfirmBtn;
 
   try {
-    const supabase = getSupabaseClient();
+    clearRemoveCompanyAccessAlert();
 
-    const { data, error } = await supabase.rpc(
-      "admin_remove_profile_tenant_access",
-      {
-        target_profile_id: String(profile.id || "").trim(),
-      },
-    );
+    if (button) {
+      if (!button.dataset.originalHtml) {
+        button.dataset.originalHtml =
+          button.innerHTML;
+      }
 
-    if (error) throw error;
+      button.disabled = true;
 
-    const result = Array.isArray(data) ? data[0] : data;
+      button.innerHTML = `
+        <span
+          class="spinner-border spinner-border-sm me-2"
+          aria-hidden="true"
+        ></span>
+        Removing Access...
+      `;
+    }
+
+    const supabase =
+      getSupabaseClient();
+
+    // EXISTING SECURE RPC - UNCHANGED
+    const { data, error } =
+      await supabase.rpc(
+        "admin_remove_profile_tenant_access",
+        {
+          target_profile_id: String(
+            profile.id || "",
+          ).trim(),
+        },
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    const result =
+      Array.isArray(data)
+        ? data[0]
+        : data;
 
     if (result && result.success === false) {
       throw new Error(
-        result.message || "User company access could not be removed.",
+        result.message ||
+        "User company access could not be removed.",
       );
+    }
+
+    // Close only after the protected RPC succeeds.
+    const modalEl =
+      state.dom.removeCompanyAccessModal;
+
+    if (modalEl) {
+      bootstrap.Modal
+        .getOrCreateInstance(modalEl)
+        .hide();
     }
 
     await refreshProfileTenantLinkingWorkspace();
@@ -3917,28 +5305,245 @@ async function removeProfileTenantAccess(profileId = "") {
       `${profileName} can no longer access ${companyName}.`,
     );
   } catch (error) {
-    console.error("Error removing user company access:", error);
+    console.error(
+      "Error removing user company access:",
+      error,
+    );
 
-    showPageAlert(
+    const message =
+      String(error?.message || "").trim() ||
+      "User company access could not be removed.";
+
+    // Keep the modal open on failure.
+    showRemoveCompanyAccessAlert(
       "danger",
-      error.message || "User company access could not be removed.",
+      message,
     );
 
     showDashboardToast(
       "danger",
       "Access removal failed",
-      error.message || "User company access could not be removed.",
+      message,
     );
+  } finally {
+    if (button?.dataset.originalHtml) {
+      button.innerHTML =
+        button.dataset.originalHtml;
+
+      delete button.dataset.originalHtml;
+    }
+
+    if (button) {
+      button.disabled = false;
+    }
   }
 }
 
-// ADMIN COMPLETE USER REMOVAL
-// Permanently deletes the selected company user through the secure
-// delete-company-user Edge Function.
+
+// =========================================================
+// ADMIN FORCE DELETE USER MODAL - v1.0.0
 //
-// The backend verifies Admin authority, protects payroll/history records,
-// deletes the employee record, releases the employee number and email,
-// and permanently removes the Supabase Auth account.
+// Controlled replacement for the old chained window.prompt()
+// and window.confirm() permanent-delete workflow.
+//
+// Security remains unchanged:
+// - Platform Admin restrictions remain in the Edge Function;
+// - the browser never receives a service-role key;
+// - permanent deletion remains server-side;
+// - the typed email is still sent as confirmationEmail.
+// =========================================================
+
+// ADMIN FORCE DELETE USER EMAIL NORMALISATION - v1.0.1
+// Permanent-delete confirmation must compare what the Admin can actually see.
+//
+// Besides trimming and lowercasing, remove invisible Unicode formatting
+// characters that can arrive through copied/autofilled email addresses.
+//
+// Important:
+// - "+" aliases are preserved;
+// - dots are preserved;
+// - domains are preserved;
+// - no Gmail-specific rewriting is performed;
+// - backend confirmation remains authoritative.
+function normalisePermanentDeleteConfirmationEmail(value = "") {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function clearPermanentDeleteUserAlert() {
+  const alert = state.dom.permanentDeleteUserAlert;
+  if (!alert) return;
+
+  alert.className = "alert d-none mt-3 mb-0";
+  alert.textContent = "";
+}
+
+function showPermanentDeleteUserAlert(type, message) {
+  const alert = state.dom.permanentDeleteUserAlert;
+
+  if (!alert) {
+    showPageAlert(type, message);
+    return;
+  }
+
+  alert.className = `alert alert-${type} mt-3 mb-0`;
+  alert.textContent = message;
+}
+
+function updatePermanentDeleteUserContinueButtonState() {
+  // ADMIN FORCE DELETE USER MODAL - CONFIRMATION MATCH FIX v1.0.1
+  //
+  // Use one shared normalisation rule for both stored and entered emails.
+  // This prevents invisible copied/autofilled characters from leaving
+  // Continue grey when the two addresses visibly match.
+
+  const button =
+    state.dom.permanentDeleteUserContinueBtn;
+
+  if (!button) return;
+
+  const expectedEmail =
+    normalisePermanentDeleteConfirmationEmail(
+      state.currentPermanentDeleteTarget?.email,
+    );
+
+  const enteredEmail =
+    normalisePermanentDeleteConfirmationEmail(
+      state.dom.permanentDeleteUserEmailInput?.value,
+    );
+
+  const isMatch =
+    Boolean(expectedEmail) &&
+    Boolean(enteredEmail) &&
+    enteredEmail === expectedEmail;
+
+  button.disabled = !isMatch;
+
+  button.className = isMatch
+    ? "btn btn-danger dashboard-action-btn"
+    : "btn btn-secondary dashboard-action-btn";
+}
+
+function showPermanentDeleteUserStageOne() {
+  state.dom.permanentDeleteUserStageOne?.classList.remove("d-none");
+  state.dom.permanentDeleteUserStageTwo?.classList.add("d-none");
+
+  state.dom.permanentDeleteUserContinueBtn?.classList.remove("d-none");
+  state.dom.permanentDeleteUserConfirmBtn?.classList.add("d-none");
+
+  if (state.dom.permanentDeleteUserBackBtn) {
+    state.dom.permanentDeleteUserBackBtn.textContent = "Cancel";
+  }
+
+  clearPermanentDeleteUserAlert();
+  updatePermanentDeleteUserContinueButtonState();
+
+  window.requestAnimationFrame(() => {
+    state.dom.permanentDeleteUserEmailInput?.focus();
+
+    // Recalculate after the modal has rendered so pasted/autofilled
+    // confirmation values immediately unlock Continue when valid.
+    updatePermanentDeleteUserContinueButtonState();
+  });
+}
+
+function showPermanentDeleteUserStageTwo() {
+  const profile = state.currentPermanentDeleteTarget;
+  if (!profile) return;
+
+  state.dom.permanentDeleteUserStageOne?.classList.add("d-none");
+  state.dom.permanentDeleteUserStageTwo?.classList.remove("d-none");
+
+  state.dom.permanentDeleteUserContinueBtn?.classList.add("d-none");
+  state.dom.permanentDeleteUserConfirmBtn?.classList.remove("d-none");
+
+  if (state.dom.permanentDeleteUserBackBtn) {
+    state.dom.permanentDeleteUserBackBtn.textContent = "Go Back";
+  }
+
+  if (state.dom.permanentDeleteUserFinalName) {
+    state.dom.permanentDeleteUserFinalName.textContent =
+      getProfileDisplayName(profile);
+  }
+
+  if (state.dom.permanentDeleteUserFinalEmail) {
+    state.dom.permanentDeleteUserFinalEmail.textContent =
+      String(profile.email || "").trim().toLowerCase();
+  }
+
+  clearPermanentDeleteUserAlert();
+}
+
+function clearPermanentDeleteUserModal() {
+  state.currentPermanentDeleteTarget = null;
+
+  if (state.dom.permanentDeleteUserEmailInput) {
+    state.dom.permanentDeleteUserEmailInput.value = "";
+  }
+
+  state.dom.permanentDeleteUserStageOne?.classList.remove("d-none");
+  state.dom.permanentDeleteUserStageTwo?.classList.add("d-none");
+
+  state.dom.permanentDeleteUserContinueBtn?.classList.remove("d-none");
+  state.dom.permanentDeleteUserConfirmBtn?.classList.add("d-none");
+
+  if (state.dom.permanentDeleteUserContinueBtn) {
+    state.dom.permanentDeleteUserContinueBtn.disabled = true;
+    state.dom.permanentDeleteUserContinueBtn.className =
+      "btn btn-secondary dashboard-action-btn";
+  }
+
+  if (state.dom.permanentDeleteUserBackBtn) {
+    state.dom.permanentDeleteUserBackBtn.textContent = "Cancel";
+  }
+
+  if (state.dom.permanentDeleteUserConfirmBtn) {
+    state.dom.permanentDeleteUserConfirmBtn.disabled = false;
+  }
+
+  clearPermanentDeleteUserAlert();
+}
+
+function advancePermanentDeleteUserModal() {
+  const profile = state.currentPermanentDeleteTarget;
+
+  if (!profile) {
+    showPermanentDeleteUserAlert(
+      "warning",
+      "The selected user could not be confirmed. Close this window and try again.",
+    );
+    return;
+  }
+
+  // ADMIN FORCE DELETE USER EMAIL NORMALISATION - v1.0.1
+  // Use the exact same comparison rule as the Continue button state.
+  const expectedEmail =
+    normalisePermanentDeleteConfirmationEmail(
+      profile.email,
+    );
+
+  const enteredEmail =
+    normalisePermanentDeleteConfirmationEmail(
+      state.dom.permanentDeleteUserEmailInput?.value,
+    );
+
+  if (!expectedEmail || enteredEmail !== expectedEmail) {
+    showPermanentDeleteUserAlert(
+      "warning",
+      "Type the user's full email address exactly before continuing.",
+    );
+    updatePermanentDeleteUserContinueButtonState();
+    return;
+  }
+
+  showPermanentDeleteUserStageTwo();
+}
+
+// Existing row action now opens the controlled modal only.
+// No destructive request is made until the final red button is clicked.
 async function permanentlyDeleteCompanyUser(profileId = "") {
   const profile = getProfileForTenantLinkById(profileId);
 
@@ -3962,7 +5567,6 @@ async function permanentlyDeleteCompanyUser(profileId = "") {
     return;
   }
 
-  const profileName = getProfileDisplayName(profile);
   const profileEmail = String(profile.email || "")
     .trim()
     .toLowerCase();
@@ -3975,40 +5579,132 @@ async function permanentlyDeleteCompanyUser(profileId = "") {
     return;
   }
 
-  const confirmationEmail = window.prompt(
-    `Permanently delete "${profileName}"?\n\n` +
-      `${profileEmail}\n\n` +
-      "This will permanently remove the employee record, login account, and profile. " +
-      "The employee number and email will become reusable.\n\n" +
-      "Type the user's full email address to confirm:",
-    "",
-  );
+  clearPermanentDeleteUserModal();
 
-  if (confirmationEmail === null) return;
+  state.currentPermanentDeleteTarget = profile;
 
-  const normalisedConfirmationEmail = String(confirmationEmail)
-    .trim()
-    .toLowerCase();
+  const profileName = getProfileDisplayName(profile);
 
-  if (normalisedConfirmationEmail !== profileEmail) {
+  if (state.dom.permanentDeleteUserTargetName) {
+    state.dom.permanentDeleteUserTargetName.textContent = profileName;
+  }
+
+  if (state.dom.permanentDeleteUserTargetEmail) {
+    state.dom.permanentDeleteUserTargetEmail.textContent = profileEmail;
+  }
+
+  if (state.dom.permanentDeleteUserFinalName) {
+    state.dom.permanentDeleteUserFinalName.textContent = profileName;
+  }
+
+  if (state.dom.permanentDeleteUserFinalEmail) {
+    state.dom.permanentDeleteUserFinalEmail.textContent = profileEmail;
+  }
+
+  showPermanentDeleteUserStageOne();
+
+  const modalEl = state.dom.permanentDeleteUserModal;
+
+  if (!modalEl) {
     showPageAlert(
-      "warning",
-      "Permanent deletion was cancelled because the confirmation email did not match.",
+      "danger",
+      "Permanent delete confirmation could not be opened.",
     );
     return;
   }
 
-  const finalConfirmation = window.confirm(
-    `Final confirmation\n\n` +
-      `Permanently delete ${profileName}?\n\n` +
-      `${profileEmail}\n\n` +
-      "This action cannot be undone.",
-  );
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+}
 
-  if (!finalConfirmation) return;
+
+// Final destructive action.
+//
+// IMPORTANT:
+// This is the already-proven secure delete-company-user request.
+// Only its trigger has moved from window.confirm() to the modal's
+// Permanently Delete button.
+async function submitPermanentDeleteCompanyUser() {
+  const profile = state.currentPermanentDeleteTarget;
+
+  if (!profile) {
+    showPermanentDeleteUserAlert(
+      "warning",
+      "The selected user could not be confirmed. Close this window and try again.",
+    );
+    return;
+  }
+
+  const profileName = getProfileDisplayName(profile);
+
+  // ADMIN FORCE DELETE USER EMAIL NORMALISATION - v1.0.1
+  // Reuse the same canonical comparison immediately before the
+  // secure destructive backend request.
+  const profileEmail =
+    normalisePermanentDeleteConfirmationEmail(
+      profile.email,
+    );
+
+  const enteredEmail =
+    normalisePermanentDeleteConfirmationEmail(
+      state.dom.permanentDeleteUserEmailInput?.value,
+    );
+
+  // Re-check immediately before the destructive request.
+  if (!profileEmail || enteredEmail !== profileEmail) {
+    showPermanentDeleteUserStageOne();
+
+    showPermanentDeleteUserAlert(
+      "warning",
+      "The confirmation email no longer matches the selected user.",
+    );
+
+    return;
+  }
+
+  const confirmButton = state.dom.permanentDeleteUserConfirmBtn;
 
   try {
+    if (confirmButton) {
+      if (!confirmButton.dataset.originalHtml) {
+        confirmButton.dataset.originalHtml = confirmButton.innerHTML;
+      }
+
+      confirmButton.disabled = true;
+
+      confirmButton.innerHTML = `
+        <span
+          class="spinner-border spinner-border-sm me-2"
+          aria-hidden="true"
+        ></span>
+        Permanently Deleting...
+      `;
+    }
+
     const supabase = getSupabaseClient();
+
+    // ADMIN COMPLETE USER REMOVAL - AUTH REPAIR v1.0.0
+    // Read the current signed-in Admin bearer token explicitly.
+    // Admin authority remains verified by delete-company-user.
+    const { data: sessionData, error: sessionError } =
+      await supabase.auth.getSession();
+
+    if (sessionError) {
+      throw new Error(
+        sessionError.message ||
+        "Your Admin session could not be read. Please sign out and sign in again.",
+      );
+    }
+
+    const accessToken = String(
+      sessionData?.session?.access_token || "",
+    ).trim();
+
+    if (!accessToken) {
+      throw new Error(
+        "Your Admin session has expired or could not be found. Please sign out and sign in again before deleting a user.",
+      );
+    }
 
     const { data, error } = await supabase.functions.invoke(
       "delete-company-user",
@@ -4017,18 +5713,34 @@ async function permanentlyDeleteCompanyUser(profileId = "") {
           profileId: String(profile.id || "").trim(),
           confirmationEmail: profileEmail,
         },
+
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       },
     );
 
     if (error) {
-      throw error;
+      const message = await getAdminEdgeFunctionErrorMessage(
+        error,
+        "The secure permanent-delete function could not be reached.",
+      );
+
+      throw new Error(message);
     }
 
     if (data?.success === false) {
       throw new Error(
         data?.error ||
-          "The company user could not be permanently deleted.",
+        "The company user could not be permanently deleted.",
       );
+    }
+
+    // Close the destructive modal only after the backend succeeds.
+    const modalEl = state.dom.permanentDeleteUserModal;
+
+    if (modalEl) {
+      bootstrap.Modal.getOrCreateInstance(modalEl).hide();
     }
 
     await refreshProfileTenantLinkingWorkspace();
@@ -4058,13 +5770,27 @@ async function permanentlyDeleteCompanyUser(profileId = "") {
       "The company user could not be permanently deleted.",
     );
 
-    showPageAlert("danger", message);
+    // Keep the modal open when deletion fails so Admin can review
+    // the selected user instead of losing the destructive context.
+    showPermanentDeleteUserAlert(
+      "danger",
+      message,
+    );
 
     showDashboardToast(
       "danger",
       "Permanent deletion failed",
       message,
     );
+  } finally {
+    if (confirmButton?.dataset.originalHtml) {
+      confirmButton.innerHTML = confirmButton.dataset.originalHtml;
+      delete confirmButton.dataset.originalHtml;
+    }
+
+    if (confirmButton) {
+      confirmButton.disabled = false;
+    }
   }
 }
 
@@ -4125,6 +5851,11 @@ async function saveProfileTenantLink() {
 }
 
 async function loadAdminProfileImages(profileImagePath, initials) {
+  // ADMIN PROFILE PHOTO PARITY - REMOVE PICTURE
+  // Remove Picture is available only when a saved image path exists.
+  if (state.dom.removeAdminProfileImageBtn) {
+    state.dom.removeAdminProfileImageBtn.disabled = !profileImagePath;
+  }
   if (!profileImagePath) {
     if (state.dom.adminProfileAvatar) {
       state.dom.adminProfileAvatar.textContent = initials;
@@ -4236,6 +5967,41 @@ function renderAdminProfile(profile, user) {
   const role = String(profile?.role || "admin").toLowerCase();
   const department = profile?.department || "";
   const initials = getInitials(fullName, "AD");
+
+  // ADMIN AUTHORITATIVE APPLICATION HEADER - v1.0.0
+  // Keep the compact account control aligned with the authenticated profile.
+  const modernUserName =
+    document.getElementById("adminModernUserName");
+
+  const modernUserRole =
+    document.getElementById("adminModernUserRole");
+
+  if (modernUserName) {
+    modernUserName.textContent = fullName;
+  }
+
+  // ADMIN OPERATIONAL OVERVIEW - v1.0.0
+  // Keep the Overview greeting aligned with the authenticated Admin profile.
+  const adminOverviewWelcomeName =
+    document.getElementById("adminOverviewWelcomeName");
+
+  if (adminOverviewWelcomeName) {
+    const firstName =
+      String(fullName || "Administrator")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)[0] ||
+      "Administrator";
+
+    adminOverviewWelcomeName.textContent = firstName;
+  }
+
+  if (modernUserRole) {
+    modernUserRole.textContent =
+      role === "admin"
+        ? "Platform Admin"
+        : role;
+  }
 
   if (state.dom.adminInitials) {
     state.dom.adminInitials.textContent = initials;
@@ -4498,6 +6264,124 @@ async function saveAdminProfileImage() {
     );
   } finally {
     setAdminProfileImageSaveLoading(false);
+  }
+}
+
+// ADMIN PROFILE PHOTO PARITY - REMOVE PICTURE
+// Clears the signed-in Admin's saved image reference first.
+// Storage cleanup is best-effort so a storage cleanup failure does not
+// restore a picture the Admin has already removed from their profile.
+async function removeAdminProfileImage() {
+  if (!state.currentUser?.id) {
+    showPageAlert(
+      "danger",
+      "Signed-in Admin user could not be confirmed.",
+    );
+    return;
+  }
+
+  const currentImagePath = String(
+    state.currentProfile?.profile_image_path || "",
+  ).trim();
+
+  if (!currentImagePath) {
+    showPageAlert(
+      "info",
+      "There is no saved profile picture to remove.",
+    );
+
+    if (state.dom.removeAdminProfileImageBtn) {
+      state.dom.removeAdminProfileImageBtn.disabled = true;
+    }
+
+    return;
+  }
+
+  const confirmed = window.confirm(
+    "Remove your current profile picture?\n\nYour initials will be shown instead.",
+  );
+
+  if (!confirmed) return;
+
+  const button = state.dom.removeAdminProfileImageBtn;
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.dataset.originalHtml = button.innerHTML;
+      button.innerHTML = `
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+        Removing...
+      `;
+    }
+
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({
+        profile_image_path: null,
+      })
+      .eq("id", state.currentUser.id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) throw error;
+
+    state.currentProfile = {
+      ...state.currentProfile,
+      ...(data || {}),
+      profile_image_path: null,
+    };
+
+    state.pendingProfileImageFile = null;
+
+    if (state.dom.adminProfileImageInput) {
+      state.dom.adminProfileImageInput.value = "";
+    }
+
+    // Storage cleanup is secondary to clearing the profile reference.
+    try {
+      const { error: storageError } = await supabase.storage
+        .from(PROFILE_IMAGES_BUCKET)
+        .remove([currentImagePath]);
+
+      if (storageError) {
+        console.warn(
+          "Admin profile image reference was cleared, but storage cleanup failed:",
+          storageError,
+        );
+      }
+    } catch (storageCleanupError) {
+      console.warn(
+        "Admin profile image reference was cleared, but storage cleanup could not complete:",
+        storageCleanupError,
+      );
+    }
+
+    await loadLatestAdminProfile();
+    renderAdminProfile(state.currentProfile, state.currentUser);
+
+    showPageAlert(
+      "success",
+      "Your profile picture was removed successfully.",
+    );
+  } catch (error) {
+    console.error("Error removing admin profile image:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "Profile picture could not be removed.",
+    );
+  } finally {
+    if (button) {
+      if (button.dataset.originalHtml) {
+        button.innerHTML = button.dataset.originalHtml;
+        delete button.dataset.originalHtml;
+      }
+
+      button.disabled = !state.currentProfile?.profile_image_path;
+    }
   }
 }
 

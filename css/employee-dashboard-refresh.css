@@ -1,0 +1,6354 @@
+/* =========================================================
+   EMPLOYEE DASHBOARD APPROVED VISUAL REFRESH - v1.0.0
+
+   Employee-scoped presentation layer recovered from the
+   approved Employee dashboard reference.
+
+   Scope:
+   - Employee dashboard only
+   - standard BexHR and Alpatech tenant presentation
+   - no authentication, authorisation, payroll, leave,
+     Supabase, tenant-filter or data-behaviour changes
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh {
+  --employee-overview-primary: #0b5f95;
+  --employee-overview-primary-dark: #073b63;
+  --employee-overview-primary-soft: #36b9cf;
+  --employee-overview-page-text: #0f172a;
+  --employee-overview-muted: #64748b;
+  --employee-overview-border: #e2e8f0;
+  --employee-overview-surface: #ffffff;
+  --employee-overview-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+body.bexhr-employee-visual-refresh .employee-operations-overview {
+  width: 100%;
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-page-header > div:first-child {
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--employee-overview-primary);
+  font-size: 0.67rem;
+  font-weight: 780;
+  letter-spacing: 0.11em;
+  line-height: 1.35;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-page-title {
+  color: var(--employee-overview-page-text);
+  font-size: clamp(1.55rem, 2.5vw, 2rem);
+  font-weight: 820;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-page-copy {
+  max-width: 720px;
+  color: var(--employee-overview-muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-account {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--employee-overview-border);
+  border-radius: 14px;
+  background: var(--employee-overview-surface);
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.04);
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-account-avatar {
+  width: 38px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 38px;
+  border-radius: 12px;
+  color: #08446d;
+  background: linear-gradient(135deg, #eaf8fb 0%, #d8f2f7 100%);
+  font-size: 0.75rem;
+  font-weight: 820;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-account-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-account-copy strong {
+  overflow: hidden;
+  color: var(--employee-overview-page-text);
+  font-size: 0.78rem;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-account-copy span {
+  overflow: hidden;
+  color: var(--employee-overview-muted);
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-account-logout {
+  width: 36px;
+  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 36px;
+  border: 0;
+  border-radius: 10px;
+  color: #64748b;
+  background: #f8fafc;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-account-logout:hover,
+body.bexhr-employee-visual-refresh
+  .employee-overview-account-logout:focus-visible {
+  outline: none;
+  color: #08446d;
+  background: #eaf8fb;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-welcome {
+  position: relative;
+  overflow: hidden;
+  min-height: 180px;
+  padding: clamp(1.5rem, 3vw, 2.2rem);
+  border-radius: 22px;
+  color: #ffffff;
+  background:
+    radial-gradient(
+      circle at 88% 18%,
+      rgba(54, 185, 207, 0.34),
+      transparent 25%
+    ),
+    radial-gradient(
+      circle at 72% 110%,
+      rgba(255, 255, 255, 0.1),
+      transparent 32%
+    ),
+    linear-gradient(
+      135deg,
+      #073b63 0%,
+      #0b5f95 64%,
+      #168fae 100%
+    );
+  box-shadow: 0 18px 36px rgba(7, 59, 99, 0.18);
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-welcome::before {
+  content: "";
+  position: absolute;
+  top: -80px;
+  right: -48px;
+  width: 220px;
+  height: 220px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-welcome::after {
+  content: "";
+  position: absolute;
+  right: 96px;
+  bottom: -110px;
+  width: 190px;
+  height: 190px;
+  border: 28px solid rgba(255, 255, 255, 0.055);
+  border-radius: 50%;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-welcome > * {
+  position: relative;
+  z-index: 1;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-welcome-kicker {
+  display: inline-block;
+  margin-bottom: 0.55rem;
+  color: #c8f6ff;
+  font-size: 0.74rem;
+  font-weight: 780;
+  letter-spacing: 0.12em;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-welcome-title {
+  max-width: 760px;
+  color: #ffffff;
+  font-size: clamp(1.75rem, 3.5vw, 2.55rem);
+  font-weight: 820;
+  letter-spacing: -0.045em;
+  line-height: 1.12;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-welcome-copy {
+  max-width: 650px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-stat-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  min-width: 0;
+  min-height: 132px;
+  padding: 1.15rem;
+  border: 1px solid var(--employee-overview-border);
+  border-radius: 18px;
+  background: var(--employee-overview-surface);
+  box-shadow: var(--employee-overview-shadow);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-stat-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(11, 95, 149, 0.25);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.07);
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-stat-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 42px;
+  border-radius: 12px;
+  font-size: 1.05rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-stat-icon-profile {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-stat-icon-requests {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-stat-icon-leave {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-stat-icon-payroll {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-stat-card > div:last-child {
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-stat-label {
+  margin-bottom: 0.28rem;
+  color: var(--employee-overview-muted);
+  font-size: 0.68rem;
+  font-weight: 760;
+  letter-spacing: 0.07em;
+  line-height: 1.35;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-stat-value {
+  color: var(--employee-overview-page-text);
+  font-size: clamp(1.35rem, 2.2vw, 1.8rem);
+  font-weight: 840;
+  line-height: 1.12;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-stat-copy {
+  margin-top: 0.4rem;
+  color: var(--employee-overview-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-action-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  min-width: 0;
+  padding: 1.25rem 1.35rem;
+  border: 1px solid var(--employee-overview-border);
+  border-radius: 18px;
+  background: var(--employee-overview-surface);
+  box-shadow: var(--employee-overview-shadow);
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-action-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-action-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 42px;
+  border-radius: 12px;
+  color: #08446d;
+  background: #eaf8fb;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-action-kicker {
+  margin-bottom: 0.18rem;
+  color: var(--employee-overview-primary);
+  font-size: 0.67rem;
+  font-weight: 780;
+  letter-spacing: 0.1em;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-action-heading h3 {
+  color: var(--employee-overview-page-text);
+  font-size: 1.02rem;
+  font-weight: 780;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-action-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh .employee-overview-action-btn {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid #dbe4ec;
+  border-radius: 10px;
+  color: #334155;
+  background: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 720;
+  line-height: 1.2;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-action-btn:hover,
+body.bexhr-employee-visual-refresh
+  .employee-overview-action-btn:focus-visible {
+  outline: none;
+  border-color: rgba(11, 95, 149, 0.35);
+  color: #08446d;
+  background: #eaf8fb;
+}
+
+@media (max-width: 1199.98px) {
+  body.bexhr-employee-visual-refresh .employee-overview-action-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-action-grid {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-employee-visual-refresh .employee-overview-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-account {
+    width: 100%;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-account-copy {
+    flex: 1 1 auto;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-overview-account-logout {
+    margin-left: auto;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-welcome {
+    min-height: 0;
+    padding: 1.35rem;
+    border-radius: 18px;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-welcome-title {
+    font-size: 1.65rem;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-action-panel {
+    padding: 1rem;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-action-btn {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 575.98px) {
+  body.bexhr-employee-visual-refresh .employee-operations-overview {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-page-title,
+  body.bexhr-employee-visual-refresh .employee-overview-page-copy,
+  body.bexhr-employee-visual-refresh .employee-overview-welcome-title,
+  body.bexhr-employee-visual-refresh .employee-overview-welcome-copy {
+    max-width: 100%;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-stat-card {
+    min-height: 108px;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-action-heading {
+    align-items: flex-start;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-action-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.bexhr-employee-visual-refresh .employee-overview-stat-card,
+  body.bexhr-employee-visual-refresh .employee-overview-action-btn,
+  body.bexhr-employee-visual-refresh
+    .employee-overview-account-logout {
+    transition: none;
+  }
+
+  body.bexhr-employee-visual-refresh .employee-overview-stat-card:hover {
+    transform: none;
+  }
+}
+
+/* =========================================================
+   EMPLOYEE MODERN APPLICATION HEADER - HR PARITY v1.0.0
+
+   Purpose:
+   - match the approved HR application-header proportions;
+   - retain all existing Employee IDs and JavaScript behaviour;
+   - keep Alpatech tenant colours and branding available;
+   - scope every rule to the Employee visual-refresh body class.
+
+   No authentication, role, tenant, leave, payroll, profile,
+   request, Supabase, or navigation logic is changed.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh {
+  --employee-shell-page: #f4f7fb;
+  --employee-shell-panel: #ffffff;
+  --employee-shell-text: #172033;
+  --employee-shell-muted: #667085;
+  --employee-shell-line: #e4eaf1;
+  --employee-shell-primary: #0f9f9a;
+  --employee-shell-primary-soft: #16b8ae;
+  --employee-shell-primary-dark: #0a7b78;
+  background: var(--employee-shell-page);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace {
+  --employee-shell-page: #f4f8fb;
+  --employee-shell-text: #101828;
+  --employee-shell-muted: #667085;
+  --employee-shell-line: #d8e5ee;
+  --employee-shell-primary: #0b5f95;
+  --employee-shell-primary-soft: #36b9cf;
+  --employee-shell-primary-dark: #08446d;
+}
+
+body.bexhr-employee-visual-refresh main.container {
+  width: min(100%, 1500px);
+  max-width: 1500px;
+  padding-left: clamp(1rem, 2vw, 2rem);
+  padding-right: clamp(1rem, 2vw, 2rem);
+}
+
+body.bexhr-employee-visual-refresh .employee-modern-app-header {
+  position: relative;
+  z-index: 10;
+  border: 1px solid var(--employee-shell-line);
+  border-radius: 18px;
+  background: var(--employee-shell-panel);
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.07);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-app-header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  min-width: 0;
+  padding: 1.15rem 1.25rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-page-heading {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-context-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.28rem;
+  color: var(--employee-shell-primary);
+  font-size: 0.69rem;
+  font-weight: 800;
+  letter-spacing: 0.075em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-company-name {
+  overflow: hidden;
+  max-width: 280px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-context-separator {
+  width: 4px;
+  height: 4px;
+  flex: 0 0 4px;
+  border-radius: 50%;
+  background: var(--employee-shell-primary-soft);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-page-heading h1 {
+  margin: 0;
+  color: var(--employee-shell-text);
+  font-size: clamp(1.5rem, 2.4vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.16;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-page-heading p {
+  max-width: 760px;
+  margin: 0.34rem 0 0;
+  color: var(--employee-shell-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-area {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-button {
+  display: flex;
+  align-items: center;
+  gap: 0.72rem;
+  min-width: 220px;
+  max-width: 320px;
+  min-height: 54px;
+  padding: 0.48rem 0.62rem;
+  border: 1px solid var(--employee-shell-line);
+  border-radius: 14px;
+  background: #ffffff;
+  color: var(--employee-shell-text);
+  text-align: left;
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.04);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-button:hover,
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-button:focus-visible {
+  outline: none;
+  border-color: rgba(15, 159, 154, 0.32);
+  background: #fbfdfd;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  .employee-modern-account-button:hover,
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  .employee-modern-account-button:focus-visible {
+  border-color: rgba(11, 95, 149, 0.3);
+  background: #f8fcfd;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-avatar-wrap .dashboard-avatar {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--employee-shell-primary-dark);
+  background:
+    linear-gradient(
+      135deg,
+      #ffffff 0%,
+      rgba(15, 159, 154, 0.14) 100%
+    );
+  font-size: 0.78rem;
+  font-weight: 820;
+  box-shadow: none;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  .employee-modern-avatar-wrap .dashboard-avatar {
+  color: #08446d;
+  background: linear-gradient(135deg, #ffffff 0%, #e7f7fb 100%);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-avatar-wrap img.dashboard-avatar {
+  display: block;
+  object-fit: cover;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-avatar-wrap img.dashboard-avatar.d-none,
+body.bexhr-employee-visual-refresh
+  .employee-modern-avatar-wrap span.dashboard-avatar.d-none {
+  display: none !important;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-copy strong {
+  overflow: hidden;
+  color: var(--employee-shell-text);
+  font-size: 0.8rem;
+  font-weight: 780;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-copy small {
+  overflow: hidden;
+  color: var(--employee-shell-muted);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-button > .bi-chevron-down {
+  flex: 0 0 auto;
+  color: #98a2b3;
+  font-size: 0.78rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-logout-button {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-color: var(--employee-shell-line);
+  border-radius: 12px;
+  color: #667085;
+  background: #ffffff;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-logout-button:hover,
+body.bexhr-employee-visual-refresh
+  .employee-modern-logout-button:focus-visible {
+  color: var(--employee-shell-primary-dark);
+  border-color: rgba(15, 159, 154, 0.32);
+  background: rgba(15, 159, 154, 0.07);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  .employee-modern-logout-button:hover,
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  .employee-modern-logout-button:focus-visible {
+  color: #08446d;
+  border-color: rgba(11, 95, 149, 0.28);
+  background: #eaf8fb;
+}
+
+@media (min-width: 992px) {
+  body.bexhr-employee-visual-refresh {
+    --sidebar-width: 220px;
+    padding-left: var(--sidebar-width);
+  }
+
+  body.bexhr-employee-visual-refresh .bexhr-sidebar {
+    width: var(--sidebar-width);
+    padding: 1.1rem 0.9rem;
+    gap: 0.75rem;
+  }
+
+  body.bexhr-employee-visual-refresh .bexhr-sidebar-brand {
+    min-height: 64px;
+    padding: 0.35rem 0.55rem 1rem;
+    margin-bottom: 0.65rem;
+  }
+
+  body.bexhr-employee-visual-refresh .bexhr-sidebar-nav {
+    gap: 0.35rem;
+  }
+
+  body.bexhr-employee-visual-refresh .bexhr-sidebar-item {
+    min-height: 46px;
+    padding: 0.68rem 0.8rem;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+
+  body.bexhr-employee-visual-refresh .bexhr-sidebar-item i {
+    width: 24px;
+    height: 24px;
+    font-size: 1.05rem;
+  }
+
+  body.bexhr-employee-visual-refresh .bexhr-sidebar-footer {
+    padding-top: 0.9rem;
+  }
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-employee-visual-refresh main.container {
+    padding-top: 1rem !important;
+    padding-bottom: 2rem !important;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-modern-app-header-main {
+    align-items: flex-start;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-modern-account-button {
+    min-width: 200px;
+  }
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-employee-visual-refresh
+    .employee-modern-app-header-main {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-modern-account-area {
+    width: 100%;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-modern-account-button {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
+@media (max-width: 575.98px) {
+  body.bexhr-employee-visual-refresh
+    .employee-modern-app-header {
+    border-radius: 16px;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-modern-page-heading h1 {
+    font-size: 1.45rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-modern-page-heading p {
+    font-size: 0.8rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-modern-account-button {
+    min-height: 50px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.bexhr-employee-visual-refresh
+    .employee-modern-account-button {
+    transition: none;
+  }
+}
+
+/* =========================================================
+   EMPLOYEE HR VISUAL PARITY CORRECTION - v1.0.0
+
+   Purpose:
+   - use the approved HR navy and teal standard workspace palette;
+   - remove the remaining brown Employee sidebar presentation;
+   - align the Employee welcome and operational cards with HR;
+   - preserve Alpatech tenant-specific colours.
+
+   Presentation only.
+   No authentication, tenant, role, profile, request, leave,
+   payroll, Supabase, navigation, or permission logic changes.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace) {
+  --employee-overview-primary: #0f9f9a;
+  --employee-overview-primary-dark: #0a7b78;
+  --employee-overview-primary-soft: #16b8ae;
+  --employee-overview-page-text: #172033;
+  --employee-overview-muted: #667085;
+  --employee-overview-border: #e4eaf1;
+  --employee-overview-surface: #ffffff;
+  --employee-overview-shadow:
+    0 12px 34px rgba(15, 23, 42, 0.07);
+}
+
+/* Standard BexHR desktop sidebar parity with the approved HR workspace. */
+@media (min-width: 992px) {
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar {
+    background:
+      linear-gradient(
+        180deg,
+        #071426 0%,
+        #0b1f38 100%
+      );
+    border-right: 0;
+    box-shadow: 12px 0 38px rgba(7, 20, 38, 0.16);
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-brand {
+    border-bottom-color: rgba(255, 255, 255, 0.12);
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-brand::after {
+    content: "BexHR";
+    color: #ffffff;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-brand .hr-brand-mark {
+    color: #071426;
+    background:
+      linear-gradient(
+        135deg,
+        #16b8ae 0%,
+        #55d7cd 100%
+      );
+    box-shadow: 0 10px 26px rgba(22, 184, 174, 0.28);
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-item {
+    color: #aebbc9;
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-item i {
+    color: #7890a8;
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-item:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateX(2px);
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-item:hover i {
+    color: #9ce8e2;
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-item.active {
+    color: #ffffff;
+    background: rgba(22, 184, 174, 0.15);
+    box-shadow:
+      inset 0 0 0 1px rgba(98, 221, 211, 0.16);
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-item.active::before {
+    left: -0.9rem;
+    top: 8px;
+    bottom: 8px;
+    width: 4px;
+    background:
+      linear-gradient(
+        180deg,
+        #62ddd3 0%,
+        #16b8ae 100%
+      );
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-item.active i {
+    color: #62ddd3;
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-footer {
+    border-top-color: rgba(255, 255, 255, 0.12);
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .bexhr-sidebar-footer .bexhr-sidebar-item:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* Exact HR-style operational welcome palette. */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  .employee-overview-welcome {
+  min-height: 214px;
+  padding: clamp(1.75rem, 3vw, 2.2rem);
+  border-radius: 22px;
+  background:
+    radial-gradient(
+      circle at 88% 10%,
+      rgba(22, 184, 174, 0.28),
+      transparent 29%
+    ),
+    linear-gradient(
+      135deg,
+      #071426 0%,
+      #123253 65%,
+      #176b70 100%
+    );
+  box-shadow: 0 18px 42px rgba(11, 31, 56, 0.14);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  .employee-overview-welcome-kicker {
+  color: #62ddd3;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  .employee-overview-welcome-title {
+  font-size: clamp(2rem, 3.6vw, 2.6rem);
+  letter-spacing: -0.045em;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  .employee-overview-welcome-copy {
+  max-width: 720px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.93rem;
+  line-height: 1.65;
+}
+
+/* Metric card sizing and surface treatment aligned to HR Overview. */
+body.bexhr-employee-visual-refresh
+  .employee-overview-stat-card {
+  min-height: 134px;
+  border: 1px solid var(--employee-overview-border);
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #f9fbfd 100%
+    );
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.045);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-stat-card:hover {
+  border-color: #d8e0ea;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.075);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-stat-label {
+  color: #778395;
+  font-size: 0.73rem;
+  letter-spacing: 0.045em;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-stat-value {
+  color: #172033;
+  font-size: clamp(1.45rem, 2vw, 1.85rem);
+  font-weight: 800;
+}
+
+/* Lower operational action panel parity. */
+body.bexhr-employee-visual-refresh
+  .employee-overview-action-panel {
+  border-color: var(--employee-overview-border);
+  background: #ffffff;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.07);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-action-kicker {
+  color: var(--employee-overview-primary);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-action-icon {
+  color: var(--employee-overview-primary-dark);
+  background: rgba(15, 159, 154, 0.1);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-action-btn:hover,
+body.bexhr-employee-visual-refresh
+  .employee-overview-action-btn:focus-visible {
+  color: var(--employee-overview-primary-dark);
+  border-color: rgba(15, 159, 154, 0.36);
+  background: rgba(15, 159, 154, 0.07);
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .employee-overview-welcome {
+    min-height: 0;
+    padding: 1.35rem;
+    border-radius: 18px;
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    .employee-overview-welcome-title {
+    font-size: 1.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.bexhr-employee-visual-refresh
+    .bexhr-sidebar-item {
+    transition: none;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .bexhr-sidebar-item:hover {
+    transform: none;
+  }
+}
+
+/* =========================================================
+   EMPLOYEE WELCOME DECORATION CLEANUP - v1.0.0
+   Matches the clean Manager and HR welcome-banner treatment.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh
+  .employee-overview-welcome::before,
+body.bexhr-employee-visual-refresh
+  .employee-overview-welcome::after {
+  content: none;
+  display: none;
+}
+
+/* =========================================================
+   EMPLOYEE EXACT HR HEADER DIMENSION PARITY - v1.0.0
+
+   Uses the approved HR desktop application-header dimensions.
+   Presentation only. No navigation, tenant, authentication,
+   employee, request, leave, payroll, or permission logic changes.
+   ========================================================= */
+
+@media (min-width: 992px) {
+  body.bexhr-employee-visual-refresh main.container {
+    padding-top: 1.1rem !important;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-modern-app-header {
+    z-index: 1030;
+    border-color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.055);
+    backdrop-filter: blur(14px);
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-modern-app-header-main {
+    min-height: 82px;
+    padding: 0.95rem 1.1rem 0.95rem 1.25rem;
+    gap: 1.5rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-modern-page-heading h1 {
+    font-size: clamp(1.35rem, 2vw, 1.75rem);
+    font-weight: 820;
+    line-height: normal;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-modern-page-heading p {
+    margin: 0.2rem 0 0;
+    max-width: 760px;
+    font-size: 0.83rem;
+    line-height: 1.45;
+  }
+}
+/* =========================================================
+   EMPLOYEE WORKSPACE LOADER ACCENT PARITY - v1.0.0
+
+   Align only the standard BexHR Employee loader with the
+   approved shared teal workspace palette.
+
+   Alpatech tenant branding is intentionally excluded.
+   ========================================================= */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  .bexhr-workspace-loader {
+  --hr-primary: #0f9f9a;
+  --hr-primary-soft: #16b8ae;
+  --hr-primary-dark: #0a7b78;
+}
+/* =========================================================
+   EMPLOYEE ACCOUNT CARD MANAGER DIMENSION PARITY - v1.0.0
+
+   Match the approved Manager account-card proportions.
+   Presentation only. No account, navigation, tenant,
+   authentication, profile, or logout behaviour changes.
+   ========================================================= */
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-button {
+  min-width: 0;
+  min-height: 50px;
+  padding: 0.35rem 0.55rem 0.35rem 0.4rem;
+  gap: 0.65rem;
+  background: #f8fafc;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-avatar-wrap {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-avatar-wrap .dashboard-avatar {
+  width: 38px;
+  height: 38px;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-copy {
+  min-width: 120px;
+  max-width: 210px;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-copy strong {
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-copy small {
+  font-size: 0.7rem;
+  line-height: 1.25;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-button > .bi-chevron-down {
+  font-size: 0.72rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-logout-button {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+/* =========================================================
+   EMPLOYEE HEADER ROLE PILL - v1.0.0
+
+   Presentation only. No role, tenant, authentication,
+   permission, profile, or session behaviour changes.
+   ========================================================= */
+body.bexhr-employee-visual-refresh
+  .employee-modern-account-copy
+  #heroRoleValue {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 20px;
+  margin-top: 0.16rem;
+  padding: 0.18rem 0.48rem;
+  border: 1px solid rgba(15, 159, 154, 0.24);
+  border-radius: 999px;
+  background: rgba(15, 159, 154, 0.08);
+  color: #0a7b78;
+  font-size: 0.64rem;
+  font-weight: 760;
+  line-height: 1;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  .employee-modern-account-copy
+  #heroRoleValue {
+  border-color: rgba(11, 95, 149, 0.24);
+  background: rgba(11, 95, 149, 0.08);
+  color: #08446d;
+}
+/* =========================================================
+   EMPLOYEE LEAVE HR MANAGER VISUAL PARITY - v1.0.0
+
+   Approved HR/Manager self-service presentation adapted to
+   the Pinehearst Employee Leave workspace.
+
+   Presentation only. Leave balances, submissions, approvals,
+   cancellation audit, returned-request RPC, RLS, tenant
+   filtering, reporting lines, and Supabase behaviour remain
+   unchanged.
+
+   Alpatech is deliberately excluded for its dedicated
+   tenant-branding validation.
+   ========================================================= */
+
+/* Primary Leave workspace cards */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  > .dashboard-section-card,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .employee-leave-equal-card {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 24px;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(45, 212, 191, 0.055),
+      transparent 30%
+    ),
+    #ffffff;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.055);
+}
+
+/* Leave balance tiles */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveBalancesGrid
+  > [class*="col-"] {
+  display: flex;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveBalancesGrid
+  .leave-entitlement-tile {
+  position: relative;
+  width: 100%;
+  min-height: 190px;
+  padding: 1.15rem;
+  overflow: hidden;
+  border: 1px solid rgba(21, 128, 61, 0.17);
+  border-radius: 18px;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(34, 197, 94, 0.11),
+      transparent 34%
+    ),
+    linear-gradient(180deg, #ffffff 0%, #f8fdf9 100%);
+  box-shadow: 0 12px 26px rgba(21, 128, 61, 0.065);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveBalancesGrid
+  .leave-entitlement-tile::before {
+  content: "";
+  position: absolute;
+  inset: 0 1rem auto;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #16a34a 0%, #4ade80 100%);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveBalancesGrid
+  .badge {
+  padding: 0.38rem 0.62rem;
+  border-radius: 999px;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveBalancesGrid
+  .progress {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(21, 128, 61, 0.1);
+}
+
+/* Latest Leave Decision */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #latestDecisionCard
+  > .info-tile,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #latestDecisionCard
+  > .border,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #latestDecisionCard
+  > [class*="rounded"] {
+  border: 1px solid rgba(109, 40, 217, 0.18) !important;
+  border-radius: 18px !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(139, 92, 246, 0.09),
+      transparent 30%
+    ),
+    linear-gradient(180deg, #ffffff 0%, #fbfaff 100%) !important;
+  box-shadow: 0 12px 26px rgba(109, 40, 217, 0.06);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #latestDecisionCard
+  .info-tile-label,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #latestDecisionCard
+  .text-secondary {
+  color: #64748b !important;
+}
+
+/* Request Leave form */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestForm
+  .form-control,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestForm
+  .form-select {
+  min-height: 48px;
+  border-color: #d8e2eb;
+  border-radius: 14px;
+  background-color: #ffffff;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestForm
+  textarea.form-control {
+  min-height: 118px;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestForm
+  .form-control:focus,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestForm
+  .form-select:focus {
+  border-color: rgba(14, 116, 144, 0.72);
+  box-shadow: 0 0 0 0.22rem rgba(14, 116, 144, 0.11);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestForm
+  > .border-top {
+  padding: 1rem;
+  border: 1px solid rgba(14, 116, 144, 0.14) !important;
+  border-radius: 16px;
+  color: #475569;
+  background: linear-gradient(135deg, #f0fdfa 0%, #f0f9ff 100%);
+}
+
+/* Leave History */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestsList {
+  display: grid;
+  gap: 0.85rem;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestsList
+  > .card,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestsList
+  > .border,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestsList
+  > [class*="rounded"] {
+  margin: 0 !important;
+  padding: 1rem !important;
+  border: 1px solid rgba(148, 163, 184, 0.27) !important;
+  border-radius: 17px !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(56, 189, 248, 0.065),
+      transparent 28%
+    ),
+    #ffffff !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.045);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestsList
+  .badge {
+  padding: 0.38rem 0.58rem;
+  border-radius: 999px;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestsList
+  .bg-light,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestsList
+  .bg-light-subtle {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 13px !important;
+  background: #f8fafc !important;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .employee-leave-history-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color:
+    rgba(14, 116, 144, 0.32)
+    rgba(148, 163, 184, 0.08);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .employee-leave-history-scroll-area::-webkit-scrollbar {
+  width: 8px;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .employee-leave-history-scroll-area::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(14, 116, 144, 0.3);
+}
+
+/* Desktop containment and alignment */
+@media (min-width: 1200px) {
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    #leaveSection
+    .employee-leave-history-scroll-area {
+    max-height: 560px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+  }
+}
+
+/* Mobile and tablet */
+@media (max-width: 991.98px) {
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    #leaveSection
+    .card-body {
+    padding: 1.15rem !important;
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    #leaveSection
+    .employee-leave-history-scroll-area {
+    max-height: 520px;
+  }
+}
+/* =========================================================
+   EMPLOYEE LEAVE STRUCTURAL HR MANAGER PARITY - v1.0.1
+
+   Structural presentation hooks copied from the approved
+   HR and Manager self-service design.
+
+   Employee IDs and all leave behaviour remain unchanged.
+   Applies to standard BexHR tenants. Alpatech keeps its
+   dedicated branded presentation.
+   ========================================================= */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-self-service-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 24px;
+  background:
+    radial-gradient(
+      circle at 94% 8%,
+      rgba(45, 212, 191, 0.08),
+      transparent 31%
+    ),
+    linear-gradient(135deg, #ffffff 0%, #f8fcfd 100%);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.055);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-self-service-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, #0f9f9a 0%, #22d3ee 100%);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-card-heading-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-card-heading-copy {
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-self-service-kicker {
+  display: block;
+  margin-bottom: 0.32rem;
+  color: #07857f;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-card-heading-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(14, 116, 144, 0.16);
+  border-radius: 14px;
+  font-size: 1.05rem;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-card-heading-icon--self-service-balance {
+  color: #15803d;
+  border-color: rgba(34, 197, 94, 0.2);
+  background: #f0fdf4;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-card-heading-icon--self-service-decision,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-card-heading-icon--self-service-history {
+  color: #7c3aed;
+  border-color: rgba(139, 92, 246, 0.2);
+  background: #f5f3ff;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-card-heading-icon--self-service-request {
+  color: #15803d;
+  border-color: rgba(34, 197, 94, 0.2);
+  background: #f0fdf4;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-self-service-card-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-left: auto;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-self-service-workflow-note {
+  padding: 1rem;
+  border: 1px solid rgba(14, 116, 144, 0.14);
+  border-radius: 16px;
+  color: #475569;
+  background: linear-gradient(135deg, #f0fdfa 0%, #f0f9ff 100%);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-self-service-workflow-note
+  .bi {
+  color: #0e7490 !important;
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    #leaveSection
+    .hr-card-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    #leaveSection
+    .hr-self-service-card-toolbar {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 575.98px) {
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    #leaveSection
+    .hr-card-heading-main {
+    gap: 0.7rem;
+  }
+
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    #leaveSection
+    .hr-card-heading-icon {
+    flex-basis: 40px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+}
+/* =========================================================
+   EMPLOYEE LEAVE DYNAMIC RENDER PARITY - v1.0.0
+
+   Approved HR/Manager outlined status pills and neutral
+   dynamic Leave records.
+
+   Presentation only. Entitlement, submission, approval,
+   cancellation, amendment, RLS, tenant, reporting-line and
+   Supabase behaviour remain unchanged.
+   ========================================================= */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .bexhr-status-pill {
+  min-width: 78px;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.38rem;
+  padding: 0.28rem 0.58rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.69rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .bexhr-status-pill
+  .bi {
+  flex: 0 0 auto;
+  font-size: 0.67rem;
+  line-height: 1;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .bexhr-status-pill--success {
+  border-color: #cceedd;
+  background: #edf9f3;
+  color: #087443;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .bexhr-status-pill--warning {
+  border-color: #f4df9d;
+  background: #fff9e8;
+  color: #8a6100;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .bexhr-status-pill--danger {
+  border-color: #f4c7c3;
+  background: #fff1f0;
+  color: #b42318;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .bexhr-status-pill--neutral {
+  border-color: #dbe4ed;
+  background: #f5f8fb;
+  color: #526579;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveBalancesGrid
+  .info-tile {
+  width: 100%;
+  min-height: 190px;
+  padding: 1.15rem;
+  border: 1px solid rgba(21, 128, 61, 0.17);
+  border-radius: 18px;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(34, 197, 94, 0.11),
+      transparent 34%
+    ),
+    linear-gradient(180deg, #ffffff 0%, #f8fdf9 100%);
+  box-shadow: 0 12px 26px rgba(21, 128, 61, 0.065);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveBalancesGrid
+  .info-tile::before {
+  content: none;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveBalancesGrid
+  .progress {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(21, 128, 61, 0.1);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestsList
+  > div {
+  margin-bottom: 0.75rem;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveRequestsList
+  > div
+  > .border {
+  border: 1px solid #dbe4ed !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+/* =========================================================
+   EMPLOYEE LEAVE CARD SIZE HR MANAGER PARITY - v1.0.0
+
+   Match the authoritative HR/Manager self-service card-body
+   measurements. This overrides the Employee HTML p-4 p-lg-5
+   Bootstrap utilities without changing the HTML or behaviour.
+   ========================================================= */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-self-service-card
+  > .card-body {
+  padding: clamp(1.2rem, 2vw, 1.65rem) !important;
+}
+
+/* A collapsed heading has no content beneath it, so it must not
+   retain the expanded-card bottom margin. */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #employeeLeaveBalancesCard:has(#leaveBalancesCardCollapse.d-none)
+  #employeeLeaveBalancesHeader,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #employeeLatestDecisionCard:has(#latestDecisionCardCollapse.d-none)
+  #employeeLatestDecisionHeader,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #employeeLeaveHistoryCard:has(#leaveHistoryCardCollapse.d-none)
+  #employeeLeaveHistoryHeader {
+  margin-bottom: 0 !important;
+}
+
+/* Match the authoritative compact toolbar control height. */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #leaveSection
+  .hr-self-service-card-toolbar
+  .btn {
+  min-height: 38px;
+}
+
+/* Preserve the approved HR/Manager mobile card padding. */
+@media (max-width: 575.98px) {
+  body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+    #leaveSection
+    .hr-self-service-card
+    > .card-body {
+    padding: 1.15rem !important;
+  }
+}
+/* =========================================================
+   EMPLOYEE PAYROLL HR MANAGER PRESENTATION PARITY - v1.0.0
+
+   System-wide Employee Payroll History and payslip presentation
+   aligned to the authoritative HR/Manager self-service pattern.
+
+   No payroll query, calculation, record access, tenant filtering,
+   preview authorisation or PDF generation behaviour is changed.
+   ========================================================= */
+
+/* Payroll History outer card */
+body.bexhr-employee-visual-refresh
+  #payrollSection
+  #employeePayrollHistoryCard {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(203, 213, 225, 0.82) !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(20, 184, 166, 0.075),
+      transparent 32%
+    ),
+    #ffffff;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.065) !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #payrollSection
+  #employeePayrollHistoryCard::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, #0f9f9a 0%, #38bdf8 100%);
+}
+
+body.bexhr-employee-visual-refresh
+  #payrollSection
+  #employeePayrollHistoryCard
+  > .card-body {
+  padding: clamp(1.2rem, 2vw, 1.65rem) !important;
+}
+
+/* Remove unnecessary expanded-spacing while collapsed. */
+body.bexhr-employee-visual-refresh
+  #employeePayrollHistoryCard:has(#payrollHistoryCardCollapse.d-none)
+  #employeePayrollHistoryHeader {
+  margin-bottom: 0 !important;
+}
+
+/* HR/Manager heading structure */
+body.bexhr-employee-visual-refresh
+  #employeePayrollHistoryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #employeePayrollHistoryHeader
+  .hr-card-heading-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.9rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #employeePayrollHistoryHeader
+  .hr-card-heading-copy {
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh
+  #employeePayrollHistoryHeader
+  .hr-self-service-kicker {
+  display: block;
+  margin-bottom: 0.32rem;
+  color: #07857f;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+body.bexhr-employee-visual-refresh
+  #employeePayrollHistoryHeader
+  .hr-card-heading-icon--self-service-history-payroll {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  border: 1px solid rgba(180, 83, 9, 0.14);
+  border-radius: 14px;
+  color: #b45309;
+  background: linear-gradient(145deg, #fffbeb 0%, #fef3c7 100%);
+  box-shadow: 0 10px 22px rgba(180, 83, 9, 0.1);
+}
+
+/* Employee payslip modal uses the approved HR modal shell. */
+.employee-payslip-preview-modal {
+  z-index: 1060;
+  background: rgba(15, 23, 42, 0.52) !important;
+  backdrop-filter: blur(3px);
+}
+
+.employee-payslip-preview-modal
+  .bexhr-payslip-modal-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.employee-payslip-preview-modal
+  .bexhr-payslip-modal-header {
+  flex: 0 0 auto;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(14, 165, 164, 0.12),
+      transparent 34%
+    ),
+    #ffffff !important;
+}
+
+.employee-payslip-preview-modal
+  .bexhr-payslip-modal-header
+  h2 {
+  color: #10233f;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.employee-payslip-preview-modal
+  .bexhr-payslip-modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  background: #eef3f7;
+  scrollbar-width: thin;
+}
+
+.employee-payslip-preview-modal
+  .bexhr-payslip-modal-footer {
+  flex: 0 0 auto;
+  border-top: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+}
+
+/* Employee identity panel receives the same soft teal spray used by HR. */
+.employee-payslip-preview-modal
+  #employeePayslipPreviewContent
+  > .border:first-child {
+  border-color: #dce5ee !important;
+  border-radius: 18px !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(14, 165, 164, 0.08),
+      transparent 32%
+    ),
+    linear-gradient(145deg, #f8fbfc 0%, #ffffff 100%) !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+/* Summary figures mirror the approved HR payslip cards. */
+.employee-payslip-preview-modal
+  #employeePayslipPreviewContent
+  > .row
+  > [class*="col-"]
+  > .border {
+  position: relative;
+  overflow: hidden;
+  border-color: #dce5ee !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(14, 165, 164, 0.07),
+      transparent 34%
+    ),
+    linear-gradient(145deg, #ffffff 0%, #f8fbfc 100%);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+/* Salary Structure and other payslip detail panels. */
+.employee-payslip-preview-modal
+  #employeePayslipPreviewContent
+  > .border:not(:first-child),
+.employee-payslip-preview-modal
+  #employeePayslipPreviewContent
+  .alert {
+  border-color: #dce5ee !important;
+  border-radius: 18px !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(14, 165, 164, 0.055),
+      transparent 30%
+    ),
+    #ffffff !important;
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-employee-visual-refresh
+    #employeePayrollHistoryHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #employeePayrollHistoryHeader
+    > .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .employee-payslip-preview-modal
+    .bexhr-payslip-modal-shell {
+    max-height: 96vh !important;
+  }
+
+  .employee-payslip-preview-modal
+    .bexhr-payslip-modal-header,
+  .employee-payslip-preview-modal
+    .bexhr-payslip-modal-content,
+  .employee-payslip-preview-modal
+    .bexhr-payslip-modal-footer {
+    padding: 1.1rem !important;
+  }
+}
+/* =========================================================
+   EMPLOYEE PAYROLL FILTER PANEL PARITY - v1.0.0
+
+   Match the authoritative HR/Manager payroll filter panel.
+   Presentation only.
+   ========================================================= */
+body.bexhr-employee-visual-refresh
+  #employeePayrollHistoryCard
+  .hr-self-service-filter-panel {
+  padding: 1rem;
+  border: 1px solid rgba(14, 116, 144, 0.16) !important;
+  border-radius: 18px !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(56, 189, 248, 0.11),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at bottom left,
+      rgba(20, 184, 166, 0.07),
+      transparent 34%
+    ),
+    linear-gradient(
+      135deg,
+      #ffffff 0%,
+      #f4fbfd 100%
+    ) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 8px 20px rgba(15, 23, 42, 0.035);
+}
+
+body.bexhr-employee-visual-refresh
+  #employeePayrollHistoryCard
+  .hr-self-service-filter-panel
+  .form-control {
+  background-color: rgba(255, 255, 255, 0.94);
+}
+
+body.bexhr-employee-visual-refresh
+  #employeePayrollHistoryCard
+  .hr-self-service-filter-panel
+  .btn {
+  background-color: rgba(255, 255, 255, 0.88);
+}
+/* =========================================================
+   EMPLOYEE PAYROLL RECORD ACCENT PARITY - v1.0.0
+
+   Match Employee authorised payroll-record accents with the
+   approved HR/Manager self-service treatment.
+
+   System-wide across all tenants. Presentation only.
+   Payroll records, calculations, authorisation, tenant access,
+   preview and PDF behaviour remain unchanged.
+   ========================================================= */
+
+/* Authorised pay-cycle record icon */
+body.bexhr-employee-visual-refresh
+  #payrollHistoryTableWrapper
+  .bexhr-self-service-payroll-icon {
+  border-color: rgba(13, 148, 136, 0.22);
+  color: #008f88;
+  background: rgba(13, 148, 136, 0.1);
+}
+
+/* Net Pay emphasis */
+body.bexhr-employee-visual-refresh
+  #payrollHistoryTableWrapper
+  .bexhr-self-service-payroll-metric.is-net-pay {
+  background: rgba(13, 148, 136, 0.07);
+}
+
+body.bexhr-employee-visual-refresh
+  #payrollHistoryTableWrapper
+  .bexhr-self-service-payroll-metric.is-net-pay
+  strong {
+  color: #008f88;
+}
+
+/* Read-only authorised-record shield */
+body.bexhr-employee-visual-refresh
+  #payrollHistoryTableWrapper
+  .bexhr-self-service-payroll-note
+  i {
+  color: #008f88;
+}
+
+/* =========================================================
+   EMPLOYEE CURRENT PAYROLL HR MANAGER CSS PARITY - v1.0.0
+
+   System-wide presentation alignment for the Employee
+   Current Payslip Summary.
+
+   Existing payroll loading, authorised-record filtering,
+   masking, calculations, tenant boundaries and refresh
+   behaviour remain unchanged.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh
+  #payrollSection
+  #employeeCurrentPayrollCard {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(203, 213, 225, 0.82) !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(20, 184, 166, 0.075),
+      transparent 32%
+    ),
+    #ffffff;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.065) !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #payrollSection
+  #employeeCurrentPayrollCard::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, #0f9f9a 0%, #38bdf8 100%);
+}
+
+body.bexhr-employee-visual-refresh
+  #employeeCurrentPayrollCard
+  > .card-body {
+  padding: clamp(1.2rem, 2vw, 1.65rem) !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #employeeCurrentPayrollCard
+  .hr-self-service-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #employeeCurrentPayrollCard
+  .hr-card-heading-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.9rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #employeeCurrentPayrollCard
+  .hr-card-heading-copy {
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh
+  #employeeCurrentPayrollCard
+  .hr-self-service-kicker {
+  display: block;
+  margin-bottom: 0.32rem;
+  color: #07857f;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+body.bexhr-employee-visual-refresh
+  #employeeCurrentPayrollCard
+  .hr-card-heading-icon--self-service-payroll {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  border: 1px solid rgba(180, 83, 9, 0.14);
+  border-radius: 14px;
+  color: #b45309;
+  background: linear-gradient(145deg, #fffbeb 0%, #fef3c7 100%);
+  box-shadow: 0 10px 22px rgba(180, 83, 9, 0.1);
+}
+
+body.bexhr-employee-visual-refresh
+  #employeeCurrentPayrollCard
+  .hr-self-service-card-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-left: auto;
+}
+
+body.bexhr-employee-visual-refresh
+  #currentPayrollSummaryGrid
+  > [class*="col-"] {
+  display: flex;
+}
+
+body.bexhr-employee-visual-refresh
+  #currentPayrollSummaryGrid
+  .info-tile {
+  position: relative;
+  width: 100%;
+  min-height: 132px;
+  padding: 1.05rem 1.05rem 1.05rem 4.25rem !important;
+  border: 1px solid rgba(180, 83, 9, 0.16) !important;
+  border-radius: 18px !important;
+  background:
+    radial-gradient(
+      circle at bottom right,
+      rgba(251, 191, 36, 0.12),
+      transparent 35%
+    ),
+    linear-gradient(180deg, #ffffff 0%, #fffcf5 100%) !important;
+  box-shadow: 0 10px 24px rgba(180, 83, 9, 0.055) !important;
+  overflow: hidden;
+}
+
+body.bexhr-employee-visual-refresh
+  #currentPayrollSummaryGrid
+  .info-tile::before {
+  content: none !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #currentPayrollSummaryGrid
+  .info-tile
+  .d-flex {
+  display: block !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #currentPayrollSummaryGrid
+  .info-tile
+  .bi {
+  position: absolute;
+  top: 1.05rem;
+  left: 1.05rem;
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  color: #b45309 !important;
+  background: #fff3d6;
+  font-size: 1.05rem;
+  opacity: 1;
+}
+
+body.bexhr-employee-visual-refresh
+  #currentPayrollSummaryGrid
+  .info-tile-label {
+  color: #64748b !important;
+  font-size: 0.72rem !important;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+body.bexhr-employee-visual-refresh
+  #currentPayrollSummaryGrid
+  .info-tile-value {
+  max-width: 100%;
+  margin-top: 0.35rem;
+  color: #0f172a !important;
+  font-size: clamp(1rem, 1.7vw, 1.25rem) !important;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.025em;
+}
+
+@media (min-width: 1200px) and (max-width: 1499.98px) {
+  body.bexhr-employee-visual-refresh
+    #currentPayrollSummaryGrid
+    > [class*="col-"] {
+    flex: 0 0 auto;
+    width: 50%;
+  }
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-employee-visual-refresh
+    #employeeCurrentPayrollCard
+    .hr-self-service-card-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #employeeCurrentPayrollCard
+    .hr-self-service-card-toolbar {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #employeeCurrentPayrollCard
+    .hr-self-service-card-toolbar
+    .btn {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 575.98px) {
+  body.bexhr-employee-visual-refresh
+    #currentPayrollSummaryGrid
+    .info-tile {
+    min-height: 112px;
+    padding: 1rem 1rem 1rem 4rem !important;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #currentPayrollSummaryGrid
+    .info-tile
+    .bi {
+    top: 1rem;
+    left: 1rem;
+  }
+}
+
+/* =========================================================
+   EMPLOYEE CURRENT PAYROLL EXACT ROW SPACING - v1.0.0
+
+   Bootstrap g-3 already supplies the authorised HR/Manager
+   1rem gutter. Remove the additional CSS row-gap so the
+   spacing is not doubled.
+
+   Presentation only.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh
+  #currentPayrollSummaryGrid {
+  row-gap: 0 !important;
+}
+
+/* EMPLOYEE PROFILE AND HELP FINAL REFRESH - v1.0.0 */
+body.bexhr-employee-visual-refresh
+  #currentPayrollSummaryGrid {
+  row-gap: 0 !important;
+}
+
+
+/* =========================================================
+   EMPLOYEE PROFILE HR VISUAL PARITY - v1.0.0
+
+   Presentation-only adaptation of the approved HR My Profile
+   layout for Employee Self-Service.
+
+   Safety:
+   - retains all existing Employee profile IDs and bindings;
+   - retains Upload Picture;
+   - retains safe Remove Picture;
+   - retains HR Profile Review and correction-request workflows;
+   - does not change Supabase, session, role, tenant, leave,
+     payroll, payslip or authorisation behaviour.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-workspace-card {
+  overflow: visible;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-eyebrow {
+  margin-bottom: 0.35rem;
+  color: var(--hr-primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-security-badge,
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-member-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(var(--bexhr-accent-rgb, 8, 127, 122), 0.2);
+  border-radius: 999px;
+  background: rgba(var(--bexhr-accent-rgb, 8, 127, 122), 0.08);
+  color: var(--hr-primary-dark);
+  font-size: 0.76rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-security-badge {
+  min-height: 34px;
+  padding: 0.4rem 0.72rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 315px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-identity-panel,
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-details-panel {
+  min-width: 0;
+  border: 1px solid var(--bexhr-line, #dfe7ee);
+  border-radius: 18px;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-identity-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.45rem;
+  overflow: hidden;
+  text-align: center;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(var(--bexhr-accent-rgb, 8, 127, 122), 0.13),
+      transparent 34%
+    ),
+    linear-gradient(180deg, #ffffff 0%, #f8fbfc 100%);
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-identity-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 1.4rem;
+  width: min(76%, 268px);
+  height: 3px;
+  border-radius: 0 0 999px 999px;
+  background: linear-gradient(
+    90deg,
+    var(--hr-primary),
+    var(--hr-primary-soft)
+  );
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-avatar-stage {
+  position: relative;
+  width: 118px;
+  height: 118px;
+  margin: 0.55rem auto 1rem;
+  flex: 0 0 auto;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-main-image {
+  display: block;
+  width: 118px !important;
+  height: 118px !important;
+  object-fit: cover;
+  border: 5px solid #ffffff;
+  border-radius: 50%;
+  background: #eef4f7;
+  box-shadow:
+    0 0 0 1px rgba(var(--bexhr-accent-rgb, 8, 127, 122), 0.12),
+    0 14px 32px rgba(15, 39, 71, 0.16);
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-avatar-status {
+  position: absolute;
+  right: 5px;
+  bottom: 7px;
+  width: 17px;
+  height: 17px;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 4px 10px rgba(34, 197, 94, 0.28);
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-name {
+  max-width: 100%;
+  color: #10213b;
+  font-size: 1.08rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-job-title {
+  max-width: 100%;
+  color: #64748b;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-member-pill {
+  padding: 0.38rem 0.72rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-meta {
+  width: 100%;
+  margin-top: 1rem;
+  color: #64748b;
+  font-size: 0.79rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-photo-panel {
+  width: 100%;
+  margin-top: 1.2rem;
+  padding: 1rem;
+  border: 1px solid var(--bexhr-line, #dfe7ee);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.94);
+  text-align: left;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-photo-title {
+  display: block;
+  color: #17243a;
+  font-size: 0.81rem;
+  font-weight: 800;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-photo-help {
+  color: #64748b;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-photo-icon {
+  color: var(--hr-primary);
+  font-size: 1rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #profileImageInput {
+  min-height: 44px;
+  border-color: var(--bexhr-line, #dfe7ee);
+  border-radius: 11px;
+  background: #ffffff;
+  font-size: 0.78rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #profileImageInput::file-selector-button {
+  min-height: 42px;
+  margin: -0.375rem 0.7rem -0.375rem -0.75rem;
+  padding: 0.45rem 0.7rem;
+  border: 0;
+  border-right: 1px solid var(--bexhr-line, #dfe7ee);
+  background: rgba(var(--bexhr-accent-rgb, 8, 127, 122), 0.07);
+  color: var(--hr-primary-dark);
+  font-weight: 700;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #saveProfileImageBtn,
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #removeProfileImageBtn {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 11px;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #saveProfileImageBtn:not(:disabled) {
+  border-color: var(--hr-primary);
+  background: var(--hr-primary);
+  color: #ffffff;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #saveProfileImageBtn:disabled {
+  border-color: #cbd5e1;
+  background: #aeb6bf;
+  color: #ffffff;
+  opacity: 1;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #removeProfileImageBtn {
+  background: #ffffff;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #removeProfileImageBtn:disabled {
+  border-color: #d6dde5;
+  background: #f8fafc;
+  color: #94a3b8;
+  opacity: 1;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-details-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 1.45rem;
+  background: #ffffff;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-details-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-details-heading p {
+  max-width: 590px;
+  line-height: 1.55;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-details-icon {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(var(--bexhr-accent-rgb, 8, 127, 122), 0.2);
+  border-radius: 12px;
+  background: rgba(var(--bexhr-accent-rgb, 8, 127, 122), 0.08);
+  color: var(--hr-primary);
+  font-size: 1rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-details-panel
+  .form-label {
+  margin-bottom: 0.42rem;
+  color: #17243a;
+  font-size: 0.8rem;
+  font-weight: 750 !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-details-panel
+  .form-control {
+  min-height: 46px;
+  border-color: var(--bexhr-line, #dfe7ee);
+  border-radius: 11px;
+  color: #5e6d82;
+  font-size: 0.86rem;
+  box-shadow: none;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-details-panel
+  .form-control[readonly] {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(248, 250, 252, 0.98),
+      rgba(241, 245, 249, 0.94)
+    );
+  cursor: default;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-system-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-top: auto;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--bexhr-line, #dfe7ee);
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-system-note i {
+  margin-top: 0.1rem;
+  color: var(--hr-primary);
+}
+
+/* Keep the Employee HR Profile Review clearly separated beneath
+   the identity and account-details layout. */
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-layout
+  + .mt-4 {
+  margin-top: 1.5rem !important;
+}
+
+@media (max-width: 1199.98px) {
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-layout {
+    grid-template-columns: minmax(230px, 285px) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-layout {
+    grid-template-columns: 1fr;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-identity-panel {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-avatar-stage {
+    margin-left: 0;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-member-pill {
+    align-self: flex-start;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-photo-panel {
+    margin-top: 1rem;
+  }
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-card-header,
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-details-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-security-badge {
+    align-self: flex-start;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-identity-panel,
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-details-panel {
+    padding: 1rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-main-image,
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-avatar-stage {
+    width: 104px !important;
+    height: 104px !important;
+  }
+}
+
+/* Standard Employee profile colour parity with approved HR workspace.
+   Alpatech is deliberately excluded so its tenant palette remains intact. */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #profileSection {
+  --hr-primary: #0f9f9a;
+  --hr-primary-soft: #16b8ae;
+  --hr-primary-dark: #0a7b78;
+  --bexhr-accent-rgb: 15, 159, 154;
+  --bexhr-line: #e4eaf1;
+}
+
+/* ---------------------------------------------------------
+   EMPLOYEE HR PROFILE REVIEW VISUAL PARITY - v1.0.0
+
+   Presentation only:
+   - preserves the three existing review tabs;
+   - preserves all read-only HR-held profile fields;
+   - preserves correction-request and request-history logic;
+   - preserves Employee and Alpatech tenant behaviour.
+   --------------------------------------------------------- */
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-review-panel {
+  padding: 1.35rem;
+  border: 1px solid var(--bexhr-line, #e4eaf1);
+  border-radius: 18px;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.07),
+      transparent 32%
+    ),
+    #ffffff;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.045);
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.15rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-review-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-review-icon {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.2
+  );
+  border-radius: 12px;
+  background: rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.08
+  );
+  color: var(--hr-primary);
+  font-size: 1rem;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-review-status {
+  flex: 0 0 auto;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.36rem 0.68rem;
+  border: 1px solid rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.2
+  );
+  border-radius: 999px;
+  background: rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.08
+  );
+  color: var(--hr-primary-dark);
+  font-size: 0.74rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-review-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 1.15rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--bexhr-line, #e4eaf1);
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-review-tabs
+  .employee-profile-review-tab-btn {
+  min-height: 36px;
+  padding: 0.42rem 0.78rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #profileSection
+  .employee-profile-review-tabs
+  .employee-profile-review-tab-btn.btn-primary {
+  border-color: var(--hr-primary);
+  background: linear-gradient(
+    135deg,
+    var(--hr-primary),
+    var(--hr-primary-soft)
+  );
+  color: #ffffff;
+  box-shadow: 0 7px 16px rgba(15, 159, 154, 0.16);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #profileSection
+  .employee-profile-review-tabs
+  .employee-profile-review-tab-btn.btn-outline-primary {
+  border-color: rgba(15, 159, 154, 0.42);
+  background: #ffffff;
+  color: var(--hr-primary-dark);
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #profileSection
+  .employee-profile-review-tabs
+  .employee-profile-review-tab-btn.btn-outline-primary:hover,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #profileSection
+  .employee-profile-review-tabs
+  .employee-profile-review-tab-btn.btn-outline-primary:focus {
+  border-color: var(--hr-primary);
+  background: rgba(15, 159, 154, 0.08);
+  color: var(--hr-primary-dark);
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-review-panel
+  .form-label {
+  color: #17243a;
+  font-size: 0.79rem;
+  font-weight: 750 !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-review-panel
+  .form-control[readonly] {
+  min-height: 46px;
+  border-color: var(--bexhr-line, #e4eaf1);
+  border-radius: 11px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(248, 250, 252, 0.98),
+      rgba(241, 245, 249, 0.94)
+    ) !important;
+  color: #5f6f83;
+  font-size: 0.86rem;
+  cursor: default;
+  box-shadow: none;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  .employee-profile-review-panel
+  [data-employee-profile-review-panel] {
+  animation: employeeProfileReviewFade 0.16s ease;
+}
+
+@keyframes employeeProfileReviewFade {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-review-panel {
+    padding: 1rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-review-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-review-status {
+    align-self: flex-start;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-review-tabs
+    .employee-profile-review-tab-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+/* ---------------------------------------------------------
+   EMPLOYEE IDENTITY REVIEW INNER WORKSPACE - v1.0.0
+
+   Purpose:
+   - contains the long Identity review, correction request and
+     request-history content inside the HR Profile Review card;
+   - keeps Core Details and Personal & Origin natural-height;
+   - refreshes correction-request presentation only.
+
+   Safety:
+   - preserves all existing field IDs and tab switching;
+   - preserves correction submission and request-history logic;
+   - preserves read-only HR-held information;
+   - does not change Supabase, tenant, role, session or access logic.
+   --------------------------------------------------------- */
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  [data-employee-profile-review-panel="identity"] {
+  max-height: min(68vh, 760px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: 0.15rem 0.55rem 0.25rem 0.1rem;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color:
+    rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.38)
+    rgba(148, 163, 184, 0.1);
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  [data-employee-profile-review-panel="identity"]::-webkit-scrollbar {
+  width: 9px;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  [data-employee-profile-review-panel="identity"]::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  [data-employee-profile-review-panel="identity"]::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background:
+    rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.38);
+  background-clip: padding-box;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  [data-employee-profile-review-panel="identity"]::-webkit-scrollbar-thumb:hover {
+  background:
+    rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.58);
+  background-clip: padding-box;
+}
+
+/* Keep the identity fields grouped at the top of the scroll workspace. */
+body.bexhr-employee-visual-refresh
+  #profileSection
+  [data-employee-profile-review-panel="identity"]
+  > .row {
+  margin-right: 0;
+  margin-left: 0;
+}
+
+/* Correction-request prompt. */
+body.bexhr-employee-visual-refresh
+  #profileSection
+  [data-employee-profile-review-panel="identity"]
+  .alert-info {
+  margin-top: 0.4rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.22
+  );
+  border-radius: 14px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.09),
+      rgba(248, 250, 252, 0.98)
+    );
+  color: #345065;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #profileSection
+  #openProfileCorrectionRequestBtn {
+  min-height: 38px;
+  padding: 0.42rem 0.78rem;
+  border-color: rgba(15, 159, 154, 0.45);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--hr-primary-dark);
+  font-size: 0.78rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #profileSection
+  #openProfileCorrectionRequestBtn:hover,
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #profileSection
+  #openProfileCorrectionRequestBtn:focus {
+  border-color: var(--hr-primary);
+  background: rgba(15, 159, 154, 0.09);
+  color: var(--hr-primary-dark);
+}
+
+/* Main correction-request form panel. */
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #profileCorrectionRequestPanel {
+  margin-top: 1rem;
+  padding: 1.2rem !important;
+  border: 1px solid var(--bexhr-line, #e4eaf1) !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.06),
+      transparent 32%
+    ),
+    #ffffff !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #profileCorrectionRequestPanel h4 {
+  color: #17243a;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #profileCorrectionRequestPanel
+  .badge {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.62rem;
+  border-color: rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.2
+  ) !important;
+  border-radius: 999px;
+  background: rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.08
+  ) !important;
+  color: var(--hr-primary-dark);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #profileCorrectionRequestPanel
+  :is(.form-control, .form-select) {
+  min-height: 46px;
+  border-color: var(--bexhr-line, #e4eaf1);
+  border-radius: 11px;
+  font-size: 0.86rem;
+  box-shadow: none;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #profileCorrectionRequestPanel
+  textarea.form-control {
+  min-height: 104px;
+  resize: vertical;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #profileCorrectionRequestPanel
+  :is(.form-control, .form-select):focus {
+  border-color: var(--hr-primary-soft);
+  box-shadow: 0 0 0 0.2rem
+    rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.12);
+}
+
+/* Correction-request history panel. */
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #profileCorrectionRequestHistoryPanel {
+  margin-top: 1rem;
+  padding: 1.2rem !important;
+  border: 1px solid var(--bexhr-line, #e4eaf1) !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #profileCorrectionRequestHistoryPanel h4 {
+  color: #17243a;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #profileSection
+  #refreshProfileCorrectionRequestHistoryBtn {
+  min-height: 38px;
+  border-color: rgba(15, 159, 154, 0.42);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--hr-primary-dark);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #profileCorrectionRequestHistoryEmptyState {
+  padding: 0.9rem 1rem;
+  border-color: var(--bexhr-line, #e4eaf1) !important;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+/* Keep action buttons clear and aligned. */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  #profileSection
+  #submitProfileCorrectionRequestBtn:not(:disabled) {
+  border-color: var(--hr-primary);
+  background: linear-gradient(
+    135deg,
+    var(--hr-primary),
+    var(--hr-primary-soft)
+  );
+  color: #ffffff;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #submitProfileCorrectionRequestBtn,
+body.bexhr-employee-visual-refresh
+  #profileSection
+  #cancelProfileCorrectionRequestBtn {
+  min-height: 40px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    [data-employee-profile-review-panel="identity"] {
+    max-height: 72vh;
+    padding-right: 0.35rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    [data-employee-profile-review-panel="identity"]
+    .alert-info
+    .d-flex {
+    align-items: stretch !important;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    #openProfileCorrectionRequestBtn,
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    #refreshProfileCorrectionRequestHistoryBtn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    #profileCorrectionRequestPanel,
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    #profileCorrectionRequestHistoryPanel {
+    padding: 1rem !important;
+  }
+}
+
+/* ---------------------------------------------------------
+   EMPLOYEE CORRECTION REQUEST STATUS PILLS - v1.0.0
+
+   Modernises the existing Employee correction-request status badges
+   to match the refined HR/Manager status treatment.
+
+   Safety:
+   - CSS only;
+   - preserves existing status values and JavaScript mappings;
+   - preserves request data, HR decisions and Supabase behaviour;
+   - scoped only to Employee correction-request history.
+   --------------------------------------------------------- */
+
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.34rem 0.68rem;
+  border: 1px solid transparent !important;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  box-shadow: none;
+}
+
+/* Rejected */
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-danger {
+  border-color: rgba(220, 38, 38, 0.18) !important;
+  background: rgba(254, 226, 226, 0.92) !important;
+  color: #b42318 !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-danger::before {
+  content: "\f62a";
+  font-family: "bootstrap-icons";
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+/* Completed */
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-success {
+  border-color: rgba(22, 163, 74, 0.18) !important;
+  background: rgba(220, 252, 231, 0.94) !important;
+  color: #067647 !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-success::before {
+  content: "\f26b";
+  font-family: "bootstrap-icons";
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+/* Pending Review */
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-warning {
+  border-color: rgba(217, 119, 6, 0.2) !important;
+  background: rgba(254, 243, 199, 0.94) !important;
+  color: #92400e !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-warning::before {
+  content: "\f293";
+  font-family: "bootstrap-icons";
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+/* In Review */
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-primary {
+  border-color: rgba(15, 159, 154, 0.2) !important;
+  background: rgba(204, 251, 241, 0.92) !important;
+  color: #0f766e !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-primary::before {
+  content: "\f130";
+  font-family: "bootstrap-icons";
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+/* Approved */
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-info {
+  border-color: rgba(2, 132, 199, 0.18) !important;
+  background: rgba(224, 242, 254, 0.94) !important;
+  color: #0369a1 !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-info::before {
+  content: "\f26e";
+  font-family: "bootstrap-icons";
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+/* Closed */
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-secondary {
+  border-color: rgba(100, 116, 139, 0.18) !important;
+  background: rgba(241, 245, 249, 0.96) !important;
+  color: #475569 !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-secondary::before {
+  content: "\f5ae";
+  font-family: "bootstrap-icons";
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+/* Unknown/fallback status */
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge.text-bg-light {
+  border-color: rgba(148, 163, 184, 0.28) !important;
+  background: #f8fafc !important;
+  color: #475569 !important;
+}
+
+/* Keep field label visually separate from the status pill. */
+body.bexhr-employee-visual-refresh
+  #profileCorrectionRequestHistoryList
+  .badge
+  + .fw-semibold {
+  color: #17243a;
+  font-size: 0.88rem;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em;
+}
+
+/* END EMPLOYEE PROFILE HR VISUAL PARITY - v1.0.0 */
+
+/* EMPLOYEE PROFILE AND HELP FINAL REFRESH - v1.0.0 */
+
+/* the complete new Profile and Help Guide CSS continues here */
+
+/* =========================================================
+   EMPLOYEE OPERATING GUIDE HR VISUAL PARITY - v1.0.0
+
+   Presentation-only adaptation of the authoritative HR guide.
+
+   Safety:
+   - retains all existing Employee Help Guide IDs and bindings;
+   - retains both launch buttons and both close buttons;
+   - retains existing outside-click and Escape behaviour;
+   - does not change profile, leave, payroll, payslip, PDF,
+     Supabase, session, role, tenant or Alpatech logic.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-modal {
+  z-index: 1095;
+  padding: 0;
+  background: rgba(8, 20, 38, 0.7);
+  backdrop-filter: blur(8px);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-modal:not(.d-none) {
+  display: flex !important;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-stage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(0.75rem, 2vw, 1.5rem);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-shell {
+  width: min(1080px, 100%);
+  max-height: min(92vh, 880px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow:
+    0 34px 90px rgba(2, 12, 27, 0.32),
+    0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-shell:focus {
+  outline: none;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-header {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.35rem 5.75rem 1.35rem 1.5rem;
+  border-bottom: 1px solid #e4eaf1;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.13),
+      transparent 42%
+    ),
+    linear-gradient(180deg, #ffffff 0%, #fbfdfd 100%);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-heading-icon {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.22
+  );
+  border-radius: 14px;
+  background: rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.1
+  );
+  color: var(--hr-primary);
+  font-size: 1.15rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-kicker,
+body.bexhr-employee-visual-refresh
+  .employee-guide-card-kicker,
+body.bexhr-employee-visual-refresh
+  .employee-guide-section-kicker {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--hr-primary);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-heading h2 {
+  margin: 0;
+  color: #10213b;
+  font-size: clamp(1.3rem, 2.2vw, 1.75rem);
+  font-weight: 850;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-heading p {
+  max-width: 700px;
+  margin: 0.35rem 0 0;
+  color: #64748b;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-close {
+  position: absolute;
+  top: 1.35rem;
+  right: 1.5rem;
+  width: 40px;
+  height: 40px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #d8e1ea;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.9rem;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-close:hover,
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-close:focus-visible {
+  border-color: rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.38
+  );
+  background: rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.08
+  );
+  color: var(--hr-primary-dark);
+  transform: translateY(-1px);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1.35rem 1.5rem 1.5rem;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(248, 250, 252, 0.94),
+      rgba(255, 255, 255, 0.98)
+    );
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color:
+    rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.38)
+    rgba(148, 163, 184, 0.1);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-body::-webkit-scrollbar {
+  width: 9px;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-body::-webkit-scrollbar-track {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background:
+    rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.4);
+  background-clip: padding-box;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-card {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.05rem 1.15rem;
+  border: 1px solid rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.24
+  );
+  border-radius: 17px;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.12),
+      transparent 42%
+    ),
+    linear-gradient(135deg, #f0fdfa 0%, #ffffff 76%);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-icon {
+  width: 48px;
+  height: 48px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(
+    135deg,
+    var(--hr-primary),
+    var(--hr-primary-soft)
+  );
+  color: #ffffff;
+  font-size: 1.1rem;
+  box-shadow: 0 9px 20px rgba(15, 159, 154, 0.2);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-copy {
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-copy strong {
+  display: block;
+  color: #10213b;
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-copy small {
+  display: block;
+  margin-top: 0.25rem;
+  color: #5f6f83;
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-card-action {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--hr-primary-dark);
+  box-shadow: 0 7px 16px rgba(15, 23, 42, 0.08);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.45rem 0 0.85rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-section-heading h3 {
+  margin: 0;
+  color: #17243a;
+  font-size: 1rem;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-card {
+  min-height: 156px;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.035);
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.3
+  );
+  box-shadow: 0 13px 26px rgba(15, 23, 42, 0.07);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 12px;
+  font-size: 0.95rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-icon-profile {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-icon-request {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-icon-leave {
+  background: #dcfce7;
+  color: #067647;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-icon-payroll {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-icon-payslip {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-icon-security {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-card strong {
+  display: block;
+  color: #17243a;
+  font-size: 0.88rem;
+  font-weight: 850;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-card p {
+  margin: 0.35rem 0 0;
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-operating-section {
+  margin-top: 1.35rem;
+  padding-top: 0.1rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-operating-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-operating-step {
+  min-height: 128px;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.9rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+  background: #ffffff;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-operating-step > span {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.1
+  );
+  color: var(--hr-primary-dark);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-operating-step strong {
+  display: block;
+  color: #17243a;
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-operating-step p {
+  margin: 0.28rem 0 0;
+  color: #64748b;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-help-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  margin-top: 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.2
+  );
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.08),
+      rgba(248, 250, 252, 0.98)
+    );
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-help-note-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 11px;
+  background: #ffffff;
+  color: var(--hr-primary);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-help-note strong {
+  color: #17243a;
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-help-note p {
+  margin: 0.25rem 0 0;
+  color: #5f6f83;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-footer {
+  flex: 0 0 auto;
+  min-height: 64px;
+  padding: 0.85rem 1.5rem;
+  border-top: 1px solid #e4eaf1;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-footer > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-footer > span i {
+  color: var(--hr-primary-dark);
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-operating-guide-footer .btn {
+  min-height: 38px;
+  padding: 0.45rem 0.9rem;
+  border-radius: 11px;
+  font-size: 0.74rem;
+  font-weight: 750;
+}
+
+/* Standard Employee guide uses the approved teal palette.
+   Alpatech remains free to inherit its own tenant variables. */
+body.bexhr-employee-visual-refresh:not(.alpatech-workspace)
+  .employee-operating-guide-modal {
+  --hr-primary: #0f9f9a;
+  --hr-primary-soft: #16b8ae;
+  --hr-primary-dark: #0a7b78;
+  --bexhr-accent-rgb: 15, 159, 154;
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-employee-visual-refresh
+    .employee-guide-workspace-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-operating-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-stage {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-shell {
+    width: 100%;
+    max-height: 100vh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-header {
+    padding: 1rem 4.5rem 1rem 1rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-heading {
+    gap: 0.65rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-heading-icon {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+    border-radius: 12px;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-close {
+    top: 1rem;
+    right: 1rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-body {
+    padding: 1rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-featured-card {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-featured-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-card-action {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-workspace-grid,
+  body.bexhr-employee-visual-refresh
+    .employee-guide-operating-steps {
+    grid-template-columns: 1fr;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-workspace-card,
+  body.bexhr-employee-visual-refresh
+    .employee-guide-operating-step {
+    min-height: 0;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-footer {
+    padding: 0.8rem 1rem;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-footer .btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-modal *,
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-modal *::before,
+  body.bexhr-employee-visual-refresh
+    .employee-operating-guide-modal *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
+
+/* =========================================================
+   EMPLOYEE GUIDE SUGGESTED OPERATING FLOW - v1.0.0
+
+   Mirrors the authoritative HR/Manager flag-led guidance pattern.
+
+   Presentation only:
+   - no workspace routing changes;
+   - no form or request submission;
+   - no profile, leave, payroll or tenant behaviour changes.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-flow-panel {
+  margin-top: 1rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid #dfe7ef;
+  border-radius: 17px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(248, 250, 252, 0.98),
+      rgba(255, 255, 255, 1)
+    );
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-flow-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-flow-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 11px;
+  background: rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.1
+  );
+  color: var(--hr-primary-dark);
+  font-size: 0.95rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-flow-heading
+  .employee-guide-section-kicker {
+  margin-bottom: 0.14rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-flow-heading h3 {
+  margin: 0;
+  color: #17243a;
+  font-size: 0.9rem;
+  font-weight: 850;
+  letter-spacing: -0.015em;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-flow-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-flow-step {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.2rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-flow-number {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--hr-primary-dark);
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 850;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-flow-step strong {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: #17243a;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-flow-step p {
+  margin: 0;
+  color: #6b7b90;
+  font-size: 0.66rem;
+  line-height: 1.48;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-task-help {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(245, 158, 11, 0.34);
+  border-radius: 15px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 251, 235, 0.98),
+      rgba(255, 255, 255, 0.98)
+    );
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-task-help-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #fff3c4;
+  color: #b45309;
+  font-size: 0.9rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-task-help strong {
+  display: block;
+  color: #7c3f10;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-task-help p {
+  margin: 0.2rem 0 0;
+  color: #a65318;
+  font-size: 0.67rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-employee-visual-refresh
+    .employee-guide-flow-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575.98px) {
+  body.bexhr-employee-visual-refresh
+    .employee-guide-flow-panel {
+    padding: 0.9rem;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-flow-steps {
+    grid-template-columns: 1fr;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-flow-step {
+    padding: 0.1rem 0;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-task-help {
+    padding: 0.85rem;
+  }
+}
+
+/* =========================================================
+   EMPLOYEE GUIDE FEATURED CARD HR MEASUREMENT PARITY - v1.0.0
+
+   Uses the exact authoritative HR featured-card proportions while
+   retaining Employee wording, targets and tenant colour variables.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-card {
+  width: 100%;
+  min-height: auto;
+  padding: 1rem 1.05rem;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.9rem;
+  border: 1px solid rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.22
+  );
+  border-radius: 18px;
+  color: #172033;
+  font: inherit;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 14px;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-copy strong {
+  margin-top: 0.12rem;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-copy small {
+  margin-top: 0.18rem;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  color: var(--hr-primary-dark);
+  font-size: 0.72rem;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-featured-action strong {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-action {
+  cursor: pointer;
+  appearance: none;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-action:focus-visible {
+  outline: 3px solid rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.2
+  );
+  outline-offset: 2px;
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-employee-visual-refresh
+    .employee-guide-featured-card {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-featured-icon {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-featured-action {
+    grid-column: 2;
+    justify-content: flex-start;
+    margin-top: 0.25rem;
+  }
+}
+
+/* =========================================================
+   EMPLOYEE GUIDE WORKSPACE CARD HR PARITY - v1.0.1
+
+   Corrects the linked Employee guide cards to match the
+   authoritative HR/Manager card layout:
+   - icon at top-left;
+   - left-aligned title and description;
+   - action link anchored at the bottom;
+   - consistent card dimensions;
+   - three-column desktop layout.
+
+   Presentation only. Existing workspace targets and routing remain unchanged.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-grid-four {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  align-items: stretch;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-card {
+  width: 100%;
+  min-height: 164px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 1rem;
+  border: 1px solid #dfe7ef;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #172033;
+  font: inherit;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-card:hover {
+  border-color: rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.42
+  );
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.035),
+      #ffffff
+    );
+  transform: none;
+  box-shadow: none;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-card:focus-visible {
+  outline: 3px solid rgba(
+    var(--bexhr-accent-rgb, 15, 159, 154),
+    0.18
+  );
+  outline-offset: 2px;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-card
+  .employee-guide-workspace-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: inline-grid;
+  place-items: center;
+  margin-bottom: 0.72rem;
+  border-radius: 11px;
+  font-size: 0.9rem;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-copy {
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-copy > strong {
+  display: block;
+  margin: 0;
+  color: #172033;
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.3;
+  text-align: left;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-copy > small {
+  display: block;
+  margin-top: 0.34rem;
+  color: #64748b;
+  font-size: 0.71rem;
+  line-height: 1.52;
+  text-align: left;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-open-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.35rem;
+  margin-top: auto;
+  padding-top: 0.65rem;
+  color: var(--hr-primary-dark);
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+  text-align: left;
+  white-space: nowrap;
+}
+
+body.bexhr-employee-visual-refresh
+  .employee-guide-open-action i {
+  font-size: 0.68rem;
+}
+
+/* Overview */
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-icon-overview {
+  background: #def7f3;
+  color: #0f8c86;
+}
+
+/* Leave */
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-icon-leave {
+  background: #dcfce7;
+  color: #067647;
+}
+
+/* Payroll */
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-icon-payroll {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+/* My Profile */
+body.bexhr-employee-visual-refresh
+  .employee-guide-workspace-icon-profile {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-employee-visual-refresh
+    .employee-guide-workspace-grid-four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575.98px) {
+  body.bexhr-employee-visual-refresh
+    .employee-guide-workspace-grid-four {
+    grid-template-columns: 1fr;
+  }
+
+  body.bexhr-employee-visual-refresh
+    .employee-guide-workspace-card {
+    min-height: 0;
+  }
+}
+
+/* END EMPLOYEE OPERATING GUIDE HR VISUAL PARITY - v1.0.0 */
+
+/* =========================================================
+   ALPATECH EMPLOYEE LEAVE CARD SIZE PARITY - v1.0.0
+
+   First controlled Alpatech Leave refresh:
+   - compacts Leave Balances and Latest Leave Decision;
+   - removes collapsed-card dead space;
+   - aligns header, icon and toolbar measurements;
+   - preserves the approved Alpatech blue/cyan palette.
+
+   Presentation only:
+   - no leave calculations;
+   - no balances, request or decision changes;
+   - no collapse JavaScript changes;
+   - no tenant, RLS, reporting-line or Supabase changes.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-card {
+  overflow: hidden;
+  border: 1px solid rgba(11, 95, 149, 0.16) !important;
+  border-radius: 20px !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(54, 185, 207, 0.07),
+      transparent 32%
+    ),
+    #ffffff !important;
+  box-shadow: 0 12px 28px rgba(7, 59, 99, 0.055) !important;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-card
+  > .card-body {
+  padding: clamp(1.2rem, 2vw, 1.65rem) !important;
+}
+
+/* Collapsed cards must contain only the compact header. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #employeeLeaveBalancesCard:has(#leaveBalancesCardCollapse.d-none)
+  #employeeLeaveBalancesHeader,
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #employeeLatestDecisionCard:has(#latestDecisionCardCollapse.d-none)
+  #employeeLatestDecisionHeader {
+  margin-bottom: 0 !important;
+}
+
+/* Prevent inherited minimum heights from creating blank card space. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #employeeLeaveBalancesCard,
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #employeeLatestDecisionCard {
+  min-height: 0 !important;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 0;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-card-heading-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-card-heading-copy {
+  min-width: 0;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-card-heading-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(11, 95, 149, 0.2);
+  border-radius: 13px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(11, 95, 149, 0.08),
+      rgba(54, 185, 207, 0.08)
+    );
+  color: #0b5f95;
+  font-size: 1rem;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-kicker {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: #0b5f95;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-card-heading
+  .section-heading {
+  margin-bottom: 0.18rem !important;
+  color: #10213b;
+  font-size: clamp(1.15rem, 1.7vw, 1.42rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-card-heading
+  .section-subtext {
+  max-width: 720px;
+  color: #667085;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-card-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-left: auto;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-card-toolbar
+  .btn {
+  min-height: 38px;
+  padding: 0.42rem 0.82rem;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+/* Expanded card bodies begin cleanly beneath the header. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    #leaveBalancesCardCollapse,
+    #latestDecisionCardCollapse
+  ):not(.d-none) {
+  padding-top: 0.15rem;
+}
+
+/* Compact empty states inside expanded cards. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-empty-state {
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  padding: 0.9rem 1rem;
+  border: 1px dashed rgba(11, 95, 149, 0.2);
+  border-radius: 14px;
+  background: rgba(244, 250, 252, 0.8);
+  color: #667085;
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .hr-card-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .hr-self-service-card-toolbar {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 575.98px) {
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .hr-self-service-card
+    > .card-body {
+    padding: 1.15rem !important;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .hr-card-heading-main {
+    align-items: flex-start;
+    gap: 0.7rem;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .hr-card-heading-icon {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+    border-radius: 12px;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .hr-self-service-card-toolbar
+    .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* END ALPATECH EMPLOYEE LEAVE CARD SIZE PARITY - v1.0.0 */
+
+/* =========================================================
+   ALPATECH EMPLOYEE LEAVE REQUEST + HISTORY PARITY - v1.0.0
+
+   Refreshes only the Alpatech Employee Request Leave and
+   My Leave History presentation.
+
+   Objectives:
+   - remove unnecessary equal-height empty space;
+   - retain the approved 5/7 desktop column structure;
+   - compact headings, form controls and toolbars;
+   - modernise the empty history state;
+   - retain contained scrolling when history records exist;
+   - preserve Alpatech blue/cyan branding.
+
+   Presentation only:
+   - no request submission changes;
+   - no leave calculations or validation changes;
+   - no collapse, refresh or returned-request workflow changes;
+   - no Supabase, tenant, RLS or reporting-line changes.
+   ========================================================= */
+
+/* Do not force the empty history card to match the full form height.
+   The existing JavaScript may still calculate a shared height, but this
+   Alpatech-only presentation override keeps both cards content-sized. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .employee-leave-main-row[data-leave-card-height]
+  .employee-leave-equal-card {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .employee-leave-main-row {
+  align-items: flex-start;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .employee-leave-main-row
+  > [class*="col-"] {
+  align-self: flex-start;
+}
+
+/* Request and History card shells */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    .hr-self-service-request-card,
+    .hr-self-service-history-card
+  ) {
+  width: 100%;
+  min-height: 0 !important;
+  overflow: hidden;
+  border: 1px solid rgba(11, 95, 149, 0.16) !important;
+  border-radius: 20px !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(54, 185, 207, 0.065),
+      transparent 30%
+    ),
+    #ffffff !important;
+  box-shadow: 0 12px 28px rgba(7, 59, 99, 0.055) !important;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    .hr-self-service-request-card,
+    .hr-self-service-history-card
+  )
+  > .card-body {
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 1.5rem !important;
+}
+
+/* Compact card headings */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    .hr-self-service-request-card,
+    .hr-self-service-history-card
+  )
+  .hr-self-service-card-heading {
+  margin-bottom: 1.25rem !important;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    .hr-self-service-request-card,
+    .hr-self-service-history-card
+  )
+  .hr-card-heading-main {
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    .hr-self-service-request-card,
+    .hr-self-service-history-card
+  )
+  .hr-card-heading-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 12px;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    .hr-self-service-request-card,
+    .hr-self-service-history-card
+  )
+  .section-heading {
+  font-size: 1.3rem !important;
+  line-height: 1.2;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    .hr-self-service-request-card,
+    .hr-self-service-history-card
+  )
+  .section-subtext {
+  max-width: 560px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* Request Leave form density */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-request-card
+  .form-label {
+  margin-bottom: 0.38rem;
+  color: #17243a;
+  font-size: 0.78rem;
+  font-weight: 750 !important;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-request-card
+  :is(
+    .form-control,
+    .form-select
+  ) {
+  min-height: 46px;
+  border-color: #d6e3ed;
+  border-radius: 13px;
+  background-color: #ffffff;
+  font-size: 0.82rem;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-request-card
+  textarea.form-control {
+  min-height: 104px;
+  resize: vertical;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-request-card
+  :is(
+    .form-control,
+    .form-select
+  ):focus {
+  border-color: rgba(11, 95, 149, 0.52);
+  box-shadow: 0 0 0 0.2rem rgba(54, 185, 207, 0.14);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-request-card
+  .form-text {
+  font-size: 0.68rem;
+}
+
+/* Keep the submit action professional but compact. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #submitLeaveBtn {
+  min-height: 44px;
+  border-radius: 13px;
+  font-size: 0.79rem;
+}
+
+/* Compact the supporting workflow note rather than allowing it
+   to make the form card unnecessarily tall. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-workflow-note {
+  padding: 0.9rem;
+  border: 1px solid rgba(11, 95, 149, 0.14);
+  border-radius: 14px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(238, 249, 252, 0.92),
+      rgba(255, 255, 255, 0.98)
+    );
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-workflow-note
+  .d-grid {
+  gap: 0.45rem !important;
+}
+
+/* My Leave History header and toolbar */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #employeeLeaveHistoryHeader {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #employeeLeaveHistoryHeader
+  .hr-self-service-card-toolbar {
+  gap: 0.5rem;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #employeeLeaveHistoryHeader
+  .btn,
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #refreshLeaveRequestsBtn {
+  min-height: 38px;
+  padding: 0.42rem 0.78rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* Expanded history should be content-sized when empty. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #leaveHistoryCardCollapse:not(.d-none) {
+  display: block;
+  min-height: 0;
+  flex: none;
+}
+
+/* Modern compact empty history state */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #leaveRequestsEmptyState {
+  min-height: 86px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 1rem;
+  border: 1px dashed rgba(11, 95, 149, 0.22);
+  border-radius: 14px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(244, 250, 252, 0.94),
+      rgba(255, 255, 255, 0.98)
+    );
+  color: #667085;
+  font-size: 0.8rem;
+}
+
+/* Real history records retain a contained scroll region. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .employee-leave-history-scroll-area {
+  min-height: 0;
+  max-height: 520px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.25rem;
+  scrollbar-width: thin;
+  scrollbar-color:
+    rgba(11, 95, 149, 0.32)
+    rgba(148, 163, 184, 0.08);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .employee-leave-history-scroll-area::-webkit-scrollbar {
+  width: 8px;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .employee-leave-history-scroll-area::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(11, 95, 149, 0.3);
+}
+
+/* Modernise dynamically rendered leave request cards without
+   changing their generated content or status logic. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveRequestsList
+  > [class*="rounded"] {
+  margin: 0 !important;
+  padding: 1rem !important;
+  border: 1px solid rgba(11, 95, 149, 0.16) !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(54, 185, 207, 0.06),
+      transparent 28%
+    ),
+    #ffffff !important;
+  box-shadow: 0 8px 20px rgba(7, 59, 99, 0.045);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveRequestsList
+  .badge {
+  padding: 0.36rem 0.56rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveRequestsList
+  :is(
+    .bg-light,
+    .bg-light-subtle
+  ) {
+  border: 1px solid rgba(11, 95, 149, 0.12);
+  border-radius: 12px !important;
+  background: #f6fafc !important;
+}
+
+/* Tablet and mobile should use natural card heights. */
+@media (max-width: 1199.98px) {
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .employee-leave-main-row[data-leave-card-height]
+    .employee-leave-equal-card {
+    height: auto !important;
+  }
+}
+
+@media (max-width: 767.98px) {
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    :is(
+      .hr-self-service-request-card,
+      .hr-self-service-history-card
+    )
+    > .card-body {
+    padding: 1.15rem !important;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    #employeeLeaveHistoryHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    #employeeLeaveHistoryHeader
+    .hr-self-service-card-toolbar {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    #employeeLeaveHistoryHeader
+    .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .employee-leave-history-scroll-area {
+    max-height: 460px;
+  }
+}
+
+/* END ALPATECH EMPLOYEE LEAVE REQUEST + HISTORY PARITY - v1.0.0 */
+
+/* =========================================================
+   ALPATECH EMPLOYEE LEAVE EQUAL INNER-SCROLL CARDS - v1.0.1
+
+   Desktop only:
+   - Request Leave and My Leave History use the same controlled height;
+   - each card has its own vertical inner scroll;
+   - headings and actions remain visible;
+   - collapsed History returns to natural compact height.
+
+   Presentation only:
+   - no leave submission, validation, calculation or data changes;
+   - no tenant, RLS, Supabase or manager-decision changes.
+   ========================================================= */
+
+@media (min-width: 1200px) {
+  /* Apply equal controlled height only while History is expanded. */
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .employee-leave-main-row:has(#leaveHistoryCardCollapse:not(.d-none))
+    .employee-leave-equal-card {
+    width: 100%;
+    height: clamp(520px, calc(100vh - 150px), 620px) !important;
+    min-height: 520px !important;
+    max-height: 620px !important;
+    overflow: hidden !important;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .employee-leave-main-row:has(#leaveHistoryCardCollapse:not(.d-none))
+    > [class*="col-"] {
+    display: flex;
+    align-self: stretch;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .employee-leave-main-row:has(#leaveHistoryCardCollapse:not(.d-none))
+    .employee-leave-equal-card
+    > .card-body {
+    height: 100% !important;
+    min-height: 0 !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Keep both card headers outside their scroll regions. */
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .employee-leave-main-row:has(#leaveHistoryCardCollapse:not(.d-none))
+    .hr-self-service-card-heading {
+    flex: 0 0 auto;
+  }
+
+  /* Request Leave inner scroll. */
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .employee-leave-main-row:has(#leaveHistoryCardCollapse:not(.d-none))
+    #leaveRequestForm {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.45rem;
+    scrollbar-width: thin;
+    scrollbar-color:
+      rgba(11, 95, 149, 0.36)
+      rgba(148, 163, 184, 0.1);
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    #leaveRequestForm::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    #leaveRequestForm::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.1);
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    #leaveRequestForm::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: rgba(11, 95, 149, 0.36);
+    background-clip: padding-box;
+  }
+
+  /* History uses the remaining height below its fixed heading. */
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    #leaveHistoryCardCollapse:not(.d-none) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    #leaveHistoryCardCollapse:not(.d-none)
+    > .d-flex {
+    flex: 0 0 auto;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .employee-leave-history-scroll-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.45rem;
+  }
+
+  /* When History is collapsed, remove the forced equal-height treatment. */
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .employee-leave-main-row:has(#leaveHistoryCardCollapse.d-none)
+    .employee-leave-equal-card {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+  }
+}
+
+@media (max-width: 1199.98px) {
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .employee-leave-equal-card {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+  }
+
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    #leaveRequestForm,
+  body.bexhr-employee-visual-refresh.alpatech-workspace
+    #leaveSection
+    .employee-leave-history-scroll-area {
+    max-height: none !important;
+    overflow: visible;
+  }
+}
+
+/* END ALPATECH EMPLOYEE LEAVE EQUAL INNER-SCROLL CARDS - v1.0.1 */
+
+/* =========================================================
+   ALPATECH EMPLOYEE LEAVE COLOUR + RECORD PARITY - v1.0.0
+
+   Replicates the current authoritative HR self-service visual
+   hierarchy using the approved Alpatech blue/cyan palette.
+
+   Scope:
+   - Leave Balances;
+   - Request Leave;
+   - My Leave History;
+   - dynamically rendered request records;
+   - semantic request statuses.
+
+   Presentation only:
+   - no leave data, calculation, submission or decision changes;
+   - no JavaScript, Supabase, tenant, RLS or reporting changes.
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   SHARED ALPATECH LEAVE CARD EDGE LANGUAGE
+   --------------------------------------------------------- */
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    #employeeLeaveBalancesCard,
+    #employeeLatestDecisionCard,
+    .hr-self-service-request-card,
+    .hr-self-service-history-card
+  ) {
+  position: relative;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    #employeeLeaveBalancesCard,
+    #employeeLatestDecisionCard,
+    .hr-self-service-request-card,
+    .hr-self-service-history-card
+  )::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  z-index: 1;
+  border-radius: 20px 0 0 20px;
+  background:
+    linear-gradient(
+      180deg,
+      #0b5f95 0%,
+      #1d9bd7 48%,
+      #36b9cf 100%
+    );
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------
+   REQUEST LEAVE
+   --------------------------------------------------------- */
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-request-card {
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(54, 185, 207, 0.12),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #f7fbfd 100%
+    ) !important;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-request-card
+  .hr-card-heading-icon {
+  border-color: rgba(14, 159, 128, 0.2);
+  background:
+    linear-gradient(
+      135deg,
+      #ecfdf5 0%,
+      #dff8f3 100%
+    );
+  color: #087f66;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-request-card
+  .hr-self-service-kicker {
+  color: #087f66;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #submitLeaveBtn:not(:disabled) {
+  border-color: #0b5f95 !important;
+  background:
+    linear-gradient(
+      135deg,
+      #0b5f95 0%,
+      #1787ba 58%,
+      #36b9cf 100%
+    ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 22px rgba(11, 95, 149, 0.2);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #submitLeaveBtn:not(:disabled):hover,
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #submitLeaveBtn:not(:disabled):focus {
+  border-color: #08446d !important;
+  background:
+    linear-gradient(
+      135deg,
+      #08446d 0%,
+      #0b5f95 62%,
+      #1d9bd7 100%
+    ) !important;
+}
+
+/* ---------------------------------------------------------
+   MY LEAVE HISTORY
+   --------------------------------------------------------- */
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-history-card {
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(66, 153, 225, 0.12),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #f8fbfe 100%
+    ) !important;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-history-card
+  .hr-card-heading-icon {
+  border-color: rgba(99, 102, 241, 0.18);
+  background:
+    linear-gradient(
+      135deg,
+      #eef2ff 0%,
+      #e8eafe 100%
+    );
+  color: #4f46e5;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .hr-self-service-history-card
+  .hr-self-service-kicker {
+  color: #4f46e5;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #refreshLeaveRequestsBtn {
+  border-color: rgba(11, 95, 149, 0.48);
+  background: rgba(255, 255, 255, 0.86);
+  color: #0b5f95;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #refreshLeaveRequestsBtn:hover,
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #refreshLeaveRequestsBtn:focus {
+  border-color: #0b5f95;
+  background: #eaf8fb;
+  color: #08446d;
+}
+
+/* ---------------------------------------------------------
+   LEAVE BALANCE TILES
+   --------------------------------------------------------- */
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .leave-entitlement-tile {
+  border-color: rgba(11, 95, 149, 0.18) !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(54, 185, 207, 0.14),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #f5fbfd 100%
+    ) !important;
+  box-shadow:
+    0 12px 26px rgba(7, 59, 99, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.94);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .leave-entitlement-tile::before {
+  left: 1rem;
+  right: 1rem;
+  height: 3px;
+  background:
+    linear-gradient(
+      90deg,
+      #0b5f95 0%,
+      #1d9bd7 50%,
+      #36b9cf 100%
+    );
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .leave-entitlement-tile
+  .progress {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(11, 95, 149, 0.1);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  .leave-entitlement-tile
+  .progress-bar {
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      #0b5f95 0%,
+      #36b9cf 100%
+    );
+}
+
+/* ---------------------------------------------------------
+   DYNAMIC LEAVE HISTORY RECORDS
+   --------------------------------------------------------- */
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #leaveRequestsList {
+  display: grid;
+  gap: 0.8rem;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #leaveRequestsList
+  > [class*="rounded"] {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(11, 95, 149, 0.16) !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(54, 185, 207, 0.085),
+      transparent 32%
+    ),
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #f8fbfd 100%
+    ) !important;
+  box-shadow:
+    0 8px 20px rgba(7, 59, 99, 0.055);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #leaveRequestsList
+  > [class*="rounded"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background:
+    linear-gradient(
+      180deg,
+      #0b5f95,
+      #36b9cf
+    );
+}
+
+/* Pending / awaiting action */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #leaveRequestsList
+  > [class*="rounded"]:has(
+    .badge.bg-warning,
+    .badge.text-bg-warning
+  )::before {
+  background:
+    linear-gradient(
+      180deg,
+      #f59e0b,
+      #fbbf24
+    );
+}
+
+/* Approved / completed */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #leaveRequestsList
+  > [class*="rounded"]:has(
+    .badge.bg-success,
+    .badge.text-bg-success
+  )::before {
+  background:
+    linear-gradient(
+      180deg,
+      #059669,
+      #34d399
+    );
+}
+
+/* Rejected / cancelled */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #leaveRequestsList
+  > [class*="rounded"]:has(
+    .badge.bg-danger,
+    .badge.text-bg-danger
+  )::before {
+  background:
+    linear-gradient(
+      180deg,
+      #dc2626,
+      #fb7185
+    );
+}
+
+/* Returned / clarification / informational */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #leaveRequestsList
+  > [class*="rounded"]:has(
+    .badge.bg-info,
+    .badge.text-bg-info,
+    .badge.bg-primary,
+    .badge.text-bg-primary
+  )::before {
+  background:
+    linear-gradient(
+      180deg,
+      #0b5f95,
+      #38bdf8
+    );
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #leaveRequestsList
+  .badge {
+  min-height: 25px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.34rem 0.62rem;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Supporting metadata tiles inside cancelled/returned records */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  #leaveRequestsList
+  :is(
+    .bg-light,
+    .bg-light-subtle
+  ) {
+  border-color: rgba(11, 95, 149, 0.12) !important;
+  background:
+    linear-gradient(
+      180deg,
+      #f7fbfd 0%,
+      #ffffff 100%
+    ) !important;
+}
+
+/* ---------------------------------------------------------
+   ALPATECH SCROLLBARS
+   --------------------------------------------------------- */
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    #leaveRequestForm,
+    .employee-leave-history-scroll-area
+  ) {
+  scrollbar-color:
+    rgba(11, 95, 149, 0.42)
+    rgba(11, 95, 149, 0.07);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    #leaveRequestForm,
+    .employee-leave-history-scroll-area
+  )::-webkit-scrollbar-thumb {
+  background: rgba(11, 95, 149, 0.4);
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveSection
+  :is(
+    #leaveRequestForm,
+    .employee-leave-history-scroll-area
+  )::-webkit-scrollbar-track {
+  background: rgba(11, 95, 149, 0.07);
+}
+
+/* END ALPATECH EMPLOYEE LEAVE COLOUR + RECORD PARITY - v1.0.0 */
+
+/* =========================================================
+   ALPATECH EMPLOYEE SHARED REFRESH TOKEN BRIDGE - v1.0.0
+
+   Allows the completed shared Employee structural refresh to
+   render with the approved Alpatech tenant palette.
+
+   This does not import standard BexHR branding:
+   - no navy BexHR sidebar;
+   - no BexHR wordmark;
+   - no standard teal tenant identity;
+   - no logo or favicon changes.
+
+   Presentation variables only:
+   - no authentication, role, tenant, RLS or Supabase changes;
+   - no profile, leave, payroll or request behaviour changes.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh.alpatech-workspace {
+  /* Shared Employee component tokens */
+  --bexhr-accent-rgb: 11, 95, 149;
+  --bexhr-page: #f4f8fb;
+  --bexhr-panel: #ffffff;
+  --bexhr-panel-soft: #f5fafc;
+  --bexhr-text: #17243a;
+  --bexhr-muted: #667085;
+  --bexhr-line: #d8e5ee;
+  --bexhr-shadow:
+    0 12px 34px rgba(7, 59, 99, 0.07);
+  --bexhr-shadow-hover:
+    0 18px 44px rgba(7, 59, 99, 0.11);
+
+  /* Employee Overview component tokens */
+  --employee-overview-primary: #0b5f95;
+  --employee-overview-primary-dark: #08446d;
+  --employee-overview-primary-soft: #36b9cf;
+  --employee-overview-page-text: #17243a;
+  --employee-overview-muted: #667085;
+  --employee-overview-border: #d8e5ee;
+  --employee-overview-surface: #ffffff;
+  --employee-overview-shadow:
+    0 12px 34px rgba(7, 59, 99, 0.07);
+
+  /* Existing shared HR-style component variables */
+  --hr-primary: #0b5f95;
+  --hr-primary-soft: #36b9cf;
+  --hr-primary-dark: #08446d;
+  --hr-background: #f4f8fb;
+  --hr-surface: #ffffff;
+  --hr-text: #101828;
+  --hr-muted: #667085;
+  --hr-border: #d8e5ee;
+  --hr-soft-surface: #eef9fc;
+}
+
+/* Shared refreshed cards should inherit Alpatech borders and shadows. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  :is(
+    #overviewSection,
+    #profileSection,
+    #leaveSection,
+    #payrollSection
+  )
+  .dashboard-section-card {
+  border-color: var(--bexhr-line);
+  box-shadow: var(--bexhr-shadow);
+}
+
+/* Shared interaction treatment without replacing tenant identity. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  :is(
+    #overviewSection,
+    #profileSection,
+    #leaveSection,
+    #payrollSection
+  )
+  .dashboard-section-card:hover {
+  border-color: rgba(var(--bexhr-accent-rgb), 0.24);
+  box-shadow: var(--bexhr-shadow-hover);
+}
+
+/* Shared form focus treatment across refreshed Employee workspaces. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  :is(
+    #profileSection,
+    #leaveSection,
+    #payrollSection,
+    .employee-operating-guide-modal
+  )
+  :is(
+    .form-control,
+    .form-select
+  ):focus {
+  border-color: var(--hr-primary-soft);
+  box-shadow:
+    0 0 0 0.2rem rgba(var(--bexhr-accent-rgb), 0.14);
+}
+
+/* Shared guide/profile components inherit Alpatech rather than
+   the standard-tenant teal variable overrides. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  :is(
+    #profileSection,
+    .employee-operating-guide-modal
+  ) {
+  --hr-primary: #0b5f95;
+  --hr-primary-soft: #36b9cf;
+  --hr-primary-dark: #08446d;
+  --bexhr-accent-rgb: 11, 95, 149;
+  --bexhr-line: #d8e5ee;
+}
+
+/* END ALPATECH EMPLOYEE SHARED REFRESH TOKEN BRIDGE - v1.0.0 */
+
+/* =========================================================
+   ALPATECH LEAVE SOFT COLOUR-WASH PARITY - v1.0.0
+
+   Replicates the soft coloured depth of the authoritative
+   Employee/HR Leave workspace using Alpatech blue and cyan.
+
+   Presentation only:
+   - no leave balances, decisions or request data changes;
+   - no JavaScript, tenant, RLS or Supabase changes;
+   - semantic status colours remain authoritative.
+   ========================================================= */
+
+/* Leave Balances outer workspace card */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #employeeLeaveBalancesCard {
+  border-color: rgba(11, 95, 149, 0.17) !important;
+  background:
+    radial-gradient(
+      circle at 92% 4%,
+      rgba(54, 185, 207, 0.16),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 8% 96%,
+      rgba(11, 95, 149, 0.07),
+      transparent 28%
+    ),
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #f5fbfd 100%
+    ) !important;
+  box-shadow:
+    0 16px 36px rgba(7, 59, 99, 0.075) !important;
+}
+
+/* Individual entitlement tiles */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveBalancesGrid
+  .leave-entitlement-tile {
+  border-color: rgba(11, 95, 149, 0.18) !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(54, 185, 207, 0.18),
+      transparent 38%
+    ),
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #f1f9fc 100%
+    ) !important;
+  box-shadow:
+    0 12px 26px rgba(7, 59, 99, 0.075),
+    inset 0 1px 0 rgba(255, 255, 255, 0.94) !important;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveBalancesGrid
+  .leave-entitlement-tile::before {
+  background:
+    linear-gradient(
+      90deg,
+      #0b5f95 0%,
+      #1d9bd7 52%,
+      #36b9cf 100%
+    ) !important;
+}
+
+/* Available badge: Alpatech blue/cyan rather than green */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveBalancesGrid
+  .badge {
+  border: 1px solid rgba(11, 95, 149, 0.16) !important;
+  background: #eaf8fb !important;
+  color: #08446d !important;
+}
+
+/* Progress tracks and values */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveBalancesGrid
+  .progress {
+  background: rgba(11, 95, 149, 0.11) !important;
+}
+
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #leaveBalancesGrid
+  .progress-bar {
+  background:
+    linear-gradient(
+      90deg,
+      #0b5f95 0%,
+      #36b9cf 100%
+    ) !important;
+}
+
+/* Latest Leave Decision outer card */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #employeeLatestDecisionCard {
+  border-color: rgba(11, 95, 149, 0.17) !important;
+  background:
+    radial-gradient(
+      circle at 92% 4%,
+      rgba(54, 185, 207, 0.15),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 8% 96%,
+      rgba(29, 155, 215, 0.07),
+      transparent 28%
+    ),
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #f5fbfd 100%
+    ) !important;
+  box-shadow:
+    0 16px 36px rgba(7, 59, 99, 0.075) !important;
+}
+
+/* Dynamically rendered latest-decision record */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #latestDecisionCard
+  > .info-tile,
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #latestDecisionCard
+  > .border,
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #latestDecisionCard
+  > [class*="rounded"] {
+  border-color: rgba(11, 95, 149, 0.18) !important;
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(54, 185, 207, 0.14),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #f3fafd 100%
+    ) !important;
+  box-shadow:
+    0 12px 26px rgba(7, 59, 99, 0.065) !important;
+}
+
+/* Inner decision information tiles */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #latestDecisionCard
+  :is(
+    .info-tile,
+    .bg-light,
+    .bg-light-subtle,
+    .border
+  ) {
+  border-color: rgba(11, 95, 149, 0.13) !important;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(240, 249, 252, 0.94) 0%,
+      #ffffff 100%
+    ) !important;
+}
+
+/* Preserve semantic decision badges such as Cancelled, Approved and Pending. */
+body.bexhr-employee-visual-refresh.alpatech-workspace
+  #latestDecisionCard
+  :is(
+    .badge.bg-danger,
+    .badge.text-bg-danger,
+    .badge.bg-success,
+    .badge.text-bg-success,
+    .badge.bg-warning,
+    .badge.text-bg-warning
+  ) {
+  background-color: revert-layer;
+}
+
+/* END ALPATECH LEAVE SOFT COLOUR-WASH PARITY - v1.0.0 */
+
+/* =========================================================
+   EMPLOYEE STICKY APPLICATION HEADER - v1.0.1
+
+   Uses the same desktop-only sticky pattern as the
+   authoritative HR and Manager application headers.
+
+   Presentation only:
+   - no navigation, tenant, account or data changes.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh
+  .employee-modern-app-header {
+  position: relative;
+  z-index: 1030;
+}
+
+@media (min-width: 992px) {
+  body.bexhr-employee-visual-refresh
+    .employee-modern-app-header {
+    position: sticky;
+    top: 0.75rem;
+  }
+}
+
+/* END EMPLOYEE STICKY APPLICATION HEADER - v1.0.1 */

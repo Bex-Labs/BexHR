@@ -11,18 +11,21 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
-  <link rel="stylesheet" href="css/styles.css" />
+<link rel="stylesheet" href="css/styles.css" />
 
-  <!-- HR SELF-SERVICE LEAVE PARITY - STEP 1C-3
-     Match Employee Dashboard leave history behaviour inside HR My Self-Service.
-     Long leave history records scroll inside the card instead of stretching
-     the whole HR dashboard page. -->
+  <!-- SYSTEM-WIDE HR SELF-SERVICE LEAVE INNER-SCROLL PARITY - v1.0.0
+     Mirrors the approved Manager and Employee leave layout:
+     - equal desktop card height while My Leave History is expanded;
+     - Request Leave and My Leave History scroll internally;
+     - headings and actions remain visible;
+     - collapsed History makes both cards compact and header-only;
+     - expanding History restores the complete two-card workspace;
+     - mobile and tablet retain normal document flow.
+
+     Presentation only:
+     - no Leave Balances, leave submission, validation, entitlement,
+       approval, payroll, Supabase, tenant, RLS or role changes. -->
   <style>
-    /* HR SELF-SERVICE LEAVE PARITY - STEP 1C-3C
-   Match Employee Dashboard behaviour:
-   - normal mobile/tablet flow
-   - desktop equal-height only while My Leave History is expanded
-   - inner scroll stays inside My Leave History records */
     #hrSelfServiceSection .employee-leave-history-scroll-area {
       max-height: none;
       overflow: visible;
@@ -30,82 +33,190 @@
     }
 
     @media (min-width: 1200px) {
-      #hrSelfServiceSection .ss-leave-main-row {
-        align-items: flex-start;
-      }
 
-      #hrSelfServiceSection .ss-leave-main-row>[class*="col-"] {
+      /* Expanded state: both cards use the same controlled desktop height. */
+      #hrSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none))>[class*="col-"] {
         display: flex;
+        align-self: stretch;
       }
 
-      #hrSelfServiceSection .ss-leave-equal-card {
+      #hrSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) .ss-leave-equal-card {
         width: 100%;
+        height: clamp(520px, calc(100vh - 150px), 620px) !important;
+        min-height: 520px !important;
+        max-height: 620px !important;
+        overflow: hidden !important;
       }
 
-      #hrSelfServiceSection .ss-leave-main-row[data-ss-leave-card-height] .ss-leave-equal-card {
-        height: var(--ss-leave-card-height);
-      }
-
-      #hrSelfServiceSection #ssEmployeeLeaveHistoryCard.ss-leave-equal-card {
+      #hrSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) .ss-leave-equal-card>.card-body {
+        display: flex;
+        flex-direction: column;
+        height: 100% !important;
+        min-height: 0 !important;
         overflow: hidden;
       }
 
-      #hrSelfServiceSection #ssEmployeeLeaveHistoryCard>.card-body {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        min-height: 0;
+      #hrSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) .hr-self-service-card-heading {
+        flex: 0 0 auto;
       }
 
-      #hrSelfServiceSection #ssLeaveHistoryCardCollapse:not(.d-none) {
-        display: flex;
-        flex-direction: column;
+      /* Request Leave scrolls below its fixed heading. */
+      #hrSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) #ssLeaveRequestForm {
         flex: 1 1 auto;
         min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding-right: 0.45rem;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(14, 116, 144, 0.36) rgba(148, 163, 184, 0.1);
+      }
+
+      #hrSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      #hrSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar-track {
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.1);
+      }
+
+      #hrSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar-thumb {
+        border: 2px solid transparent;
+        border-radius: 999px;
+        background: rgba(14, 116, 144, 0.36);
+        background-clip: padding-box;
+      }
+
+      /* My Leave History scrolls below its fixed heading and refresh action. */
+      #hrSelfServiceSection #ssLeaveHistoryCardCollapse:not(.d-none) {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      #hrSelfServiceSection #ssLeaveHistoryCardCollapse:not(.d-none)>.d-flex {
+        flex: 0 0 auto;
       }
 
       #hrSelfServiceSection .employee-leave-history-scroll-area {
         flex: 1 1 auto;
         min-height: 0;
-        max-height: none;
-        overflow-y: auto;
+        max-height: none !important;
         overflow-x: hidden;
+        overflow-y: auto;
         overscroll-behavior: contain;
-        padding-right: 0.25rem;
+        padding-right: 0.45rem;
+      }
+
+      /* Collapsed state: both paired cards become compact header-only cards. */
+      #hrSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)>[class*="col-"] {
+        display: flex;
+        align-self: flex-start;
+      }
+
+      #hrSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) .ss-leave-equal-card {
+        width: 100%;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: hidden !important;
+      }
+
+      #hrSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) .ss-leave-equal-card>.card-body {
+        display: block;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: hidden !important;
+      }
+
+      #hrSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) .hr-self-service-card-heading {
+        margin-bottom: 0 !important;
+      }
+
+      #hrSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) #ssLeaveRequestForm {
+        display: none !important;
+      }
+
+      #hrSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) #ssEmployeeLeaveHistoryCard {
+        overflow: hidden !important;
+      }
+    }
+
+    @media (max-width: 1199.98px) {
+      #hrSelfServiceSection .ss-leave-equal-card {
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+      }
+
+      #hrSelfServiceSection #ssLeaveRequestForm,
+      #hrSelfServiceSection .employee-leave-history-scroll-area {
+        max-height: none !important;
+        overflow: visible;
       }
     }
   </style>
 
 
-  <link rel="icon" type="image/x-icon" href="assets/favic0n.png" />
   <style id="hrWorkspaceFirstPaintGate">
     body.hr-workspace-booting .bexhr-sidebar,
     body.hr-workspace-booting main {
       visibility: hidden !important;
     }
   </style>
+  <!-- BEXHR UNIVERSAL FAVICON SET - v1.0.0 -->
+  <link rel="icon" type="image/svg+xml" href="assets/favicon/favicon.svg?v=20260731" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png?v=20260731" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png?v=20260731" />
+  <link rel="icon" type="image/x-icon" href="assets/favicon/favicon.ico?v=20260731" />
+  <link rel="shortcut icon" href="assets/favicon/favicon.ico?v=20260731" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png?v=20260731" />
+  <link rel="manifest" href="assets/favicon/site.webmanifest?v=20260731" />
+  <meta name="msapplication-config" content="assets/favicon/browserconfig.xml?v=20260731" />
+  <meta name="theme-color" content="#087f7a" />
 </head>
 
-<body class="dashboard-page bexhr-has-sidebar bexhr-hr-visual-refresh hr-workspace-booting"
-  aria-busy="true">
+<body class="dashboard-page bexhr-has-sidebar bexhr-hr-visual-refresh hr-workspace-booting" aria-busy="true">
 
   <!-- BEXHR WORKSPACE LOADER - PEOPLE UI REFRESH STEP 1
        Visible only while the exact remembered HR workspace is restored.
        It gives immediate feedback instead of showing a blank white page. -->
-  <div id="bexhrWorkspaceLoader" class="bexhr-workspace-loader"
-    role="status" aria-live="polite" aria-atomic="true">
+  <div id="bexhrWorkspaceLoader" class="bexhr-workspace-loader" role="status" aria-live="polite" aria-atomic="true">
     <div class="bexhr-workspace-loader-panel">
       <div class="bexhr-workspace-loader-brand" aria-hidden="true">
-        <span class="bexhr-workspace-loader-mark">B</span>
-        <span>BexHR</span>
+        <span class="bexhr-workspace-loader-logo-shell">
+          <img src="assets/favicon/favicon.svg?v=20260801" alt="" class="bexhr-workspace-loader-logo" />
+        </span>
+
+        <span class="bexhr-workspace-loader-brand-copy">
+          <strong>BexHR</strong>
+          <small>People and payroll workspace</small>
+        </span>
       </div>
 
-      <span class="bexhr-workspace-loader-spinner" aria-hidden="true"></span>
+      <div class="bexhr-workspace-loader-progress" aria-hidden="true">
+        <span class="bexhr-workspace-loader-spinner"></span>
+        <span class="bexhr-workspace-loader-progress-line">
+          <span></span>
+        </span>
+      </div>
 
-      <strong>BexHR is preparing your workspace</strong>
-      <span>Restoring your last HR workspace securely.</span>
+      <div class="bexhr-workspace-loader-message">
+        <strong>BexHR is preparing your workspace</strong>
+        <span>Restoring your last HR workspace securely.</span>
+      </div>
+
+      <div class="bexhr-workspace-loader-status" aria-hidden="true">
+        <span class="bexhr-workspace-loader-status-dot"></span>
+        <span>Verifying access and restoring your workspace</span>
+      </div>
     </div>
   </div>
+
   <!-- ALPATECH TENANT BRANDING - STEP 1H
        Pre-apply Alpatech branding from the already validated tenant context.
 
@@ -212,7 +323,7 @@
        BEXHR SIDEBAR NAV
        Sticky left sidebar for desktop. Proxies clicks to the
        existing workspace tab buttons so all JS stays unchanged.
-       Hidden on mobile — the workspace-switcher card handles mobile.
+       Hidden on mobile - the workspace-switcher card handles mobile.
        ========================================================= -->
   <nav class="bexhr-sidebar" id="bexhrSidebar" aria-label="Workspace navigation">
     <div class="bexhr-sidebar-brand" id="tenantSidebarBrand">
@@ -300,24 +411,24 @@
 
         <div class="hr-modern-account-area">
           <button type="button" class="hr-modern-account-button"
-            onclick="document.getElementById('hrTabProfileBtn')?.click()"
-            aria-label="Open my profile">
+            onclick="document.getElementById('hrTabProfileBtn')?.click()" aria-label="Open my profile">
             <span class="hr-modern-avatar-wrap">
               <span class="dashboard-avatar" id="hrInitials">HR</span>
-              <img id="hrHeroImage" src="" alt="HR profile avatar"
-                class="dashboard-avatar d-none" />
+              <img id="hrHeroImage" src="" alt="HR profile avatar" class="dashboard-avatar d-none" />
             </span>
 
             <span class="hr-modern-account-copy">
               <strong id="hrModernUserName">HR User</strong>
-              <small id="hrRole"><span class="skeleton">&nbsp;</span></small>
+              <small id="hrRole" class="hr-modern-account-responsibilities"
+                aria-label="HR and manager responsibilities">
+                <span class="skeleton">&nbsp;</span>
+              </small>
             </span>
 
             <i class="bi bi-chevron-down" aria-hidden="true"></i>
           </button>
 
-          <button id="logoutBtn" type="button"
-            class="btn btn-outline-secondary hr-modern-logout-button"
+          <button id="logoutBtn" type="button" class="btn btn-outline-secondary hr-modern-logout-button"
             aria-label="Sign out" title="Sign out">
             <i class="bi bi-box-arrow-right"></i>
           </button>
@@ -427,154 +538,152 @@
 
         <div class="hr-overview-quick-actions" aria-label="HR quick actions">
           <button type="button" class="btn btn-light dashboard-action-btn"
-            onclick="document.getElementById('hrTabEmployeesBtn')?.click()">
-            <i class="bi bi-person-plus me-2"></i>People
-          </button>
-          <button type="button" class="btn btn-light dashboard-action-btn"
-            onclick="document.getElementById('hrTabReviewBtn')?.click()">
-            <i class="bi bi-clipboard-check me-2"></i>Review Queue
-          </button>
-          <button type="button" class="btn btn-light dashboard-action-btn"
-            onclick="document.getElementById('hrTabPayrollBtn')?.click()">
-            <i class="bi bi-cash-coin me-2"></i>Payroll
-          </button>
+            onclick="document.getElementById(' hrTabEmployeesBtn')?.click()">
+      <i class="bi bi-person-plus me-2"></i>People
+      </button>
+      <button type="button" class="btn btn-light dashboard-action-btn"
+        onclick="document.getElementById('hrTabReviewBtn')?.click()">
+        <i class="bi bi-clipboard-check me-2"></i>Review Queue
+      </button>
+      <button type="button" class="btn btn-light dashboard-action-btn"
+        onclick="document.getElementById('hrTabPayrollBtn')?.click()">
+        <i class="bi bi-cash-coin me-2"></i>Payroll
+      </button>
+    </div>
+    </section>
+
+    <section class="hr-overview-metrics" aria-label="HR overview metrics">
+      <article class="hr-overview-metric-card metric-people">
+        <div class="hr-overview-metric-icon"><i class="bi bi-people"></i></div>
+        <div>
+          <div class="hr-overview-metric-label">Total employees</div>
+          <div class="hr-overview-metric-value" id="hrOverviewTotalEmployees">0</div>
+          <div class="hr-overview-metric-detail" id="hrOverviewActiveEmployees">0 active</div>
         </div>
-      </section>
+      </article>
 
-      <section class="hr-overview-metrics" aria-label="HR overview metrics">
-        <article class="hr-overview-metric-card metric-people">
-          <div class="hr-overview-metric-icon"><i class="bi bi-people"></i></div>
-          <div>
-            <div class="hr-overview-metric-label">Total employees</div>
-            <div class="hr-overview-metric-value" id="hrOverviewTotalEmployees">0</div>
-            <div class="hr-overview-metric-detail" id="hrOverviewActiveEmployees">0 active</div>
-          </div>
-        </article>
+      <article class="hr-overview-metric-card metric-review">
+        <div class="hr-overview-metric-icon"><i class="bi bi-inbox"></i></div>
+        <div>
+          <div class="hr-overview-metric-label">Open HR reviews</div>
+          <div class="hr-overview-metric-value" id="hrOverviewOpenReviews">0</div>
+          <div class="hr-overview-metric-detail">Requests needing attention</div>
+        </div>
+      </article>
 
-        <article class="hr-overview-metric-card metric-review">
-          <div class="hr-overview-metric-icon"><i class="bi bi-inbox"></i></div>
-          <div>
-            <div class="hr-overview-metric-label">Open HR reviews</div>
-            <div class="hr-overview-metric-value" id="hrOverviewOpenReviews">0</div>
-            <div class="hr-overview-metric-detail">Requests needing attention</div>
-          </div>
-        </article>
+      <article class="hr-overview-metric-card metric-payroll">
+        <div class="hr-overview-metric-icon"><i class="bi bi-check2-circle"></i></div>
+        <div>
+          <div class="hr-overview-metric-label">Payroll ready</div>
+          <div class="hr-overview-metric-value" id="hrOverviewPayrollReady">0</div>
+          <div class="hr-overview-metric-detail" id="hrOverviewPayrollReadyDetail">0 of 0 active employees</div>
+        </div>
+      </article>
 
-        <article class="hr-overview-metric-card metric-payroll">
-          <div class="hr-overview-metric-icon"><i class="bi bi-check2-circle"></i></div>
-          <div>
-            <div class="hr-overview-metric-label">Payroll ready</div>
-            <div class="hr-overview-metric-value" id="hrOverviewPayrollReady">0</div>
-            <div class="hr-overview-metric-detail" id="hrOverviewPayrollReadyDetail">0 of 0 active employees</div>
-          </div>
-        </article>
+      <article class="hr-overview-metric-card metric-attention">
+        <div class="hr-overview-metric-icon"><i class="bi bi-exclamation-circle"></i></div>
+        <div>
+          <div class="hr-overview-metric-label">Missing information</div>
+          <div class="hr-overview-metric-value" id="hrOverviewMissingInformation">0</div>
+          <div class="hr-overview-metric-detail">Employee records to complete</div>
+        </div>
+      </article>
+    </section>
 
-        <article class="hr-overview-metric-card metric-attention">
-          <div class="hr-overview-metric-icon"><i class="bi bi-exclamation-circle"></i></div>
-          <div>
-            <div class="hr-overview-metric-label">Missing information</div>
-            <div class="hr-overview-metric-value" id="hrOverviewMissingInformation">0</div>
-            <div class="hr-overview-metric-detail">Employee records to complete</div>
-          </div>
-        </article>
-      </section>
-
-      <section class="hr-overview-readiness-card mb-4">
-        <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1A
+    <section class="hr-overview-readiness-card mb-4">
+      <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1A
              Shared icon-led heading. Existing readiness value and progress IDs stay unchanged. -->
-        <div class="hr-overview-readiness-heading hr-card-heading">
-          <div class="hr-card-heading-main">
-            <span class="hr-card-heading-icon hr-card-heading-icon--payroll" aria-hidden="true">
-              <i class="bi bi-check2-circle"></i>
-            </span>
-            <div class="hr-card-heading-copy">
-              <span class="hr-overview-section-kicker">Payroll preparation</span>
-              <h3>Employee payroll readiness</h3>
-            </div>
+      <div class="hr-overview-readiness-heading hr-card-heading">
+        <div class="hr-card-heading-main">
+          <span class="hr-card-heading-icon hr-card-heading-icon--payroll" aria-hidden="true">
+            <i class="bi bi-check2-circle"></i>
+          </span>
+          <div class="hr-card-heading-copy">
+            <span class="hr-overview-section-kicker">Payroll preparation</span>
+            <h3>Employee payroll readiness</h3>
           </div>
-          <strong id="hrOverviewPayrollReadinessPercent">0%</strong>
         </div>
-        <div class="progress" role="progressbar" aria-label="Payroll readiness"
-          aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
-          id="hrOverviewPayrollReadinessProgress">
-          <div class="progress-bar" id="hrOverviewPayrollReadinessBar" style="width: 0%"></div>
-        </div>
-        <p id="hrOverviewPayrollReadinessMessage">
-          Payroll setup information will appear after employee and salary records load.
-        </p>
-      </section>
+        <strong id="hrOverviewPayrollReadinessPercent">0%</strong>
+      </div>
+      <div class="progress" role="progressbar" aria-label="Payroll readiness" aria-valuemin="0" aria-valuemax="100"
+        aria-valuenow="0" id="hrOverviewPayrollReadinessProgress">
+        <div class="progress-bar" id="hrOverviewPayrollReadinessBar" style="width: 0%"></div>
+      </div>
+      <p id="hrOverviewPayrollReadinessMessage">
+        Payroll setup information will appear after employee and salary records load.
+      </p>
+    </section>
 
-      <div class="hr-overview-content-grid mb-4">
-        <section class="hr-overview-panel hr-overview-priority-panel">
-          <!-- DASHBOARD PRIORITY ATTENTION BALANCE - STEP 2
+    <div class="hr-overview-content-grid mb-4">
+      <section class="hr-overview-panel hr-overview-priority-panel">
+        <!-- DASHBOARD PRIORITY ATTENTION BALANCE - STEP 2
                Keep the live work queue useful even when all four checks are clear.
                Existing triggers and workspace destinations remain unchanged. -->
-          <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1B
+        <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1B
                Shared operational heading. Existing action routing stays unchanged. -->
-          <div class="hr-overview-panel-header hr-card-heading">
-            <div class="hr-card-heading-main">
-              <span class="hr-card-heading-icon hr-card-heading-icon--attention" aria-hidden="true">
-                <i class="bi bi-exclamation-circle"></i>
-              </span>
-              <div class="hr-card-heading-copy">
-                <span class="hr-overview-section-kicker">Work queue</span>
-                <h3>Priority attention</h3>
-              </div>
-            </div>
-            <button type="button" class="btn btn-sm btn-outline-primary"
-              onclick="document.getElementById('hrTabReviewBtn')?.click()">
-              Open HR Review
-            </button>
-          </div>
-          <div id="hrOverviewPriorityList" class="hr-overview-priority-list"
-            aria-live="polite" aria-atomic="true">
-            <div class="hr-overview-empty-state">Loading priority work...</div>
-          </div>
-        </section>
-
-        <section class="hr-overview-panel">
-          <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1C
-               Shared operational heading. Existing People navigation stays unchanged. -->
-          <div class="hr-overview-panel-header hr-card-heading">
-            <div class="hr-card-heading-main">
-              <span class="hr-card-heading-icon hr-card-heading-icon--organisation" aria-hidden="true">
-                <i class="bi bi-diagram-3"></i>
-              </span>
-              <div class="hr-card-heading-copy">
-                <span class="hr-overview-section-kicker">Organisation</span>
-                <h3>Department snapshot</h3>
-              </div>
-            </div>
-            <button type="button" class="btn btn-sm btn-outline-primary"
-              onclick="document.getElementById('hrTabEmployeesBtn')?.click()">
-              View People
-            </button>
-          </div>
-          <div id="hrOverviewDepartmentList" class="hr-overview-department-list">
-            <div class="hr-overview-empty-state">Loading departments...</div>
-          </div>
-        </section>
-      </div>
-
-      <section class="hr-overview-panel hr-overview-activity-panel mb-4">
-        <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1D
-             Shared operational heading. Live data status remains unchanged. -->
         <div class="hr-overview-panel-header hr-card-heading">
           <div class="hr-card-heading-main">
-            <span class="hr-card-heading-icon hr-card-heading-icon--activity" aria-hidden="true">
-              <i class="bi bi-clock-history"></i>
+            <span class="hr-card-heading-icon hr-card-heading-icon--attention" aria-hidden="true">
+              <i class="bi bi-exclamation-circle"></i>
             </span>
             <div class="hr-card-heading-copy">
-              <span class="hr-overview-section-kicker">Audit visibility</span>
-              <h3>Recent activity</h3>
+              <span class="hr-overview-section-kicker">Work queue</span>
+              <h3>Priority attention</h3>
             </div>
           </div>
-          <span class="hr-overview-live-badge"><span></span> Live workspace data</span>
+          <button type="button" class="btn btn-sm btn-outline-primary"
+            onclick="document.getElementById('hrTabReviewBtn')?.click()">
+            Open HR Review
+          </button>
         </div>
-        <div id="hrOverviewRecentActivity" class="hr-overview-activity-list">
-          <div class="hr-overview-empty-state">Loading recent activity...</div>
+        <div id="hrOverviewPriorityList" class="hr-overview-priority-list" aria-live="polite" aria-atomic="true">
+          <div class="hr-overview-empty-state">Loading priority work...</div>
         </div>
       </section>
+
+      <section class="hr-overview-panel">
+        <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1C
+               Shared operational heading. Existing People navigation stays unchanged. -->
+        <div class="hr-overview-panel-header hr-card-heading">
+          <div class="hr-card-heading-main">
+            <span class="hr-card-heading-icon hr-card-heading-icon--organisation" aria-hidden="true">
+              <i class="bi bi-diagram-3"></i>
+            </span>
+            <div class="hr-card-heading-copy">
+              <span class="hr-overview-section-kicker">Organisation</span>
+              <h3>Department snapshot</h3>
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-primary"
+            onclick="document.getElementById('hrTabEmployeesBtn')?.click()">
+            View People
+          </button>
+        </div>
+        <div id="hrOverviewDepartmentList" class="hr-overview-department-list">
+          <div class="hr-overview-empty-state">Loading departments...</div>
+        </div>
+      </section>
+    </div>
+
+    <section class="hr-overview-panel hr-overview-activity-panel mb-4">
+      <!-- PLATFORM CARD HEADER CONSISTENCY - STEP 1D
+             Shared operational heading. Live data status remains unchanged. -->
+      <div class="hr-overview-panel-header hr-card-heading">
+        <div class="hr-card-heading-main">
+          <span class="hr-card-heading-icon hr-card-heading-icon--activity" aria-hidden="true">
+            <i class="bi bi-clock-history"></i>
+          </span>
+          <div class="hr-card-heading-copy">
+            <span class="hr-overview-section-kicker">Audit visibility</span>
+            <h3>Recent activity</h3>
+          </div>
+        </div>
+        <span class="hr-overview-live-badge"><span></span> Live workspace data</span>
+      </div>
+      <div id="hrOverviewRecentActivity" class="hr-overview-activity-list">
+        <div class="hr-overview-empty-state">Loading recent activity...</div>
+      </div>
+    </section>
     </section>
 
     <section id="hrProfileSection" class="workspace-section d-none">
@@ -588,7 +697,8 @@
               <div class="hr-profile-eyebrow">My account</div>
               <h2 class="section-heading h4 mb-1">My Profile</h2>
               <p class="section-subtext mb-0">
-                Keep your personal profile accurate while system-controlled role and department details remain protected.
+                Keep your personal profile accurate while system-controlled role and department details remain
+                protected.
               </p>
             </div>
 
@@ -631,15 +741,25 @@
                   <i class="bi bi-camera hr-profile-photo-icon" aria-hidden="true"></i>
                 </div>
 
-                <input type="file" id="hrProfileImageInput" class="form-control"
-                  accept=".png,.jpg,.jpeg,.webp" />
+                <input type="file" id="hrProfileImageInput" class="form-control" accept=".png,.jpg,.jpeg,.webp" />
 
                 <!-- ADMIN UI CLEANUP - STEP 1D-HR PARITY
                      Keep upload grey/disabled until a valid image file is selected. -->
-                <button type="button" id="saveHrProfileImageBtn"
-                  class="btn btn-secondary dashboard-action-btn mt-2" disabled>
+                <button type="button" id="saveHrProfileImageBtn" class="btn btn-secondary dashboard-action-btn mt-2"
+                  disabled>
                   <i class="bi bi-cloud-arrow-up me-2"></i>Upload Photo
                 </button>
+
+                <!-- HR PROFILE IMAGE REMOVAL - v1.0.0
+     Mirrors the browser-verified Manager profile-photo behaviour.
+     The control is disabled unless the signed-in HR profile has a
+     stored profile_image_path. No employee, tenant or role data is changed. -->
+                <button type="button" id="removeHrProfileImageBtn"
+                  class="btn btn-outline-danger dashboard-action-btn mt-2" disabled>
+                  <i class="bi bi-trash3 me-2" aria-hidden="true"></i>
+                  Remove Picture
+                </button>
+
               </div>
             </aside>
 
@@ -649,7 +769,8 @@
                   <div class="hr-profile-eyebrow">Account details</div>
                   <h3 class="h5 fw-bold mb-1">Personal information</h3>
                   <p class="text-secondary small mb-0">
-                    Your email, role, and department are shown for reference. Only your name can be edited here.
+                    Your account details are shown for reference. Employee identity is maintained from the People
+                    record.
                   </p>
                 </div>
 
@@ -660,12 +781,20 @@
 
               <form id="hrProfileForm" novalidate>
                 <div class="row g-3 g-xl-4">
+                  <!-- SYSTEM-WIDE EMPLOYEE IDENTITY AUTHORITY - v1.0.0
+     Employee first/middle/last name is maintained in the HR People record.
+     My Profile displays the synchronised account name but does not create
+     a second editable source of employee identity. -->
                   <div class="col-md-6">
                     <label for="hrProfileFullName" class="form-label fw-semibold">
-                      Full Name <span class="text-danger">*</span>
+                      Full Name
                     </label>
-                    <input type="text" id="hrProfileFullName" class="form-control"
-                      placeholder="Enter your full name" required />
+
+                    <input type="text" id="hrProfileFullName" class="form-control bg-light" readonly />
+
+                    <div class="form-text">
+                      Your name is maintained from your HR employee record.
+                    </div>
                   </div>
 
                   <div class="col-md-6">
@@ -687,13 +816,12 @@
                 <div class="hr-profile-form-footer">
                   <div class="hr-profile-system-note">
                     <i class="bi bi-lock"></i>
-                    <span>Role and department are managed by authorised administrators.</span>
+                    <span>Name, role, and department are managed from authorised HR records.</span>
                   </div>
 
                   <!-- DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
                        Save remains disabled until HR changes an editable profile value. -->
-                  <button type="submit" id="saveHrProfileBtn"
-                    class="btn btn-secondary dashboard-action-btn" disabled>
+                  <button type="submit" id="saveHrProfileBtn" class="btn btn-secondary dashboard-action-btn" disabled>
                     <i class="bi bi-save me-2"></i>
                     <span id="saveHrProfileBtnText">Save Profile Changes</span>
                   </button>
@@ -787,7 +915,8 @@
       <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
            Real HR review queue for correction requests submitted from Employee Self Service.
            This step is read-only: HR can see requests before approve/reject actions are wired. -->
-      <section class="card dashboard-section-card hr-review-operational-card hr-review-profile-card mb-4" id="profileCorrectionRequestsCard">
+      <section class="card dashboard-section-card hr-review-operational-card hr-review-profile-card mb-4"
+        id="profileCorrectionRequestsCard">
         <div class="card-body p-4 p-lg-5">
           <!-- HR REVIEW WORKSPACE MODERNISATION - STEP 2
                Profile correction card now follows the shared platform heading system.
@@ -814,8 +943,7 @@
                 Refresh Requests
               </button>
 
-              <select id="profileCorrectionRequestsViewFilter"
-                class="form-select hr-review-filter-select"
+              <select id="profileCorrectionRequestsViewFilter" class="form-select hr-review-filter-select"
                 aria-label="Filter profile correction requests">
                 <option value="open" selected>Open Only</option>
                 <option value="all">All Requests</option>
@@ -871,8 +999,7 @@
             <!-- HR REVIEW QUEUE REFINEMENT - STEP 1
                  Keep lifecycle help available without letting it dominate the queue.
                  Native details/summary preserves accessibility and needs no new workflow handler. -->
-            <details id="profileCorrectionLifecycleGuidance"
-              class="hr-review-guidance-disclosure mb-4">
+            <details id="profileCorrectionLifecycleGuidance" class="hr-review-guidance-disclosure mb-4">
               <summary>
                 <span class="hr-review-guidance-summary-icon" aria-hidden="true">
                   <i class="bi bi-signpost-split"></i>
@@ -917,7 +1044,8 @@
               No profile correction requests have been submitted yet.
             </div>
 
-            <div id="profileCorrectionRequestsTableWrapper" class="dashboard-table-wrap table-responsive hr-review-table-wrap d-none"
+            <div id="profileCorrectionRequestsTableWrapper"
+              class="dashboard-table-wrap table-responsive hr-review-table-wrap d-none"
               style="max-height: 460px; overflow-y: auto;">
               <table class="table align-middle mb-0">
                 <thead>
@@ -941,7 +1069,8 @@
            HR should not rely on managers manually reporting normal leave decisions.
            This panel gives HR a central view of manager-approved, rejected,
            and returned leave requests using the existing leave_requests audit fields. -->
-      <section class="card dashboard-section-card hr-review-operational-card hr-review-leave-card mb-4" id="recentManagerLeaveDecisionsCard">
+      <section class="card dashboard-section-card hr-review-operational-card hr-review-leave-card mb-4"
+        id="recentManagerLeaveDecisionsCard">
         <div class="card-body p-4 p-lg-5">
           <!-- HR REVIEW WORKSPACE MODERNISATION - STEP 3
                Manager decision card now follows the shared platform heading system.
@@ -1006,7 +1135,8 @@
               <span class="hr-review-summary-icon" aria-hidden="true"><i class="bi bi-clock-history"></i></span>
               <div>
                 <span class="hr-review-summary-label">Latest Decision</span>
-                <strong class="hr-review-summary-value hr-review-summary-value--date" id="managerLeaveDecisionLatestValue">--</strong>
+                <strong class="hr-review-summary-value hr-review-summary-value--date"
+                  id="managerLeaveDecisionLatestValue">--</strong>
               </div>
             </article>
           </div>
@@ -1038,7 +1168,8 @@
                  - horizontal scroll remains available only on smaller screens;
                  - existing tbody ID stays unchanged for current JavaScript wiring. -->
             <div class="dashboard-table-hint">Swipe to view more →</div>
-            <div id="managerLeaveDecisionsTableWrapper" class="dashboard-table-wrap table-responsive hr-review-table-wrap d-none"
+            <div id="managerLeaveDecisionsTableWrapper"
+              class="dashboard-table-wrap table-responsive hr-review-table-wrap d-none"
               style="max-height: 340px; overflow-y: auto; overflow-x: auto;">
               <!-- HR APPROVED LEAVE CANCELLATION UI - STEP 1A
      Add one controlled Action column for HR-only approved-leave cancellation.
@@ -1506,112 +1637,103 @@
               </div>
             </div>
 
-              <!-- COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
+            <!-- COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
                    Hidden by default. JavaScript reveals and loads it only for an
                    active HR profile with hr_access_level = tenant_admin.
                    The protected RPC remains the tenant-isolation authority. -->
-              <hr class="my-5" />
+            <hr class="my-5" />
 
-              <section id="companyAdminAuditHistorySection"
-                class="company-admin-audit-panel d-none"
-                aria-labelledby="companyAdminAuditHistoryTitle">
-                <div class="hr-card-heading company-admin-audit-heading mb-4">
-                  <div class="hr-card-heading-main">
-                    <span class="hr-card-heading-icon company-admin-audit-heading-icon"
-                      aria-hidden="true">
-                      <i class="bi bi-shield-lock"></i>
-                    </span>
+            <section id="companyAdminAuditHistorySection" class="company-admin-audit-panel d-none"
+              aria-labelledby="companyAdminAuditHistoryTitle">
+              <div class="hr-card-heading company-admin-audit-heading mb-4">
+                <div class="hr-card-heading-main">
+                  <span class="hr-card-heading-icon company-admin-audit-heading-icon" aria-hidden="true">
+                    <i class="bi bi-shield-lock"></i>
+                  </span>
 
-                    <div class="hr-card-heading-copy">
-                      <span class="hr-setup-card-kicker">Company governance</span>
-                      <h3 id="companyAdminAuditHistoryTitle"
-                        class="section-heading h5 mb-1">
-                        Administrative Audit History
-                      </h3>
-                      <p class="section-subtext mb-0">
-                        Review read-only Company Administration and HR-access changes
-                        recorded for this company.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div class="company-admin-audit-heading-actions">
-                    <span class="company-admin-audit-readonly-chip">
-                      <i class="bi bi-lock-fill" aria-hidden="true"></i>
-                      Read only
-                    </span>
-
-                    <button type="button" id="refreshCompanyAdminAuditHistoryBtn"
-                      class="btn btn-outline-primary dashboard-action-btn">
-                      <i class="bi bi-arrow-clockwise me-2"></i>
-                      Refresh
-                    </button>
-
-                    <button type="button" id="toggleCompanyAdminAuditHistoryBtn"
-                      class="btn btn-outline-secondary dashboard-action-btn"
-                      aria-expanded="true"
-                      aria-controls="companyAdminAuditHistoryCollapse">
-                      <i class="bi bi-chevron-up me-2"></i>
-                      <span>Collapse</span>
-                    </button>
+                  <div class="hr-card-heading-copy">
+                    <span class="hr-setup-card-kicker">Company governance</span>
+                    <h3 id="companyAdminAuditHistoryTitle" class="section-heading h5 mb-1">
+                      Administrative Audit History
+                    </h3>
+                    <p class="section-subtext mb-0">
+                      Review read-only Company Administration and HR-access changes
+                      recorded for this company.
+                    </p>
                   </div>
                 </div>
 
-                <div id="companyAdminAuditHistoryCollapse">
-                  <div class="company-admin-audit-toolbar mb-3">
-                    <div class="company-admin-audit-search">
-                      <label for="companyAdminAuditHistorySearch"
-                        class="form-label fw-semibold mb-2">
-                        Search history
-                      </label>
+                <div class="company-admin-audit-heading-actions">
+                  <span class="company-admin-audit-readonly-chip">
+                    <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                    Read only
+                  </span>
 
-                      <div class="input-group">
-                        <span class="input-group-text" aria-hidden="true">
-                          <i class="bi bi-search"></i>
-                        </span>
-                        <input type="search" id="companyAdminAuditHistorySearch"
-                          class="form-control"
-                          placeholder="Search actor, action, target, or changed field..." />
-                      </div>
+                  <button type="button" id="refreshCompanyAdminAuditHistoryBtn"
+                    class="btn btn-outline-primary dashboard-action-btn">
+                    <i class="bi bi-arrow-clockwise me-2"></i>
+                    Refresh
+                  </button>
+
+                  <button type="button" id="toggleCompanyAdminAuditHistoryBtn"
+                    class="btn btn-outline-secondary dashboard-action-btn" aria-expanded="true"
+                    aria-controls="companyAdminAuditHistoryCollapse">
+                    <i class="bi bi-chevron-up me-2"></i>
+                    <span>Collapse</span>
+                  </button>
+                </div>
+              </div>
+
+              <div id="companyAdminAuditHistoryCollapse">
+                <div class="company-admin-audit-toolbar mb-3">
+                  <div class="company-admin-audit-search">
+                    <label for="companyAdminAuditHistorySearch" class="form-label fw-semibold mb-2">
+                      Search history
+                    </label>
+
+                    <div class="input-group">
+                      <span class="input-group-text" aria-hidden="true">
+                        <i class="bi bi-search"></i>
+                      </span>
+                      <input type="search" id="companyAdminAuditHistorySearch" class="form-control"
+                        placeholder="Search actor, action, target, or changed field..." />
                     </div>
-
-                    <div class="company-admin-audit-count" aria-live="polite">
-                      <span>Events shown</span>
-                      <strong id="companyAdminAuditHistoryCount">0</strong>
-                    </div>
                   </div>
 
-                  <div id="companyAdminAuditHistoryLoading"
-                    class="company-admin-audit-state d-none"
-                    role="status" aria-live="polite">
-                    <span class="spinner-border spinner-border-sm"
-                      aria-hidden="true"></span>
-                    Loading administrative history...
-                  </div>
-
-                  <div id="companyAdminAuditHistoryEmpty"
-                    class="company-admin-audit-state d-none">
-                    No administrative audit events were found for this company.
-                  </div>
-
-                  <div id="companyAdminAuditHistoryTableWrapper"
-                    class="table-responsive company-admin-audit-table-wrapper d-none">
-                    <table class="table align-middle mb-0 company-admin-audit-table">
-                      <thead>
-                        <tr>
-                          <th>Actor</th>
-                          <th>Action</th>
-                          <th>Target</th>
-                          <th>Changes</th>
-                          <th class="text-center">Status</th>
-                          <th>Date &amp; Time</th>
-                        </tr>
-                      </thead>
-                      <tbody id="companyAdminAuditHistoryTableBody"></tbody>
-                    </table>
+                  <div class="company-admin-audit-count" aria-live="polite">
+                    <span>Events shown</span>
+                    <strong id="companyAdminAuditHistoryCount">0</strong>
                   </div>
                 </div>
-              </section>
+
+                <div id="companyAdminAuditHistoryLoading" class="company-admin-audit-state d-none" role="status"
+                  aria-live="polite">
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                  Loading administrative history...
+                </div>
+
+                <div id="companyAdminAuditHistoryEmpty" class="company-admin-audit-state d-none">
+                  No administrative audit events were found for this company.
+                </div>
+
+                <div id="companyAdminAuditHistoryTableWrapper"
+                  class="table-responsive company-admin-audit-table-wrapper d-none">
+                  <table class="table align-middle mb-0 company-admin-audit-table">
+                    <thead>
+                      <tr>
+                        <th>Actor</th>
+                        <th>Action</th>
+                        <th>Target</th>
+                        <th>Changes</th>
+                        <th class="text-center">Status</th>
+                        <th>Date &amp; Time</th>
+                      </tr>
+                    </thead>
+                    <tbody id="companyAdminAuditHistoryTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </section>
@@ -1630,7 +1752,8 @@
                 <span class="hr-people-section-kicker">Bulk onboarding</span>
                 <h2 class="section-heading h4 mb-1">Batch Employee Import</h2>
                 <p class="section-subtext mb-0">
-                  Upload, review, and create multiple employee profiles without blocking rows that only need optional details completed later.
+                  Upload, review, and create multiple employee profiles without blocking rows that only need optional
+                  details completed later.
                 </p>
               </div>
             </div>
@@ -1648,7 +1771,8 @@
             <div class="hr-batch-workflow-connector" aria-hidden="true"></div>
             <div class="hr-batch-workflow-step">
               <span>2</span>
-              <div><strong>Review records</strong><small>Confirm eligible, incomplete, duplicate, and blocked rows.</small></div>
+              <div><strong>Review records</strong><small>Confirm eligible, incomplete, duplicate, and blocked
+                  rows.</small></div>
             </div>
             <div class="hr-batch-workflow-connector" aria-hidden="true"></div>
             <div class="hr-batch-workflow-step">
@@ -1661,16 +1785,19 @@
             <i class="bi bi-info-circle" aria-hidden="true"></i>
             <div>
               <strong>Minimum identity rule</strong>
-              <span>First Name, Last Name, and a valid unique Work Email are required. Department, job title, employment date, and optional biodata can be completed later.</span>
+              <span>First Name, Last Name, and a valid unique Work Email are required. Department, job title, employment
+                date, and optional biodata can be completed later.</span>
             </div>
           </div>
 
           <div id="batchEmployeeCsvImportPanel" class="hr-batch-upload-panel mb-4">
             <div class="hr-batch-upload-copy">
-              <span class="hr-batch-upload-symbol" aria-hidden="true"><i class="bi bi-file-earmark-spreadsheet"></i></span>
+              <span class="hr-batch-upload-symbol" aria-hidden="true"><i
+                  class="bi bi-file-earmark-spreadsheet"></i></span>
               <div>
                 <div class="fw-bold">Employee CSV file</div>
-                <div class="small text-secondary">Use the approved template so column names map safely to employee records.</div>
+                <div class="small text-secondary">Use the approved template so column names map safely to employee
+                  records.</div>
               </div>
             </div>
 
@@ -1681,13 +1808,16 @@
               </div>
 
               <div class="hr-batch-action-row">
-                <button type="button" id="importBatchEmployeesCsvBtn" class="btn btn-secondary dashboard-action-btn" disabled>
+                <button type="button" id="importBatchEmployeesCsvBtn" class="btn btn-secondary dashboard-action-btn"
+                  disabled>
                   <i class="bi bi-upload me-2"></i>Import CSV
                 </button>
-                <button type="button" id="clearBatchEmployeesCsvBtn" class="btn btn-outline-secondary dashboard-action-btn">
+                <button type="button" id="clearBatchEmployeesCsvBtn"
+                  class="btn btn-outline-secondary dashboard-action-btn">
                   <i class="bi bi-x-circle me-2"></i>Clear
                 </button>
-                <button type="button" id="downloadBatchEmployeesCsvTemplateBtn" class="btn btn-outline-primary dashboard-action-btn">
+                <button type="button" id="downloadBatchEmployeesCsvTemplateBtn"
+                  class="btn btn-outline-primary dashboard-action-btn">
                   <i class="bi bi-download me-2"></i>Download Template
                 </button>
               </div>
@@ -1720,7 +1850,8 @@
               <div>
                 <span class="hr-people-section-kicker">Review queue</span>
                 <h3 class="h5 fw-bold mb-1">Batch Employee Review</h3>
-                <p class="small text-secondary mb-0">Every row shown below is eligible to create. Amber notes identify profile details that can be completed later. Duplicate and Blocked rows are excluded.</p>
+                <p class="small text-secondary mb-0">Every row shown below is eligible to create. Amber notes identify
+                  profile details that can be completed later. Duplicate and Blocked rows are excluded.</p>
               </div>
               <div id="batchEmployeeReviewCount" class="badge text-bg-primary rounded-pill px-3 py-2">0 eligible</div>
             </div>
@@ -1743,16 +1874,20 @@
                   </tr>
                 </thead>
                 <tbody id="batchEmployeeReviewTableBody">
-                  <tr><td colspan="8" class="text-center text-secondary py-4">No employee CSV rows imported yet.</td></tr>
+                  <tr>
+                    <td colspan="8" class="text-center text-secondary py-4">No employee CSV rows imported yet.</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
 
             <div class="hr-batch-review-footer">
               <div class="small text-secondary">
-                Eligible rows are created independently, so one failed or duplicate row does not stop the rest of the batch.
+                Eligible rows are created independently, so one failed or duplicate row does not stop the rest of the
+                batch.
               </div>
-              <button type="button" id="submitBatchEmployeesBtn" class="btn btn-primary dashboard-action-btn text-nowrap" disabled>
+              <button type="button" id="submitBatchEmployeesBtn"
+                class="btn btn-primary dashboard-action-btn text-nowrap" disabled>
                 <i class="bi bi-person-plus me-2"></i>Create Eligible Employees
               </button>
             </div>
@@ -1767,7 +1902,8 @@
                role restrictions, document uploads, and Supabase behaviour remain. -->
           <div class="hr-create-employee-header hr-card-heading mb-4">
             <div class="hr-create-employee-heading hr-card-heading-main">
-              <span class="hr-create-employee-icon hr-card-heading-icon hr-card-heading-icon--onboarding" aria-hidden="true">
+              <span class="hr-create-employee-icon hr-card-heading-icon hr-card-heading-icon--onboarding"
+                aria-hidden="true">
                 <i class="bi bi-person-plus"></i>
               </span>
               <div class="hr-card-heading-copy">
@@ -2066,7 +2202,7 @@
                 <div class="col-12">
                   <h3 class="h6 fw-bold mb-2 mt-2">Identity Verification</h3>
                   <p class="text-secondary small mb-0">
-                    Record the employee’s primary means of identification and supporting identity details.
+                    Record the employee's primary means of identification and supporting identity details.
                   </p>
                 </div>
 
@@ -2263,10 +2399,10 @@
      Reporting Lines supports the Product Owner requirement for two or more
      managers while keeping the existing primary Line Manager / Approver Email
      snapshot used by current workflow logic. -->
-                <div class="col-12">
+                <div class="col-12" id="employeeReportingLinesSection">
                   <h3 class="h6 fw-bold mb-2 mt-2">Reporting Lines</h3>
                   <p class="text-secondary small mb-0">
-                    Assign the employee’s primary manager and any additional reporting managers.
+                    Assign the employee's primary manager and any additional reporting managers.
                   </p>
                 </div>
 
@@ -2281,7 +2417,7 @@
                     <option value="">Select primary line manager</option>
                   </select>
                   <div class="form-text">
-                    Select the employee’s main reporting manager.
+                    Select the employee's main reporting manager.
                   </div>
                 </div>
 
@@ -2392,10 +2528,10 @@
                   </label>
 
                   <select id="systemRole" class="form-select">
-                    <option value="">Select role (optional)</option>
+                    <option value="">Select role</option>
                     <option value="employee">Employee</option>
                     <option value="manager">Manager</option>
-                    <!-- HR Officer is injected by JavaScript only for Company Admins. -->
+                    <!-- HR Standard is injected by JavaScript only for Company Admins. -->
                     <!-- <option value="custom">Other / Add new role</option> -->
                   </select>
 
@@ -2403,7 +2539,8 @@
                     placeholder="Enter new system role" autocomplete="off" />
 
                   <div class="form-text">
-                    Employee and Manager are standard dashboard roles. Company Admins can also assign HR Officer access.
+                    Employee is the default dashboard role. Company Admins can also assign Manager or HR Standard
+                    access.
                   </div>
 
                   <div id="employeeCompanyAdminAccess" class="d-none mt-3" aria-live="polite">
@@ -2424,10 +2561,10 @@
                     <div class="d-flex align-items-start gap-2">
                       <i class="bi bi-shield-lock-fill mt-1"></i>
                       <div>
-                        <div class="fw-bold mb-1">HR access protected</div>
+                        <div class="fw-bold mb-1">Protected access</div>
                         <div class="small">
-                          You cannot change your own dashboard access.
-                          HR Officer access can only be changed by a Company Admin.
+                          You can continue updating employee details and reporting managers.
+                          HR Standard access can only be granted, changed, or removed by an HR Admin.
                         </div>
                       </div>
                     </div>
@@ -2439,16 +2576,17 @@
                       <i class="bi bi-exclamation-triangle-fill mt-1"></i>
 
                       <div>
-                        <div class="fw-bold mb-1">Grant HR Officer access</div>
+                        <div class="fw-bold mb-1">Grant HR Standard access</div>
                         <div class="small">
-                          This gives the employee standard HR Officer access for day-to-day HR operations in this company.
+                          This gives the employee HR Standard access for day-to-day HR operations in this
+                          company.
                           It does not grant Company Admin or BexHR Platform Admin permissions.
                         </div>
 
                         <div class="form-check mt-3">
                           <input class="form-check-input" type="checkbox" id="confirmHrRoleAssignment" />
                           <label class="form-check-label small fw-semibold" for="confirmHrRoleAssignment">
-                            I confirm this employee is authorised to perform HR Officer duties for this company.
+                            I confirm this employee is authorised to perform HR Standard duties for this company.
                           </label>
                         </div>
                       </div>
@@ -2575,7 +2713,7 @@
                 <div class="col-12">
                   <h3 class="h6 fw-bold mb-2 mt-2">Address Details</h3>
                   <p class="text-secondary small mb-0">
-                    Capture the employee’s current residential address and permanent/home address.
+                    Capture the employee's current residential address and permanent/home address.
                   </p>
                 </div>
 
@@ -2771,7 +2909,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                 <div class="col-12">
                   <h3 class="h6 fw-bold mb-2 mt-2">Education / Academic Qualifications</h3>
                   <p class="text-secondary small mb-0">
-                    Enter the employee’s qualification details here. Upload certificates, transcripts, or WAEC/NECO
+                    Enter the employee's qualification details here. Upload certificates, transcripts, or WAEC/NECO
                     evidence under Supporting Documents below.
                   </p>
                 </div>
@@ -2931,125 +3069,152 @@ Disable browser address autofill popup on HR employee address fields. -->
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  <!-- EMPLOYEE BIODATA COMPLETION - STEP 6C-3C
+                <!-- EMPLOYEE BIODATA COMPLETION - STEP 6C-3C
      Supporting Documents are employee evidence files.
      The selected Document Type should match the uploaded file name. -->
-                  <div class="col-12">
-                    <h3 class="h6 fw-bold mb-2 mt-2">Supporting Documents</h3>
-                    <p class="text-secondary small mb-0">
-                      Upload employee evidence files here. Select the correct Document Type before choosing files, for
-                      example Degree Certificate, WAEC / NECO, CV / Resume, Birth Certificate, or National ID.
-                    </p>
-                  </div>
+                <div class="col-12">
+                  <h3 class="h6 fw-bold mb-2 mt-2">Supporting Documents</h3>
+                  <p class="text-secondary small mb-0">
+                    Upload employee evidence files here. Select the correct Document Type before choosing files, for
+                    example Degree Certificate, WAEC / NECO, CV / Resume, Birth Certificate, or National ID.
+                  </p>
+                </div>
 
-                  <div class="col-12">
-                    <div class="border rounded-4 p-3 p-lg-4">
-                      <!-- =========================================================
+                <div class="col-12">
+                  <div class="border rounded-4 p-3 p-lg-4">
+                    <!-- =========================================================
      UI POLISH
      Keep file input and Clear Pending Files button inline.
      Helper text now sits below both controls instead of
      pushing the button lower than the input row.
 ========================================================== -->
-                      <div class="row g-3 align-items-center">
-                        <!-- DESCRIPTION ITEM 10 - STEP 1
+                    <div class="row g-3 align-items-center">
+                      <!-- DESCRIPTION ITEM 10 - STEP 1
        Add a document type selector so HR can classify each upload
        before the file is submitted and saved. -->
-                        <div class="col-lg-5">
-                          <label for="employeeDocumentsInput" class="form-label fw-semibold">
-                            Attach Supporting Documents
-                          </label>
-                          <input type="file" id="employeeDocumentsInput" class="form-control" multiple
-                            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" />
-                        </div>
+                      <div class="col-lg-5">
+                        <label for="employeeDocumentsInput" class="form-label fw-semibold">
+                          Attach Supporting Documents
+                        </label>
+                        <input type="file" id="employeeDocumentsInput" class="form-control" multiple
+                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" />
+                      </div>
 
-                        <div class="col-lg-4">
-                          <label for="employeeDocumentType" class="form-label fw-semibold">
-                            Document Type
-                          </label>
-                          <select id="employeeDocumentType" class="form-select">
-                            <option value="">Select document type</option>
-                            <option value="Birth Certificate">Birth Certificate</option>
-                            <option value="State of Origin">State of Origin</option>
-                            <option value="WAEC / NECO">WAEC / NECO</option>
-                            <option value="NYSC Certificate">NYSC Certificate</option>
-                            <option value="Degree Certificate">Degree Certificate</option>
-                            <option value="CV / Resume">CV / Resume</option>
-                            <option value="National ID">National ID</option>
-                            <option value="International Passport">International Passport</option>
-                            <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 2C
+                      <div class="col-lg-4">
+                        <label for="employeeDocumentType" class="form-label fw-semibold">
+                          Document Type
+                        </label>
+                        <select id="employeeDocumentType" class="form-select">
+                          <option value="">Select document type</option>
+                          <option value="Birth Certificate">Birth Certificate</option>
+                          <option value="State of Origin">State of Origin</option>
+                          <option value="WAEC / NECO">WAEC / NECO</option>
+                          <option value="NYSC Certificate">NYSC Certificate</option>
+                          <option value="Degree Certificate">Degree Certificate</option>
+                          <option value="CV / Resume">CV / Resume</option>
+                          <option value="National ID">National ID</option>
+                          <option value="International Passport">International Passport</option>
+                          <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 2C
                                  Add identity evidence types that match the new
                                  Means of Identification options. JavaScript
                                  filename restriction will be extended later. -->
-                            <option value="Driver's Licence">Driver's Licence</option>
-                            <option value="Voter's Card / PVC">Voter's Card / PVC</option>
-                            <option value="Offer Letter">Offer Letter</option>
-                            <option value="Employment Contract">Employment Contract</option>
-                            <option value="Other">Other</option>
-                          </select>
-                        </div>
-
-                        <div class="col-lg-3">
-                          <label class="form-label fw-semibold d-block opacity-0">
-                            Action
-                          </label>
-                          <button type="button" id="clearPendingDocumentsBtn"
-                            class="btn btn-outline-secondary dashboard-action-btn w-100 text-nowrap">
-                            <i class="bi bi-trash me-2"></i>Clear Pending Files
-                          </button>
-                        </div>
-
-                        <div class="col-12">
-                          <div class="form-text">
-                            Allowed: PDF, DOC, DOCX, PNG, JPG, JPEG. Maximum file size: 10MB per file.
-                          </div>
-                        </div>
+                          <option value="Driver's Licence">Driver's Licence</option>
+                          <option value="Voter's Card / PVC">Voter's Card / PVC</option>
+                          <option value="Offer Letter">Offer Letter</option>
+                          <option value="Employment Contract">Employment Contract</option>
+                          <option value="Other">Other</option>
+                        </select>
                       </div>
 
-                      <div class="mt-4">
-                        <div class="fw-semibold mb-2">Pending Uploads</div>
-                        <div class="text-secondary small mb-2">
-                          Files selected here are not saved yet. Click
-                          <strong>Create Employee Profile</strong> or
-                          <strong>Update Employee Profile</strong> to upload them.
-                        </div>
-                        <div id="pendingDocumentsEmptyState" class="text-secondary small">
-                          No files selected yet.
-                        </div>
-                        <div id="pendingDocumentsList" class="list-group d-none"></div>
+                      <div class="col-lg-3">
+                        <label class="form-label fw-semibold d-block opacity-0">
+                          Action
+                        </label>
+                        <button type="button" id="clearPendingDocumentsBtn"
+                          class="btn btn-outline-secondary dashboard-action-btn w-100 text-nowrap">
+                          <i class="bi bi-trash me-2"></i>Clear Pending Files
+                        </button>
+                      </div>
 
-                        <hr class="my-4" />
-
-                        <div>
-                          <div class="fw-semibold mb-2">Attached Documents (Saved)</div>
-                          <div class="text-secondary small mb-2">
-                            Saved employee documents appear here after a successful create or update.
-                          </div>
-                          <div id="attachedDocumentsEmptyState" class="text-secondary small">
-                            No uploaded documents saved for this employee yet.
-                          </div>
-                          <div id="attachedDocumentsList" class="list-group d-none"></div>
+                      <div class="col-12">
+                        <div class="form-text">
+                          Allowed: PDF, DOC, DOCX, PNG, JPG, JPEG. Maximum file size: 10MB per file.
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div class="col-12">
-                    <div class="hr-create-employee-submit-bar">
-                      <div class="hr-create-employee-submit-copy">
-                        <strong>Ready to save?</strong>
-                        <span>Required identity fields must be complete. Optional sections can be updated later.</span>
+                    <div class="mt-4">
+                      <div class="fw-semibold mb-2">Pending Uploads</div>
+                      <div class="text-secondary small mb-2">
+                        Files selected here are not saved yet. Click
+                        <strong>Create Employee Profile</strong> or
+                        <strong>Update Employee Profile</strong> to upload them.
                       </div>
+                      <div id="pendingDocumentsEmptyState" class="text-secondary small">
+                        No files selected yet.
+                      </div>
+                      <div id="pendingDocumentsList" class="list-group d-none"></div>
 
-                      <!-- EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1D FIX
-                           Existing readiness and save behaviour remain unchanged. -->
-                      <button type="submit" id="saveEmployeeBtn" class="btn btn-secondary dashboard-action-btn" disabled>
-                        <i class="bi bi-person-plus me-2"></i>
-                        <span id="saveEmployeeBtnText">Create Employee Profile</span>
-                      </button>
+                      <hr class="my-4" />
+
+                      <div>
+                        <div class="fw-semibold mb-2">Attached Documents (Saved)</div>
+                        <div class="text-secondary small mb-2">
+                          Saved employee documents appear here after a successful create or update.
+                        </div>
+                        <div id="attachedDocumentsEmptyState" class="text-secondary small">
+                          No uploaded documents saved for this employee yet.
+                        </div>
+                        <div id="attachedDocumentsList" class="list-group d-none"></div>
+                      </div>
                     </div>
                   </div>
                 </div>
+
+                <div class="col-12 hr-create-employee-submit-wrap">
+                  <div class="hr-create-employee-submit-bar">
+                    <div class="hr-create-employee-submit-copy">
+                      <strong>Ready to save?</strong>
+                      <span>Required identity fields must be complete. Optional sections can be updated later.</span>
+                      <!-- =====================================================
+     EMPLOYEE REPORTING-LINE READINESS FEEDBACK - v1.0.0
+
+     Shared across every tenant.
+
+     This explains why Update Employee Profile may remain
+     disabled when a saved/additional reporting manager is
+     incomplete or is no longer eligible as a manager.
+
+     Validation and reporting-line data are unchanged.
+     ===================================================== -->
+                      <div id="employeeReportingLineAttention" class="alert alert-warning d-none mt-3 mb-0"
+                        role="status" aria-live="polite">
+                        <div class="d-flex align-items-start gap-2">
+                          <i class="bi bi-exclamation-triangle-fill mt-1" aria-hidden="true"></i>
+
+                          <div>
+                            <strong class="d-block">Reporting line requires attention</strong>
+
+                            <span class="small">
+                              A reporting manager is incomplete or is no longer eligible as a manager.
+                              Open Reporting and remove or replace the affected manager before saving.
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1D FIX
+                           Existing readiness and save behaviour remain unchanged. -->
+                    <button type="submit" id="saveEmployeeBtn" class="btn btn-secondary dashboard-action-btn" disabled>
+                      <i class="bi bi-person-plus me-2"></i>
+                      <span id="saveEmployeeBtnText">Create Employee Profile</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </form>
 
             <!-- DESCRIPTION ITEM 1 - BREAK FIX
@@ -3119,9 +3284,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                 <label for="employeeSearchInput" class="form-label fw-semibold mb-2">
                   Search employee list
                 </label>
-                <input type="search" id="employeeSearchInput" class="form-control"
-                  name="bexhrEmployeeDirectorySearch" autocomplete="off" autocapitalize="none"
-                  spellcheck="false" enterkeyhint="search"
+                <input type="search" id="employeeSearchInput" class="form-control" name="bexhrEmployeeDirectorySearch"
+                  autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="search"
                   placeholder="Search by employee ID, name, email, department..." />
               </div>
             </div>
@@ -3235,8 +3399,7 @@ Disable browser address autofill popup on HR employee address fields. -->
          counters, filters, refresh buttons, collapse behaviour, and Supabase
          loading logic remain intact. -->
     <section id="hrReviewSection" class="workspace-section d-none">
-      <section id="hrReviewLandingCard"
-        class="card dashboard-section-card hr-review-landing-card mb-4"
+      <section id="hrReviewLandingCard" class="card dashboard-section-card hr-review-landing-card mb-4"
         aria-labelledby="hrReviewLandingTitle">
         <div class="card-body p-4 p-lg-5">
           <!-- HR REVIEW OVERVIEW SIMPLIFICATION - STEP 1
@@ -3680,7 +3843,8 @@ Disable browser address autofill popup on HR employee address fields. -->
               <span class="hr-payroll-summary-icon" aria-hidden="true"><i class="bi bi-wallet2"></i></span>
               <div>
                 <span class="hr-payroll-summary-label">Gross total shown</span>
-                <strong class="hr-payroll-summary-value hr-payroll-summary-value--financial" id="payrollGrossTotalValue">NGN 0.00</strong>
+                <strong class="hr-payroll-summary-value hr-payroll-summary-value--financial"
+                  id="payrollGrossTotalValue">NGN 0.00</strong>
                 <span class="hr-payroll-summary-detail">Combined gross pay for records shown</span>
               </div>
             </article>
@@ -3689,7 +3853,8 @@ Disable browser address autofill popup on HR employee address fields. -->
               <span class="hr-payroll-summary-icon" aria-hidden="true"><i class="bi bi-currency-exchange"></i></span>
               <div>
                 <span class="hr-payroll-summary-label">Net payable shown</span>
-                <strong class="hr-payroll-summary-value hr-payroll-summary-value--financial" id="payrollNetTotalValue">NGN 0.00</strong>
+                <strong class="hr-payroll-summary-value hr-payroll-summary-value--financial"
+                  id="payrollNetTotalValue">NGN 0.00</strong>
                 <span class="hr-payroll-summary-detail">Combined net pay for records shown</span>
               </div>
             </article>
@@ -4037,25 +4202,44 @@ Disable browser address autofill popup on HR employee address fields. -->
           <!-- PAYROLL WORKSPACE MODERNISATION - STEP 2
                Shared icon-led salary setup heading. Existing collapse, form, save,
                edit, refresh, and Supabase IDs remain unchanged. -->
-          <div class="hr-card-heading hr-payroll-card-heading mb-4">
-            <div class="hr-card-heading-main">
+          <!-- EMPLOYEE SALARY SETUP HEADER POLISH - v1.0.0
+               Keep the existing IDs and collapse behaviour.
+               This only repairs the header layout and prevents the action
+               button from becoming a tall stacked box. -->
+          <div
+            class="hr-card-heading hr-payroll-card-heading mb-4
+                   d-flex flex-column flex-lg-row
+                   justify-content-between align-items-lg-start gap-3"
+          >
+            <div class="hr-card-heading-main flex-grow-1">
               <span class="hr-card-heading-icon hr-card-heading-icon--salary" aria-hidden="true">
                 <i class="bi bi-person-vcard"></i>
               </span>
 
               <div class="hr-card-heading-copy">
                 <span class="hr-payroll-section-kicker">Salary configuration</span>
-                <h2 class="section-heading h4 mb-1">Employee Salary Setup</h2>
+
+                <h2 class="section-heading h4 mb-1">
+                  Employee Salary Setup
+                </h2>
+
                 <p class="section-subtext mb-0">
-                  Set up each employee’s monthly salary, pay cycle, effective date, and payroll status before running payroll.
+                  Set up each employee's monthly salary, pay cycle,
+                  effective date, and payroll status before running payroll.
                 </p>
               </div>
             </div>
 
-            <button type="button" id="togglePayrollMasterCardBtn"
-              class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
-              aria-controls="payrollMasterCardCollapse">
-              <i class="bi bi-chevron-up me-2"></i>
+            <button
+              type="button"
+              id="togglePayrollMasterCardBtn"
+              class="btn btn-outline-secondary dashboard-action-btn
+                     text-nowrap d-inline-flex align-items-center
+                     justify-content-center flex-shrink-0 align-self-start"
+              aria-expanded="true"
+              aria-controls="payrollMasterCardCollapse"
+            >
+              <i class="bi bi-chevron-up me-2" aria-hidden="true"></i>
               <span>Collapse</span>
             </button>
           </div>
@@ -4130,7 +4314,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                   <input type="number" id="payrollMasterBasicSalary" class="form-control" step="0.01" min="0"
                     placeholder="Enter agreed monthly gross salary" required />
                   <div class="form-text">
-                    This is the employee’s agreed monthly salary package before the system splits it into Basic Pay and
+                    This is the employee's agreed monthly salary package before the system splits it into Basic Pay and
                     allowances.
                   </div>
                 </div>
@@ -4213,7 +4397,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                  Keep the records contained inside this card and remove the
                  duplicate payrollMasterRecordsTableWrapper that could confuse
                  document.getElementById() and table rendering. -->
-            <div id="payrollMasterRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none hr-payroll-table-wrap hr-payroll-salary-records-wrap"
+            <div id="payrollMasterRecordsTableWrapper"
+              class="dashboard-table-wrap table-responsive d-none hr-payroll-table-wrap hr-payroll-salary-records-wrap"
               style="max-height: 420px; overflow: auto; overscroll-behavior: contain;">
               <table class="table align-middle mb-0 hr-payroll-records-table">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
@@ -5226,7 +5411,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                 <span class="hr-payroll-section-kicker">Payroll processing</span>
                 <h2 class="section-heading h4 mb-1" id="payrollFormTitle">Finalise Payroll &amp; Payslips</h2>
                 <p class="section-subtext mb-0" id="payrollFormSubtext">
-                  Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.
+                  Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are
+                  sent separately after payroll records are finalised.
                 </p>
               </div>
             </div>
@@ -5266,11 +5452,11 @@ Disable browser address autofill popup on HR employee address fields. -->
               </button>
             </div>
 
-            <!-- BATCH PAYROLL CSV IMPORT - STEP 1
-     Upload area for Alpatech-format CSV files.
-     This step adds the UI only. Parsing and payroll record creation
-     will be wired in the next step so we do not disturb existing batch payroll. -->
-            <div id="batchPayrollCsvImportPanel" class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4 hr-payroll-subpanel hr-payroll-import-panel">
+            <!-- ALPATECH PAYROLL TENANT ISOLATION - STEP 2
+     Hidden by default. JavaScript reveals this operational panel
+     only after the current workspace is confirmed as Alpatech. -->
+            <div id="batchPayrollCsvImportPanel"
+              class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4 hr-payroll-subpanel hr-payroll-import-panel d-none">
               <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
                 <div>
                   <div class="fw-bold">Batch Payroll CSV Import</div>
@@ -5325,7 +5511,8 @@ Disable browser address autofill popup on HR employee address fields. -->
      This panel becomes the default Run Payroll review area.
      It shows selected active employees in a table before any payroll
      calculation or submission is performed. -->
-            <div id="batchPayrollReviewPanel" class="alert alert-light border d-none mb-4 hr-payroll-subpanel hr-payroll-batch-review-panel">
+            <div id="batchPayrollReviewPanel"
+              class="alert alert-light border d-none mb-4 hr-payroll-subpanel hr-payroll-batch-review-panel">
               <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
                 <div>
                   <!-- PAYROLL WORKFLOW UX REPAIR - STEP 5B
@@ -5360,8 +5547,11 @@ Disable browser address autofill popup on HR employee address fields. -->
                     </div>
                   </div>
 
-                  <span class="badge rounded-pill text-bg-light border px-3 py-2">
-                    Required before submit
+                  <!-- HR PAYROLL STATUS CHIP REFRESH - v1.0.1
+     Static requirement indicator using the shared BexHR pill language. -->
+                  <span class="bexhr-status-pill bexhr-status-pill--warning">
+                    <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
+                    <span>Required before submit</span>
                   </span>
                 </div>
 
@@ -5503,7 +5693,8 @@ Disable browser address autofill popup on HR employee address fields. -->
        Read-only employee reference panel for payroll.
        This makes it clear payroll is consuming employee data from HR,
        not maintaining a separate employee record. -->
-                  <div id="payrollSelectedEmployeeReference" class="border rounded-4 p-3 p-lg-4 bg-light-subtle hr-payroll-subpanel hr-payroll-employee-reference">
+                  <div id="payrollSelectedEmployeeReference"
+                    class="border rounded-4 p-3 p-lg-4 bg-light-subtle hr-payroll-subpanel hr-payroll-employee-reference">
                     <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
                       <div>
                         <h3 class="h6 fw-bold mb-1">Selected Employee Reference</h3>
@@ -5833,7 +6024,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                     <input type="number" id="payrollPayeTax" class="form-control" step="0.01" min="0" />
 
                     <div id="payrollPayeTaxNote" class="form-text text-success fw-semibold d-none">
-                      PAYE is NGN 0.00 because the employee’s annual chargeable income is within the NTA 2025 tax-free
+                      PAYE is NGN 0.00 because the employee's annual chargeable income is within the NTA 2025 tax-free
                       band.
                     </div>
                   </div>
@@ -6049,7 +6240,8 @@ Disable browser address autofill popup on HR employee address fields. -->
      Add breathing space between the payroll action toolbar and the
      Payroll Records table so the records area does not visually touch
      the filter/action card. -->
-              <div id="payrollRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none mt-3 hr-payroll-table-wrap hr-payroll-main-records-wrap"
+              <div id="payrollRecordsTableWrapper"
+                class="dashboard-table-wrap table-responsive d-none mt-3 hr-payroll-table-wrap hr-payroll-main-records-wrap"
                 style="max-height: 620px; overflow-y: auto;">
                 <table class="table align-middle mb-0 hr-payroll-records-table">
                   <!-- DESCRIPTION ITEM 4 - STEP 5C
@@ -6159,7 +6351,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                       <div class="hr-payroll-email-status-guidance">
                         <i class="bi bi-info-circle" aria-hidden="true"></i>
                         <span>
-                          Status loads automatically when this panel opens. Use Refresh Status only for the latest provider result.
+                          Status loads automatically when this panel opens. Use Refresh Status only for the latest
+                          provider result.
                         </span>
                       </div>
 
@@ -6259,7 +6452,7 @@ Disable browser address autofill popup on HR employee address fields. -->
         </div>
       </section>
 
-      <!-- ── Leave Sub-Section ── -->
+      <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Leave Sub-Section Ã¢â€â‚¬Ã¢â€â‚¬ -->
       <div id="ssLeaveSection">
 
         <!-- Leave Balances -->
@@ -6273,22 +6466,12 @@ Disable browser address autofill popup on HR employee address fields. -->
                 <div class="hr-card-heading-copy">
                   <span class="hr-self-service-kicker">Leave availability</span>
                   <h2 class="section-heading h4 mb-1">Leave Balances</h2>
-                <p class="section-subtext mb-0">Your leave entitlement, used days, and remaining balance by leave type.
-                </p>
+                  <p class="section-subtext mb-0">Your leave entitlement, used days, and remaining balance by leave
+                    type.
+                  </p>
                 </div>
               </div>
               <div class="hr-self-service-card-toolbar">
-                <!-- HR SELF-SERVICE LEAVE PARITY - STEP 1C-2
-                   Leave is now reachable from Payroll, so Payroll must also be
-                   reachable from Leave without forcing HR to refresh or scroll
-                   back to the hidden inner switcher. -->
-                <button type="button" id="ssGoToPayrollFromLeaveBtn"
-                  class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
-                  aria-label="Open payroll" title="Open payroll">
-                  <i class="bi bi-cash-coin me-2"></i>
-                  Payroll
-                </button>
-
                 <button type="button" id="ssToggleLeaveBalancesCardBtn"
                   class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
                   aria-expanded="false" aria-controls="ssLeaveBalancesCardCollapse" title="Expand leave balances">
@@ -6304,7 +6487,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                   <i class="bi bi-arrow-clockwise me-2"></i>Refresh Balances
                 </button>
               </div>
-              <div id="ssLeaveBalancesEmptyState" class="text-secondary hr-self-service-empty-state">No leave balances available yet.</div>
+              <div id="ssLeaveBalancesEmptyState" class="text-secondary hr-self-service-empty-state">No leave balances
+                available yet.</div>
               <div class="row g-4 d-none hr-self-service-balance-grid" id="ssLeaveBalancesGrid"></div>
             </div>
           </div>
@@ -6341,7 +6525,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                   <i class="bi bi-arrow-clockwise me-2"></i>Refresh Decision
                 </button>
               </div>
-              <div id="ssLatestDecisionEmptyState" class="text-secondary hr-self-service-empty-state">No leave decision updates available yet.</div>
+              <div id="ssLatestDecisionEmptyState" class="text-secondary hr-self-service-empty-state">No leave decision
+                updates available yet.</div>
               <div id="ssLatestDecisionCard" class="d-none hr-self-service-decision-content">
                 <div class="info-tile">
                   <div class="d-flex flex-column flex-lg-row gap-3 gap-lg-5">
@@ -6385,7 +6570,8 @@ Disable browser address autofill popup on HR employee address fields. -->
            and My Leave History. Height is applied only while history is expanded. -->
         <div class="row g-4 ss-leave-main-row">
           <div class="col-12 col-xl-5">
-            <section class="card dashboard-section-card dashboard-form-card ss-leave-equal-card hr-self-service-card hr-self-service-request-card">
+            <section
+              class="card dashboard-section-card dashboard-form-card ss-leave-equal-card hr-self-service-card hr-self-service-request-card">
               <div class="card-body p-4 p-lg-5">
                 <div class="hr-card-heading hr-self-service-card-heading mb-4">
                   <div class="hr-card-heading-main">
@@ -6471,7 +6657,9 @@ Disable browser address autofill popup on HR employee address fields. -->
      My Leave History participates in Employee Dashboard-style equal-height
      behaviour only while expanded. When collapsed, JS removes the height rule
      so the card shrinks to header-only. -->
-            <section class="card dashboard-section-card ss-leave-equal-card hr-self-service-card hr-self-service-history-card" id="ssEmployeeLeaveHistoryCard">
+            <section
+              class="card dashboard-section-card ss-leave-equal-card hr-self-service-card hr-self-service-history-card"
+              id="ssEmployeeLeaveHistoryCard">
               <div class="card-body p-4 p-lg-5">
                 <div class="hr-card-heading hr-self-service-card-heading mb-4">
                   <div class="hr-card-heading-main">
@@ -6481,7 +6669,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                     <div class="hr-card-heading-copy">
                       <span class="hr-self-service-kicker">Request timeline</span>
                       <h2 class="section-heading h4 mb-1">My Leave History</h2>
-                      <p class="section-subtext mb-0">Track submitted requests, manager decisions, and decision comments.</p>
+                      <p class="section-subtext mb-0">Track submitted requests, manager decisions, and decision
+                        comments.</p>
                     </div>
                   </div>
                   <div class="hr-self-service-card-toolbar">
@@ -6506,7 +6695,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                      loading, refresh, empty state, and request rendering continue unchanged. -->
                   <div class="employee-leave-history-scroll-area" role="region"
                     aria-label="Self-service leave history records" tabindex="0">
-                    <div id="ssLeaveRequestsEmptyState" class="text-secondary hr-self-service-empty-state">No leave requests submitted yet.</div>
+                    <div id="ssLeaveRequestsEmptyState" class="text-secondary hr-self-service-empty-state">No leave
+                      requests submitted yet.</div>
                     <div id="ssLeaveRequestsList" class="d-none hr-self-service-record-list"></div>
                   </div>
                 </div>
@@ -6516,7 +6706,7 @@ Disable browser address autofill popup on HR employee address fields. -->
         </div>
       </div>
 
-      <!-- ── Payroll Sub-Section ── -->
+      <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Payroll Sub-Section Ã¢â€â‚¬Ã¢â€â‚¬ -->
       <div id="ssPayrollSection" class="d-none">
 
         <!-- Current Payslip Summary -->
@@ -6530,7 +6720,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                 <div class="hr-card-heading-copy">
                   <span class="hr-self-service-kicker">Latest authorised pay</span>
                   <h2 class="section-heading h4 mb-1">Current Payslip Summary</h2>
-                  <p class="section-subtext mb-0">Your latest authorised payslip summary for the most recent pay cycle.</p>
+                  <p class="section-subtext mb-0">Your latest authorised payslip summary for the most recent pay cycle.
+                  </p>
                 </div>
               </div>
               <div class="hr-self-service-card-toolbar">
@@ -6540,17 +6731,6 @@ Disable browser address autofill popup on HR employee address fields. -->
                   title="Hide payroll figures">
                   <i class="bi bi-eye-slash"></i>
                 </button>
-                <!-- HR SELF-SERVICE LEAVE PARITY - STEP 1C-1
-                   Payroll now opens first for HR payslip visibility.
-                   Keep Leave Management reachable from the visible payroll header
-                   so HR does not need to scroll/search for the hidden inner switcher. -->
-                <button type="button"
-                  class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
-                  id="ssGoToLeaveFromPayrollBtn" aria-label="Open leave management" title="Open leave management">
-                  <i class="bi bi-calendar-check me-2"></i>
-                  Leave Management
-                </button>
-
                 <button type="button"
                   class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center"
                   id="ssRefreshPayrollBtn" aria-label="Refresh payroll" title="Refresh payroll">
@@ -6558,7 +6738,8 @@ Disable browser address autofill popup on HR employee address fields. -->
                 </button>
               </div>
             </div>
-            <div id="ssCurrentPayrollEmptyState" class="text-secondary hr-self-service-empty-state">No authorised payroll records available yet.
+            <div id="ssCurrentPayrollEmptyState" class="text-secondary hr-self-service-empty-state">No authorised
+              payroll records available yet.
             </div>
             <div class="row g-3 d-none hr-self-service-payroll-summary-grid" id="ssCurrentPayrollSummaryGrid">
               <div class="col-md-6 col-xl-3">
@@ -6614,7 +6795,8 @@ Disable browser address autofill popup on HR employee address fields. -->
           <div class="card-body p-4 p-lg-5">
             <div class="hr-card-heading hr-self-service-card-heading mb-4">
               <div class="hr-card-heading-main">
-                <span class="hr-card-heading-icon hr-card-heading-icon--self-service-history-payroll" aria-hidden="true">
+                <span class="hr-card-heading-icon hr-card-heading-icon--self-service-history-payroll"
+                  aria-hidden="true">
                   <i class="bi bi-receipt-cutoff"></i>
                 </span>
                 <div class="hr-card-heading-copy">
@@ -6658,10 +6840,11 @@ Disable browser address autofill popup on HR employee address fields. -->
                   </div>
                 </div>
               </div>
-              <div id="ssPayrollHistoryEmptyState" class="text-secondary hr-self-service-empty-state">No authorised payroll history available yet.
+              <div id="ssPayrollHistoryEmptyState" class="text-secondary hr-self-service-empty-state">No authorised
+                payroll history available yet.
               </div>
-              <div class="dashboard-table-wrap table-responsive d-none hr-self-service-payroll-records" id="ssPayrollHistoryTableWrapper"
-                style="max-height: 460px; overflow: auto;">
+              <div class="dashboard-table-wrap table-responsive d-none hr-self-service-payroll-records"
+                id="ssPayrollHistoryTableWrapper" style="max-height: 460px; overflow: auto;">
                 <table class="table table-sm align-middle mb-0">
                   <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                     <tr>
@@ -6745,10 +6928,9 @@ Disable browser address autofill popup on HR employee address fields. -->
        - cards reuse the existing hrTab* navigation buttons;
        - no employee, payroll, leave, setup, tenant, role, or Supabase logic changes;
        - tenant colour variables style the guide without hardcoding Alpatech branding. -->
-  <div id="hrOperatingGuideModal"
-    class="d-none position-fixed top-0 start-0 w-100 h-100 hr-operating-guide-modal"
-    role="dialog" aria-modal="true" aria-labelledby="hrOperatingGuideTitle"
-    aria-describedby="hrOperatingGuideSubtitle" aria-hidden="true">
+  <div id="hrOperatingGuideModal" class="d-none position-fixed top-0 start-0 w-100 h-100 hr-operating-guide-modal"
+    role="dialog" aria-modal="true" aria-labelledby="hrOperatingGuideTitle" aria-describedby="hrOperatingGuideSubtitle"
+    aria-hidden="true">
     <div class="hr-operating-guide-stage">
       <div class="hr-operating-guide-shell" tabindex="-1">
         <header class="hr-operating-guide-header">
@@ -6766,15 +6948,14 @@ Disable browser address autofill popup on HR employee address fields. -->
             </div>
           </div>
 
-          <button type="button" id="closeHrOperatingGuideBtn"
-            class="hr-operating-guide-close" aria-label="Close HR workspace guide">
+          <button type="button" id="closeHrOperatingGuideBtn" class="hr-operating-guide-close"
+            aria-label="Close HR workspace guide">
             <i class="bi bi-x-lg"></i>
           </button>
         </header>
 
         <div class="hr-operating-guide-body">
-          <button type="button" class="hr-guide-featured-card"
-            data-hr-guide-target="hrTabDashboardBtn">
+          <button type="button" class="hr-guide-featured-card" data-hr-guide-target="hrTabDashboardBtn">
             <span class="hr-guide-featured-icon" aria-hidden="true">
               <i class="bi bi-grid-1x2"></i>
             </span>
@@ -6783,7 +6964,8 @@ Disable browser address autofill popup on HR employee address fields. -->
               <span class="hr-guide-card-kicker">Recommended starting point</span>
               <strong>Dashboard</strong>
               <small>
-                Review priority work, payroll readiness, department coverage, and recent activity before opening a detailed workspace.
+                Review priority work, payroll readiness, department coverage, and recent activity before opening a
+                detailed workspace.
               </small>
             </span>
 
@@ -6801,7 +6983,8 @@ Disable browser address autofill popup on HR employee address fields. -->
               </span>
               <span class="hr-guide-workspace-copy">
                 <strong>People</strong>
-                <small>Maintain employee records, reporting lines, documents, login readiness, and employment details.</small>
+                <small>Maintain employee records, reporting lines, documents, login readiness, and employment
+                  details.</small>
               </span>
               <span class="hr-guide-workspace-link">Open workspace <i class="bi bi-arrow-up-right"></i></span>
             </button>
@@ -6825,7 +7008,8 @@ Disable browser address autofill popup on HR employee address fields. -->
               </span>
               <span class="hr-guide-workspace-copy">
                 <strong>Payroll</strong>
-                <small>Prepare and finalise payroll, preview payslips, export payment files, and review delivery status.</small>
+                <small>Prepare and finalise payroll, preview payslips, export payment files, and review delivery
+                  status.</small>
               </span>
               <span class="hr-guide-workspace-link">Open workspace <i class="bi bi-arrow-up-right"></i></span>
             </button>
@@ -6837,7 +7021,8 @@ Disable browser address autofill popup on HR employee address fields. -->
               </span>
               <span class="hr-guide-workspace-copy">
                 <strong>Setup</strong>
-                <small>Maintain organisation details, payroll rules, deductions, banks, and communication settings.</small>
+                <small>Maintain organisation details, payroll rules, deductions, banks, and communication
+                  settings.</small>
               </span>
               <span class="hr-guide-workspace-link">Open workspace <i class="bi bi-arrow-up-right"></i></span>
             </button>
@@ -6849,7 +7034,8 @@ Disable browser address autofill popup on HR employee address fields. -->
               </span>
               <span class="hr-guide-workspace-copy">
                 <strong>Self-Service</strong>
-                <small>View your own leave, authorised payroll history, payslips, and personal employee information.</small>
+                <small>View your own leave, authorised payroll history, payslips, and personal employee
+                  information.</small>
               </span>
               <span class="hr-guide-workspace-link">Open workspace <i class="bi bi-arrow-up-right"></i></span>
             </button>
@@ -6881,7 +7067,8 @@ Disable browser address autofill popup on HR employee address fields. -->
             <ol class="hr-guide-operating-steps">
               <li>
                 <span>1</span>
-                <div><strong>Review</strong><small>Start on Dashboard and identify anything needing attention.</small></div>
+                <div><strong>Review</strong><small>Start on Dashboard and identify anything needing attention.</small>
+                </div>
               </li>
               <li>
                 <span>2</span>
@@ -6889,11 +7076,13 @@ Disable browser address autofill popup on HR employee address fields. -->
               </li>
               <li>
                 <span>3</span>
-                <div><strong>Configure</strong><small>Confirm organisation, payroll, deduction, and payment setup.</small></div>
+                <div><strong>Configure</strong><small>Confirm organisation, payroll, deduction, and payment
+                    setup.</small></div>
               </li>
               <li>
                 <span>4</span>
-                <div><strong>Process</strong><small>Prepare, finalise, verify, and deliver payroll securely.</small></div>
+                <div><strong>Process</strong><small>Prepare, finalise, verify, and deliver payroll securely.</small>
+                </div>
               </li>
             </ol>
           </section>
@@ -6902,7 +7091,8 @@ Disable browser address autofill popup on HR employee address fields. -->
             <span aria-hidden="true"><i class="bi bi-lightbulb"></i></span>
             <div>
               <strong>Not sure where a task belongs?</strong>
-              <small>Open Dashboard first. Priority Attention and the overview cards will point you to the correct workspace.</small>
+              <small>Open Dashboard first. Priority Attention and the overview cards will point you to the correct
+                workspace.</small>
             </div>
           </div>
         </div>
@@ -6981,11 +7171,15 @@ Disable browser address autofill popup on HR employee address fields. -->
      HR uses this to review finalised payslip content before or after
      controlled payslip notification delivery. Employee secure viewing
      will be handled separately through a protected access route. -->
-  <div id="payslipPreviewModal" class="d-none position-fixed top-0 start-0 w-100 h-100 hr-payslip-modal bexhr-payslip-modal"
+  <div id="payslipPreviewModal"
+    class="d-none position-fixed top-0 start-0 w-100 h-100 hr-payslip-modal bexhr-payslip-modal"
     style="z-index: 1060; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
-    <div class="container h-100 d-flex align-items-center justify-content-center py-4 hr-payslip-modal-container bexhr-payslip-modal-container">
-      <div class="card border-0 shadow-lg rounded-4 w-100 hr-payslip-modal-shell bexhr-payslip-modal-shell" style="max-width: 980px; max-height: 94vh; overflow: hidden;">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4 hr-payslip-modal-header bexhr-payslip-modal-header">
+    <div
+      class="container h-100 d-flex align-items-center justify-content-center py-4 hr-payslip-modal-container bexhr-payslip-modal-container">
+      <div class="card border-0 shadow-lg rounded-4 w-100 hr-payslip-modal-shell bexhr-payslip-modal-shell"
+        style="max-width: 980px; max-height: 94vh; overflow: hidden;">
+        <div
+          class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4 hr-payslip-modal-header bexhr-payslip-modal-header">
           <div>
             <h2 id="payslipPreviewTitle" class="h4 mb-1">Payslip Preview</h2>
             <p class="text-secondary mb-0">
@@ -7005,7 +7199,8 @@ Disable browser address autofill popup on HR employee address fields. -->
           </div>
         </div>
 
-        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4 hr-payslip-modal-footer bexhr-payslip-modal-footer">
+        <div
+          class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4 hr-payslip-modal-footer bexhr-payslip-modal-footer">
           <button type="button" id="printPayslipBtn" class="btn btn-primary dashboard-action-btn">
             <i class="bi bi-printer me-2"></i>Print / Save PDF
           </button>
@@ -7025,8 +7220,7 @@ Disable browser address autofill popup on HR employee address fields. -->
   <!-- EMPLOYEE DETAILS MODAL MODERNISATION - STEP 1
        The employee name link and the View action both open this one shared,
        read-only modal. The content area scrolls internally on every viewport. -->
-  <div id="employeeFilledFormModal"
-    class="d-none position-fixed top-0 start-0 w-100 h-100 hr-employee-details-modal"
+  <div id="employeeFilledFormModal" class="d-none position-fixed top-0 start-0 w-100 h-100 hr-employee-details-modal"
     aria-hidden="true">
     <div class="hr-employee-details-modal-shell">
       <section class="hr-employee-details-modal-panel" role="dialog" aria-modal="true"
@@ -7046,8 +7240,7 @@ Disable browser address autofill popup on HR employee address fields. -->
             </div>
           </div>
 
-          <button type="button" class="btn hr-employee-details-modal-close"
-            aria-label="Close employee filled form"
+          <button type="button" class="btn hr-employee-details-modal-close" aria-label="Close employee filled form"
             onclick="window.hrCloseEmployeeFilledForm?.()">
             <i class="bi bi-x-lg" aria-hidden="true"></i>
           </button>
@@ -7074,6 +7267,117 @@ Disable browser address autofill popup on HR employee address fields. -->
     </div>
   </div>
 
+
+
+  <!-- HR ACCESS / REPORTING RESPONSIBILITY DECOUPLING - PHASE 2 -->
+  <div id="hrEmployeeAccessModal" class="hr-employee-access-overlay d-none" tabindex="-1" role="dialog"
+    aria-modal="true" aria-labelledby="hrEmployeeAccessModalLabel" aria-hidden="true">
+    <div class="hr-employee-access-dialog">
+      <section class="hr-employee-access-modal" aria-describedby="hrEmployeeAccessModalDescription">
+        <header class="hr-access-modal-header">
+          <div class="hr-access-modal-heading">
+            <span class="hr-access-modal-kicker">HR ADMIN ACCESS CONTROL</span>
+            <h2 id="hrEmployeeAccessModalLabel">Manage employee access</h2>
+            <p id="hrEmployeeAccessModalDescription">
+              Dashboard access and reporting responsibilities are managed separately.
+            </p>
+          </div>
+          <button type="button" class="hr-access-modal-close" aria-label="Close employee access"
+            onclick="window.hrCloseEmployeeAccess?.()">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </header>
+
+        <div class="hr-access-modal-body">
+          <input type="hidden" id="hrEmployeeAccessEmployeeId" />
+
+          <div class="hr-access-employee-summary">
+            <span class="hr-access-employee-icon" aria-hidden="true">
+              <i class="bi bi-person-badge"></i>
+            </span>
+            <div class="hr-access-employee-copy">
+              <strong id="hrEmployeeAccessEmployeeName">Employee</strong>
+              <span id="hrEmployeeAccessEmployeeMeta"></span>
+            </div>
+          </div>
+
+          <div class="hr-access-section-grid">
+            <section class="hr-access-section-card hr-access-section-card--primary">
+              <div class="hr-access-section-heading">
+                <span class="hr-access-section-step" aria-hidden="true">1</span>
+                <div>
+                  <h3>Dashboard access</h3>
+                  <p>Choose the main workspace this employee opens after sign-in.</p>
+                </div>
+              </div>
+
+              <label for="hrEmployeeAccessRole" class="form-label fw-semibold">Access level</label>
+              <select id="hrEmployeeAccessRole" class="form-select form-select-lg">
+                <option value="employee">Employee</option>
+                <option value="manager">Manager</option>
+                <option value="hr">HR Standard</option>
+              </select>
+              <div class="hr-access-inline-note">
+                <i class="bi bi-info-circle" aria-hidden="true"></i>
+                <span>HR Admin access remains controlled by Platform Admin.</span>
+              </div>
+            </section>
+
+            <section class="hr-access-section-card">
+              <div class="hr-access-section-heading">
+                <span class="hr-access-section-step" aria-hidden="true">2</span>
+                <div>
+                  <h3>Reporting responsibilities</h3>
+                  <p>Primary and Secondary Manager assignments do not change when dashboard access changes.</p>
+                </div>
+              </div>
+
+              <div class="hr-reporting-direction-list">
+                <article class="hr-reporting-direction-card">
+                  <div class="hr-reporting-direction-icon" aria-hidden="true">
+                    <i class="bi bi-diagram-3"></i>
+                  </div>
+                  <div class="hr-reporting-direction-copy">
+                    <strong>Who manages this employee?</strong>
+                    <span>Review or change their Primary Manager and additional Secondary Managers.</span>
+                  </div>
+                  <button type="button" class="btn btn-outline-primary hr-reporting-direction-action"
+                    onclick="window.hrOpenReportingManagersFromAccess?.()">
+                    <i class="bi bi-people me-2" aria-hidden="true"></i>
+                    Manage managers
+                  </button>
+                </article>
+
+              </div>
+            </section>
+          </div>
+
+          <div id="hrEmployeeAccessStatus" class="alert d-none mt-3 mb-3" role="alert" aria-live="assertive">
+          </div>
+
+          <div id="hrEmployeeAccessSelfNotice" class="alert alert-warning d-none mb-0" role="alert">
+            You cannot change your own dashboard access from the employee list. Reporting responsibilities remain
+            available.
+          </div>
+        </div>
+
+        <footer class="hr-access-modal-footer">
+          <p>
+            <i class="bi bi-shield-check" aria-hidden="true"></i>
+            Access changes never remove existing Primary or Secondary Manager assignments.
+          </p>
+          <div class="hr-access-modal-actions">
+            <button type="button" class="btn btn-outline-secondary"
+              onclick="window.hrCloseEmployeeAccess?.()">Cancel</button>
+            <button type="button" id="hrEmployeeAccessSaveBtn" class="btn btn-primary"
+              onclick="window.hrSaveEmployeeAccess?.()">
+              <i class="bi bi-shield-check me-2"></i>Save dashboard access
+            </button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  </div>
 
 
   <!-- DASHBOARD WORKSPACE MEMORY - REFRESH FIX

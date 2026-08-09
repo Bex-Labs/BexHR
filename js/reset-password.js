@@ -19,6 +19,9 @@ document.addEventListener("DOMContentLoaded", function () {
   const submitBtn = document.getElementById("resetSubmitBtn");
   const mfaSection = document.getElementById("resetMfaSection");
   const mfaCodeInput = document.getElementById("resetMfaCode");
+  // BEXHR RESET PAGE LOADER - v1.0.0
+  // Presentation-only reference. Authentication behaviour remains unchanged.
+  const resetPageLoader = document.getElementById("resetPageLoader");
 
   const toggleNewPasswordBtn = document.getElementById("toggleNewPasswordBtn");
   const toggleNewPasswordIcon = document.getElementById("toggleNewPasswordIcon");
@@ -234,19 +237,30 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  async function initialiseMfaRequirement() {
-    try {
-      const session = await ensureSessionExistsForReset();
+async function initialiseMfaRequirement() {
+  try {
+    const session = await ensureSessionExistsForReset();
 
-      if (!session?.user) {
-        return;
-      }
+    if (!session?.user) {
+      return;
+    }
 
-      await getMfaRequirement();
-    } catch (error) {
-      console.error("Initial MFA requirement check failed:", error);
+    await getMfaRequirement();
+  } catch (error) {
+    console.error("Initial MFA requirement check failed:", error);
+  } finally {
+    // BEXHR RESET PAGE LOADER - v1.0.0
+    // Hide the presentation loader when the existing initial session/MFA
+    // check finishes. No authentication decision is changed here.
+    if (resetPageLoader) {
+      resetPageLoader.classList.add("bexhr-reset-page-loader--hidden");
+
+      window.setTimeout(function () {
+        resetPageLoader.remove();
+      }, 220);
     }
   }
+}
 
   initialiseMfaRequirement();
 

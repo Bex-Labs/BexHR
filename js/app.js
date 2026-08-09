@@ -1,3 +1,71 @@
+// =========================================================
+// LANDING PAGE LOADER - v1.0.0
+//
+// Presentation only.
+//
+// The loader is released when the public landing page has
+// completed browser loading. It does not wait on authentication,
+// tenant validation, Supabase profile loading, or sign-in logic.
+// =========================================================
+function releaseLandingPageLoader() {
+  const body = document.body;
+
+  const loader =
+    document.getElementById("bexhrLandingLoader");
+
+  const firstPaintGate =
+    document.getElementById(
+      "landingWorkspaceFirstPaintGate",
+    );
+
+
+  body?.classList.remove(
+    "landing-workspace-booting",
+  );
+
+  body?.removeAttribute("aria-busy");
+
+
+  firstPaintGate?.remove();
+
+
+  if (!loader) return;
+
+
+  loader.setAttribute(
+    "aria-hidden",
+    "true",
+  );
+
+  loader.style.opacity = "0";
+  loader.style.pointerEvents = "none";
+
+
+  window.setTimeout(() => {
+    loader.remove();
+  }, 220);
+}
+
+
+// LANDING PAGE LOADER - v1.0.0
+// Do not introduce an artificial loading delay.
+// Release as soon as the browser reports the landing page ready.
+if (document.readyState === "complete") {
+
+  window.requestAnimationFrame(() => {
+    releaseLandingPageLoader();
+  });
+
+} else {
+
+  window.addEventListener(
+    "load",
+    releaseLandingPageLoader,
+    { once: true },
+  );
+
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   const loginForm = document.getElementById("loginForm");
 
@@ -423,11 +491,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const redirectTarget =
       getSafePostLoginRedirectForRole(profile.role) ||
       getDashboardByRole(profile.role);
-
-    showAlert(
-      `Sign-in successful. Welcome <strong>${profile.full_name || authData.user.email}</strong>. Company: <strong>${tenantValidation.companyName || tenantValidation.tenantCode}</strong>. Redirecting...`,
-      "success",
-    );
 
     console.log("Supabase sign-in success:", {
       userId: authData.user.id,
@@ -1240,10 +1303,10 @@ document.addEventListener("DOMContentLoaded", function () {
   // PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 4C
   // Cache safe payroll intent once before sign-in so the user lands on Payroll
   // after authentication without first touching a protected dashboard URL.
-cachePayslipEmailLandingIntentFromUrl();
+  cachePayslipEmailLandingIntentFromUrl();
 
-prefillRememberedLoginDetails();
-prefillTenantCodeFromCache();
+  prefillRememberedLoginDetails();
+  prefillTenantCodeFromCache();
 
-showMessageFromQueryString();
+  showMessageFromQueryString();
 });

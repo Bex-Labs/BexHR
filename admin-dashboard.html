@@ -12,115 +12,228 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
   <link rel="stylesheet" href="css/styles.css" />
-  <link rel="icon" type="image/x-icon" href="assets/favicon.png" />
+  <!-- BEXHR UNIVERSAL FAVICON SET - v1.0.0 -->
+  <link rel="icon" type="image/svg+xml" href="assets/favicon/favicon.svg?v=20260731" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png?v=20260731" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png?v=20260731" />
+  <link rel="icon" type="image/x-icon" href="assets/favicon/favicon.ico?v=20260731" />
+  <link rel="shortcut icon" href="assets/favicon/favicon.ico?v=20260731" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png?v=20260731" />
+  <link rel="manifest" href="assets/favicon/site.webmanifest?v=20260731" />
+  <meta name="msapplication-config" content="assets/favicon/browserconfig.xml?v=20260731" />
+  <meta name="theme-color" content="#087f7a" />
 </head>
 
-<body class="dashboard-page bexhr-has-sidebar">
+<body class="dashboard-page bexhr-has-sidebar bexhr-admin-visual-refresh admin-workspace-booting" aria-busy="true">
+
+  <!-- ADMIN WORKSPACE LOADER VISUAL PARITY - v1.0.3
+       Uses the same approved favicon, spinner, animated loading line,
+       message and secure-status pattern as the other BexHR workspaces.
+       Presentation only. -->
+  <div id="bexhrWorkspaceLoader" class="bexhr-workspace-loader" role="status" aria-live="polite" aria-atomic="true">
+    <div class="bexhr-workspace-loader-panel">
+
+      <div class="bexhr-workspace-loader-brand" aria-hidden="true">
+        <span class="bexhr-workspace-loader-logo-shell">
+          <img class="bexhr-workspace-loader-logo" src="assets/favicon/favicon.svg?v=20260731" alt="" />
+        </span>
+
+        <span class="bexhr-workspace-loader-brand-copy">
+          <strong>BexHR</strong>
+          <small>People and payroll workspace</small>
+        </span>
+      </div>
+
+      <div class="bexhr-workspace-loader-progress" aria-hidden="true">
+        <span class="bexhr-workspace-loader-spinner"></span>
+
+        <span class="bexhr-workspace-loader-progress-line">
+          <span></span>
+        </span>
+      </div>
+
+      <div class="bexhr-workspace-loader-message">
+        <strong>BexHR is preparing your Admin workspace</strong>
+        <span>
+          Restoring platform companies and access controls securely.
+        </span>
+      </div>
+
+      <div class="bexhr-workspace-loader-status">
+        <span class="bexhr-workspace-loader-status-dot" aria-hidden="true"></span>
+
+        <span>Checking your secure Admin access</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ADMIN WORKSPACE LOADER - FIRST PAINT GATE v1.0.2 -->
+  <style id="adminWorkspaceFirstPaintGate">
+    body.admin-workspace-booting> :not(#bexhrWorkspaceLoader) {
+      visibility: hidden;
+    }
+
+    body.admin-workspace-booting #bexhrWorkspaceLoader {
+      visibility: visible;
+    }
+  </style>
+
   <!-- =========================================================
-       BEXHR SIDEBAR NAV - ADMIN STEP 1C-1
-       Desktop sidebar for Admin. It proxies to the existing Admin
-       workspace tab buttons, so current JS routing remains intact.
-       Hidden on mobile by shared CSS; the workspace switcher card remains
-       available on smaller screens.
-       ========================================================= -->
+     ADMIN AUTHORITATIVE SIDEBAR - v1.0.0
+
+     Mirrors the approved HR/Employee navigation hierarchy.
+
+     Safety:
+     - routes through existing adminTab* buttons;
+     - no duplicate workspace switching;
+     - no company/access/profile/security workflow changes.
+     ========================================================= -->
   <nav class="bexhr-sidebar" id="bexhrSidebar" aria-label="Admin workspace navigation">
+    <!-- ADMIN SIDEBAR BRAND PARITY
+     Match the approved HR sidebar brand spacing and structure. -->
     <div class="bexhr-sidebar-brand">
-      <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">AD</span>
+      <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">
+        AD
+      </span>
+
+      <span class="bexhr-sidebar-brand-text">
+        BexHR
+      </span>
     </div>
 
     <ul class="bexhr-sidebar-nav">
       <li>
-        <button class="bexhr-sidebar-item active" id="sidebarAdminProfileBtn"
-          onclick="document.getElementById('adminTabProfileBtn')?.click()" title="Profile">
-          <i class="bi bi-person-circle"></i>
-          <span>Profile</span>
-        </button>
-      </li>
-
-      <li>
-        <button class="bexhr-sidebar-item" id="sidebarAdminOverviewBtn"
+        <button type="button" class="bexhr-sidebar-item active" id="sidebarAdminOverviewBtn"
           onclick="document.getElementById('adminTabOverviewBtn')?.click()" title="Overview">
-          <i class="bi bi-grid"></i>
+          <i class="bi bi-grid-1x2"></i>
           <span>Overview</span>
         </button>
       </li>
 
-      <li>
-        <button class="bexhr-sidebar-item" id="sidebarAdminCompaniesBtn"
+      <!-- ADMIN COMPANIES SUB-WORKSPACE NAVIGATION - v1.0.0
+           Companies remains one authenticated Admin workspace.
+           These buttons only switch presentation inside adminTenantsSection. -->
+      <li class="admin-companies-sidebar-group">
+        <button type="button" class="bexhr-sidebar-item" id="sidebarAdminCompaniesBtn"
           onclick="document.getElementById('adminTabTenantsBtn')?.click()" title="Companies">
-          <i class="bi bi-building"></i>
+          <i class="bi bi-buildings"></i>
           <span>Companies</span>
         </button>
+
+        <div class="admin-companies-sidebar-subnav" id="adminCompaniesSidebarSubnav">
+          <button type="button" class="admin-companies-sidebar-subitem active" id="sidebarAdminCompanyIdentityBtn"
+            onclick="window.adminOpenCompanyIdentityWorkspace?.()">
+            <i class="bi bi-building-add"></i>
+            <span>Company Identity</span>
+          </button>
+
+          <button type="button" class="admin-companies-sidebar-subitem" id="sidebarAdminEmailSetupBtn"
+            onclick="window.adminOpenEmailSetupWorkspace?.()">
+            <i class="bi bi-envelope-check"></i>
+            <span>Email Setup</span>
+          </button>
+
+          <button type="button" class="admin-companies-sidebar-subitem" id="sidebarAdminUserAccessBtn"
+            onclick="window.adminOpenUserAccessWorkspace?.()">
+            <i class="bi bi-person-check"></i>
+            <span>User Access</span>
+          </button>
+        </div>
       </li>
     </ul>
 
     <div class="bexhr-sidebar-footer">
-      <!-- GUIDED HELP LAYER - ADMIN STEP 1T
-           Desktop sidebar access for the Admin operating guide.
-           This uses Bootstrap's modal trigger attributes, so no new
-           admin-dashboard.js logic is required. -->
+      <!-- Keep Profile in the account/footer area, matching HR/Employee. -->
+      <button type="button" class="bexhr-sidebar-item" id="sidebarAdminProfileBtn"
+        onclick="document.getElementById('adminTabProfileBtn')?.click()" title="My Profile">
+        <i class="bi bi-person-circle"></i>
+        <span>My Profile</span>
+      </button>
+
       <button type="button" class="bexhr-sidebar-item" data-bs-toggle="modal" data-bs-target="#adminOperatingGuideModal"
         title="Help Guide">
         <i class="bi bi-question-circle"></i>
         <span>Help Guide</span>
       </button>
-
-      <button class="bexhr-sidebar-item" onclick="document.getElementById('logoutBtn')?.click()" title="Sign out">
-        <i class="bi bi-box-arrow-left"></i>
-        <span>Sign out</span>
-      </button>
     </div>
   </nav>
+
   <main class="container py-4 py-lg-5">
     <!-- =========================================================
-           HERO
-           ========================================================= -->
-    <section class="dashboard-hero mb-4">
-      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-4">
-        <div>
-          <div class="hero-badge">
-            <i class="bi bi-shield-lock"></i>
-            Admin Workspace
+     ADMIN MODERN APPLICATION HEADER - v1.0.0
+
+     Mirrors the approved HR/Employee application header.
+     Existing Admin identity/image/logout IDs are retained.
+     ========================================================= -->
+    <section class="admin-modern-app-header mb-4" aria-label="Admin workspace header">
+      <div class="admin-modern-app-header-main">
+
+        <div class="admin-modern-page-heading">
+
+          <div class="admin-modern-context-line">
+            <span class="admin-modern-context-name">
+              PLATFORM ADMINISTRATION
+            </span>
+
+            <span class="admin-modern-context-separator" aria-hidden="true"></span>
+
+            <span id="adminModuleValue">
+              Overview
+            </span>
           </div>
-          <h1 class="display-6 fw-bold mb-2">Admin Dashboard</h1>
-          <p class="mb-0" style="max-width: 760px">
-            Manage platform oversight, access control visibility, and your own
-            administrator profile details.
+
+          <h1 id="adminModernPageTitle">
+            Admin Overview
+          </h1>
+
+          <p id="adminModernPageSubtitle">
+            Monitor company workspaces, platform access, and administrative setup.
           </p>
         </div>
 
-        <div class="d-flex flex-column align-items-lg-end gap-2">
-          <!-- ADMIN UI CLEANUP - STEP 1D
-       Admin now supports the same profile image display pattern as HR.
-       adminInitials remains the fallback when no profile image is available. -->
-          <div class="position-relative">
-            <div class="dashboard-avatar" id="adminInitials">AD</div>
-            <img id="adminHeroImage" src="" alt="Admin profile avatar" class="dashboard-avatar d-none"
-              style="width: 68px; height: 68px; object-fit: cover;" />
-          </div>
+        <div class="admin-modern-account-area">
 
-          <button id="logoutBtn" class="btn btn-light dashboard-action-btn">
-            <i class="bi bi-box-arrow-right me-2"></i>Logout
+          <button type="button" class="admin-modern-account-button"
+            onclick="document.getElementById('adminTabProfileBtn')?.click()" aria-label="Open my Admin profile">
+            <span class="admin-modern-avatar-wrap">
+
+              <span class="dashboard-avatar" id="adminInitials">
+                AD
+              </span>
+
+              <img id="adminHeroImage" src="" alt="Admin profile avatar" class="dashboard-avatar d-none" />
+            </span>
+
+            <!-- ADMIN ACCOUNT HEADER PARITY
+     Match the approved HR account identity pattern:
+     name on top, role as compact pill beneath. -->
+            <span class="admin-modern-account-copy">
+              <strong id="adminModernUserName">
+                Administrator
+              </strong>
+
+              <span class="admin-modern-account-pills">
+                <span class="admin-modern-role-pill" id="adminModernUserRole">
+                  Platform Admin
+                </span>
+              </span>
+            </span>
+
+            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+          </button>
+
+          <button id="logoutBtn" type="button" class="btn btn-outline-secondary admin-modern-logout-button"
+            aria-label="Sign out" title="Sign out">
+            <i class="bi bi-box-arrow-right"></i>
           </button>
         </div>
       </div>
 
-      <div class="hero-meta-grid">
-        <div class="hero-meta-card">
-          <div class="hero-meta-label">Signed in as</div>
-          <div class="hero-meta-value text-break" id="adminEmail"><span
-              class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
-        </div>
-
-        <div class="hero-meta-card">
-          <div class="hero-meta-label">Role</div>
-          <div class="hero-meta-value" id="adminRole">admin</div>
-        </div>
-
-        <div class="hero-meta-card">
-          <div class="hero-meta-label">Current Workspace</div>
-          <div class="hero-meta-value" id="adminModuleValue">Profile</div>
-        </div>
+      <!-- Compatibility values retained for current Admin rendering logic. -->
+      <div class="d-none" aria-hidden="true">
+        <span id="adminEmail"></span>
+        <span id="adminRole">admin</span>
       </div>
     </section>
 
@@ -174,68 +287,150 @@
     </section>
 
     <!-- =========================================================
-           PROFILE SECTION
-           ========================================================= -->
+     ADMIN PROFILE AUTHORITATIVE VISUAL PARITY - v1.0.0
+
+     Presentation structure adapted from the approved Employee/HR
+     profile layout.
+
+     Safety:
+     - every existing Admin profile ID is retained;
+     - existing profile save behaviour is retained;
+     - existing upload and Remove Picture behaviour is retained;
+     - no Supabase, role, session or Admin workflow logic changes.
+     ========================================================= -->
     <section id="adminProfileSection" class="workspace-section">
-      <section class="card dashboard-section-card mb-4">
+      <section class="card dashboard-section-card admin-profile-workspace-card mb-4">
         <div class="card-body p-4 p-lg-5">
-          <div class="mb-4">
-            <h2 class="section-heading h4 mb-1">My Profile</h2>
-            <p class="section-subtext mb-0">
-              View and update your own administrator profile details.
-            </p>
-          </div>
 
-          <div class="row g-4 align-items-start">
-            <div class="col-lg-4">
-              <div class="border rounded-4 p-4 h-100 text-center">
-                <div class="dashboard-avatar mx-auto mb-3" id="adminProfileAvatar">
-                  AD
-                </div>
-                <h3 class="h5 mb-1" id="adminProfileCardName">
-                  Administrator
-                </h3>
-                <p class="text-secondary mb-3 text-break" id="adminProfileCardEmail">
-                  --
-                </p>
-
-                <div class="small text-secondary mb-2">Profile Photo</div>
-
-                <!-- ADMIN UI CLEANUP - STEP 1D
-     Replace the Admin placeholder with real profile photo upload controls.
-     These IDs are Admin-specific and do not touch the HR dashboard. -->
-                <div class="border rounded-4 p-3 bg-light-subtle">
-                  <div class="mb-3">
-                    <img id="adminProfileImagePreview" src="" alt="Admin profile preview"
-                      class="img-fluid rounded-circle d-none" style="width: 96px; height: 96px; object-fit: cover;" />
-                  </div>
-
-                  <div class="d-grid gap-2">
-                    <input type="file" id="adminProfileImageInput" class="form-control"
-                      accept=".png,.jpg,.jpeg,.webp" />
-
-                    <!-- ADMIN UI CLEANUP - STEP 1D RECOVERY
-     Keep upload disabled/grey until Admin selects a valid image file. -->
-                    <button type="button" id="saveAdminProfileImageBtn" class="btn btn-secondary dashboard-action-btn"
-                      disabled>
-                      <i class="bi bi-image me-2"></i>Upload Profile Photo
-                    </button>
-                  </div>
-
-                  <div class="text-secondary small mt-3">
-                    Allowed: PNG, JPG, JPEG, WEBP. Maximum file size: 5MB.
-                  </div>
-                </div>
+          <!-- PROFILE HEADER -->
+          <div class="admin-profile-card-header mb-4">
+            <div>
+              <div class="admin-profile-eyebrow">
+                My account
               </div>
+
+              <h2 class="section-heading h4 mb-1">
+                My Profile
+              </h2>
+
+              <p class="section-subtext mb-0">
+                Review your administrator account, profile photo, and
+                platform profile information.
+              </p>
             </div>
 
-            <div class="col-lg-8">
+            <span class="admin-profile-security-badge">
+              <i class="bi bi-shield-check"></i>
+              Secure administrator profile
+            </span>
+          </div>
+
+          <div class="admin-profile-layout">
+
+            <!-- =====================================================
+             LEFT: IDENTITY + PROFILE PHOTO
+             ===================================================== -->
+            <aside class="admin-profile-identity-panel" aria-label="Administrator identity and profile photo">
+              <div class="admin-profile-avatar-stage">
+
+                <!-- Existing initials fallback retained. -->
+                <div class="dashboard-avatar admin-profile-main-avatar" id="adminProfileAvatar">
+                  AD
+                </div>
+
+                <!-- Existing saved/pending image preview retained. -->
+                <img id="adminProfileImagePreview" src="" alt="Administrator profile"
+                  class="admin-profile-main-image d-none" />
+
+                <span class="admin-profile-avatar-status" title="Active administrator profile"
+                  aria-label="Active administrator profile"></span>
+              </div>
+
+              <h3 class="admin-profile-name mb-1" id="adminProfileCardName">
+                Administrator
+              </h3>
+
+              <p class="admin-profile-email mb-3 text-break" id="adminProfileCardEmail">
+                --
+              </p>
+
+              <span class="admin-profile-member-pill">
+                <i class="bi bi-shield-lock"></i>
+                Platform administrator
+              </span>
+
+              <!-- PROFILE PHOTO CONTROLS -->
+              <div class="admin-profile-photo-panel">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                  <div>
+                    <label for="adminProfileImageInput" class="admin-profile-photo-title mb-1">
+                      Profile photo
+                    </label>
+
+                    <div class="admin-profile-photo-help">
+                      PNG, JPG, JPEG or WEBP. Maximum 5MB.
+                    </div>
+                  </div>
+
+                  <i class="bi bi-camera admin-profile-photo-icon" aria-hidden="true"></i>
+                </div>
+
+                <input type="file" id="adminProfileImageInput" class="form-control" accept=".png,.jpg,.jpeg,.webp" />
+
+                <div class="d-grid gap-2 mt-2">
+                  <button type="button" id="saveAdminProfileImageBtn" class="btn btn-secondary dashboard-action-btn"
+                    disabled>
+                    <i class="bi bi-cloud-arrow-up me-2"></i>
+                    Upload Picture
+                  </button>
+
+                  <!-- Existing safe Remove Picture workflow retained. -->
+                  <button type="button" id="removeAdminProfileImageBtn"
+                    class="btn btn-outline-danger dashboard-action-btn" disabled>
+                    <i class="bi bi-trash3 me-2"></i>
+                    Remove Picture
+                  </button>
+                </div>
+              </div>
+            </aside>
+
+            <!-- =====================================================
+             RIGHT: ADMIN ACCOUNT DETAILS
+             ===================================================== -->
+            <div class="admin-profile-details-panel">
+
+              <div class="admin-profile-details-heading mb-4">
+                <div>
+                  <div class="admin-profile-eyebrow">
+                    Account details
+                  </div>
+
+                  <h3 class="h5 fw-bold mb-1">
+                    Administrator information
+                  </h3>
+
+                  <p class="text-secondary small mb-0">
+                    Your name can be maintained here. Email, role and department
+                    remain controlled by the platform account.
+                  </p>
+                </div>
+
+                <span class="admin-profile-details-icon" aria-hidden="true">
+                  <i class="bi bi-person-vcard"></i>
+                </span>
+              </div>
+
+              <!-- Existing form + IDs retained. -->
               <form id="adminProfileForm" novalidate>
-                <div class="row g-4">
+
+                <div class="row g-3 g-xl-4">
+
                   <div class="col-md-6">
                     <label for="adminProfileFullName" class="form-label fw-semibold">
-                      Full Name <span class="text-danger">*</span>
+                      Full Name
+                      <span class="text-danger">*</span>
                     </label>
+
                     <input type="text" id="adminProfileFullName" class="form-control" placeholder="Enter your full name"
                       required />
                   </div>
@@ -244,6 +439,7 @@
                     <label for="adminProfileEmail" class="form-label fw-semibold">
                       Email
                     </label>
+
                     <input type="email" id="adminProfileEmail" class="form-control" readonly />
                   </div>
 
@@ -251,32 +447,46 @@
                     <label for="adminProfileRole" class="form-label fw-semibold">
                       Role
                     </label>
-                    <!-- ADMIN UI CLEANUP - STEP 1D-ADMIN PARITY
-     Role is system-controlled, so keep it readonly and visually greyed out. -->
-                    <input type="text" id="adminProfileRole" class="form-control bg-light" readonly />
+
+                    <input type="text" id="adminProfileRole" class="form-control" readonly />
                   </div>
 
                   <div class="col-md-6">
                     <label for="adminProfileDepartment" class="form-label fw-semibold">
                       Department
                     </label>
-                    <input type="text" id="adminProfileDepartment" class="form-control bg-light" readonly />
+
+                    <input type="text" id="adminProfileDepartment" class="form-control" readonly />
                   </div>
 
-                  <div class="col-12">
-                    <!-- ADMIN UI CLEANUP - STEP 1D RECOVERY
-     Keep Save Profile Changes grey until Admin edits profile text fields. -->
-                    <button type="submit" id="saveAdminProfileBtn" class="btn btn-secondary dashboard-action-btn"
-                      disabled>
-                      <i class="bi bi-save me-2"></i>
-                      <span id="saveAdminProfileBtnText">
-                        Save Profile Changes
-                      </span>
-                    </button>
-                  </div>
                 </div>
+
+                <!-- PROFILE FOOTER -->
+                <div class="admin-profile-form-footer">
+
+                  <div class="admin-profile-system-note">
+                    <i class="bi bi-lock"></i>
+
+                    <span>
+                      Email, administrator role and department are controlled
+                      through authorised platform administration processes.
+                    </span>
+                  </div>
+
+                  <button type="submit" id="saveAdminProfileBtn" class="btn btn-secondary dashboard-action-btn"
+                    disabled>
+                    <i class="bi bi-save me-2"></i>
+
+                    <span id="saveAdminProfileBtnText">
+                      Save Profile Changes
+                    </span>
+                  </button>
+
+                </div>
+
               </form>
             </div>
+
           </div>
         </div>
       </section>
@@ -286,125 +496,389 @@
        OVERVIEW SECTION
        ========================================================= -->
     <section id="adminOverviewSection" class="workspace-section d-none">
-      <!-- ADMIN UI CLEANUP - STEP 1E
-       Admin Overview should summarise platform/company access health,
-       not only repeat the signed-in user's profile values. -->
-      <section class="card dashboard-section-card mb-4 shadow-sm">
+
+      <!-- ADMIN OPERATIONAL OVERVIEW - v1.0.0
+     Presentation only.
+     Mirrors the approved HR/Employee welcome-banner pattern.
+     Existing company/access metrics and Admin workflows remain unchanged. -->
+      <section class="admin-overview-welcome mb-4">
+        <div class="admin-overview-welcome-kicker">
+          PLATFORM OPERATIONS
+        </div>
+
+        <h2 class="admin-overview-welcome-title mb-3">
+          Good to see you,
+          <span id="adminOverviewWelcomeName">Administrator</span>.
+        </h2>
+
+        <p class="admin-overview-welcome-copy mb-0">
+          Here is the current position across company workspaces,
+          user access, and platform administration.
+        </p>
+      </section>
+
+      <!-- =========================================================
+     ADMIN PLATFORM OPERATIONS OVERVIEW - v1.0.0
+
+     Platform-level operational dashboard.
+     Existing metric IDs are preserved.
+     No tenant, access, authentication or Supabase workflow changes.
+     ========================================================= -->
+      <section class="card dashboard-section-card admin-platform-operations-card mb-4">
         <div class="card-body p-4 p-lg-5">
-          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+
+          <!-- PLATFORM HEALTH HEADER -->
+          <div class="admin-overview-panel-header mb-4">
             <div>
-              <h2 class="section-heading h4 mb-1">Platform Overview</h2>
+              <!-- ADMIN OPERATIONS SNAPSHOT - v1.0.0
+     Admin should show operational state, not a decorative health label. -->
+              <h2 class="section-heading h4 mb-1">
+                Operations Snapshot
+              </h2>
+
               <p class="section-subtext mb-0">
-                Quick view of company workspaces and user-to-company access setup.
+                Monitor company availability, account linkage and access readiness
+                across the BexHR platform.
               </p>
             </div>
 
-            <span class="badge rounded-pill text-bg-light border px-3 py-2">
-              Live Admin Summary
+            <span class="admin-overview-status-chip">
+              <i class="bi bi-broadcast-pin"></i>
+              <span>Live platform status</span>
             </span>
           </div>
 
-          <div class="row g-4">
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Company Workspaces</div>
-                <div class="summary-tile-value" id="adminOverviewCompanyCount">0</div>
+          <!-- =====================================================
+ OPERATIONAL METRICS
+
+ Display-only platform snapshot.
+ These cards show current operational totals only.
+ Navigation is handled by Platform Readiness and Action Centre below.
+ ===================================================== -->
+          <div class="row g-3 admin-overview-metric-grid">
+
+            <!-- TOTAL COMPANIES -->
+            <div class="col-12 col-sm-6 col-xl-3">
+              <!-- Display-only platform metric. -->
+              <div id="adminOverviewTotalCompaniesCard" class="admin-overview-metric-card w-100 h-100">
+                <span class="admin-overview-metric-icon admin-overview-metric-icon-company">
+                  <i class="bi bi-buildings"></i>
+                </span>
+
+                <span class="admin-overview-metric-content">
+                  <span class="admin-overview-metric-label">
+                    TOTAL COMPANIES
+                  </span>
+
+                  <strong class="admin-overview-metric-value" id="adminOverviewCompanyCount">
+                    0
+                  </strong>
+
+                  <span class="admin-overview-metric-support">
+                    Registered workspaces
+                  </span>
+                </span>
               </div>
             </div>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Active Companies</div>
-                <div class="summary-tile-value" id="adminOverviewActiveCompanyCount">0</div>
+            <!-- ACTIVE COMPANIES -->
+            <div class="col-12 col-sm-6 col-xl-3">
+              <!-- Display-only platform metric: Active Companies -->
+              <div id="adminOverviewActiveCompaniesCard" class="admin-overview-metric-card w-100 h-100">
+                <span class="admin-overview-metric-icon admin-overview-metric-icon-active">
+                  <i class="bi bi-building-check"></i>
+                </span>
+
+                <span class="admin-overview-metric-content">
+                  <span class="admin-overview-metric-label">
+                    ACTIVE COMPANIES
+                  </span>
+
+                  <strong class="admin-overview-metric-value" id="adminOverviewActiveCompanyCount">
+                    0
+                  </strong>
+
+                  <span class="admin-overview-metric-support">
+                    Available for operation
+                  </span>
+                </span>
               </div>
             </div>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Linked Users</div>
-                <div class="summary-tile-value" id="adminOverviewLinkedUserCount">0</div>
+            <!-- LINKED USERS -->
+            <div class="col-12 col-sm-6 col-xl-3">
+              <!-- Display-only platform metric: Linked Users -->
+              <div id="adminOverviewLinkedUsersCard" class="admin-overview-metric-card w-100 h-100">
+                <span class="admin-overview-metric-icon admin-overview-metric-icon-linked">
+                  <i class="bi bi-person-check"></i>
+                </span>
+
+                <span class="admin-overview-metric-content">
+                  <span class="admin-overview-metric-label">
+                    LINKED USERS
+                  </span>
+
+                  <strong class="admin-overview-metric-value" id="adminOverviewLinkedUserCount">
+                    0
+                  </strong>
+
+                  <span class="admin-overview-metric-support">
+                    Company access assigned
+                  </span>
+                </span>
               </div>
             </div>
 
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Unlinked Users</div>
-                <div class="summary-tile-value" id="adminOverviewUnlinkedUserCount">0</div>
+            <!-- UNLINKED USERS -->
+            <div class="col-12 col-sm-6 col-xl-3">
+              <!-- Display-only platform metric: Unlinked Users -->
+              <div id="adminOverviewUnlinkedUsersCard" class="admin-overview-metric-card w-100 h-100">
+                <span class="admin-overview-metric-icon admin-overview-metric-icon-warning">
+                  <i class="bi bi-person-exclamation"></i>
+                </span>
+
+                <span class="admin-overview-metric-content">
+                  <span class="admin-overview-metric-label">
+                    UNLINKED USERS
+                  </span>
+
+                  <strong class="admin-overview-metric-value" id="adminOverviewUnlinkedUserCount">
+                    0
+                  </strong>
+
+                  <span class="admin-overview-metric-support">
+                    Access requiring action
+                  </span>
+                </span>
               </div>
             </div>
+
           </div>
 
-          <!-- ADMIN UI CLEANUP - STEP 1G
-           Show a clear access-health message based on user/company linking.
-           This is display-only and uses already-loaded profile/tenant data. -->
-          <div id="adminOverviewAccessHealthPanel" class="alert alert-light border mt-4 mb-0">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+          <!-- =====================================================
+         ACCESS READINESS
+         This is an operational exception panel, not a generic alert.
+         ===================================================== -->
+          <div id="adminOverviewAccessHealthPanel" class="admin-overview-access-health mt-4">
+            <div class="admin-overview-access-health-content">
+
+              <span class="admin-overview-access-health-icon">
+                <i class="bi bi-shield-exclamation"></i>
+              </span>
+
               <div>
-                <div class="fw-semibold" id="adminOverviewAccessHealthTitle">
+                <div class="admin-overview-access-health-kicker">
+                  ACCESS READINESS
+                </div>
+
+                <div class="admin-overview-access-health-title" id="adminOverviewAccessHealthTitle">
                   Checking user access setup...
                 </div>
-                <div class="small" id="adminOverviewAccessHealthMessage">
-                  User access setup summary will appear here.
+
+                <div class="admin-overview-access-health-message" id="adminOverviewAccessHealthMessage">
+                  User access readiness will appear here.
                 </div>
               </div>
 
-              <button type="button" id="adminOverviewOpenCompaniesBtn"
-                class="btn btn-outline-primary dashboard-action-btn text-nowrap">
-                <i class="bi bi-building me-2"></i>Open Companies
-              </button>
             </div>
           </div>
-        </div>
-      </section>
 
-      <section class="card dashboard-section-card mb-4 shadow-sm">
-        <div class="card-body p-4 p-lg-5">
-          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-            <div>
-              <h2 class="section-heading h4 mb-1">Signed-in Admin</h2>
-              <p class="section-subtext mb-0">
-                Current administrator session details loaded from your authenticated profile.
+          <!-- =====================================================
+               ADMIN PLATFORM READINESS - v1.0.0
+
+               Operational Admin controls derived from the same
+               company and user-access data already loaded on Overview.
+
+               Existing Admin workflow and security logic remain unchanged.
+               ===================================================== -->
+          <div class="admin-operations-readiness mt-4">
+
+            <div class="admin-operations-readiness-main">
+
+              <div class="admin-operations-readiness-heading">
+                <div>
+                  <div class="admin-operations-readiness-kicker">
+                    PLATFORM READINESS
+                  </div>
+
+                  <h3 class="h5 fw-bold mb-1">
+                    Access coverage
+                  </h3>
+
+                  <p class="text-secondary small mb-0">
+                    Company-access coverage across the user profiles currently
+                    available to platform administration.
+                  </p>
+                </div>
+
+                <strong class="admin-operations-readiness-percent" id="adminOverviewAccessCoverageValue">
+                  0%
+                </strong>
+              </div>
+
+              <div class="admin-operations-readiness-track" id="adminOverviewAccessCoverageTrack" role="progressbar"
+                aria-label="Platform access coverage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <span class="admin-operations-readiness-bar" id="adminOverviewAccessCoverageBar"></span>
+              </div>
+
+            </div>
+
+
+            <!-- OPERATIONAL EXCEPTIONS -->
+            <div class="admin-operations-exception-grid">
+
+              <button type="button" class="admin-operations-exception-card" id="adminOverviewInactiveCompaniesAction">
+                <span class="admin-operations-exception-icon">
+                  <i class="bi bi-building-dash"></i>
+                </span>
+
+                <span>
+                  <small>INACTIVE COMPANIES</small>
+
+                  <strong id="adminOverviewInactiveCompanyCount">
+                    0
+                  </strong>
+
+                  <span>
+                    Review workspace status
+                  </span>
+                </span>
+
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+              </button>
+
+
+              <button type="button" class="admin-operations-exception-card"
+                id="adminOverviewCompaniesWithoutUsersAction">
+                <span class="admin-operations-exception-icon">
+                  <i class="bi bi-building-exclamation"></i>
+                </span>
+
+                <span>
+                  <small>COMPANIES WITHOUT USERS</small>
+
+                  <strong id="adminOverviewCompaniesWithoutUsersCount">
+                    0
+                  </strong>
+
+                  <span>
+                    Workspaces requiring access setup
+                  </span>
+                </span>
+
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+              </button>
+
+
+              <button type="button" class="admin-operations-exception-card" id="adminOverviewUnlinkedAccessAction">
+                <span class="admin-operations-exception-icon">
+                  <i class="bi bi-person-exclamation"></i>
+                </span>
+
+                <span>
+                  <small>UNLINKED USERS</small>
+
+                  <strong id="adminOverviewReadinessUnlinkedCount">
+                    0
+                  </strong>
+
+                  <span>
+                    User access requiring action
+                  </span>
+                </span>
+
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+              </button>
+
+            </div>
+          </div>
+
+
+          <!-- =====================================================
+               ADMIN ACTION CENTRE - v1.0.0
+
+               Direct routes into the main operational Admin areas.
+               ===================================================== -->
+          <div class="admin-action-centre mt-4">
+
+            <div class="admin-action-centre-heading">
+              <div class="admin-operations-readiness-kicker">
+                ACTION CENTRE
+              </div>
+
+              <h3 class="h5 fw-bold mb-1">
+                Platform administration
+              </h3>
+
+              <p class="text-secondary small mb-0">
+                Go directly to the operational area you need to manage.
               </p>
             </div>
 
-            <span class="badge rounded-pill text-bg-light border px-3 py-2">
-              Live Session
-            </span>
+            <div class="admin-action-centre-grid">
+
+              <button type="button" class="admin-action-centre-item" id="adminOverviewManageCompaniesAction">
+                <span class="admin-action-centre-icon">
+                  <i class="bi bi-buildings"></i>
+                </span>
+
+                <span class="admin-action-centre-copy">
+                  <strong>
+                    Manage Companies
+                  </strong>
+
+                  <small>
+                    Create, review and maintain company workspaces.
+                  </small>
+                </span>
+
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+              </button>
+
+
+              <button type="button" class="admin-action-centre-item" id="adminOverviewManageAccessAction">
+                <span class="admin-action-centre-icon">
+                  <i class="bi bi-person-gear"></i>
+                </span>
+
+                <span class="admin-action-centre-copy">
+                  <strong>
+                    Manage User Access
+                  </strong>
+
+                  <small>
+                    Review company assignment and account access.
+                  </small>
+                </span>
+
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+              </button>
+
+
+              <button type="button" class="admin-action-centre-item" id="adminOverviewManageEmailAction">
+                <span class="admin-action-centre-icon">
+                  <i class="bi bi-envelope-check"></i>
+                </span>
+
+                <span class="admin-action-centre-copy">
+                  <strong>
+                    Email Setup
+                  </strong>
+
+                  <small>
+                    Manage approved recipients and validation activity.
+                  </small>
+                </span>
+
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+              </button>
+
+            </div>
           </div>
 
-          <div class="row g-4 mt-1">
-            <div class="col-md-6 col-xl-3">
-              <div class="info-tile">
-                <div class="info-tile-label">Full Name</div>
-                <div class="info-tile-value text-break" id="adminFullName"><span
-                    class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
-              </div>
-            </div>
-
-            <div class="col-md-6 col-xl-3">
-              <div class="info-tile">
-                <div class="info-tile-label">Email</div>
-                <div class="info-tile-value text-break" id="adminEmailTile"><span
-                    class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
-              </div>
-            </div>
-
-            <div class="col-md-6 col-xl-3">
-              <div class="info-tile">
-                <div class="info-tile-label">Role</div>
-                <div class="info-tile-value" id="adminRoleTile"><span class="skeleton">&nbsp;&nbsp;</span></div>
-              </div>
-            </div>
-
-            <div class="col-md-6 col-xl-3">
-              <div class="info-tile">
-                <div class="info-tile-label">Department</div>
-                <div class="info-tile-value" id="adminDepartment">--</div>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
+
     </section>
 
     <!-- =========================================================
@@ -413,26 +887,14 @@
     <section id="adminTenantsSection" class="workspace-section d-none">
       <section class="card dashboard-section-card mb-4 shadow-sm">
         <div class="card-body p-4 p-lg-5">
-          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
-            <div>
-              <h2 class="section-heading h4 mb-1">Company Setup</h2>
-              <p class="section-subtext mb-0">
-                Create and maintain company workspaces, company names, Company/Tenant IDs, and user-to-company access.
-              </p>
-            </div>
 
-            <span class="badge rounded-pill text-bg-light border px-3 py-2">
-              Admin controlled
-            </span>
-          </div>
-
-          <div class="border rounded-4 p-4 bg-white mb-4">
+          <!-- ADMIN COMPANY IDENTITY AUTHORITATIVE UI - v1.0.0
+               Presentation only. Existing company CRUD behaviour is retained. -->
+          <div id="adminCompanyIdentityWorkspace" class="admin-company-identity-card mb-4 admin-companies-subworkspace">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
               <div class="d-flex align-items-start gap-3">
-                <div
-                  class="rounded-circle bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
-                  style="width: 40px; height: 40px;">
-                  <i class="bi bi-building-add text-primary"></i>
+                <div class="admin-company-identity-icon" aria-hidden="true">
+                  <i class="bi bi-building-add"></i>
                 </div>
 
                 <div>
@@ -452,63 +914,145 @@
             </div>
 
             <div id="adminCompanyIdentityCollapse">
-              <form id="tenantCreateForm" novalidate>
+
+              <!-- =========================================================
+     ADMIN COMPANY IDENTITY MODERN FORM - v1.0.0
+
+     Presentation-only restructuring.
+
+     Safety:
+     - all existing field IDs are retained;
+     - existing validation remains;
+     - existing create/update/cancel/refresh workflows remain;
+     - no tenant, Supabase or authentication behaviour changes.
+     ========================================================= -->
+              <form id="tenantCreateForm" class="admin-company-form" novalidate>
                 <input type="hidden" id="editingTenantId" />
 
-                <div class="row g-4 align-items-start">
-                  <div class="col-lg-5">
-                    <label for="tenantCompanyName" class="form-label fw-semibold">
-                      Company Name <span class="text-danger">*</span>
-                    </label>
-                    <input type="text" id="tenantCompanyName" class="form-control"
-                      placeholder="Example: Alpatech Limited" required />
-                    <div class="invalid-feedback">Company name is required.</div>
-                  </div>
-
-                  <div class="col-lg-4">
-                    <label for="tenantCode" class="form-label fw-semibold">
-                      Tenant ID / Company ID <span class="text-danger">*</span>
-                    </label>
-                    <input type="text" id="tenantCode" class="form-control" placeholder="Example: ALPATECH"
-                      autocomplete="off" required />
-                    <div class="form-text">
-                      Use letters, numbers, hyphen, or underscore only. This will be used during login.
+                <!-- FORM INTRO -->
+                <div class="admin-company-form-intro">
+                  <div>
+                    <div class="admin-company-form-kicker">
+                      COMPANY DETAILS
                     </div>
-                    <div class="invalid-feedback">Tenant ID / Company ID is required.</div>
+
+                    <h4 class="admin-company-form-title">
+                      Workspace identity
+                    </h4>
+
+                    <p class="admin-company-form-copy">
+                      Define the company name, login Company ID and current workspace status.
+                    </p>
                   </div>
 
-                  <div class="col-lg-3">
-                    <label for="tenantStatus" class="form-label fw-semibold">
-                      Status <span class="text-danger">*</span>
+                  <span class="admin-company-form-required-note">
+                    <span class="admin-company-required-dot" aria-hidden="true"></span>
+                    Required fields
+                  </span>
+                </div>
+
+                <!-- FORM FIELDS -->
+                <div class="admin-company-form-grid">
+
+                  <!-- COMPANY NAME -->
+                  <div class="admin-company-field admin-company-field-name">
+                    <label for="tenantCompanyName" class="admin-company-field-label">
+                      Company Name
+                      <span class="admin-company-required">*</span>
                     </label>
-                    <select id="tenantStatus" class="form-select" required>
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </div>
 
-                  <div class="col-12">
-                    <div class="d-flex flex-wrap gap-2">
-                      <button type="submit" id="saveTenantBtn" class="btn btn-secondary dashboard-action-btn" disabled>
-                        <i class="bi bi-save me-2"></i>
-                        <span id="saveTenantBtnText">Create Company</span>
-                      </button>
+                    <!-- ADMIN COMPANY IDENTITY FORM POLISH - v1.0.1
+     Keep operational fields clean and text-led.
+     Decorative icons were removed because they competed with entered values. -->
+                    <div class="admin-company-input-shell">
+                      <input type="text" id="tenantCompanyName" class="form-control admin-company-input"
+                        placeholder="Example: Alpatech Limited" autocomplete="organization" required />
+                    </div>
 
-                      <!-- REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1C
-     Cancel Edit discards an active company edit, so use the same red
-     outline pattern as HR edit-cancel actions. -->
-                      <button type="button" id="cancelTenantEditBtn"
-                        class="btn btn-outline-danger dashboard-action-btn d-none">
-                        <i class="bi bi-x-circle me-2"></i>
-                        Cancel Edit
-                      </button>
-
-                      <button type="button" id="refreshTenantsBtn" class="btn btn-outline-primary dashboard-action-btn">
-                        <i class="bi bi-arrow-clockwise me-2"></i>
-                        Refresh Companies
-                      </button>
+                    <div class="invalid-feedback">
+                      Company name is required.
                     </div>
                   </div>
+
+
+                  <!-- COMPANY ID -->
+                  <div class="admin-company-field admin-company-field-code">
+                    <label for="tenantCode" class="admin-company-field-label">
+                      Company ID
+                      <span class="admin-company-required">*</span>
+                    </label>
+
+                    <div class="admin-company-input-shell">
+                      <input type="text" id="tenantCode" class="form-control admin-company-input"
+                        placeholder="Example: ALPATECH" autocomplete="off" required />
+                    </div>
+
+                    <div class="admin-company-field-help">
+                      Used during company login. Letters, numbers, hyphen and underscore only.
+                    </div>
+
+                    <div class="invalid-feedback">
+                      Company ID is required.
+                    </div>
+                  </div>
+
+
+                  <!-- STATUS -->
+                  <div class="admin-company-field admin-company-field-status">
+                    <label for="tenantStatus" class="admin-company-field-label">
+                      Workspace Status
+                      <span class="admin-company-required">*</span>
+                    </label>
+
+                    <div class="admin-company-select-shell">
+                      <select id="tenantStatus" class="form-select admin-company-select" required>
+
+                        <option value="Active">
+                          Active
+                        </option>
+
+                        <option value="Inactive">
+                          Inactive
+                        </option>
+                      </select>
+                    </div>
+
+                    <div class="admin-company-field-help">
+                      Inactive workspaces remain recorded but should not be used for new access.
+                    </div>
+                  </div>
+
+                </div>
+
+
+                <!-- FORM ACTIONS -->
+                <div class="admin-company-form-actions">
+
+                  <div class="admin-company-form-actions-primary">
+
+                    <button type="submit" id="saveTenantBtn" class="btn btn-secondary dashboard-action-btn" disabled>
+                      <i class="bi bi-building-add me-2"></i>
+
+                      <span id="saveTenantBtnText">
+                        Create Company
+                      </span>
+                    </button>
+
+
+                    <button type="button" id="cancelTenantEditBtn"
+                      class="btn btn-outline-danger dashboard-action-btn d-none">
+                      <i class="bi bi-x-circle me-2"></i>
+                      Cancel Edit
+                    </button>
+
+                  </div>
+
+
+                  <button type="button" id="refreshTenantsBtn" class="btn btn-outline-primary dashboard-action-btn">
+                    <i class="bi bi-arrow-clockwise me-2"></i>
+                    Refresh Companies
+                  </button>
+
                 </div>
               </form>
 
@@ -547,171 +1091,329 @@
           <!-- ADMIN EMAIL SETUP - STEP 1D
                Admin owns approved validation recipients per company.
                HR can only use these approved recipients from Setup > Email Integration. -->
-          <div class="border rounded-4 p-4 bg-white mb-4">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
-              <div class="d-flex align-items-start gap-3">
-                <div
-                  class="rounded-circle bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
-                  style="width: 40px; height: 40px;">
-                  <i class="bi bi-envelope-check text-primary"></i>
+          <!-- =========================================================
+     ADMIN EMAIL SETUP AUTHORITATIVE UI - v1.0.0
+
+     Presentation-only workspace refresh.
+
+     Existing IDs and workflows retained:
+     - company-scoped recipient setup
+     - approved recipient CRUD
+     - validation history
+     - clear-history action
+     - refresh behaviour
+     - Supabase / RPC / auth / tenant rules
+     ========================================================= -->
+          <div id="adminEmailSetupWorkspace"
+            class="admin-email-setup-card border mb-4 admin-companies-subworkspace d-none">
+
+            <!-- WORKSPACE HEADER -->
+            <div class="admin-email-header">
+              <div class="admin-email-header-main">
+                <div class="admin-email-header-icon" aria-hidden="true">
+                  <i class="bi bi-envelope-check"></i>
                 </div>
 
                 <div>
-                  <h3 class="section-heading h5 mb-1">Email Setup</h3>
-                  <p class="section-subtext mb-0">
-                    Register approved validation recipients and review email delivery health by company workspace.
+                  <div class="admin-email-eyebrow">
+                    COMMUNICATION CONTROL
+                  </div>
+
+                  <h3 class="admin-email-title">
+                    Email Setup
+                  </h3>
+
+                  <p class="admin-email-copy">
+                    Register approved validation recipients and review controlled email delivery activity by company.
                   </p>
                 </div>
               </div>
 
-              <div class="d-flex flex-wrap gap-2 align-items-center">
-                <span class="badge rounded-pill text-bg-light border px-3 py-2">
+              <div class="admin-email-header-actions">
+                <span class="admin-email-control-pill">
+                  <i class="bi bi-shield-lock" aria-hidden="true"></i>
                   Admin controlled
                 </span>
-
                 <button type="button" id="toggleAdminEmailSetupCardBtn"
-                  class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                  class="btn btn-outline-secondary dashboard-action-btn" aria-expanded="true"
                   aria-controls="adminEmailSetupCollapse">
                   <i class="bi bi-chevron-up me-2"></i>
                   <span>Collapse</span>
                 </button>
               </div>
             </div>
-
             <div id="adminEmailSetupCollapse">
-              <div class="alert alert-light border rounded-4 mb-4">
-                <div class="fw-semibold mb-1">Controlled validation only</div>
-                <div class="small text-secondary">
-                  Admin registers approved recipients here. HR can then send safe validation emails only to those
-                  approved recipients from the HR Email Integration panel. Provider secrets remain server-side.
+
+              <!-- CONTROL CONTEXT -->
+              <div class="admin-email-control-note">
+                <span class="admin-email-control-note-icon" aria-hidden="true">
+                  <i class="bi bi-shield-check"></i>
+                </span>
+
+                <div>
+                  <strong>
+                    Controlled validation only
+                  </strong>
+
+                  <span>
+                    Admin approves recipients here. HR can then use only those approved recipients from Email
+                    Integration. Provider secrets remain server-side.
+                  </span>
                 </div>
               </div>
 
-              <div class="row g-4 mb-4">
-                <div class="col-md-6 col-xl-3">
-                  <div class="summary-tile">
-                    <div class="summary-tile-label">Approved Recipients</div>
-                    <div class="summary-tile-value h6 mb-0" id="adminEmailRecipientCountValue">0</div>
-                  </div>
-                </div>
 
-                <div class="col-md-6 col-xl-3">
-                  <div class="summary-tile">
-                    <div class="summary-tile-label">Active Recipients</div>
-                    <div class="summary-tile-value h6 mb-0" id="adminEmailActiveRecipientCountValue">0</div>
-                  </div>
-                </div>
+              <!-- OPERATIONAL SUMMARY -->
+              <div class="admin-email-summary-grid">
 
-                <div class="col-md-6 col-xl-3">
-                  <div class="summary-tile">
-                    <div class="summary-tile-label">Validation History</div>
-                    <div class="summary-tile-value h6 mb-0" id="adminEmailDeliveryLogCountValue">0</div>
-                  </div>
-                </div>
+                <article class="admin-email-summary-card">
+                  <span class="admin-email-summary-icon">
+                    <i class="bi bi-person-check"></i>
+                  </span>
 
-                <div class="col-md-6 col-xl-3">
-                  <div class="summary-tile">
-                    <div class="summary-tile-label">Last Result</div>
-                    <div class="summary-tile-value h6 mb-0" id="adminEmailLastResultValue">--</div>
+                  <div>
+                    <span class="admin-email-summary-label">
+                      Approved Recipients
+                    </span>
+
+                    <strong class="admin-email-summary-value" id="adminEmailRecipientCountValue">
+                      0
+                    </strong>
                   </div>
-                </div>
+                </article>
+
+
+                <article class="admin-email-summary-card">
+                  <span class="admin-email-summary-icon">
+                    <i class="bi bi-check-circle"></i>
+                  </span>
+
+                  <div>
+                    <span class="admin-email-summary-label">
+                      Active Recipients
+                    </span>
+
+                    <strong class="admin-email-summary-value" id="adminEmailActiveRecipientCountValue">
+                      0
+                    </strong>
+                  </div>
+                </article>
+
+
+                <article class="admin-email-summary-card">
+                  <span class="admin-email-summary-icon">
+                    <i class="bi bi-clock-history"></i>
+                  </span>
+
+                  <div>
+                    <span class="admin-email-summary-label">
+                      Validation History
+                    </span>
+
+                    <strong class="admin-email-summary-value" id="adminEmailDeliveryLogCountValue">
+                      0
+                    </strong>
+                  </div>
+                </article>
+
+
+                <article class="admin-email-summary-card">
+                  <span class="admin-email-summary-icon">
+                    <i class="bi bi-activity"></i>
+                  </span>
+
+                  <div>
+                    <span class="admin-email-summary-label">
+                      Last Result
+                    </span>
+
+                    <strong class="admin-email-summary-value" id="adminEmailLastResultValue">
+                      --
+                    </strong>
+                  </div>
+                </article>
+
               </div>
 
-              <form id="adminEmailRecipientForm" class="border rounded-4 p-4 bg-light-subtle mb-4" novalidate>
+
+              <!-- APPROVED RECIPIENT FORM -->
+              <form id="adminEmailRecipientForm" class="admin-email-form" novalidate>
                 <input type="hidden" id="editingAdminEmailRecipientId" />
 
-                <div class="row g-3 align-items-start">
-                  <!-- ADMIN EMAIL SETUP - STEP 1D-1
-       Keep all required recipient fields aligned on one row on wide screens.
-       This avoids the Status field wrapping awkwardly under Company. -->
-                  <div class="col-12 col-md-6 col-xl-3">
-                    <label for="adminEmailSetupCompanyId" class="form-label fw-semibold">
-                      Company <span class="text-danger">*</span>
-                    </label>
-                    <select id="adminEmailSetupCompanyId" class="form-select" required>
-                      <option value="">Select company</option>
-                    </select>
-                    <div class="form-text">
-                      Recipient will be available only in the selected company workspace.
+                <div class="admin-email-form-heading">
+                  <div>
+                    <div class="admin-email-form-kicker">
+                      APPROVED RECIPIENT
                     </div>
-                    <div class="invalid-feedback">Select the company workspace.</div>
+
+                    <h4>
+                      Recipient configuration
+                    </h4>
+
+                    <p>
+                      Choose the company workspace and maintain the approved mailbox details available to HR.
+                    </p>
                   </div>
 
-                  <div class="col-12 col-md-6 col-xl-3">
-                    <!-- ADMIN EMAIL SETUP - STEP 1D-2
-     Recipient Label is the friendly name HR sees when selecting
-     an approved validation recipient. It is not the email address. -->
-                    <label for="adminEmailRecipientDisplayName" class="form-label fw-semibold">
-                      Recipient Label <span class="text-danger">*</span>
+                  <span class="admin-email-required-note">
+                    <span aria-hidden="true"></span>
+                    Required fields
+                  </span>
+                </div>
+
+
+                <div class="admin-email-form-grid">
+
+                  <!-- COMPANY -->
+                  <div class="admin-email-field">
+                    <label for="adminEmailSetupCompanyId">
+                      Company
+                      <span>*</span>
                     </label>
+
+                    <select id="adminEmailSetupCompanyId" class="form-select" required>
+                      <option value="">
+                        Select company
+                      </option>
+                    </select>
+
+                    <small>
+                      Recipient is available only within the selected company workspace.
+                    </small>
+
+                    <div class="invalid-feedback">
+                      Select the company workspace.
+                    </div>
+                  </div>
+
+
+                  <!-- LABEL -->
+                  <div class="admin-email-field">
+                    <label for="adminEmailRecipientDisplayName">
+                      Recipient Label
+                      <span>*</span>
+                    </label>
+
                     <input type="text" id="adminEmailRecipientDisplayName" class="form-control"
                       placeholder="Example: Payroll Validation Mailbox" autocomplete="off" required />
-                    <div class="invalid-feedback">Enter a clear recipient label.</div>
-                  </div>
 
-                  <div class="col-12 col-md-6 col-xl-3">
-                    <label for="adminEmailRecipientEmail" class="form-label fw-semibold">
-                      Recipient Email <span class="text-danger">*</span>
-                    </label>
-                    <input type="email" id="adminEmailRecipientEmail" class="form-control"
-                      placeholder="validation@example.com" autocomplete="off" required />
-                    <div class="invalid-feedback">Enter a valid recipient email.</div>
-                  </div>
+                    <small>
+                      Friendly name shown to HR when choosing an approved recipient.
+                    </small>
 
-                  <div class="col-12 col-md-6 col-xl-3">
-                    <label for="adminEmailRecipientStatus" class="form-label fw-semibold">
-                      Status <span class="text-danger">*</span>
-                    </label>
-                    <select id="adminEmailRecipientStatus" class="form-select" required>
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </div>
-
-                  <div class="col-12">
-                    <div class="d-flex flex-wrap gap-2">
-                      <button type="submit" id="saveAdminEmailRecipientBtn"
-                        class="btn btn-secondary dashboard-action-btn" disabled>
-                        <i class="bi bi-save me-2"></i>
-                        <span id="saveAdminEmailRecipientBtnText">Add Approved Recipient</span>
-                      </button>
-
-                      <!-- REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1C
-     Cancel Edit discards an active approved-recipient edit. Keep this
-     visually consistent with other edit-cancel actions. -->
-                      <button type="button" id="cancelAdminEmailRecipientEditBtn"
-                        class="btn btn-outline-danger dashboard-action-btn d-none">
-                        <i class="bi bi-x-circle me-2"></i>
-                        Cancel Edit
-                      </button>
-
-                      <button type="button" id="refreshAdminEmailSetupBtn"
-                        class="btn btn-outline-primary dashboard-action-btn">
-                        <i class="bi bi-arrow-clockwise me-2"></i>
-                        Refresh Email Setup
-                      </button>
+                    <div class="invalid-feedback">
+                      Enter a clear recipient label.
                     </div>
                   </div>
+
+
+                  <!-- EMAIL -->
+                  <div class="admin-email-field">
+                    <label for="adminEmailRecipientEmail">
+                      Recipient Email
+                      <span>*</span>
+                    </label>
+
+                    <input type="email" id="adminEmailRecipientEmail" class="form-control"
+                      placeholder="validation@example.com" autocomplete="off" required />
+
+                    <small>
+                      Approved mailbox used for controlled validation only.
+                    </small>
+
+                    <div class="invalid-feedback">
+                      Enter a valid recipient email.
+                    </div>
+                  </div>
+
+
+                  <!-- STATUS -->
+                  <div class="admin-email-field">
+                    <label for="adminEmailRecipientStatus">
+                      Status
+                      <span>*</span>
+                    </label>
+
+                    <select id="adminEmailRecipientStatus" class="form-select" required>
+                      <option value="Active">
+                        Active
+                      </option>
+
+                      <option value="Inactive">
+                        Inactive
+                      </option>
+                    </select>
+
+                    <small>
+                      Inactive recipients remain recorded but are unavailable to HR.
+                    </small>
+                  </div>
+
+                </div>
+
+
+                <!-- FORM ACTIONS -->
+                <div class="admin-email-form-actions">
+
+                  <div class="admin-email-form-actions-primary">
+                    <button type="submit" id="saveAdminEmailRecipientBtn" class="btn btn-secondary dashboard-action-btn"
+                      disabled>
+                      <i class="bi bi-save me-2"></i>
+
+                      <span id="saveAdminEmailRecipientBtnText">
+                        Add Approved Recipient
+                      </span>
+                    </button>
+
+
+                    <button type="button" id="cancelAdminEmailRecipientEditBtn"
+                      class="btn btn-outline-danger dashboard-action-btn d-none">
+                      <i class="bi bi-x-circle me-2"></i>
+                      Cancel Edit
+                    </button>
+                  </div>
+
+
+                  <button type="button" id="refreshAdminEmailSetupBtn"
+                    class="btn btn-outline-primary dashboard-action-btn">
+                    <i class="bi bi-arrow-clockwise me-2"></i>
+                    Refresh Email Setup
+                  </button>
+
                 </div>
               </form>
 
-              <div class="mt-4">
-                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+
+              <!-- APPROVED RECIPIENTS -->
+              <section class="admin-email-records-section">
+
+                <div class="admin-email-section-heading">
                   <div>
-                    <h4 class="h6 fw-semibold mb-1" id="adminEmailRecipientsHeader">
+                    <div class="admin-email-section-kicker">
+                      APPROVED RECIPIENTS
+                    </div>
+
+                    <h4 id="adminEmailRecipientsHeader">
                       Approved Validation Recipients
                     </h4>
-                    <p class="text-secondary small mb-0">
+
+                    <p>
                       These recipients appear in HR Setup &gt; Email Integration for the selected company.
                     </p>
                   </div>
                 </div>
 
-                <div id="adminEmailRecipientsEmptyState" class="alert alert-light border mb-0">
-                  No approved validation recipients have been configured for this company.
+
+                <div id="adminEmailRecipientsEmptyState" class="admin-email-empty-state">
+                  <i class="bi bi-inbox" aria-hidden="true"></i>
+
+                  <span>
+                    No approved validation recipients have been configured for this company.
+                  </span>
                 </div>
 
-                <div id="adminEmailRecipientsTableWrapper" class="table-responsive d-none">
+
+                <div id="adminEmailRecipientsTableWrapper" class="table-responsive d-none admin-email-table-shell">
                   <table class="table align-middle dashboard-table mb-0">
                     <thead>
                       <tr>
@@ -722,39 +1424,53 @@
                         <th class="text-center">Action</th>
                       </tr>
                     </thead>
+
                     <tbody id="adminEmailRecipientsTableBody"></tbody>
                   </table>
                 </div>
-              </div>
 
-              <hr class="my-5" />
+              </section>
 
-<div>
-  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
-    <div>
-      <h4 class="h6 fw-semibold mb-1">Validation History</h4>
-      <p class="text-secondary small mb-0">
-        Recent controlled validation email outcomes for the selected company.
-      </p>
-    </div>
 
-    <button type="button" id="clearAdminEmailHistoryBtn"
-      class="btn btn-sm btn-secondary dashboard-action-btn" disabled>
-      <i class="bi bi-trash me-2"></i>
-      Clear Validation History
-    </button>
-  </div>
+              <!-- VALIDATION HISTORY -->
+              <section class="admin-email-history-section">
 
-                <div id="adminEmailDeliveryLogsEmptyState" class="alert alert-light border mb-0">
-                  No validation email history is available for this company yet.
+                <div class="admin-email-section-heading admin-email-history-heading">
+                  <div>
+                    <div class="admin-email-section-kicker">
+                      AUDIT HISTORY
+                    </div>
+
+                    <h4>
+                      Validation History
+                    </h4>
+
+                    <p>
+                      Recent controlled validation email outcomes for the selected company.
+                    </p>
+                  </div>
+
+
+                  <button type="button" id="clearAdminEmailHistoryBtn"
+                    class="btn btn-sm btn-secondary dashboard-action-btn" disabled>
+                    <i class="bi bi-trash me-2"></i>
+                    Clear Validation History
+                  </button>
                 </div>
 
-                <!-- ADMIN EMAIL SETUP CLEANUP - STEP 1F
-     Validation History can grow quickly as HR validates email delivery.
-     Keep it visibly contained inside the Email Setup card with its own inner scroll. -->
-                <div id="adminEmailDeliveryLogsTableWrapper" class="table-responsive d-none border rounded-4"
-                  style="max-height: 220px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain;">
-                  <table class="table align-middle dashboard-table mb-0" style="min-width: 720px;">
+
+                <div id="adminEmailDeliveryLogsEmptyState" class="admin-email-empty-state">
+                  <i class="bi bi-clock-history" aria-hidden="true"></i>
+
+                  <span>
+                    No validation email history is available for this company yet.
+                  </span>
+                </div>
+
+
+                <div id="adminEmailDeliveryLogsTableWrapper"
+                  class="table-responsive d-none admin-email-history-table-shell">
+                  <table class="table align-middle dashboard-table mb-0">
                     <thead>
                       <tr>
                         <th>Recipient</th>
@@ -763,234 +1479,464 @@
                         <th>Sent / Created</th>
                       </tr>
                     </thead>
+
                     <tbody id="adminEmailDeliveryLogsTableBody"></tbody>
                   </table>
                 </div>
-              </div>
+
+              </section>
+
             </div>
           </div>
 
-          <div class="border rounded-4 p-4 bg-white">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
-              <div class="d-flex align-items-start gap-3">
-                <div
-                  class="rounded-circle bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
-                  style="width: 40px; height: 40px;">
-                  <i class="bi bi-person-check text-primary"></i>
+          <!-- =========================================================
+     ADMIN USER ACCESS AUTHORITATIVE UI - v1.0.0
+
+     Business purpose:
+     1. Invite Company User creates a new company-scoped account.
+     2. Change Company Access reassigns an existing account.
+     3. User Access Records provides current assignment/security actions.
+
+     Safety:
+     - existing operational IDs are retained;
+     - invite Edge Function remains unchanged;
+     - company assignment RPC remains unchanged;
+     - password reset, MFA, HR access and deletion remain unchanged.
+     ========================================================= -->
+          <!-- ADMIN USER ACCESS STANDALONE WORKSPACE - v1.0.1
+     This element is now a routing/workspace container only.
+     Its operational sections own their individual card surfaces. -->
+          <div id="adminUserAccessWorkspace"
+            class="admin-user-access-workspace border admin-companies-subworkspace d-none">
+
+            <!-- WORKSPACE HEADER -->
+            <div class="admin-user-access-header">
+
+              <div class="admin-user-access-header-main">
+
+                <div class="admin-user-access-header-icon" aria-hidden="true">
+                  <i class="bi bi-person-gear"></i>
                 </div>
 
                 <div>
-                  <h3 class="section-heading h5 mb-1">User Access Setup</h3>
-                  <p class="section-subtext mb-0">
-                    Control which company workspace each user can access during login.
+                  <div class="admin-user-access-eyebrow">
+                    ACCESS CONTROL
+                  </div>
+
+                  <h3 class="admin-user-access-title">
+                    User Access Setup
+                  </h3>
+
+                  <p class="admin-user-access-copy">
+                    Create company accounts, maintain company assignment,
+                    and review platform access for existing users.
                   </p>
                 </div>
+
               </div>
 
-              <div class="d-flex flex-wrap gap-2 align-items-center">
-                <span class="badge rounded-pill text-bg-light border px-3 py-2">
-                  Access control
+
+              <div class="admin-user-access-header-actions">
+
+                <span class="admin-user-access-control-pill">
+                  <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                  Admin controlled
                 </span>
 
+                <!-- ADMIN USER ACCESS COLLAPSE CONTROL - v1.0.2
+       Collapse hides the operational cards while the User Access Setup
+       header remains visible as the persistent workspace card. -->
                 <button type="button" id="toggleAdminUserCompanyAssignmentCardBtn"
-                  class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                  class="btn btn-outline-secondary dashboard-action-btn" aria-expanded="true"
                   aria-controls="adminUserCompanyAssignmentCollapse">
                   <i class="bi bi-chevron-up me-2"></i>
                   <span>Collapse</span>
                 </button>
+
               </div>
             </div>
-
             <div id="adminUserCompanyAssignmentCollapse">
-              <!-- ADMIN COMPANY USER BOOTSTRAP - STEP 1E
-       Platform Admin can invite a company-scoped HR, manager, or employee user
-       directly into a selected company workspace. Payroll is intentionally not
-       exposed here because company bootstrap should remain access-light. -->
-              <div class="alert alert-light border rounded-4 mb-4">
-                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
-                  <div>
-                    <div class="fw-semibold mb-1">
-                      Invite company user
+              <!-- =====================================================
+         NEW ACCOUNT / INVITE COMPANY USER
+         ===================================================== -->
+              <section class="admin-user-access-operation-card">
+
+                <div class="admin-user-access-operation-heading">
+
+                  <div class="admin-user-access-operation-heading-main">
+
+                    <span class="admin-user-access-operation-icon" aria-hidden="true">
+                      <i class="bi bi-person-plus"></i>
+                    </span>
+
+                    <div>
+                      <div class="admin-user-access-section-kicker">
+                        NEW ACCOUNT
+                      </div>
+
+                      <h4>
+                        Invite Company User
+                      </h4>
+
+                      <p>
+                        Create a new company-scoped login account for HR,
+                        Manager, or Employee access.
+                      </p>
                     </div>
-                    <div class="small text-secondary">
-                      Create a company-scoped login account for HR, manager, or employee access.
-                      Use this when a newly created company needs its first HR user.
-                    </div>
+
                   </div>
 
-                  <span class="badge rounded-pill text-bg-primary px-3 py-2">
-                    Admin bootstrap
+
+                  <span class="admin-user-access-bootstrap-pill">
+                    <i class="bi bi-lightning-charge"></i>
+                    Company bootstrap
                   </span>
+
                 </div>
-              </div>
 
-              <!-- ADMIN-CREATED COMPANY USERS TO EMPLOYEE RECORDS - STEP 3A
-       This form calls the secure invite-company-user Edge Function first.
-       After invite/profile access succeeds, Admin JS calls a secure RPC to
-       create or link the minimum employee record needed for HR list, payroll,
-       leave, and employee self-service. -->
-              <form id="companyUserInviteForm" class="border rounded-4 p-4 bg-light-subtle mb-5" novalidate>
-                <div class="row g-4 align-items-start">
-                  <div class="col-lg-6">
-                    <label for="companyUserFullName" class="form-label fw-semibold">
-                      Full Name <span class="text-danger">*</span>
-                    </label>
-                    <input type="text" id="companyUserFullName" class="form-control"
-                      placeholder="Example: Mr Samni Fatukasi" autocomplete="name" required />
-                    <div class="invalid-feedback">Enter the user’s full name.</div>
-                  </div>
 
-                  <div class="col-lg-6">
-                    <label for="companyUserEmail" class="form-label fw-semibold">
-                      Email Address <span class="text-danger">*</span>
-                    </label>
-                    <input type="email" id="companyUserEmail" class="form-control"
-                      placeholder="Example: fatukasivictor@gmail.com" autocomplete="email" required />
-                    <div class="invalid-feedback">Enter a valid email address.</div>
-                  </div>
+                <form id="companyUserInviteForm" class="admin-user-access-form" novalidate>
 
-                  <div class="col-lg-6">
-                    <label for="companyUserRole" class="form-label fw-semibold">
-                      Role <span class="text-danger">*</span>
-                    </label>
-                    <select id="companyUserRole" class="form-select" required>
-                      <!-- ADMIN COMPANY USER BOOTSTRAP - STEP 1E
-       Admin bootstrap roles are restricted to HR, Manager, and Employee.
-       Payroll access should be controlled separately if needed later. -->
-                      <option value="hr" selected>HR</option>
-                      <option value="manager">Manager</option>
-                      <option value="employee">Employee</option>
-                    </select>
-                    <div class="form-text">
-                      Use HR for the first company user who will manage people records.
+                  <div class="admin-user-access-form-grid">
+
+
+                    <!-- FULL NAME -->
+                    <div class="admin-user-access-field">
+
+                      <label for="companyUserFullName">
+                        Full Name
+                        <span>*</span>
+                      </label>
+
+                      <input type="text" id="companyUserFullName" class="form-control"
+                        placeholder="Example: Mr Samni Fatukasi" autocomplete="name" required />
+
+                      <div class="invalid-feedback">
+                        Enter the user's full name.
+                      </div>
+
                     </div>
-                    <div class="invalid-feedback">Select a company role.</div>
-                  </div>
 
-                  <div class="col-lg-6">
-                    <label for="companyUserTenantId" class="form-label fw-semibold">
-                      Company <span class="text-danger">*</span>
-                    </label>
-                    <select id="companyUserTenantId" class="form-select" required>
-                      <option value="">Select company</option>
-                    </select>
-                    <div class="form-text">
-                      User will sign in using this company’s Company ID.
+
+                    <!-- EMAIL -->
+                    <div class="admin-user-access-field">
+
+                      <label for="companyUserEmail">
+                        Email Address
+                        <span>*</span>
+                      </label>
+
+                      <input type="email" id="companyUserEmail" class="form-control"
+                        placeholder="Example: user@company.com" autocomplete="email" required />
+
+                      <div class="invalid-feedback">
+                        Enter a valid email address.
+                      </div>
+
                     </div>
-                    <div class="invalid-feedback">Select the company workspace.</div>
-                  </div>
 
-                  <div class="col-lg-6">
-                    <label for="companyUserDepartment" class="form-label fw-semibold">
-                      Department <span class="text-secondary small">(optional)</span>
-                    </label>
-                    <select id="companyUserDepartment" class="form-select" disabled>
-                      <option value="">Select a company first</option>
-                    </select>
-                    <div class="form-text">
-                      Optional during first HR bootstrap. HR can maintain company departments after access is created.
+
+                    <!-- ROLE -->
+                    <div class="admin-user-access-field">
+
+                      <label for="companyUserRole">
+                        Role
+                        <span>*</span>
+                      </label>
+
+                      <select id="companyUserRole" class="form-select" required>
+                        <option value="hr" selected>
+                          HR
+                        </option>
+
+                        <option value="manager">
+                          Manager
+                        </option>
+
+                        <option value="employee">
+                          Employee
+                        </option>
+                      </select>
+
+                      <small>
+                        Use HR for the first company user who will maintain people records.
+                      </small>
+
+                      <div class="invalid-feedback">
+                        Select a company role.
+                      </div>
+
                     </div>
-                    <div class="invalid-feedback">Select a department or leave it blank for first-user setup.</div>
-                  </div>
 
-                  <div class="col-12">
-                    <div id="companyUserInviteAlert" class="alert d-none mb-3" role="alert"></div>
 
-                    <div class="d-flex flex-wrap gap-2">
-                      <button type="submit" id="inviteCompanyUserBtn" class="btn btn-secondary dashboard-action-btn"
-                        disabled>
-                        <i class="bi bi-envelope-plus me-2"></i>
-                        <span id="inviteCompanyUserBtnText">Send Company User Invite</span>
-                      </button>
+                    <!-- COMPANY -->
+                    <div class="admin-user-access-field">
 
-                      <button type="button" id="clearCompanyUserInviteBtn"
-                        class="btn btn-outline-secondary dashboard-action-btn">
-                        <i class="bi bi-x-circle me-2"></i>
-                        Clear
-                      </button>
+                      <label for="companyUserTenantId">
+                        Company
+                        <span>*</span>
+                      </label>
+
+                      <select id="companyUserTenantId" class="form-select" required>
+                        <option value="">
+                          Select company
+                        </option>
+                      </select>
+
+                      <small>
+                        The user will sign in using this company's Company ID.
+                      </small>
+
+                      <div class="invalid-feedback">
+                        Select the company workspace.
+                      </div>
+
                     </div>
+
+
+                    <!-- DEPARTMENT -->
+                    <div class="admin-user-access-field admin-user-access-field-wide">
+
+                      <label for="companyUserDepartment">
+                        Department
+
+                        <small class="admin-user-access-optional">
+                          Optional
+                        </small>
+                      </label>
+
+                      <select id="companyUserDepartment" class="form-select" disabled>
+                        <option value="">
+                          Select a company first
+                        </option>
+                      </select>
+
+                      <small>
+                        Optional during first-user setup. Company HR can maintain
+                        departments after access is created.
+                      </small>
+
+                      <div class="invalid-feedback">
+                        Select a department or leave it blank for first-user setup.
+                      </div>
+
+                    </div>
+
                   </div>
+
+
+                  <div id="companyUserInviteAlert" class="alert d-none mx-4 mt-0 mb-3" role="alert"></div>
+
+
+                  <div class="admin-user-access-form-actions">
+
+                    <button type="submit" id="inviteCompanyUserBtn" class="btn btn-secondary dashboard-action-btn"
+                      disabled>
+                      <i class="bi bi-envelope-plus me-2"></i>
+
+                      <span id="inviteCompanyUserBtnText">
+                        Send Company User Invite
+                      </span>
+                    </button>
+
+
+                    <button type="button" id="clearCompanyUserInviteBtn"
+                      class="btn btn-outline-secondary dashboard-action-btn">
+                      <i class="bi bi-x-circle me-2"></i>
+                      Clear
+                    </button>
+
+                  </div>
+
+                </form>
+
+              </section>
+
+
+              <!-- =====================================================
+         CHANGE COMPANY ACCESS
+         Existing account -> different company
+         ===================================================== -->
+              <section class="admin-user-access-operation-card admin-user-access-reassign-card">
+
+                <div class="admin-user-access-operation-heading">
+
+                  <div class="admin-user-access-operation-heading-main">
+
+                    <span class="admin-user-access-operation-icon" aria-hidden="true">
+                      <i class="bi bi-arrow-left-right"></i>
+                    </span>
+
+                    <div>
+                      <div class="admin-user-access-section-kicker">
+                        CHANGE COMPANY ACCESS
+                      </div>
+
+                      <h4>
+                        Reassign Existing User
+                      </h4>
+
+                      <p>
+                        Move an existing user account to a different company workspace.
+                        This changes the company available to the user during login.
+                      </p>
+                    </div>
+
+                  </div>
+
+
+                  <span class="admin-user-access-impact-pill">
+                    <i class="bi bi-shield-exclamation"></i>
+                    Access change
+                  </span>
+
                 </div>
-              </form>
 
-              <form id="profileTenantLinkForm" novalidate>
-                <input type="hidden" id="editingProfileTenantLinkProfileId" />
 
-                <div class="row g-4 align-items-start">
-                  <div class="col-lg-6">
-                    <label for="profileTenantProfileId" class="form-label fw-semibold">
-                      User / Profile <span class="text-danger">*</span>
-                    </label>
-                    <select id="profileTenantProfileId" class="form-select" required>
-                      <option value="">Select user/profile</option>
-                    </select>
-                    <div class="invalid-feedback">Select a user/profile.</div>
+                <form id="profileTenantLinkForm" class="admin-user-access-form" novalidate>
+
+                  <input type="hidden" id="editingProfileTenantLinkProfileId" />
+
+
+                  <div class="admin-user-access-reassign-grid">
+
+
+                    <!-- EXISTING USER -->
+                    <div class="admin-user-access-field">
+
+                      <label for="profileTenantProfileId">
+                        User Account
+                        <span>*</span>
+                      </label>
+
+                      <select id="profileTenantProfileId" class="form-select" required>
+                        <option value="">
+                          Select user account
+                        </option>
+                      </select>
+
+                      <small>
+                        Select the existing login account whose company access should change.
+                      </small>
+
+                      <div class="invalid-feedback">
+                        Select a user account.
+                      </div>
+
+                    </div>
+
+
+                    <!-- TARGET COMPANY -->
+                    <div class="admin-user-access-field">
+
+                      <label for="profileTenantTenantId">
+                        Assigned Company
+                        <span>*</span>
+                      </label>
+
+                      <select id="profileTenantTenantId" class="form-select" required>
+                        <option value="">
+                          Select company
+                        </option>
+                      </select>
+
+                      <small>
+                        This becomes the company workspace available to the selected user.
+                      </small>
+
+                      <div class="invalid-feedback">
+                        Select the company workspace.
+                      </div>
+
+                    </div>
+
                   </div>
 
-                  <div class="col-lg-6">
-                    <label for="profileTenantTenantId" class="form-label fw-semibold">
-                      Company <span class="text-danger">*</span>
-                    </label>
-                    <select id="profileTenantTenantId" class="form-select" required>
-                      <option value="">Select company</option>
-                    </select>
-                    <div class="invalid-feedback">Select a company.</div>
-                  </div>
 
-                  <div class="col-12">
-                    <div class="d-flex flex-wrap gap-2">
+                  <div class="admin-user-access-form-actions">
+
+                    <div class="admin-user-access-form-actions-primary">
+
                       <button type="submit" id="saveProfileTenantLinkBtn" class="btn btn-secondary dashboard-action-btn"
                         disabled>
-                        <i class="bi bi-link-45deg me-2"></i>
-                        <span id="saveProfileTenantLinkBtnText">Save Access Setup</span>
+                        <i class="bi bi-arrow-left-right me-2"></i>
+
+                        <span id="saveProfileTenantLinkBtnText">
+                          Change Company Access
+                        </span>
                       </button>
 
-                      <!-- REFRESH / CLEAR BUTTON UX CONSISTENCY - STEP 1C
-     Cancel Edit discards an active user/company access edit. Use red
-     outline to distinguish it from neutral clear/refresh actions. -->
+
                       <button type="button" id="cancelProfileTenantLinkEditBtn"
                         class="btn btn-outline-danger dashboard-action-btn d-none">
                         <i class="bi bi-x-circle me-2"></i>
                         Cancel Edit
                       </button>
 
-                      <button type="button" id="refreshProfileTenantLinksBtn"
-                        class="btn btn-outline-primary dashboard-action-btn">
-                        <i class="bi bi-arrow-clockwise me-2"></i>
-                        Refresh Access Records
-                      </button>
                     </div>
-                  </div>
-                </div>
-              </form>
 
-              <div class="mt-5">
-                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+
+                    <button type="button" id="refreshProfileTenantLinksBtn"
+                      class="btn btn-outline-primary dashboard-action-btn">
+                      <i class="bi bi-arrow-clockwise me-2"></i>
+                      Refresh Access Records
+                    </button>
+
+                  </div>
+
+                </form>
+
+              </section>
+
+              <!-- =====================================================
+         CURRENT USER ACCESS
+         ===================================================== -->
+              <section class="admin-user-access-records-section">
+
+                <!-- ADMIN USER ACCESS RECORDS COLLAPSE - v1.0.0
+     Records/history starts collapsed by default while the two working
+     User Access cards remain immediately available to Admin. -->
+                <div
+                  class="admin-user-access-records-heading d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+
                   <div>
-                    <h4 class="h6 fw-semibold mb-1" id="profileTenantLinksHeader">
+                    <div class="admin-user-access-section-kicker">
+                      CURRENT ACCESS
+                    </div>
+
+                    <h4 id="profileTenantLinksHeader">
                       User Access Records
                     </h4>
-                    <p class="text-secondary small mb-0">
-                      Shows the company workspace currently assigned to each user profile.
+
+                    <p>
+                      Review current company assignment, system role,
+                      and available account administration actions.
                     </p>
                   </div>
                 </div>
 
-                <div id="profileTenantLinksEmptyState" class="alert alert-light border mb-0">
-                  No user profiles are available for tenant assignment.
+                <!-- Records/history content only.
+     The records card heading remains visible while this content is collapsed. -->
+                <div id="profileTenantLinksEmptyState" class="admin-user-access-empty-state">
+                  <i class="bi bi-people" aria-hidden="true"></i>
+
+                  <span>
+                    No user profiles are available for company assignment.
+                  </span>
                 </div>
 
-                <div id="profileTenantLinksTableWrapper" class="table-responsive d-none">
-                  <!-- ADMIN ACCESS RECORDS UX CLEANUP - STEP 1E-3
-       Company is now shown once in the grouped company header.
-       User rows keep only role, Company ID, and actions to reduce repetition. -->
+
+                <div id="profileTenantLinksTableWrapper" class="table-responsive d-none admin-user-access-table-shell">
+
                   <table class="table align-middle dashboard-table mb-0 admin-access-table">
+
                     <colgroup>
                       <col style="width: 42%;">
                       <col style="width: 18%;">
                       <col style="width: 20%;">
                       <col style="width: 20%;">
                     </colgroup>
+
                     <thead>
                       <tr>
                         <th>User</th>
@@ -1002,7 +1948,7 @@
                     <tbody id="profileTenantLinksTableBody"></tbody>
                   </table>
                 </div>
-              </div>
+              </section>
             </div>
           </div>
         </div>
@@ -1010,12 +1956,12 @@
     </section>
   </main>
 
-  <!-- ADMIN UI CLEANUP - STEP 1H
-       Floating Back to Top button for long Admin pages.
-       This matches the HR dashboard behaviour without changing any form data. -->
+  <!-- ADMIN AUTHORITATIVE UI REFRESH - BACK TO TOP MARKUP FIX
+     Correct the malformed opening button tag only.
+     Existing back-to-top JS behaviour remains unchanged. -->
   <button type="button" id="backToTopBtn" class="btn rounded-circle shadow d-none bexhr-back-to-top-btn"
     aria-label="Back to top" title="Back to top"
-    style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050; width: 46px; height: 46px; background-color: #8a5a05; border-color: #8a5a05; color: #fff;"
+    style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050; width: 46px; height: 46px; background-color: #087f7a; border-color: #087f7a; color: #fff;">
     <i class="bi bi-arrow-up"></i>
   </button>
 
@@ -1062,112 +2008,808 @@
        - Help is available when needed.
        - This does not change profile, company, access, invite, email setup,
          password reset, tenant, Supabase, or role logic. -->
-  <div class="modal fade" id="adminOperatingGuideModal" tabindex="-1" aria-labelledby="adminOperatingGuideModalLabel"
-    aria-hidden="true">
+  <div class="modal fade admin-operating-guide-modal" id="adminOperatingGuideModal" tabindex="-1"
+    aria-labelledby="adminOperatingGuideModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
-      <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-        <div class="modal-header border-0 px-4 pt-4 pb-0 d-flex justify-content-between align-items-start gap-3">
-          <div class="flex-grow-1">
-            <h5 class="modal-title fw-bold mb-1" id="adminOperatingGuideModalLabel">
-              <i class="bi bi-question-circle me-2 text-primary"></i>How this Admin dashboard works
-            </h5>
-            <p class="text-secondary small mb-0">
-              A quick guide to where each platform administration task belongs.
-            </p>
+      <div class="modal-content admin-operating-guide-shell">
+
+        <!-- ADMIN HELP GUIDE ROLE PARITY - v1.1.1
+           Follows the approved role-guide operating pattern.
+           Existing Admin navigation remains authoritative. -->
+        <header class="admin-operating-guide-header">
+
+          <div class="admin-operating-guide-header-main">
+
+            <span class="admin-operating-guide-header-icon" aria-hidden="true">
+              <i class="bi bi-compass"></i>
+            </span>
+
+            <div>
+              <div class="admin-operating-guide-kicker">
+                ADMIN WORKSPACE GUIDE
+              </div>
+
+              <h5 class="admin-operating-guide-title" id="adminOperatingGuideModalLabel">
+                Find the right place for each task
+              </h5>
+
+              <p class="admin-operating-guide-copy">
+                Open an Admin workspace below to continue directly from the guide.
+              </p>
+            </div>
+
           </div>
 
-          <!-- GUIDED HELP LAYER - ADMIN STEP 1T-FIX
-               Match Employee/HR guide close-button styling.
-               This is visual alignment only; Bootstrap still closes the modal. -->
-          <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0" data-bs-dismiss="modal"
+          <button type="button" class="admin-operating-guide-close" data-bs-dismiss="modal"
             aria-label="Close Admin operating guide">
             <i class="bi bi-x-lg"></i>
           </button>
+
+        </header>
+
+
+        <div class="modal-body admin-operating-guide-body">
+
+          <!-- RECOMMENDED STARTING POINT -->
+          <button type="button" class="admin-guide-recommended admin-guide-route"
+            data-admin-guide-target="adminTabOverviewBtn">
+
+            <span class="admin-guide-recommended-icon" aria-hidden="true">
+              <i class="bi bi-grid-1x2"></i>
+            </span>
+
+            <span class="admin-guide-recommended-copy">
+
+              <span class="admin-guide-flag">
+                RECOMMENDED STARTING POINT
+              </span>
+
+              <strong>
+                Overview
+              </strong>
+
+              <small>
+                Review company availability, access coverage, platform readiness,
+                operational exceptions, and actions requiring attention.
+              </small>
+
+            </span>
+
+            <span class="admin-guide-open-link">
+              Open Overview
+              <i class="bi bi-arrow-right"></i>
+            </span>
+
+          </button>
+
+
+          <!-- PLATFORM ADMINISTRATION -->
+          <section class="admin-guide-workspaces">
+
+            <div class="admin-guide-section-intro">
+
+              <div class="admin-guide-flag">
+                PLATFORM ADMINISTRATION
+              </div>
+
+              <h6>
+                Choose the workspace that matches your task
+              </h6>
+
+              <p>
+                Companies is the main Admin operational area.
+                Its workspaces follow the same order as the sidebar.
+              </p>
+
+            </div>
+
+
+            <div class="admin-guide-workspace-grid">
+
+              <!-- COMPANY IDENTITY -->
+              <button type="button"
+                class="admin-guide-workspace-card admin-guide-workspace-card-identity admin-guide-route"
+                data-admin-guide-target="sidebarAdminCompanyIdentityBtn">
+
+                <span class="admin-guide-workspace-icon admin-guide-workspace-icon-identity">
+                  <i class="bi bi-building-add"></i>
+                </span>
+
+                <span class="admin-guide-workspace-copy">
+
+                  <span class="admin-guide-workspace-kicker">
+                    COMPANY IDENTITY
+                  </span>
+
+                  <strong>
+                    Maintain workspace identity
+                  </strong>
+
+                  <small>
+                    Create or update company name, login Company ID,
+                    workspace status, and saved company records.
+                  </small>
+
+                  <span class="admin-guide-card-link">
+                    Open workspace
+                    <i class="bi bi-arrow-up-right"></i>
+                  </span>
+
+                </span>
+
+              </button>
+
+
+              <!-- EMAIL SETUP -->
+              <button type="button"
+                class="admin-guide-workspace-card admin-guide-workspace-card-email admin-guide-route"
+                data-admin-guide-target="sidebarAdminEmailSetupBtn">
+
+                <span class="admin-guide-workspace-icon admin-guide-workspace-icon-email">
+                  <i class="bi bi-envelope-check"></i>
+                </span>
+
+                <span class="admin-guide-workspace-copy">
+
+                  <span class="admin-guide-workspace-kicker">
+                    EMAIL SETUP
+                  </span>
+
+                  <strong>
+                    Control validation recipients
+                  </strong>
+
+                  <small>
+                    Register approved recipients and review controlled
+                    validation email activity for each company.
+                  </small>
+
+                  <span class="admin-guide-card-link">
+                    Open workspace
+                    <i class="bi bi-arrow-up-right"></i>
+                  </span>
+
+                </span>
+
+              </button>
+
+
+              <!-- USER ACCESS -->
+              <button type="button"
+                class="admin-guide-workspace-card admin-guide-workspace-card-access admin-guide-route"
+                data-admin-guide-target="sidebarAdminUserAccessBtn">
+
+                <span class="admin-guide-workspace-icon admin-guide-workspace-icon-access">
+                  <i class="bi bi-person-check"></i>
+                </span>
+
+                <span class="admin-guide-workspace-copy">
+
+                  <span class="admin-guide-workspace-kicker">
+                    USER ACCESS
+                  </span>
+
+                  <strong>
+                    Manage company access
+                  </strong>
+
+                  <small>
+                    Invite company users, reassign existing users,
+                    review access records, and use authorised account
+                    security actions where applicable.
+                  </small>
+
+                  <span class="admin-guide-card-link">
+                    Open workspace
+                    <i class="bi bi-arrow-up-right"></i>
+                  </span>
+
+                </span>
+
+              </button>
+
+
+              <!-- MY PROFILE -->
+              <button type="button"
+                class="admin-guide-workspace-card admin-guide-workspace-card-profile admin-guide-route"
+                data-admin-guide-target="adminTabProfileBtn">
+
+                <span class="admin-guide-workspace-icon admin-guide-workspace-icon-profile">
+                  <i class="bi bi-person-circle"></i>
+                </span>
+
+                <span class="admin-guide-workspace-copy">
+
+                  <span class="admin-guide-workspace-kicker">
+                    MY PROFILE
+                  </span>
+
+                  <strong>
+                    Administrator account
+                  </strong>
+
+                  <small>
+                    Review your administrator account details,
+                    name, and profile photo.
+                  </small>
+
+                  <span class="admin-guide-card-link">
+                    Open workspace
+                    <i class="bi bi-arrow-up-right"></i>
+                  </span>
+
+                </span>
+
+              </button>
+
+            </div>
+
+          </section>
+
+
+          <!-- SUGGESTED OPERATING FLOW -->
+          <section class="admin-guide-operating-flow">
+
+            <div class="admin-guide-operating-flow-heading">
+
+              <span class="admin-guide-flow-icon" aria-hidden="true">
+                <i class="bi bi-signpost-split"></i>
+              </span>
+
+              <div>
+                <div class="admin-guide-flag">
+                  SUGGESTED OPERATING FLOW
+                </div>
+
+                <h6>
+                  From review to controlled administration
+                </h6>
+              </div>
+
+            </div>
+
+
+            <ol class="admin-guide-operating-steps">
+
+              <li>
+                <span class="admin-guide-step-number">1</span>
+
+                <div>
+                  <strong>Review</strong>
+
+                  <small>
+                    Start on Overview and identify platform exceptions
+                    or access work requiring attention.
+                  </small>
+                </div>
+              </li>
+
+
+              <li>
+                <span class="admin-guide-step-number">2</span>
+
+                <div>
+                  <strong>Configure</strong>
+
+                  <small>
+                    Maintain Company Identity and controlled Email Setup
+                    where configuration is required.
+                  </small>
+                </div>
+              </li>
+
+
+              <li>
+                <span class="admin-guide-step-number">3</span>
+
+                <div>
+                  <strong>Assign</strong>
+
+                  <small>
+                    Invite company users or maintain their company access
+                    from User Access.
+                  </small>
+                </div>
+              </li>
+
+
+              <li>
+                <span class="admin-guide-step-number">4</span>
+
+                <div>
+                  <strong>Verify</strong>
+
+                  <small>
+                    Return to Overview or User Access Records to confirm
+                    the resulting platform state.
+                  </small>
+                </div>
+              </li>
+
+            </ol>
+
+          </section>
+
+
+          <!-- GUIDANCE BANNER -->
+          <aside class="admin-guide-help-note">
+
+            <span class="admin-guide-help-icon" aria-hidden="true">
+              <i class="bi bi-lightbulb"></i>
+            </span>
+
+            <div>
+
+              <strong>
+                Not sure where a task belongs?
+              </strong>
+
+              <p>
+                Start on Overview. Platform readiness, exception cards,
+                and the Action Centre will direct you to Company Identity,
+                Email Setup, or User Access.
+              </p>
+
+            </div>
+
+          </aside>
+
         </div>
 
-        <div class="modal-body px-4 py-4">
-          <div class="row g-4">
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-person-circle me-2 text-primary"></i>Profile
-                </div>
-                <div class="small text-secondary">
-                  View and maintain your own administrator profile details and profile photo.
-                </div>
-              </div>
-            </div>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-grid me-2 text-primary"></i>Overview
-                </div>
-                <div class="small text-secondary">
-                  Review platform-level company counts, active companies, linked users, and unlinked access risks.
-                </div>
-              </div>
-            </div>
+        <footer class="admin-operating-guide-footer">
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-building me-2 text-primary"></i>Companies
-                </div>
-                <div class="small text-secondary">
-                  Create and maintain company workspaces, Company IDs, company status, and user-to-company access.
-                </div>
-              </div>
-            </div>
+          <span>
+            <i class="bi bi-shield-lock"></i>
+            Platform administration remains protected by your existing Admin access.
+          </span>
 
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-building-add me-2 text-primary"></i>Company Identity
-                </div>
-                <div class="small text-secondary">
-                  Use this area to create or update the company name, login Company ID, and workspace status.
-                </div>
-              </div>
-            </div>
-
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-envelope-check me-2 text-primary"></i>Email Setup
-                </div>
-                <div class="small text-secondary">
-                  Register approved validation recipients and review controlled email delivery history for each company.
-                </div>
-              </div>
-            </div>
-
-            <div class="col-md-6 col-xl-4">
-              <div class="border rounded-4 p-3 h-100 bg-light-subtle">
-                <div class="fw-bold mb-2">
-                  <i class="bi bi-person-check me-2 text-primary"></i>User Access Setup
-                </div>
-                <div class="small text-secondary">
-                  Invite company users, assign users to company workspaces, and reset passwords where required.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="alert alert-light border rounded-4 mt-4 mb-0">
-            <div class="fw-semibold mb-1">Operating rule</div>
-            <div class="small text-secondary">
-              Use Admin for platform-level setup only. Company HR teams should use the HR dashboard for employee
-              records, payroll setup, leave visibility, and HR operations.
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-footer border-0 bg-light px-4 pb-4 pt-3">
           <button type="button" class="btn btn-outline-secondary dashboard-action-btn" data-bs-dismiss="modal">
             Close Guide
           </button>
+
+        </footer>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+     ADMIN REMOVE COMPANY ACCESS MODAL - v1.0.0
+
+     Presentation-only replacement for window.confirm().
+     The secure admin_remove_profile_tenant_access RPC remains
+     the authoritative company-access removal path.
+     ========================================================= -->
+  <div class="modal fade" id="removeCompanyAccessModal" tabindex="-1" aria-labelledby="removeCompanyAccessModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+
+        <div class="modal-header border-0 pb-0 px-4 pt-4">
+          <div>
+            <h5 class="modal-title fw-bold mb-1" id="removeCompanyAccessModalLabel">
+              <i class="bi bi-building-x me-2 text-danger"></i>
+              Remove Company Access
+            </h5>
+
+            <p class="text-secondary small mb-0">
+              Confirm the company access you want to remove.
+            </p>
+          </div>
+
+          <!-- ADMIN MODAL CLOSE ALIGNMENT - v1.0.1
+     Shared close control used by Admin destructive/security modals. -->
+          <button type="button" class="btn-close admin-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
+
+        <div class="modal-body px-4 py-3">
+
+          <div class="border rounded-3 p-3 bg-light-subtle mb-3">
+            <div class="fw-semibold" id="removeCompanyAccessTargetName">
+              --
+            </div>
+
+            <div class="text-secondary small text-break" id="removeCompanyAccessTargetEmail">
+              --
+            </div>
+
+            <div class="small mt-2">
+              Company:
+              <span class="fw-semibold" id="removeCompanyAccessTargetCompany">
+                --
+              </span>
+            </div>
+          </div>
+
+          <div class="alert alert-warning border mb-0">
+            <div class="fw-semibold mb-1">
+              Access impact
+            </div>
+
+            <div class="small">
+              This user will lose access to the selected company workspace.
+              Their login account and employee record will remain in the system.
+            </div>
+          </div>
+
+          <div id="removeCompanyAccessAlert" class="alert d-none mt-3 mb-0" role="alert"></div>
+
+        </div>
+
+        <!-- ADMIN REMOVE COMPANY ACCESS ACTION LAYOUT - v1.0.1
+     Keep Cancel visually separated on the left and the destructive
+     company-access action clearly anchored on the right. -->
+        <div class="modal-footer border-0 px-4 pb-4 pt-0
+         d-flex align-items-center justify-content-between gap-3">
+
+          <button type="button" class="btn btn-outline-secondary dashboard-action-btn" data-bs-dismiss="modal">
+            Cancel
+          </button>
+
+          <button type="button" class="btn btn-danger dashboard-action-btn ms-auto" id="removeCompanyAccessConfirmBtn">
+            <i class="bi bi-building-x me-2"></i>
+            Remove Company Access
+          </button>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+     ADMIN FORCE DELETE USER MODAL - v1.0.0
+
+     Replaces chained browser prompt/confirm dialogs with a
+     controlled two-stage destructive confirmation workflow.
+
+     Security remains authoritative in delete-company-user.
+     ========================================================= -->
+  <div class="modal fade" id="permanentDeleteUserModal" tabindex="-1" aria-labelledby="permanentDeleteUserModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+
+        <div class="modal-header border-0 pb-0 px-4 pt-4">
+          <div>
+            <h5 class="modal-title fw-bold mb-1" id="permanentDeleteUserModalLabel">
+              <i class="bi bi-person-x-fill me-2 text-danger"></i>
+              Permanently Delete User
+            </h5>
+
+            <p class="text-secondary small mb-0" id="permanentDeleteUserModalSubtitle">
+              Confirm the user before continuing.
+            </p>
+          </div>
+
+          <!-- ADMIN MODAL CLOSE ALIGNMENT - v1.0.1
+     Shared close control used by Admin destructive/security modals. -->
+          <button type="button" class="btn-close admin-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body px-4 py-3">
+
+          <!-- Stage 1: typed email confirmation -->
+          <div id="permanentDeleteUserStageOne">
+
+            <div class="border rounded-3 p-3 bg-light-subtle mb-3">
+              <div class="fw-semibold" id="permanentDeleteUserTargetName">
+                --
+              </div>
+
+              <div class="text-secondary small text-break" id="permanentDeleteUserTargetEmail">
+                --
+              </div>
+            </div>
+
+            <div class="alert alert-danger border mb-3">
+              <div class="fw-semibold mb-1">
+                Permanent deletion
+              </div>
+
+              <div class="small">
+                This removes the user account and all employee records linked
+                to this user. Their email and Employee ID become reusable.
+              </div>
+            </div>
+
+            <label for="permanentDeleteUserEmailInput" class="form-label fw-semibold">
+              Type the user's full email address to confirm
+            </label>
+
+            <input type="email" class="form-control" id="permanentDeleteUserEmailInput" autocomplete="off"
+              spellcheck="false" />
+
+            <div id="permanentDeleteUserAlert" class="alert d-none mt-3 mb-0" role="alert"></div>
+          </div>
+
+
+          <!-- Stage 2: irreversible final confirmation -->
+          <div id="permanentDeleteUserStageTwo" class="d-none">
+            <div class="alert alert-danger border mb-3">
+              <div class="fw-bold mb-2">
+                Final confirmation
+              </div>
+
+              <div>
+                You are about to permanently delete:
+              </div>
+
+              <div class="fw-semibold mt-2" id="permanentDeleteUserFinalName">
+                --
+              </div>
+
+              <div class="small text-break" id="permanentDeleteUserFinalEmail">
+                --
+              </div>
+            </div>
+
+            <p class="mb-0 fw-semibold text-danger">
+              This action cannot be undone.
+            </p>
+          </div>
+
+        </div>
+
+        <!-- ADMIN PERMANENT DELETE ACTION LAYOUT - v1.0.1
+     Stage controls remain unchanged.
+     Cancel stays separated on the left while Continue / Permanently Delete
+     occupies the destructive-action position on the right. -->
+        <div class="modal-footer border-0 px-4 pb-4 pt-0
+         d-flex align-items-center justify-content-between gap-3">
+
+          <!-- Existing button ID retained because admin-dashboard.js
+       controls Cancel / Back behaviour through this element. -->
+          <button type="button" class="btn btn-outline-secondary dashboard-action-btn" id="permanentDeleteUserBackBtn">
+            Cancel
+          </button>
+
+
+          <!-- Right-side destructive workflow controls. -->
+          <div class="d-flex align-items-center gap-2 ms-auto">
+
+            <!-- Stage 1 action.
+         JS continues controlling disabled/enabled state. -->
+            <button type="button" class="btn btn-danger dashboard-action-btn" id="permanentDeleteUserContinueBtn"
+              disabled>
+              Continue
+            </button>
+
+
+            <!-- Stage 2 action.
+         Existing d-none behaviour is preserved. -->
+            <button type="button" class="btn btn-danger dashboard-action-btn d-none" id="permanentDeleteUserConfirmBtn">
+              <i class="bi bi-person-x-fill me-2"></i>
+              Permanently Delete
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+     ADMIN RESET WORKSPACE MODAL - v1.0.0
+
+     Controlled two-stage confirmation for returning one company
+     workspace to a brand-new operational state.
+
+     IMPORTANT:
+     - company / tenant identity remains;
+     - employees remain;
+     - employee IDs remain;
+     - Auth / profile linkage remains;
+     - operational HR / payroll / leave / setup data is reset;
+     - immutable administrative/security audit evidence remains;
+     - the transactional admin_reset_tenant_workspace RPC is the
+       authoritative destructive boundary.
+     ========================================================= -->
+  <div class="modal fade" id="resetWorkspaceModal" tabindex="-1" aria-labelledby="resetWorkspaceModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+
+        <!-- =====================================================
+             MODAL HEADER
+             ===================================================== -->
+        <div class="modal-header border-0 pb-0 px-4 pt-4">
+          <div>
+            <h5 class="modal-title fw-bold mb-1" id="resetWorkspaceModalLabel">
+              <i class="bi bi-arrow-counterclockwise me-2 text-warning"></i>
+              Reset Workspace
+            </h5>
+
+            <p class="text-secondary small mb-0">
+              Confirm the company before resetting its operational workspace.
+            </p>
+          </div>
+
+          <button type="button" class="btn-close ms-3" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+
+        <!-- =====================================================
+             MODAL BODY
+             ===================================================== -->
+        <div class="modal-body px-4 py-3">
+
+          <!-- ===================================================
+               STAGE 1
+               Typed company-name confirmation.
+               =================================================== -->
+          <div id="resetWorkspaceStageOne">
+
+            <!-- Selected company -->
+            <div class="border rounded-3 p-3 bg-light-subtle mb-3">
+              <div class="fw-semibold" id="resetWorkspaceTargetName">
+                --
+              </div>
+
+              <div class="text-secondary small mt-1">
+                Company ID:
+                <span class="fw-semibold" id="resetWorkspaceTargetCode">
+                  --
+                </span>
+              </div>
+            </div>
+
+
+            <!-- Reset impact -->
+            <div class="alert alert-warning border mb-3">
+              <div class="fw-semibold mb-2">
+                Workspace reset
+              </div>
+
+              <div class="small mb-2">
+                This returns the selected company to a new operational
+                BexHR workspace while keeping the company and its employees.
+              </div>
+
+              <div class="small fw-semibold mb-1">
+                The following are kept:
+              </div>
+
+              <ul class="small mb-2 ps-3">
+                <li>Company identity and Company ID</li>
+                <li>Employees and Employee IDs</li>
+                <li>Required profile and login linkage</li>
+              </ul>
+
+              <div class="small fw-semibold mb-1">
+                Operational records are reset, including:
+              </div>
+
+              <ul class="small mb-0 ps-3">
+                <li>Payroll, salary setup, payslips and deductions</li>
+                <li>Leave requests, balances and manager delegations</li>
+                <li>Employee bank details and supplementary records</li>
+                <li>Reporting assignments and organisation structure</li>
+                <li>Email operational setup/history and workspace configuration</li>
+              </ul>
+            </div>
+
+
+            <!-- Typed confirmation -->
+            <label for="resetWorkspaceConfirmationInput" class="form-label fw-semibold">
+              Type the full company name to confirm
+            </label>
+
+            <input type="text" class="form-control" id="resetWorkspaceConfirmationInput" autocomplete="off"
+              autocorrect="off" autocapitalize="off" spellcheck="false" />
+
+            <div class="form-text">
+              The company name must match exactly before you can continue.
+            </div>
+
+
+            <!-- Runtime error / warning area -->
+            <div id="resetWorkspaceAlert" class="alert d-none mt-3 mb-0" role="alert"></div>
+
+          </div>
+
+
+          <!-- ===================================================
+               STAGE 2
+               Final irreversible confirmation.
+               =================================================== -->
+          <div id="resetWorkspaceStageTwo" class="d-none">
+
+            <div class="alert alert-warning border mb-3">
+              <div class="fw-bold mb-2">
+                Final confirmation
+              </div>
+
+              <div>
+                You are about to reset the operational workspace for:
+              </div>
+
+              <div class="fw-semibold mt-3" id="resetWorkspaceFinalName">
+                --
+              </div>
+
+              <div class="small mt-1">
+                Company ID:
+                <span class="fw-semibold" id="resetWorkspaceFinalCode">
+                  --
+                </span>
+              </div>
+            </div>
+
+
+            <div class="border rounded-3 p-3 mb-3">
+              <div class="d-flex align-items-start gap-3">
+
+                <span class="d-flex align-items-center justify-content-center
+                         flex-shrink-0 rounded-circle bg-warning-subtle
+                         text-warning-emphasis" style="width: 38px; height: 38px;" aria-hidden="true">
+                  <i class="bi bi-exclamation-triangle"></i>
+                </span>
+
+                <div>
+                  <div class="fw-semibold mb-1">
+                    Employees will remain
+                  </div>
+
+                  <div class="small text-secondary">
+                    Employee records and Employee IDs are preserved, but
+                    operational workspace information attached to those
+                    employees is reset.
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+
+            <p class="mb-0 fw-semibold text-danger">
+              The operational reset cannot be undone after it is committed.
+            </p>
+
+          </div>
+
+        </div>
+
+
+        <!-- =====================================================
+             MODAL ACTIONS
+
+             Cancel / Go Back remains isolated on the left.
+             Continue / Reset Workspace remains on the right.
+             ===================================================== -->
+        <div class="modal-footer border-0 px-4 pb-4 pt-0
+                 d-flex align-items-center justify-content-between gap-3">
+
+          <!-- JS changes this text:
+               Stage 1 = Cancel
+               Stage 2 = Go Back -->
+          <button type="button" class="btn btn-outline-secondary dashboard-action-btn" id="resetWorkspaceBackBtn">
+            Cancel
+          </button>
+
+
+          <div class="d-flex align-items-center gap-2 ms-auto">
+
+            <!-- Stage 1 -->
+            <button type="button" class="btn btn-secondary dashboard-action-btn" id="resetWorkspaceContinueBtn"
+              disabled>
+              Continue
+            </button>
+
+
+            <!-- Stage 2 -->
+            <button type="button" class="btn btn-warning dashboard-action-btn d-none" id="resetWorkspaceConfirmBtn">
+              <i class="bi bi-arrow-counterclockwise me-2"></i>
+              Reset Workspace
+            </button>
+
+          </div>
+
+        </div>
+
       </div>
     </div>
   </div>
@@ -1191,7 +2833,7 @@
               prompted to change it on next login.
             </p>
           </div>
-          <button type="button" class="btn-close ms-3" data-bs-dismiss="modal" aria-label="Close"></button>
+          <button type="button" class="btn-close admin-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
 
         <div class="modal-body px-4 py-3">
@@ -1246,8 +2888,7 @@
        This does not reset MFA in browser code. It calls the secure
        reset-user-mfa Edge Function, which performs Admin validation and
        Supabase MFA factor deletion server-side. -->
-  <div class="modal fade" id="resetMfaModal" tabindex="-1" aria-labelledby="resetMfaModalLabel"
-    aria-hidden="true">
+  <div class="modal fade" id="resetMfaModal" tabindex="-1" aria-labelledby="resetMfaModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
 
@@ -1260,7 +2901,7 @@
               Remove the selected HR user's authenticator setup so they can enrol again on next HR sign-in.
             </p>
           </div>
-          <button type="button" class="btn-close ms-3" data-bs-dismiss="modal" aria-label="Close"></button>
+          <button type="button" class="btn-close admin-modal-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
 
         <div class="modal-body px-4 py-3">
@@ -1275,7 +2916,8 @@
           <div class="alert alert-warning border mb-3">
             <div class="fw-semibold mb-1">Security impact</div>
             <div class="small">
-              This removes the HR user's current authenticator factor. The user will be forced to set up HR two-factor
+              This removes the HR user's current authenticator factor. The user will be forced to set up HR
+              two-factor
               authentication again before opening the HR Dashboard.
             </div>
           </div>
@@ -1314,7 +2956,10 @@
           window.history.scrollRestoration = "manual";
         }
 
-        var workspace = sessionStorage.getItem("hrPayroll:lastAdminWorkspace:last") || "profile";
+        // Fresh Admin sessions should open the operational Overview.
+        var workspace =
+          sessionStorage.getItem("hrPayroll:lastAdminWorkspace:last") ||
+          "overview";
 
         var profileSection = document.getElementById("adminProfileSection");
         var overviewSection = document.getElementById("adminOverviewSection");
@@ -1337,14 +2982,33 @@
           button.classList.add("btn-primary");
         }
 
-        if (workspace === "overview" || workspace === "tenants") {
-          if (profileSection) profileSection.classList.add("d-none");
+        if (
+          workspace === "overview" ||
+          workspace === "profile" ||
+          workspace === "tenants"
+        ) {
+          if (profileSection) {
+            profileSection.classList.toggle(
+              "d-none",
+              workspace !== "profile",
+            );
+          }
           if (overviewSection) overviewSection.classList.toggle("d-none", workspace !== "overview");
           if (tenantsSection) tenantsSection.classList.toggle("d-none", workspace !== "tenants");
 
           setInactive(profileBtn);
           setInactive(overviewBtn);
           setInactive(tenantsBtn);
+
+          // ADMIN AUTHORITATIVE WORKSPACE FIRST-PAINT PARITY
+          // Restore Profile correctly when it was the remembered workspace.
+          if (workspace === "profile") {
+            setActive(profileBtn);
+
+            if (moduleValue) {
+              moduleValue.textContent = "My Profile";
+            }
+          }
 
           if (workspace === "overview") {
             setActive(overviewBtn);
@@ -1353,7 +3017,9 @@
 
           if (workspace === "tenants") {
             setActive(tenantsBtn);
-            if (moduleValue) moduleValue.textContent = "Company Setup";
+            // ADMIN AUTHORITATIVE UI REFRESH
+            // Keep first-paint workspace wording aligned with the main Admin JS.
+            if (moduleValue) moduleValue.textContent = "Companies";
           }
         }
 

@@ -11,13 +11,19 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
-  <link rel="stylesheet" href="css/styles.css" />
+<link rel="stylesheet" href="css/styles.css" />
 
-  <!-- MANAGER SELF-SERVICE PARITY - STEP 2C-1
-       Repair Manager My Leave History layout:
-       - expanded history can align with Request Leave on desktop
-       - collapsed history shrinks to header-only
-       - long history records scroll inside the history card -->
+  <!-- SYSTEM-WIDE SELF-SERVICE LEAVE INNER-SCROLL PARITY - v1.0.0
+     Mirrors the completed Employee Leave layout:
+     - controlled equal desktop card height while History is expanded;
+     - Request Leave and History each scroll internally;
+     - card headings and actions remain visible;
+     - collapsed History returns to compact natural height;
+     - mobile/tablet retain normal document flow.
+
+     Presentation only:
+     - no leave submission, validation, entitlement, approval, payroll,
+       Supabase, reporting-line, tenant, RLS, or Alpatech branding changes. -->
   <style>
     #managerSelfServiceSection .employee-leave-history-scroll-area {
       max-height: none;
@@ -26,53 +32,162 @@
     }
 
     @media (min-width: 1200px) {
-      #managerSelfServiceSection .ss-leave-main-row {
-        align-items: flex-start;
-      }
-
-      #managerSelfServiceSection .ss-leave-main-row>[class*="col-"] {
+      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none))>[class*="col-"] {
         display: flex;
+        align-self: stretch;
       }
 
-      #managerSelfServiceSection .ss-leave-equal-card {
+      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) .ss-leave-equal-card {
         width: 100%;
+        height: clamp(520px, calc(100vh - 150px), 620px) !important;
+        min-height: 520px !important;
+        max-height: 620px !important;
+        overflow: hidden !important;
       }
 
-      #managerSelfServiceSection .ss-leave-main-row[data-ss-leave-card-height] .ss-leave-equal-card {
-        height: var(--ss-leave-card-height);
-      }
-
-      #managerSelfServiceSection #ssEmployeeLeaveHistoryCard.ss-leave-equal-card {
+      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) .ss-leave-equal-card>.card-body {
+        display: flex;
+        flex-direction: column;
+        height: 100% !important;
+        min-height: 0 !important;
         overflow: hidden;
       }
 
-      #managerSelfServiceSection #ssEmployeeLeaveHistoryCard>.card-body {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        min-height: 0;
+      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) .hr-self-service-card-heading {
+        flex: 0 0 auto;
       }
 
-      #managerSelfServiceSection #ssLeaveHistoryCardCollapse:not(.d-none) {
-        display: flex;
-        flex-direction: column;
+      /* Request Leave uses the remaining height below its fixed heading. */
+      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) #ssLeaveRequestForm {
         flex: 1 1 auto;
         min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding-right: 0.45rem;
+        scrollbar-width: thin;
+        scrollbar-color:
+          rgba(14, 116, 144, 0.36) rgba(148, 163, 184, 0.1);
+      }
+
+      #managerSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      #managerSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar-track {
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.1);
+      }
+
+      #managerSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar-thumb {
+        border: 2px solid transparent;
+        border-radius: 999px;
+        background: rgba(14, 116, 144, 0.36);
+        background-clip: padding-box;
+      }
+
+      /* History uses the remaining height below its heading and refresh action. */
+      #managerSelfServiceSection #ssLeaveHistoryCardCollapse:not(.d-none) {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      #managerSelfServiceSection #ssLeaveHistoryCardCollapse:not(.d-none)>.d-flex {
+        flex: 0 0 auto;
       }
 
       #managerSelfServiceSection .employee-leave-history-scroll-area {
         flex: 1 1 auto;
         min-height: 0;
-        max-height: none;
-        overflow-y: auto;
+        max-height: none !important;
         overflow-x: hidden;
+        overflow-y: auto;
         overscroll-behavior: contain;
-        padding-right: 0.25rem;
+        padding-right: 0.45rem;
+      }
+
+      /* MANAGER SYSTEM-WIDE COMPACT LEAVE COLLAPSE - v1.0.3
+   Match the approved Employee collapse behaviour across every Manager tenant.
+
+   When My Leave History is collapsed:
+   - Request Leave also becomes header-only;
+   - both cards return to compact natural height;
+   - neither card stretches the page;
+   - coloured accents remain inside the rounded card boundaries.
+
+   Presentation only:
+   - no leave submission, approval or calculation changes;
+   - no tenant, Alpatech, role, RLS, reporting-line or Supabase changes. */
+      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)>[class*="col-"] {
+        display: flex;
+        align-self: flex-start;
+      }
+
+      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) .ss-leave-equal-card {
+        width: 100%;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+
+        /* MANAGER COLLAPSED CARD EDGE CONTAINMENT - v1.0.3
+     Keep the cyan accent and card contents inside rounded boundaries. */
+        overflow: hidden !important;
+      }
+
+      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) .ss-leave-equal-card>.card-body {
+        display: block;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: hidden !important;
+      }
+
+      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) .hr-self-service-card-heading {
+        margin-bottom: 0 !important;
+      }
+
+      /* Hide only the Request Leave form while the paired History card is collapsed.
+   Expanding History automatically restores the form and desktop inner scroll
+   through the existing expanded-state rules above. */
+      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) #ssLeaveRequestForm {
+        display: none !important;
+      }
+
+      /* History content is already hidden by its existing d-none class.
+   Explicit containment prevents the cyan accent from protruding. */
+      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) #ssEmployeeLeaveHistoryCard {
+        overflow: hidden !important;
+      }
+
+      @media (max-width: 1199.98px) {
+        #managerSelfServiceSection .ss-leave-equal-card {
+          height: auto !important;
+          min-height: 0 !important;
+          max-height: none !important;
+        }
+
+        #managerSelfServiceSection #ssLeaveRequestForm,
+        #managerSelfServiceSection .employee-leave-history-scroll-area {
+          max-height: none !important;
+          overflow: visible;
+        }
       }
     }
   </style>
 
-  <link rel="icon" type="image/x-icon" href="assets/favic0n.png">
+  <!-- BEXHR UNIVERSAL FAVICON SET - v1.0.0 -->
+  <link rel="icon" type="image/svg+xml" href="assets/favicon/favicon.svg?v=20260731" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png?v=20260731" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png?v=20260731" />
+  <link rel="icon" type="image/x-icon" href="assets/favicon/favicon.ico?v=20260731" />
+  <link rel="shortcut icon" href="assets/favicon/favicon.ico?v=20260731" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png?v=20260731" />
+  <link rel="manifest" href="assets/favicon/site.webmanifest?v=20260731" />
+  <meta name="msapplication-config" content="assets/favicon/browserconfig.xml?v=20260731" />
+  <meta name="theme-color" content="#087f7a" />
 </head>
 
 <body class="dashboard-page bexhr-has-sidebar bexhr-manager-visual-refresh manager-workspace-booting" aria-busy="true">
@@ -81,18 +196,35 @@
        Manager workspace, tenant brand, profile, navigation, title, and subtitle
        are restored. No authentication, reporting-line, leave, payroll, session,
        Supabase, or approval behaviour is changed. -->
-  <div id="bexhrWorkspaceLoader" class="bexhr-workspace-loader"
-    role="status" aria-live="polite" aria-atomic="true">
+  <div id="bexhrWorkspaceLoader" class="bexhr-workspace-loader" role="status" aria-live="polite" aria-atomic="true">
     <div class="bexhr-workspace-loader-panel">
       <div class="bexhr-workspace-loader-brand" aria-hidden="true">
-        <span class="bexhr-workspace-loader-mark">B</span>
-        <span>BexHR</span>
+        <span class="bexhr-workspace-loader-logo-shell">
+          <img src="assets/favicon/favicon.svg?v=20260801" alt="" class="bexhr-workspace-loader-logo" />
+        </span>
+
+        <span class="bexhr-workspace-loader-brand-copy">
+          <strong>BexHR</strong>
+          <small>People and payroll workspace</small>
+        </span>
       </div>
 
-      <span class="bexhr-workspace-loader-spinner" aria-hidden="true"></span>
+      <div class="bexhr-workspace-loader-progress" aria-hidden="true">
+        <span class="bexhr-workspace-loader-spinner"></span>
+        <span class="bexhr-workspace-loader-progress-line">
+          <span></span>
+        </span>
+      </div>
 
-      <strong>BexHR is preparing your workspace</strong>
-      <span>Restoring your last Manager workspace securely.</span>
+      <div class="bexhr-workspace-loader-message">
+        <strong>BexHR is preparing your workspace</strong>
+        <span>Restoring your last Manager workspace securely.</span>
+      </div>
+
+      <div class="bexhr-workspace-loader-status" aria-hidden="true">
+        <span class="bexhr-workspace-loader-status-dot"></span>
+        <span>Verifying access and restoring your workspace</span>
+      </div>
     </div>
   </div>
   <!-- ALPATECH TENANT BRANDING - MANAGER STEP 1D
@@ -134,7 +266,7 @@
           var favicon = document.querySelector("link[rel~='icon']");
           if (favicon) {
             favicon.type = "image/x-icon";
-            favicon.href = "assets/favicon.ico?v=20260725-071605";
+            favicon.href = "assets/alpatech-favicon-large.png";
           }
 
           var sidebarBrand = document.getElementById("tenantSidebarBrand");
@@ -192,7 +324,7 @@
         var favicon = document.querySelector("link[rel~='icon']");
         if (favicon) {
           favicon.type = "image/x-icon";
-          favicon.href = "assets/favicon.ico?v=20260725-1";
+          favicon.href = "assets/alpatech-favicon-large.png";
         }
 
         if (document.readyState === "loading") {
@@ -417,9 +549,15 @@
               <h3 class="hr-profile-name mb-1" id="managerProfileCardName">Manager</h3>
               <p class="hr-profile-email text-break mb-3" id="managerProfileCardEmail">--</p>
 
-              <span class="hr-profile-member-pill">
+              <!-- MANAGER PROFILE AUTHORITY PARITY - v1.0.0
+     These IDs allow the existing Manager coverage calculation to display
+     Primary, Secondary, Mixed, or standard Manager authority here.
+     This is display-only and does not change stored roles or permissions. -->
+              <span class="hr-profile-member-pill" id="managerProfileAuthorityPill">
                 <i class="bi bi-person-check"></i>
-                Manager workspace member
+                <span id="managerProfileAuthorityText">
+                  Manager workspace member
+                </span>
               </span>
 
               <div class="hr-profile-photo-panel">
@@ -436,12 +574,23 @@
 
                 <input type="file" id="managerProfileImageInput" class="form-control" accept=".png,.jpg,.jpeg,.webp" />
 
-                <!-- ADMIN UI CLEANUP - STEP 1D-HR PARITY
-                     Keep upload grey/disabled until a valid image file is selected. -->
-                <button type="button" id="saveManagerProfileImageBtn"
-                  class="btn btn-secondary dashboard-action-btn mt-2" disabled>
-                  <i class="bi bi-cloud-arrow-up me-2"></i>Upload Photo
-                </button>
+                <!-- MANAGER PROFILE PHOTO ACTIONS - v1.0.0
+     Keep upload disabled until a valid image is selected.
+     Remove Picture remains disabled unless the Manager already has
+     a stored profile image reference. -->
+                <div class="manager-profile-photo-actions mt-2">
+                  <button type="button" id="saveManagerProfileImageBtn" class="btn btn-secondary dashboard-action-btn"
+                    disabled>
+                    <i class="bi bi-cloud-arrow-up me-2"></i>
+                    Upload Photo
+                  </button>
+
+                  <button type="button" id="removeManagerProfileImageBtn"
+                    class="btn btn-outline-danger dashboard-action-btn" disabled>
+                    <i class="bi bi-trash3 me-2"></i>
+                    Remove Picture
+                  </button>
+                </div>
               </div>
             </aside>
 
@@ -451,7 +600,8 @@
                   <div class="hr-profile-eyebrow">Account details</div>
                   <h3 class="h5 fw-bold mb-1">Personal information</h3>
                   <p class="text-secondary small mb-0">
-                    Your email, role, and department are shown for reference. Only your name can be edited here.
+                    Your account details are shown for reference. Employee identity is maintained from the HR People
+                    record.
                   </p>
                 </div>
 
@@ -462,12 +612,19 @@
 
               <form id="managerProfileForm" novalidate>
                 <div class="row g-3 g-xl-4">
+                  <!-- SYSTEM-WIDE MANAGER EMPLOYEE IDENTITY AUTHORITY - v1.0.0
+     Manager identity is maintained from the linked HR employee record.
+     This is shared by all tenants, including Alpatech. -->
                   <div class="col-md-6">
                     <label for="managerProfileFullName" class="form-label fw-semibold">
-                      Full Name <span class="text-danger">*</span>
+                      Full Name
                     </label>
-                    <input type="text" id="managerProfileFullName" class="form-control"
-                      placeholder="Enter your full name" required />
+
+                    <input type="text" id="managerProfileFullName" class="form-control bg-light" readonly />
+
+                    <div class="form-text">
+                      Your name is maintained from your HR employee record.
+                    </div>
                   </div>
 
                   <div class="col-md-6">
@@ -489,7 +646,7 @@
                 <div class="hr-profile-form-footer">
                   <div class="hr-profile-system-note">
                     <i class="bi bi-lock"></i>
-                    <span>Role and department are managed by authorised administrators.</span>
+                    <span>Name, role, and department are managed from authorised HR records.</span>
                   </div>
 
                   <!-- DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
@@ -576,8 +733,12 @@
               </p>
             </div>
 
-            <span id="managerCoverageModeBadge" class="manager-coverage-mode-badge">
-              Manager
+            <!-- MANAGER COVERAGE BADGE STARTUP FLASH FIX -->
+            <!-- Remain hidden until reporting-line assignments have been resolved. -->
+            <span id="managerCoverageModeBadge" class="manager-coverage-mode-badge manager-coverage-mode-badge--loading"
+              aria-live="polite" aria-busy="true">
+              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+              Checking coverage
             </span>
           </div>
 
@@ -607,7 +768,7 @@
               <div>
                 <strong id="managerSecondaryVisibilityCount">0</strong>
                 <span>Secondary Manager visibility</span>
-                <small>Visible for planning; the employeeâ€™s Primary Manager must decide</small>
+                <small>Visible for planning; the employee's Primary Manager must decide</small>
               </div>
               <button type="button" class="manager-action-centre-link" data-manager-action-target="secondary"
                 onclick="window.managerNavigateActionCentre?.('secondary')">
@@ -861,7 +1022,8 @@
         <div class="manager-team-workspace-metrics" aria-label="Manager Team workspace summary">
           <button type="button" class="manager-team-workspace-metric manager-team-workspace-metric--primary"
             onclick="window.managerOpenTeamWorkspacePanel?.('pending')">
-            <span class="manager-team-workspace-metric-icon" aria-hidden="true"><i class="bi bi-clipboard-check"></i></span>
+            <span class="manager-team-workspace-metric-icon" aria-hidden="true"><i
+                class="bi bi-clipboard-check"></i></span>
             <span><strong id="managerTeamPrimaryPendingCount">0</strong><small>Primary decisions</small></span>
           </button>
 
@@ -873,7 +1035,8 @@
 
           <button type="button" class="manager-team-workspace-metric manager-team-workspace-metric--history"
             onclick="window.managerOpenTeamWorkspacePanel?.('processed')">
-            <span class="manager-team-workspace-metric-icon" aria-hidden="true"><i class="bi bi-clock-history"></i></span>
+            <span class="manager-team-workspace-metric-icon" aria-hidden="true"><i
+                class="bi bi-clock-history"></i></span>
             <span><strong id="managerTeamProcessedCount">0</strong><small>Processed decisions</small></span>
           </button>
 
@@ -936,7 +1099,7 @@
               <span>Your assigned team currently has no requests awaiting review.</span>
             </div>
 
-            <div class="dashboard-table-hint">Swipe to view more ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢</div>
+            <div class="dashboard-table-hint">Swipe to view more &rarr;</div>
             <div id="pendingRequestsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
               style="max-height: 360px; overflow-y: auto;">
 
@@ -1006,7 +1169,7 @@
               <span>Approved, rejected, returned, and cancelled decisions will appear here.</span>
             </div>
 
-            <div class="dashboard-table-hint">Swipe to view more ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢</div>
+            <div class="dashboard-table-hint">Swipe to view more &rarr;</div>
             <div id="processedRequestsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
               style="max-height: 430px; overflow-y: auto;">
               <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1G
@@ -1071,12 +1234,13 @@
                when many approved leave records exist. -->
           <div id="teamScheduleCardCollapse" class="d-none">
             <div id="teamScheduleEmptyState" class="manager-team-empty-state text-center text-secondary py-4">
-              <span class="manager-team-empty-state-icon" aria-hidden="true"><i class="bi bi-calendar2-check"></i></span>
+              <span class="manager-team-empty-state-icon" aria-hidden="true"><i
+                  class="bi bi-calendar2-check"></i></span>
               <strong>No approved absences in view</strong>
               <span>Your current and upcoming team schedule is clear.</span>
             </div>
 
-            <div class="dashboard-table-hint">Swipe to view more ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢</div>
+            <div class="dashboard-table-hint">Swipe to view more &rarr;</div>
             <div id="teamScheduleTableWrapper" class="dashboard-table-wrap table-responsive d-none"
               style="max-height: 360px; overflow-y: auto;">
               <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
@@ -1168,7 +1332,7 @@
               <span>Employees linked to your active reporting lines will appear here.</span>
             </div>
 
-            <div class="dashboard-table-hint">Swipe to view more ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢</div>
+            <div class="dashboard-table-hint">Swipe to view more &rarr;</div>
             <div id="teamTableWrapper" class="dashboard-table-wrap table-responsive d-none"
               style="max-height: 430px; overflow-y: auto;">
               <!-- MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-D
@@ -1242,7 +1406,7 @@
         </div>
       </section>
 
-      <!-- â”€â”€ Leave Sub-Section â”€â”€ -->
+      <!-- Leave Sub-Section -->
       <div id="ssLeaveSection">
 
         <!-- Leave Balances -->
@@ -1261,37 +1425,24 @@
                   </p>
                 </div>
               </div>
-              <div class="hr-self-service-card-toolbar">
-                <!-- HR SELF-SERVICE LEAVE PARITY - STEP 1C-2
-                   Leave is now reachable from Payroll, so Payroll must also be
-                   reachable from Leave without forcing HR to refresh or scroll
-                   back to the hidden inner switcher. -->
-                <button type="button" id="ssGoToPayrollFromLeaveBtn"
-                  class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
-                  aria-label="Open payroll" title="Open payroll">
-                  <i class="bi bi-cash-coin me-2"></i>
-                  Payroll
-                </button>
-
-                <button type="button" id="ssToggleLeaveBalancesCardBtn"
-                  class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
-                  aria-expanded="false" aria-controls="ssLeaveBalancesCardCollapse" title="Expand leave balances">
-                  <i class="bi bi-chevron-down me-2"></i>
-                  <span>Expand</span>
-                </button>
-              </div>
+              <button type="button" id="ssToggleLeaveBalancesCardBtn"
+                class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
+                aria-expanded="false" aria-controls="ssLeaveBalancesCardCollapse" title="Expand leave balances">
+                <i class="bi bi-chevron-down me-2"></i>
+                <span>Expand</span>
+              </button>
             </div>
-            <div id="ssLeaveBalancesCardCollapse" class="d-none">
-              <div class="d-flex justify-content-end mb-3">
-                <button type="button" id="ssRefreshLeaveBalancesBtn"
-                  class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap">
-                  <i class="bi bi-arrow-clockwise me-2"></i>Refresh Balances
-                </button>
-              </div>
-              <div id="ssLeaveBalancesEmptyState" class="text-secondary hr-self-service-empty-state">No leave balances
-                available yet.</div>
-              <div class="row g-4 d-none hr-self-service-balance-grid" id="ssLeaveBalancesGrid"></div>
+          </div>
+          <div id="ssLeaveBalancesCardCollapse" class="d-none">
+            <div class="d-flex justify-content-end mb-3">
+              <button type="button" id="ssRefreshLeaveBalancesBtn"
+                class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap">
+                <i class="bi bi-arrow-clockwise me-2"></i>Refresh Balances
+              </button>
             </div>
+            <div id="ssLeaveBalancesEmptyState" class="text-secondary hr-self-service-empty-state">No leave balances
+              available yet.</div>
+            <div class="row g-4 d-none hr-self-service-balance-grid" id="ssLeaveBalancesGrid"></div>
           </div>
         </section>
 
@@ -1394,7 +1545,8 @@
                     </select>
                     <div class="invalid-feedback">Please select a leave type.</div>
                     <div id="ssLeaveRequestBlockNotice" class="alert alert-warning border d-none mt-3 mb-0"
-                      role="status"></div>
+                      role="status">
+                    </div>
                   </div>
                   <div class="row g-3">
                     <div class="col-md-6">
@@ -1507,7 +1659,7 @@
         </div>
       </div>
 
-      <!-- â”€â”€ Payroll Sub-Section â”€â”€ -->
+      <!-- Payroll Sub-Section -->
       <div id="ssPayrollSection" class="d-none">
 
         <!-- Current Payslip Summary -->
@@ -1532,17 +1684,6 @@
                   title="Hide payroll figures">
                   <i class="bi bi-eye-slash"></i>
                 </button>
-                <!-- HR SELF-SERVICE LEAVE PARITY - STEP 1C-1
-                   Payroll now opens first for HR payslip visibility.
-                   Keep Leave Management reachable from the visible payroll header
-                   so HR does not need to scroll/search for the hidden inner switcher. -->
-                <button type="button"
-                  class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
-                  id="ssGoToLeaveFromPayrollBtn" aria-label="Open leave management" title="Open leave management">
-                  <i class="bi bi-calendar-check me-2"></i>
-                  Leave Management
-                </button>
-
                 <button type="button"
                   class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center"
                   id="ssRefreshPayrollBtn" aria-label="Refresh payroll" title="Refresh payroll">
@@ -1736,7 +1877,7 @@
     </div>
   </div>
 
-<!-- MANAGER LEAVE DECISION MODAL MODERNISATION - v1.0.1
+  <!-- MANAGER LEAVE DECISION MODAL MODERNISATION - v1.0.1
      Presentation-only upgrade. Existing IDs, Bootstrap lifecycle, validation,
      decision actions, RPC persistence, and manager authority remain unchanged. -->
   <div class="modal fade manager-leave-decision-modal" id="leaveDecisionModal" tabindex="-1"
@@ -1762,8 +1903,8 @@
             </div>
           </div>
 
-          <button type="button" class="btn-close manager-decision-modal-close flex-shrink-0"
-            data-bs-dismiss="modal" aria-label="Close"></button>
+          <button type="button" class="btn-close manager-decision-modal-close flex-shrink-0" data-bs-dismiss="modal"
+            aria-label="Close"></button>
         </div>
 
         <div class="modal-body manager-decision-modal-body px-4 px-lg-5 py-4">
@@ -1830,6 +1971,33 @@
             </div>
           </section>
 
+          <!-- EMPLOYEE LEAVE REASON VISIBILITY - v1.0.0
+     Read-only copy of the employee's submitted reason.
+     This does not alter the original leave request or the manager decision audit. -->
+          <section class="manager-decision-modal-comment-panel" aria-labelledby="decisionEmployeeReasonLabel">
+            <div class="manager-decision-comment-heading">
+              <div class="d-flex align-items-center gap-2">
+                <span class="manager-decision-comment-icon" aria-hidden="true">
+                  <i class="bi bi-chat-quote"></i>
+                </span>
+
+                <div id="decisionEmployeeReasonLabel" class="form-label fw-bold mb-0">
+                  Employee Reason
+                </div>
+              </div>
+
+              <span class="manager-decision-comment-privacy">
+                <i class="bi bi-lock me-1"></i>
+                Submitted with leave request
+              </span>
+            </div>
+
+            <div id="decisionEmployeeReason" class="form-control manager-decision-comment-input bg-light" role="textbox"
+              aria-readonly="true" style="min-height: 96px; white-space: pre-wrap;">
+              No reason provided.
+            </div>
+          </section>
+
           <section class="manager-decision-modal-comment-panel">
             <div class="manager-decision-comment-heading">
               <div class="d-flex align-items-center gap-2">
@@ -1882,7 +2050,8 @@
             <div>
               <div class="manager-operating-guide-kicker" id="managerGuideModeKicker">Manager workspace guide</div>
               <h2 class="modal-title" id="managerOperatingGuideModalLabel">Find the right place for each task</h2>
-              <p id="managerOperatingGuideModalDescription">Open a workspace below to continue directly from the guide.</p>
+              <p id="managerOperatingGuideModalDescription">Open a workspace below to continue directly from the guide.
+              </p>
             </div>
           </div>
 
@@ -1898,7 +2067,8 @@
             <div class="manager-guide-recommended-copy">
               <div class="manager-operating-guide-kicker">Recommended starting point</div>
               <h3 id="managerGuideRecommendedTitle">Dashboard</h3>
-              <p id="managerGuideRecommendedBody">Review your current team activity, responsibilities, and coverage before opening a detailed workspace.</p>
+              <p id="managerGuideRecommendedBody">Review your current team activity, responsibilities, and coverage
+                before opening a detailed workspace.</p>
             </div>
             <button type="button" class="manager-guide-open-link" data-manager-guide-target="dashboard">
               Open Dashboard <i class="bi bi-arrow-right" aria-hidden="true"></i>
@@ -1909,57 +2079,75 @@
             <article class="manager-guide-workspace-card manager-guide-workspace-card--team">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-people"></i></span>
               <h3 id="managerGuideTeamTitle">Team Management</h3>
-              <p id="managerGuideTeamBody">Open the team workspace for leave activity, coverage planning, decision history, and employee records.</p>
-              <button type="button" class="manager-guide-card-link" data-manager-guide-target="team">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+              <p id="managerGuideTeamBody">Open the team workspace for leave activity, coverage planning, decision
+                history, and employee records.</p>
+              <button type="button" class="manager-guide-card-link" data-manager-guide-target="team">Open workspace <i
+                  class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
 
             <article class="manager-guide-workspace-card manager-guide-workspace-card--pending">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
               <h3 id="managerGuidePendingTitle">Pending Leave Requests</h3>
-              <p id="managerGuidePendingBody">Review pending requests and use the actions available for your current authority.</p>
-              <button type="button" class="manager-guide-card-link" data-manager-guide-target="pending">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+              <p id="managerGuidePendingBody">Review pending requests and use the actions available for your current
+                authority.</p>
+              <button type="button" class="manager-guide-card-link" data-manager-guide-target="pending">Open workspace
+                <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
 
             <article class="manager-guide-workspace-card manager-guide-workspace-card--history">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-clock-history"></i></span>
               <h3>Decision History</h3>
-              <p id="managerGuideHistoryBody">Review completed leave outcomes and the available decision audit history.</p>
-              <button type="button" class="manager-guide-card-link" data-manager-guide-target="processed">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+              <p id="managerGuideHistoryBody">Review completed leave outcomes and the available decision audit history.
+              </p>
+              <button type="button" class="manager-guide-card-link" data-manager-guide-target="processed">Open workspace
+                <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
 
             <article class="manager-guide-workspace-card manager-guide-workspace-card--schedule">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
               <h3>Team Leave Schedule</h3>
-              <p id="managerGuideScheduleBody">Review approved current and upcoming absences to understand availability, overlaps, and coverage requirements.</p>
-              <button type="button" class="manager-guide-card-link" data-manager-guide-target="schedule">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+              <p id="managerGuideScheduleBody">Review approved current and upcoming absences to understand availability,
+                overlaps, and coverage requirements.</p>
+              <button type="button" class="manager-guide-card-link" data-manager-guide-target="schedule">Open workspace
+                <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
 
             <article class="manager-guide-workspace-card manager-guide-workspace-card--employees">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-person-vcard"></i></span>
               <h3>Assigned Employee Records</h3>
-              <p id="managerGuideEmployeesBody">Find employees included in your reporting coverage and review the role-appropriate information available to you.</p>
-              <button type="button" class="manager-guide-card-link" data-manager-guide-target="employees">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+              <p id="managerGuideEmployeesBody">Find employees included in your reporting coverage and review the
+                role-appropriate information available to you.</p>
+              <button type="button" class="manager-guide-card-link" data-manager-guide-target="employees">Open workspace
+                <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
 
-            <article class="manager-guide-workspace-card manager-guide-workspace-card--authority d-none" id="managerGuideAuthorityCard">
+            <article class="manager-guide-workspace-card manager-guide-workspace-card--authority d-none"
+              id="managerGuideAuthorityCard">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-person-check"></i></span>
               <h3 id="managerGuideAuthorityTitle">Temporary Approval Access</h3>
-              <p id="managerGuideAuthorityBody">Grant, review, or use temporary leave approval access according to your current Manager authority.</p>
-              <button type="button" class="manager-guide-card-link" id="managerGuideAuthorityLink" data-manager-guide-target="delegation">Open access controls <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+              <p id="managerGuideAuthorityBody">Grant, review, or use temporary leave approval access according to your
+                current Manager authority.</p>
+              <button type="button" class="manager-guide-card-link" id="managerGuideAuthorityLink"
+                data-manager-guide-target="delegation">Open access controls <i class="bi bi-arrow-up-right"
+                  aria-hidden="true"></i></button>
             </article>
 
             <article class="manager-guide-workspace-card manager-guide-workspace-card--profile">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-person-circle"></i></span>
               <h3>My Profile</h3>
-              <p>Review your own Manager account and update the personal profile information that is available to you.</p>
-              <button type="button" class="manager-guide-card-link" data-manager-guide-target="profile">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+              <p>Review your own Manager account and update the personal profile information that is available to you.
+              </p>
+              <button type="button" class="manager-guide-card-link" data-manager-guide-target="profile">Open workspace
+                <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
 
             <article class="manager-guide-workspace-card manager-guide-workspace-card--selfservice">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-person-badge"></i></span>
               <h3>My Self-Service</h3>
-              <p>View and manage your own leave, balances, leave history, authorised payroll summary, and payslip records.</p>
-              <button type="button" class="manager-guide-card-link" data-manager-guide-target="selfservice">Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+              <p>View and manage your own leave, balances, leave history, authorised payroll summary, and payslip
+                records.</p>
+              <button type="button" class="manager-guide-card-link" data-manager-guide-target="selfservice">Open
+                workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
           </section>
 
@@ -1973,10 +2161,24 @@
             </div>
 
             <ol class="manager-guide-flow-list">
-              <li><span>1</span><div><strong id="managerGuideStep1Title">Review</strong><small id="managerGuideStep1Body">Start on Dashboard and identify the team activity that needs your attention.</small></div></li>
-              <li><span>2</span><div><strong id="managerGuideStep2Title">Check authority</strong><small id="managerGuideStep2Body">Confirm whether the request is yours to decide, delegated to you, or visible for awareness only.</small></div></li>
-              <li><span>3</span><div><strong id="managerGuideStep3Title">Act or plan</strong><small id="managerGuideStep3Body">Complete the available decision or use the schedule to plan operational coverage.</small></div></li>
-              <li><span>4</span><div><strong id="managerGuideStep4Title">Follow through</strong><small id="managerGuideStep4Body">Review history and employee records, then follow up with the responsible Manager or HR where needed.</small></div></li>
+              <li><span>1</span>
+                <div><strong id="managerGuideStep1Title">Review</strong><small id="managerGuideStep1Body">Start on
+                    Dashboard and identify the team activity that needs your attention.</small></div>
+              </li>
+              <li><span>2</span>
+                <div><strong id="managerGuideStep2Title">Check authority</strong><small
+                    id="managerGuideStep2Body">Confirm whether the request is yours to decide, delegated to you, or
+                    visible for awareness only.</small></div>
+              </li>
+              <li><span>3</span>
+                <div><strong id="managerGuideStep3Title">Act or plan</strong><small id="managerGuideStep3Body">Complete
+                    the available decision or use the schedule to plan operational coverage.</small></div>
+              </li>
+              <li><span>4</span>
+                <div><strong id="managerGuideStep4Title">Follow through</strong><small id="managerGuideStep4Body">Review
+                    history and employee records, then follow up with the responsible Manager or HR where
+                    needed.</small></div>
+              </li>
             </ol>
           </section>
 
@@ -1984,19 +2186,21 @@
             <span class="manager-guide-help-icon" aria-hidden="true"><i class="bi bi-lightbulb"></i></span>
             <div>
               <h3 id="managerGuideHelpTitle">Not sure where a task belongs?</h3>
-              <p id="managerGuideHelpBody">Open Dashboard first. Your coverage and decision-authority indicators will point you to the correct workspace.</p>
+              <p id="managerGuideHelpBody">Open Dashboard first. Your coverage and decision-authority indicators will
+                point you to the correct workspace.</p>
             </div>
           </section>
         </div>
 
         <div class="modal-footer manager-operating-guide-footer border-0">
-          <span id="managerGuideFooterText"><i class="bi bi-shield-check" aria-hidden="true"></i> Workspace access follows your current reporting-line and delegated authority.</span>
+          <span id="managerGuideFooterText"><i class="bi bi-shield-check" aria-hidden="true"></i> Workspace access
+            follows your current reporting-line and delegated authority.</span>
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close Guide</button>
         </div>
       </div>
     </div>
   </div>
-<!-- MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+  <!-- MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
      First-paint restore for Manager workspace.
      Dashboard is the normal landing view; Profile remains available from the
      top-right account control. Only the lightweight workspace key is read. -->
@@ -2007,7 +2211,11 @@
           window.history.scrollRestoration = "manual";
         }
 
-        var workspace = sessionStorage.getItem("hrPayroll:lastManagerWorkspace:last") || "dashboard";
+        // MANAGER WORKSPACE SWITCHER CONSISTENCY - v1.0.0
+        // Cross-dashboard navigation must always enter the Manager overview safely.
+        // Authenticated manager-dashboard.js can restore the user/tenant-scoped
+        // workspace after access has been verified.
+        var workspace = "dashboard";
         var validWorkspaces = ["dashboard", "profile", "team", "selfservice"];
 
         if (validWorkspaces.indexOf(workspace) === -1) {
