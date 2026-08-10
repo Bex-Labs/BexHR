@@ -669,7 +669,7 @@ body.bexhr-employee-visual-refresh
   width: 42px;
   height: 42px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 50%;
   color: var(--employee-shell-primary-dark);
   background:
     linear-gradient(

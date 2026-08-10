@@ -138,6 +138,47 @@ document.addEventListener("DOMContentLoaded", async () => {
       openResetMfaModal(profileId);
     };
 
+    // ADMIN USER ACCESS GROUPED ACTIONS - TICKET 3 v1.0.0
+    // These are presentation-only entry points for the two compact
+    // grouped buttons rendered in User Access Records.
+    //
+    // They do not perform any security/access operation themselves.
+    // Existing Reset Password, Reset HR 2FA, Remove Company Access,
+    // and Permanent Delete workflows remain authoritative.
+    window.adminOpenUserSecurityActions = (button) => {
+      const profileId = String(button?.dataset?.profileId || "").trim();
+      const role = String(button?.dataset?.profileRole || "").trim();
+
+      if (!profileId) return;
+
+      openAdminGroupedUserActions(
+        profileId,
+        "security",
+        {
+          role,
+        },
+      );
+    };
+
+    window.adminOpenUserAccessActions = (button) => {
+      const profileId = String(button?.dataset?.profileId || "").trim();
+
+      const canPermanentlyDelete =
+        String(
+          button?.dataset?.canPermanentlyDelete || "",
+        ).trim() === "true";
+
+      if (!profileId) return;
+
+      openAdminGroupedUserActions(
+        profileId,
+        "access",
+        {
+          canPermanentlyDelete,
+        },
+      );
+    };
+
     // HR TENANT ADMIN ACCESS - PHASE 2D
     // The browser only requests the change. The protected RPC performs the
     // Platform Admin authorization and writes the access level server-side.
@@ -264,6 +305,12 @@ const state = {
   // The actual MFA factor deletion happens in the reset-user-mfa Edge Function.
   currentMfaResetTarget: null,
 
+  // ADMIN USER ACCESS GROUPED ACTIONS - TICKET 3 v1.0.0
+  // UI-only temporary context for the grouped Security / Access chooser.
+  // Existing action functions remain authoritative.
+  currentGroupedActionProfileId: null,
+  currentGroupedActionType: null,
+
   dom: {},
 };
 
@@ -370,6 +417,114 @@ function restoreAdminWorkspaceAfterRefresh() {
 
   window.setTimeout(forceAdminDashboardToTopAfterRefresh, 0);
   window.setTimeout(forceAdminDashboardToTopAfterRefresh, 150);
+}
+
+// =========================================================
+// ADMIN USER ACCESS GROUPED ACTIONS - TICKET 3 v1.0.0
+//
+// Presentation-only action chooser.
+//
+// Important:
+// - this does not perform password, MFA, access or delete operations;
+// - it only routes the selected action into the existing authoritative
+//   Admin workflow after the chooser modal has closed.
+// =========================================================
+
+function clearAdminGroupedUserActionState() {
+  state.currentGroupedActionProfileId = null;
+  state.currentGroupedActionType = null;
+
+  state.dom.adminUserSecurityActionChoices?.classList.add("d-none");
+  state.dom.adminUserAccessActionChoices?.classList.add("d-none");
+  state.dom.adminGroupedResetMfaBtn?.classList.add("d-none");
+  state.dom.adminGroupedPermanentDeleteBtn?.classList.add("d-none");
+}
+
+function openAdminGroupedUserActions(
+  profileId = "",
+  actionType = "",
+  options = {},
+) {
+  const normalizedProfileId = String(profileId || "").trim();
+  const normalizedActionType = String(actionType || "").trim().toLowerCase();
+
+  if (
+    !normalizedProfileId ||
+    !["security", "access"].includes(normalizedActionType)
+  ) {
+    return;
+  }
+
+  clearAdminGroupedUserActionState();
+
+  state.currentGroupedActionProfileId = normalizedProfileId;
+  state.currentGroupedActionType = normalizedActionType;
+
+  const isSecurity = normalizedActionType === "security";
+
+  state.dom.adminUserSecurityActionChoices?.classList.toggle(
+    "d-none",
+    !isSecurity,
+  );
+
+  state.dom.adminUserAccessActionChoices?.classList.toggle(
+    "d-none",
+    isSecurity,
+  );
+
+  if (state.dom.adminUserGroupedActionsKicker) {
+    state.dom.adminUserGroupedActionsKicker.textContent =
+      isSecurity ? "SECURITY" : "ACCESS CONTROL";
+  }
+
+  if (state.dom.adminUserGroupedActionsTitle) {
+    state.dom.adminUserGroupedActionsTitle.textContent =
+      isSecurity ? "Security Actions" : "Access Actions";
+  }
+
+  if (state.dom.adminUserGroupedActionsDescription) {
+    state.dom.adminUserGroupedActionsDescription.textContent =
+      isSecurity
+        ? "Choose the account security action you want to perform."
+        : "Choose the company-access action you want to perform.";
+  }
+
+  // HR 2FA remains available only for HR profiles.
+  state.dom.adminGroupedResetMfaBtn?.classList.toggle(
+    "d-none",
+    String(options.role || "").trim().toLowerCase() !== "hr",
+  );
+
+  // Platform Admin accounts must not expose permanent deletion.
+  state.dom.adminGroupedPermanentDeleteBtn?.classList.toggle(
+    "d-none",
+    options.canPermanentlyDelete !== true,
+  );
+
+  const modalElement = state.dom.adminUserGroupedActionsModal;
+
+  if (!modalElement) return;
+
+  bootstrap.Modal.getOrCreateInstance(modalElement).show();
+}
+
+function runAdminGroupedActionAfterClose(actionCallback) {
+  const modalElement = state.dom.adminUserGroupedActionsModal;
+
+  if (!modalElement || typeof actionCallback !== "function") return;
+
+  const modalInstance =
+    bootstrap.Modal.getOrCreateInstance(modalElement);
+
+  modalElement.addEventListener(
+    "hidden.bs.modal",
+    () => {
+      actionCallback();
+    },
+    { once: true },
+  );
+
+  modalInstance.hide();
 }
 
 function getSupabaseClient() {
@@ -615,6 +770,38 @@ function cacheDomElements() {
     resetMfaConfirmCheckbox: document.getElementById("resetMfaConfirmCheckbox"),
     resetMfaSubmitBtn: document.getElementById("resetMfaSubmitBtn"),
     resetMfaAlert: document.getElementById("resetMfaAlert"),
+    // ADMIN USER ACCESS GROUPED ACTIONS - TICKET 3 v1.0.0
+    // Shared presentation chooser only. Existing security/access modals remain unchanged.
+    adminUserGroupedActionsModal: document.getElementById(
+      "adminUserGroupedActionsModal",
+    ),
+    adminUserGroupedActionsKicker: document.getElementById(
+      "adminUserGroupedActionsKicker",
+    ),
+    adminUserGroupedActionsTitle: document.getElementById(
+      "adminUserGroupedActionsModalLabel",
+    ),
+    adminUserGroupedActionsDescription: document.getElementById(
+      "adminUserGroupedActionsDescription",
+    ),
+    adminUserSecurityActionChoices: document.getElementById(
+      "adminUserSecurityActionChoices",
+    ),
+    adminUserAccessActionChoices: document.getElementById(
+      "adminUserAccessActionChoices",
+    ),
+    adminGroupedResetPasswordBtn: document.getElementById(
+      "adminGroupedResetPasswordBtn",
+    ),
+    adminGroupedResetMfaBtn: document.getElementById(
+      "adminGroupedResetMfaBtn",
+    ),
+    adminGroupedRemoveAccessBtn: document.getElementById(
+      "adminGroupedRemoveAccessBtn",
+    ),
+    adminGroupedPermanentDeleteBtn: document.getElementById(
+      "adminGroupedPermanentDeleteBtn",
+    ),
   };
 }
 
@@ -1434,6 +1621,90 @@ function bindEvents() {
       setAdminActionButtonLoading(state.dom.refreshProfileTenantLinksBtn, false);
     }
   });
+
+  // =========================================================
+  // ADMIN USER ACCESS GROUPED ACTIONS - TICKET 3 v1.0.1
+  //
+  // Bind only after cacheDomElements() has populated state.dom.
+  // The chooser closes first, then hands control to the existing
+  // authoritative workflow.
+  //
+  // No password, MFA, tenant-access or permanent-delete logic is
+  // duplicated here.
+  // =========================================================
+
+  // SECURITY -> Reset Password
+  state.dom.adminGroupedResetPasswordBtn?.addEventListener(
+    "click",
+    () => {
+      const profileId = String(
+        state.currentGroupedActionProfileId || "",
+      ).trim();
+
+      if (!profileId) return;
+
+      runAdminGroupedActionAfterClose(() => {
+        window.adminResetUserPassword?.(profileId);
+      });
+    },
+  );
+
+  // SECURITY -> Reset HR 2FA
+  state.dom.adminGroupedResetMfaBtn?.addEventListener(
+    "click",
+    () => {
+      const profileId = String(
+        state.currentGroupedActionProfileId || "",
+      ).trim();
+
+      if (!profileId) return;
+
+      runAdminGroupedActionAfterClose(() => {
+        window.adminResetUserMfa?.(profileId);
+      });
+    },
+  );
+
+  // ACCESS -> Remove Company Access
+  state.dom.adminGroupedRemoveAccessBtn?.addEventListener(
+    "click",
+    () => {
+      const profileId = String(
+        state.currentGroupedActionProfileId || "",
+      ).trim();
+
+      if (!profileId) return;
+
+      runAdminGroupedActionAfterClose(() => {
+        window.adminRemoveProfileTenantAccess?.(profileId);
+      });
+    },
+  );
+
+  // ACCESS -> Permanently Delete User
+  state.dom.adminGroupedPermanentDeleteBtn?.addEventListener(
+    "click",
+    () => {
+      const profileId = String(
+        state.currentGroupedActionProfileId || "",
+      ).trim();
+
+      if (!profileId) return;
+
+      runAdminGroupedActionAfterClose(() => {
+        window.adminPermanentlyDeleteCompanyUser?.(profileId);
+      });
+    },
+  );
+
+  // Clear only temporary chooser context when the chooser closes.
+  // Destination modals maintain their own independent state.
+  state.dom.adminUserGroupedActionsModal?.addEventListener(
+    "hidden.bs.modal",
+    () => {
+      clearAdminGroupedUserActionState();
+    },
+  );
 
   // =========================================================
   // ADMIN REMOVE COMPANY ACCESS MODAL - v1.0.0
@@ -4737,77 +5008,69 @@ function renderProfileTenantLinks(records = []) {
               </span>
             </td>
 
-            <td class="text-center">
-              <div class="d-flex gap-1 justify-content-center">
-                <!-- ADMIN ACCESS RECORDS UX CLEANUP - STEP 1E-3
-                     Existing edit action is preserved. -->
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline-primary"
-                  title="Edit user access setup"
-                  onclick="window.adminEditProfileTenantLink('${escapeHtml(profile.id)}')"
-                >
-                  <i class="bi bi-pencil-square"></i>
-                </button>
+<td class="text-center">
+  <!-- ADMIN USER ACCESS GROUPED ACTIONS - TICKET 3 v1.0.0
+       Presentation-only action consolidation.
 
-                <!-- ADMIN ACCESS RECORDS UX CLEANUP - STEP 1E-3
-                     Existing password reset action is preserved. -->
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline-warning"
-                  title="Reset password"
-                  onclick="window.adminResetUserPassword('${escapeHtml(profile.id)}')"
-                >
-                  <i class="bi bi-key"></i>
-                </button>
+       Safety:
+       - Edit remains a standalone action.
+       - Security groups Password Reset + HR 2FA only.
+       - Access groups Remove Company Access + Permanent Delete only.
+       - Existing secure modal/RPC/Edge Function workflows remain authoritative.
+       - No tenant, role, authentication or access logic is changed. -->
+  <div class="d-flex gap-1 justify-content-center align-items-center">
 
-
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline-danger"
-                  title="Remove company access"
-                  onclick="window.adminRemoveProfileTenantAccess('${escapeHtml(profile.id)}')"
-                >
-                  <i class="bi bi-trash"></i>
-                </button>
-
-                ${String(profile.role || "").trim().toLowerCase() !== "admin"
-            ? `
-    <!-- ADMIN COMPLETE USER REMOVAL
-         This is intentionally separate from Remove company access. -->
+    <!-- Existing edit workflow remains unchanged. -->
     <button
       type="button"
-      class="btn btn-sm btn-danger"
-      title="Permanently delete user"
-      onclick="window.adminPermanentlyDeleteCompanyUser('${escapeHtml(profile.id)}')"
+      class="btn btn-sm btn-outline-primary"
+      title="Edit user access setup"
+      onclick="window.adminEditProfileTenantLink('${escapeHtml(profile.id)}')"
     >
-      <i class="bi bi-person-x-fill"></i>
+      <i class="bi bi-pencil-square"></i>
     </button>
-  `
-            : ""
-          }
 
-                ${String(profile.role || "").trim().toLowerCase() === "hr"
-            ? `
-                    <!-- HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2C-2
-                         HR users are MFA-protected, so Admin gets a controlled
-                         reset action beside the existing password reset action.
-                         The browser does not delete factors directly. -->
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-outline-danger"
-                      title="Reset HR 2FA"
-                      onclick="window.adminResetUserMfa('${escapeHtml(profile.id)}')"
-                    >
-                      <i class="bi bi-shield-lock"></i>
-                    </button>
-                  `
-            : ""
-          }
+    <!-- SECURITY GROUP
+         Step 2 will open the compact Security action chooser.
+         Existing reset functions remain untouched. -->
+    <button
+      type="button"
+      class="btn btn-sm btn-outline-warning admin-user-security-actions-btn"
+      title="Security actions"
+      aria-label="Open security actions"
+      data-profile-id="${escapeHtml(profile.id)}"
+      data-profile-role="${escapeHtml(
+          String(profile.role || "").trim().toLowerCase(),
+        )}"
+      onclick="window.adminOpenUserSecurityActions?.(this)"
+    >
+      <i class="bi bi-key"></i>
+      <i class="bi bi-chevron-down ms-1"></i>
+    </button>
 
-                ${hrAccessActionButtonHtml}
-              </div>
-            </td>
+    <!-- ACCESS GROUP
+         Step 2 will open the compact Access action chooser.
+         Existing remove/delete functions remain untouched. -->
+    <button
+      type="button"
+      class="btn btn-sm btn-outline-danger admin-user-access-actions-btn"
+      title="Access actions"
+      aria-label="Open access actions"
+      data-profile-id="${escapeHtml(profile.id)}"
+      data-can-permanently-delete="${String(profile.role || "").trim().toLowerCase() !== "admin"
+            ? "true"
+            : "false"
+          }"
+      onclick="window.adminOpenUserAccessActions?.(this)"
+    >
+      <i class="bi bi-person-x"></i>
+      <i class="bi bi-chevron-down ms-1"></i>
+    </button>
+
+    <!-- Existing HR access-level control remains independent. -->
+    ${hrAccessActionButtonHtml}
+  </div>
+</td>
           </tr>
         `;
       })
@@ -5078,6 +5341,7 @@ function startProfileTenantLinkEdit(profileId) {
     120,
   );
 }
+
 
 // =========================================================
 // ADMIN REMOVE COMPANY ACCESS MODAL - v1.0.0

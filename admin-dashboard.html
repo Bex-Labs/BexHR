@@ -1956,6 +1956,116 @@
     </section>
   </main>
 
+  <!-- =========================================================
+     ADMIN USER ACCESS GROUPED ACTION CHOOSER - TICKET 3 v1.0.0
+
+     Presentation-only consolidation for User Access Records.
+
+     Safety:
+     - Security groups Password Reset and HR 2FA only.
+     - Access groups Remove Company Access and Permanent Delete only.
+     - Existing confirmation modals/functions remain authoritative.
+     - No authentication, tenant, role, RPC or Edge Function logic changes.
+     ========================================================= -->
+<div
+  class="modal fade"
+  id="adminUserGroupedActionsModal"
+  tabindex="-1"
+  aria-labelledby="adminUserGroupedActionsModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+
+      <div class="modal-header border-0 px-4 pt-4 pb-2">
+        <div>
+          <div
+            class="small fw-bold text-uppercase text-secondary mb-1"
+            id="adminUserGroupedActionsKicker"
+          >
+            User actions
+          </div>
+
+          <h5
+            class="modal-title fw-bold mb-1"
+            id="adminUserGroupedActionsModalLabel"
+          >
+            Account Actions
+          </h5>
+
+          <p
+            class="text-secondary small mb-0"
+            id="adminUserGroupedActionsDescription"
+          >
+            Choose an authorised action for this user.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          class="btn-close admin-modal-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+
+      <div class="modal-body px-4 pt-3 pb-4">
+
+        <!-- SECURITY ACTIONS -->
+        <div
+          id="adminUserSecurityActionChoices"
+          class="d-none d-grid gap-2"
+        >
+          <button
+            type="button"
+            id="adminGroupedResetPasswordBtn"
+            class="btn btn-outline-warning dashboard-action-btn text-start"
+          >
+            <i class="bi bi-key me-2"></i>
+            Reset Password
+          </button>
+
+          <!-- HR only. JS controls visibility. -->
+          <button
+            type="button"
+            id="adminGroupedResetMfaBtn"
+            class="btn btn-outline-danger dashboard-action-btn text-start d-none"
+          >
+            <i class="bi bi-shield-lock me-2"></i>
+            Reset HR 2FA
+          </button>
+        </div>
+
+        <!-- ACCESS ACTIONS -->
+        <div
+          id="adminUserAccessActionChoices"
+          class="d-none d-grid gap-2"
+        >
+          <button
+            type="button"
+            id="adminGroupedRemoveAccessBtn"
+            class="btn btn-outline-danger dashboard-action-btn text-start"
+          >
+            <i class="bi bi-building-x me-2"></i>
+            Remove Company Access
+          </button>
+
+          <!-- Platform Admin accounts must not expose permanent deletion. -->
+          <button
+            type="button"
+            id="adminGroupedPermanentDeleteBtn"
+            class="btn btn-danger dashboard-action-btn text-start d-none"
+          >
+            <i class="bi bi-person-x-fill me-2"></i>
+            Permanently Delete User
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
   <!-- ADMIN AUTHORITATIVE UI REFRESH - BACK TO TOP MARKUP FIX
      Correct the malformed opening button tag only.
      Existing back-to-top JS behaviour remains unchanged. -->
