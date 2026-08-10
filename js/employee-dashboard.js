@@ -998,9 +998,58 @@ function bindNavigationEvents() {
         ).trim();
 
         if (target === "requests") {
+          // BEXHR TICKET 5 - EMPLOYEE RAISE HR REQUEST QUICK ACTION
+          // Open the existing Profile workspace and Identity review area.
+          // Reveal the existing correction form without invoking its normal
+          // form-level auto-scroll, because this quick action should retain
+          // the wider HR Profile Review context.
           rememberEmployeeWorkspace("profile");
           showSection("profile");
-          setEmployeeProfileCorrectionPanelVisible(true);
+
+          const identityReviewTab = document.querySelector(
+            '[data-employee-profile-review-tab="identity"]',
+          );
+
+          identityReviewTab?.click();
+
+          const correctionPanel =
+            state.dom.profileCorrectionRequestPanel;
+
+          if (correctionPanel) {
+            correctionPanel.classList.remove("d-none");
+            populateEmployeeProfileCorrectionFieldOptions();
+          }
+
+          // Allow the Identity panel and correction form to finish rendering,
+          // then position the HR Profile Review heading below the sticky header.
+          window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+              const reviewPanel = document.querySelector(
+                ".employee-profile-review-panel",
+              );
+
+              if (!reviewPanel) return;
+
+              const stickyHeader = document.querySelector(
+                ".employee-modern-app-header",
+              );
+
+              const headerHeight =
+                stickyHeader?.getBoundingClientRect().height || 0;
+
+              const reviewTop =
+                reviewPanel.getBoundingClientRect().top +
+                window.scrollY -
+                headerHeight -
+                16;
+
+              window.scrollTo({
+                top: Math.max(0, reviewTop),
+                behavior: "smooth",
+              });
+            });
+          });
+
           return;
         }
 
