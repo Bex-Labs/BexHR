@@ -422,21 +422,45 @@
     return Array.isArray(data) && data.length > 0;
   }
 
-  function getCurrentWorkspaceKey() {
-    const path = String(window.location.pathname || "").toLowerCase();
-    const params = new URLSearchParams(window.location.search || "");
+function getCurrentWorkspaceKey() {
+  const path = String(window.location.pathname || "")
+    .toLowerCase()
+    .replace(/\/+$/, "");
 
-    if (path.endsWith("manager-dashboard.html")) return "manager";
-    if (
-      path.endsWith("hr-dashboard.html") &&
-      String(params.get("workspace") || "").toLowerCase() === "selfservice"
-    ) {
-      return "selfservice";
-    }
-    if (path.endsWith("hr-dashboard.html")) return "hr";
-    if (path.endsWith("employee-dashboard.html")) return "selfservice";
-    return "";
+  const params = new URLSearchParams(window.location.search || "");
+
+  // WORKSPACE SWITCHER CLEAN-URL PARITY - TICKET 4 v1.0.0
+  // Production uses extensionless routes such as /manager-dashboard,
+  // while local development may use /manager-dashboard.html.
+  // Recognise both forms without changing workspace navigation,
+  // authentication, role, tenant, or reporting-line behaviour.
+  const isManagerDashboard =
+    path.endsWith("/manager-dashboard") ||
+    path.endsWith("/manager-dashboard.html");
+
+  const isHrDashboard =
+    path.endsWith("/hr-dashboard") ||
+    path.endsWith("/hr-dashboard.html");
+
+  const isEmployeeDashboard =
+    path.endsWith("/employee-dashboard") ||
+    path.endsWith("/employee-dashboard.html");
+
+  if (isManagerDashboard) return "manager";
+
+  if (
+    isHrDashboard &&
+    String(params.get("workspace") || "").toLowerCase() === "selfservice"
+  ) {
+    return "selfservice";
   }
+
+  if (isHrDashboard) return "hr";
+
+  if (isEmployeeDashboard) return "selfservice";
+
+  return "";
+}
 
   function closeWorkspaceSwitcher() {
     document
