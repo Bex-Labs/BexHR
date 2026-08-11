@@ -27985,6 +27985,11 @@ body.bexhr-admin-visual-refresh #adminProfileSection
    --------------------------------------------------------- */
 
 body.bexhr-admin-visual-refresh .admin-modern-app-header {
+  /* ADMIN STICKY HEADER PARITY - v1.0.0
+     Match the established Employee / HR desktop header stacking
+     without changing Admin content, navigation, or account controls. */
+  position: relative;
+  z-index: 1030;
   padding: 1.1rem 1.25rem;
   border: 1px solid #dce5ec;
   border-radius: 18px;
@@ -28213,6 +28218,28 @@ body.bexhr-admin-visual-refresh .admin-overview-welcome-copy {
   font-size: 1rem;
   line-height: 1.55;
 }
+
+/* =========================================================
+   ADMIN STICKY APPLICATION HEADER - v1.0.0
+
+   Uses the same desktop-only sticky pattern as the approved
+   Employee and HR application headers.
+
+   Presentation only:
+   - no Admin navigation changes;
+   - no account/profile changes;
+   - no authentication or tenant changes.
+   ========================================================= */
+
+@media (min-width: 992px) {
+  body.bexhr-admin-visual-refresh
+    .admin-modern-app-header {
+    position: sticky;
+    top: 0.75rem;
+  }
+}
+
+/* END ADMIN STICKY APPLICATION HEADER - v1.0.0 */
 
 /* ---------------------------------------------------------
    DESKTOP: sidebar replaces duplicate workspace switcher
