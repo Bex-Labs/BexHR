@@ -65,10 +65,104 @@ function releaseEmployeeWorkspaceLoader() {
   }, 220);
 }
 
+/* =========================================================
+   EMPLOYEE PROFILE CARD HEIGHT SYNC - v1.0.0
+
+   Purpose:
+   - keep the left Identity card at its natural height;
+   - make Account Details / Managers exactly the same height;
+   - preserve an inner scroll only on Account Details;
+   - automatically re-measure when profile content or the
+     browser viewport changes.
+
+   Presentation only.
+   No employee, manager, profile-photo, tenant, Supabase,
+   navigation or authorisation behaviour is changed.
+   ========================================================= */
+
+function initialiseEmployeeProfileHeightSync() {
+  const profileSection = document.getElementById("profileSection");
+
+  const identityPanel = profileSection?.querySelector(
+    ".employee-profile-identity-panel",
+  );
+
+  const detailsPanel = profileSection?.querySelector(
+    ".employee-profile-details-panel",
+  );
+
+  if (!profileSection || !identityPanel || !detailsPanel) {
+    return;
+  }
+
+  function syncEmployeeProfileCardHeight() {
+    /* Mobile/tablet use the existing natural stacked layout. */
+    if (window.innerWidth < 992) {
+      detailsPanel.style.removeProperty("height");
+      detailsPanel.style.removeProperty("max-height");
+      return;
+    }
+
+    /* Do not write a zero measurement while Profile is hidden. */
+    if (identityPanel.offsetParent === null) {
+      return;
+    }
+
+    const identityHeight = Math.ceil(
+      identityPanel.getBoundingClientRect().height,
+    );
+
+    if (identityHeight <= 0) {
+      return;
+    }
+
+    detailsPanel.style.height = `${identityHeight}px`;
+    detailsPanel.style.maxHeight = `${identityHeight}px`;
+  }
+
+  /* Recalculate whenever the natural Identity card changes size,
+     for example after the employee image/profile data renders. */
+  const identityResizeObserver = new ResizeObserver(() => {
+    window.requestAnimationFrame(syncEmployeeProfileCardHeight);
+  });
+
+  identityResizeObserver.observe(identityPanel);
+
+  /* Recalculate when browser dimensions cross desktop/tablet sizes. */
+  window.addEventListener(
+    "resize",
+    () => {
+      window.requestAnimationFrame(syncEmployeeProfileCardHeight);
+    },
+    { passive: true },
+  );
+
+  /* Profile visibility changes through the existing workspace navigation.
+     Watching the Profile section ensures a fresh measurement when it opens. */
+  const profileVisibilityObserver = new MutationObserver(() => {
+    if (!profileSection.classList.contains("d-none")) {
+      window.requestAnimationFrame(syncEmployeeProfileCardHeight);
+    }
+  });
+
+  profileVisibilityObserver.observe(profileSection, {
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+
+  window.requestAnimationFrame(syncEmployeeProfileCardHeight);
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   try {
     cacheDomElements();
     bindNavigationEvents();
+
+    // EMPLOYEE PROFILE CARD HEIGHT SYNC - v1.0.0
+    // Presentation-only synchronisation between the natural
+    // Identity card and scrollable Account Details card.
+    initialiseEmployeeProfileHeightSync();
+
     bindLeaveFormEvents();
     bindUtilityEvents();
     bindPayrollFilterEvents();

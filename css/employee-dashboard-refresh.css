@@ -2566,6 +2566,90 @@ body.bexhr-employee-visual-refresh
   border-radius: 18px;
 }
 
+/* =========================================================
+   EMPLOYEE PROFILE DYNAMIC HEIGHT + INNER SCROLL - v1.0.2
+
+   Desktop behaviour:
+   - the Identity/photo card keeps its natural content height;
+   - JavaScript measures that natural height;
+   - Account Details / Managers receives the exact same height;
+   - only Account Details scrolls internally;
+   - both cards therefore share the same top and bottom edge;
+   - no Profile Photo action is clipped.
+
+   Mobile/tablet retain natural document flow.
+   ========================================================= */
+
+@media (min-width: 992px) {
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-layout {
+    align-items: start;
+  }
+
+  /* Left card remains completely content-driven. */
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-identity-panel {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    align-self: start;
+  }
+
+  /* JavaScript supplies the exact height of the left card. */
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-details-panel {
+    width: 100%;
+    min-height: 0;
+    align-self: start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding-right: 1.1rem;
+    scrollbar-width: thin;
+    scrollbar-color:
+      rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.35)
+      rgba(148, 163, 184, 0.08);
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-details-panel::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-details-panel::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.08);
+  }
+
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-details-panel::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(
+      var(--bexhr-accent-rgb, 15, 159, 154),
+      0.35
+    );
+  }
+}
+
+/* Below desktop, remove any inline desktop measurement cleanly. */
+@media (max-width: 991.98px) {
+  body.bexhr-employee-visual-refresh
+    #profileSection
+    .employee-profile-details-panel {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible;
+  }
+}
+
 body.bexhr-employee-visual-refresh
   #profileSection
   .employee-profile-identity-panel {
