@@ -1,0 +1,534 @@
+/* =========================================================
+   BexHR Performance Appraisal
+   Standalone module stylesheet
+   Scope: features/performance-appraisal only
+   ========================================================= */
+
+:root {
+  --bex-pa-primary: #0e7490;
+  --bex-pa-primary-dark: #155e75;
+  --bex-pa-primary-soft: #ecfeff;
+
+  --bex-pa-text: #0f172a;
+  --bex-pa-text-muted: #64748b;
+
+  --bex-pa-border: #e2e8f0;
+  --bex-pa-surface: #ffffff;
+  --bex-pa-background: #f8fafc;
+
+  --bex-pa-success: #15803d;
+
+  --bex-pa-sidebar-width: 260px;
+  --bex-pa-radius: 16px;
+
+  --bex-pa-shadow:
+    0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+/* =========================================================
+   Base
+   ========================================================= */
+
+body.bex-pa-page {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bex-pa-background);
+  color: var(--bex-pa-text);
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.bex-pa-page *,
+.bex-pa-page *::before,
+.bex-pa-page *::after {
+  box-sizing: border-box;
+}
+
+.bex-pa-page a,
+.bex-pa-page button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bex-pa-page button:focus-visible,
+.bex-pa-page a:focus-visible {
+  outline: 3px solid rgba(14, 116, 144, 0.25);
+  outline-offset: 2px;
+}
+
+/* =========================================================
+   Header
+   ========================================================= */
+
+.bex-pa-header {
+  z-index: 1030;
+  min-height: 72px;
+  border-color: var(--bex-pa-border) !important;
+}
+
+.bex-pa-brand {
+  display: inline-flex;
+  align-items: center;
+}
+
+.bex-pa-brand span {
+  letter-spacing: -0.04em;
+}
+
+.bex-pa-header .badge {
+  padding: 0.55rem 0.8rem;
+  border-color: var(--bex-pa-border) !important;
+  font-weight: 600;
+}
+
+/* =========================================================
+   Layout
+   ========================================================= */
+
+.bex-pa-shell {
+  min-height: calc(100vh - 72px);
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.bex-pa-shell > .row {
+  min-height: calc(100vh - 72px);
+}
+
+.bex-pa-sidebar {
+  border-color: var(--bex-pa-border) !important;
+}
+
+.bex-pa-main {
+  min-width: 0;
+  background: var(--bex-pa-background);
+}
+
+/* =========================================================
+   Sidebar navigation
+   ========================================================= */
+
+.bex-pa-sidebar nav {
+  position: sticky;
+  top: 72px;
+}
+
+#bexPaPrimaryNavigation .nav-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  border-radius: 10px;
+  color: #334155;
+  font-weight: 600;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+#bexPaPrimaryNavigation .nav-link:not(.active):not(:disabled):hover {
+  background: #f1f5f9;
+  color: var(--bex-pa-primary-dark);
+}
+
+#bexPaPrimaryNavigation .nav-link.active {
+  background: var(--bex-pa-primary-soft);
+  color: var(--bex-pa-primary-dark);
+}
+
+#bexPaPrimaryNavigation .nav-link:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+#bexPaPrimaryNavigation .nav-link i {
+  flex: 0 0 auto;
+  width: 1.25rem;
+  text-align: center;
+}
+
+.bex-pa-sidebar-footer {
+  border-color: var(--bex-pa-border) !important;
+}
+
+.bex-pa-sidebar-footer .bi-circle-fill {
+  font-size: 0.55rem;
+  color: var(--bex-pa-success) !important;
+}
+
+/* =========================================================
+   Main content
+   ========================================================= */
+
+.bex-pa-main > div {
+  width: min(100%, 1500px);
+  margin-inline: auto;
+}
+
+#bexPaOverviewTitle {
+  letter-spacing: -0.03em;
+  color: var(--bex-pa-text);
+}
+
+.bex-pa-page .text-primary {
+  color: var(--bex-pa-primary) !important;
+}
+
+.bex-pa-page .btn-primary {
+  border-color: var(--bex-pa-primary);
+  background: var(--bex-pa-primary);
+  font-weight: 600;
+}
+
+.bex-pa-page .btn-primary:hover,
+.bex-pa-page .btn-primary:focus {
+  border-color: var(--bex-pa-primary-dark);
+  background: var(--bex-pa-primary-dark);
+}
+
+.bex-pa-page .btn-primary:disabled {
+  border-color: var(--bex-pa-primary);
+  background: var(--bex-pa-primary);
+  opacity: 0.52;
+}
+
+/* =========================================================
+   Standalone notice
+   ========================================================= */
+
+.bex-pa-page .alert-info {
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  background: #f0f9ff;
+  color: #0c4a6e;
+}
+
+.bex-pa-page .alert-info > i {
+  margin-top: 0.15rem;
+  flex: 0 0 auto;
+}
+
+/* =========================================================
+   Summary cards
+   ========================================================= */
+
+.bex-pa-summary-card {
+  min-height: 132px;
+  overflow: hidden;
+  border-radius: var(--bex-pa-radius);
+  background: var(--bex-pa-surface);
+  box-shadow: var(--bex-pa-shadow) !important;
+}
+
+.bex-pa-summary-card .card-body {
+  display: flex;
+  min-height: 132px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 1.35rem;
+}
+
+.bex-pa-summary-card .display-6 {
+  letter-spacing: -0.04em;
+  color: var(--bex-pa-text);
+}
+
+/* =========================================================
+   Workflow and module user cards
+   ========================================================= */
+
+.bex-pa-workflow-card,
+.bex-pa-users-card {
+  overflow: hidden;
+  border-radius: var(--bex-pa-radius);
+  background: var(--bex-pa-surface);
+  box-shadow: var(--bex-pa-shadow) !important;
+}
+
+.bex-pa-workflow-card .card-header,
+.bex-pa-users-card .card-header {
+  border-bottom: 1px solid var(--bex-pa-border) !important;
+}
+
+.bex-pa-workflow-card .list-group-item {
+  border-color: var(--bex-pa-border);
+  background: transparent;
+}
+
+.bex-pa-workflow-card .list-group-numbered > .list-group-item::before {
+  color: var(--bex-pa-primary);
+  font-weight: 700;
+}
+
+.bex-pa-users-card dt {
+  color: var(--bex-pa-text);
+  font-weight: 700;
+}
+
+.bex-pa-users-card dd {
+  margin-bottom: 0;
+}
+
+/* =========================================================
+   Footer
+   ========================================================= */
+
+.bex-pa-footer {
+  border-color: var(--bex-pa-border) !important;
+}
+
+/* =========================================================
+   Tablet
+   ========================================================= */
+
+@media (min-width: 992px) {
+  .bex-pa-sidebar {
+    display: flex;
+    min-height: calc(100vh - 72px);
+    flex-direction: column;
+  }
+
+  .bex-pa-sidebar nav {
+    flex: 1 1 auto;
+  }
+
+  .bex-pa-sidebar-footer {
+    margin-top: auto;
+  }
+}
+
+/* =========================================================
+   Mobile and small tablet
+   ========================================================= */
+
+@media (max-width: 991.98px) {
+  .bex-pa-header {
+    position: static !important;
+  }
+
+  .bex-pa-shell,
+  .bex-pa-shell > .row {
+    min-height: auto;
+  }
+
+  .bex-pa-sidebar {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--bex-pa-border);
+  }
+
+  .bex-pa-sidebar nav {
+    position: static;
+  }
+
+  #bexPaPrimaryNavigation {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #bexPaPrimaryNavigation .nav-link {
+    height: 100%;
+  }
+
+  .bex-pa-sidebar-footer {
+    display: none;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .bex-pa-header .container-fluid {
+    align-items: flex-start !important;
+  }
+
+  .bex-pa-header .badge {
+    display: none;
+  }
+
+  #bexPaPrimaryNavigation {
+    grid-template-columns: 1fr;
+  }
+
+  .bex-pa-main > div {
+    padding: 1rem !important;
+  }
+
+  .bex-pa-summary-card {
+    min-height: 110px;
+  }
+
+  .bex-pa-summary-card .card-body {
+    min-height: 110px;
+    padding: 1.1rem;
+  }
+}
+
+/* =========================================================
+   Reduced motion
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  #bexPaPrimaryNavigation .nav-link {
+    transition: none;
+  }
+}
+
+/* =========================================================
+   Appraisal cycles
+   ========================================================= */
+
+.bex-pa-cycle-form-card,
+.bex-pa-cycle-list-card {
+  overflow: hidden;
+  border-radius: var(--bex-pa-radius);
+  background: var(--bex-pa-surface);
+  box-shadow: var(--bex-pa-shadow) !important;
+}
+
+.bex-pa-cycle-form-card .card-header,
+.bex-pa-cycle-list-card .card-header {
+  border-bottom: 1px solid var(--bex-pa-border);
+}
+
+.bex-pa-cycle-form-card .form-label {
+  color: var(--bex-pa-text);
+}
+
+.bex-pa-cycle-form-card .form-control {
+  min-height: 44px;
+  border-color: var(--bex-pa-border);
+  border-radius: 10px;
+}
+
+.bex-pa-cycle-form-card .form-control:focus {
+  border-color: var(--bex-pa-primary);
+  box-shadow: 0 0 0 0.2rem rgba(14, 116, 144, 0.12);
+}
+
+.bex-pa-cycle-list-card table {
+  min-width: 980px;
+}
+
+.bex-pa-cycle-list-card th {
+  padding: 0.9rem 1rem;
+  border-bottom-color: var(--bex-pa-border);
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.bex-pa-cycle-list-card td {
+  padding: 1rem;
+  border-bottom-color: var(--bex-pa-border);
+  color: var(--bex-pa-text);
+  vertical-align: middle;
+}
+
+.bex-pa-cycle-list-card tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.bex-pa-cycle-name {
+  font-weight: 700;
+}
+
+.bex-pa-cycle-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #166534;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+  .bex-pa-cycle-form-card .card-body {
+    padding: 1rem;
+  }
+}
+
+/* =========================================================
+   Appraisal cycle lifecycle actions
+   ========================================================= */
+
+.bex-pa-cycle-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.bex-pa-cycle-action-button {
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 8px;
+}
+
+.bex-pa-cycle-status[data-status="draft"] {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.bex-pa-cycle-status[data-status="active"] {
+  background: #ecfdf5;
+  color: #166534;
+}
+
+.bex-pa-confirm-dialog {
+  width: min(calc(100% - 2rem), 500px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--bex-pa-radius);
+  background: var(--bex-pa-surface);
+  color: var(--bex-pa-text);
+  box-shadow:
+    0 24px 64px rgba(15, 23, 42, 0.22);
+}
+
+.bex-pa-confirm-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.bex-pa-confirm-dialog-header,
+.bex-pa-confirm-dialog-body,
+.bex-pa-confirm-dialog-actions {
+  padding: 1.25rem;
+}
+
+.bex-pa-confirm-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--bex-pa-border);
+}
+
+.bex-pa-confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  border-top: 1px solid var(--bex-pa-border);
+}
+
+@media (max-width: 575.98px) {
+  .bex-pa-cycle-actions {
+    flex-wrap: wrap;
+  }
+
+  .bex-pa-confirm-dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .bex-pa-confirm-dialog-actions .btn {
+    width: 100%;
+  }
+}
