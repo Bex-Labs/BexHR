@@ -154,19 +154,114 @@
     }
   }
 
-  function bexPaShowCycleForm() {
+  function bexPaPopulateCycleForm(cycle) {
+    bexPaElements.cycleName.value = cycle.name;
+    bexPaElements.cycleStartDate.value = cycle.startDate;
+    bexPaElements.cycleEndDate.value = cycle.endDate;
+    bexPaElements.goalDeadline.value = cycle.goalDeadline;
+    bexPaElements.employeeReviewDeadline.value =
+      cycle.employeeReviewDeadline;
+    bexPaElements.managerReviewDeadline.value =
+      cycle.managerReviewDeadline;
+    bexPaElements.hrReviewDeadline.value =
+      cycle.hrReviewDeadline;
+  }
+
+  function bexPaSetCycleFormReadOnly(isReadOnly) {
+    const fields = bexPaElements.cycleForm?.querySelectorAll(
+      "input, select, textarea",
+    );
+
+    fields?.forEach((field) => {
+      field.disabled = isReadOnly;
+    });
+  }
+
+  function bexPaShowCycleForm(cycleId = null, mode = "create") {
     bexPaShowSection("cycles");
+    bexPaClearCycleError();
+
+    const cycle = cycleId
+      ? bexPaState.cycles.find(
+        (existingCycle) => existingCycle.id === cycleId,
+      )
+      : null;
+
+    if (cycleId && !cycle) {
+      return;
+    }
+
+    bexPaElements.cycleForm?.reset();
+    bexPaState.editingCycleId = null;
+
+    if (mode === "create") {
+      bexPaElements.cycleFormTitle.textContent =
+        "New Appraisal Cycle";
+      bexPaElements.cycleSubmitButton.textContent =
+        "Create Cycle";
+      bexPaElements.cycleSubmitButton.classList.remove("d-none");
+      bexPaSetCycleFormReadOnly(false);
+    }
+
+    if (mode === "edit" && cycle) {
+      if (cycle.status !== "Draft") {
+        return;
+      }
+
+      bexPaState.editingCycleId = cycle.id;
+
+      bexPaElements.cycleFormTitle.textContent =
+        "Edit Appraisal Cycle";
+      bexPaElements.cycleSubmitButton.textContent =
+        "Save Changes";
+      bexPaElements.cycleSubmitButton.classList.remove("d-none");
+
+      bexPaSetCycleFormReadOnly(false);
+      bexPaPopulateCycleForm(cycle);
+    }
+
+    if (mode === "view" && cycle) {
+      bexPaElements.cycleFormTitle.textContent =
+        "Appraisal Cycle Details";
+      bexPaElements.cycleSubmitButton.classList.add("d-none");
+
+      bexPaPopulateCycleForm(cycle);
+      bexPaSetCycleFormReadOnly(true);
+    }
 
     bexPaElements.cycleFormCard?.classList.remove("d-none");
 
     window.requestAnimationFrame(() => {
-      bexPaElements.cycleName?.focus();
+      bexPaElements.cycleFormCard?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+
+      if (mode !== "view") {
+        bexPaElements.cycleName?.focus();
+      }
     });
   }
 
   function bexPaHideCycleForm() {
+    bexPaState.editingCycleId = null;
+
     bexPaElements.cycleForm?.reset();
     bexPaClearCycleError();
+
+    bexPaSetCycleFormReadOnly(false);
+
+    if (bexPaElements.cycleSubmitButton) {
+      bexPaElements.cycleSubmitButton.textContent =
+        "Create Cycle";
+      bexPaElements.cycleSubmitButton.classList.remove("d-none");
+    }
+
+    if (bexPaElements.cycleFormTitle) {
+      bexPaElements.cycleFormTitle.textContent =
+        "New Appraisal Cycle";
+    }
+
     bexPaElements.cycleFormCard?.classList.add("d-none");
   }
 
@@ -268,7 +363,9 @@
 
     const duplicateName = bexPaState.cycles.some(
       (existingCycle) =>
-        existingCycle.name.toLowerCase() === cycle.name.toLowerCase(),
+        existingCycle.id !== bexPaState.editingCycleId &&
+        existingCycle.name.toLowerCase() ===
+        cycle.name.toLowerCase(),
     );
 
     if (duplicateName) {
@@ -304,6 +401,33 @@
     return cell;
   }
 
+  function bexPaCreateCycleActionButton({
+    label,
+    icon,
+    action,
+    cycleId,
+    variant = "outline-secondary",
+  }) {
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.className =
+      `btn btn-sm btn-${variant} bex-pa-cycle-action-button`;
+
+    button.dataset.bexPaCycleAction = action;
+    button.dataset.bexPaCycleId = cycleId;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+
+    const iconElement = document.createElement("i");
+    iconElement.className = `bi ${icon}`;
+    iconElement.setAttribute("aria-hidden", "true");
+
+    button.appendChild(iconElement);
+
+    return button;
+  }
+
   function bexPaRenderCycles() {
     if (!bexPaElements.cycleTableBody) {
       return;
@@ -316,8 +440,9 @@
       emptyRow.id = "bexPaCycleEmptyRow";
 
       const emptyCell = document.createElement("td");
-      emptyCell.colSpan = 7;
-      emptyCell.className = "py-5 text-center text-body-secondary";
+      emptyCell.colSpan = 8;
+      emptyCell.className =
+        "py-5 text-center text-body-secondary";
       emptyCell.textContent =
         "No appraisal cycles have been created yet.";
 
@@ -328,14 +453,17 @@
         const row = document.createElement("tr");
 
         row.appendChild(
-          bexPaCreateTableCell(cycle.name, "bex-pa-cycle-name"),
+          bexPaCreateTableCell(
+            cycle.name,
+            "bex-pa-cycle-name",
+          ),
         );
 
         row.appendChild(
           bexPaCreateTableCell(
-            `${bexPaFormatDate(cycle.startDate)} – ${bexPaFormatDate(
-              cycle.endDate,
-            )}`,
+            `${bexPaFormatDate(
+              cycle.startDate,
+            )} – ${bexPaFormatDate(cycle.endDate)}`,
           ),
         );
 
@@ -347,13 +475,17 @@
 
         row.appendChild(
           bexPaCreateTableCell(
-            bexPaFormatDate(cycle.employeeReviewDeadline),
+            bexPaFormatDate(
+              cycle.employeeReviewDeadline,
+            ),
           ),
         );
 
         row.appendChild(
           bexPaCreateTableCell(
-            bexPaFormatDate(cycle.managerReviewDeadline),
+            bexPaFormatDate(
+              cycle.managerReviewDeadline,
+            ),
           ),
         );
 
@@ -367,10 +499,50 @@
         const statusBadge = document.createElement("span");
 
         statusBadge.className = "bex-pa-cycle-status";
+        statusBadge.dataset.status =
+          cycle.status.toLowerCase();
         statusBadge.textContent = cycle.status;
 
         statusCell.appendChild(statusBadge);
         row.appendChild(statusCell);
+
+        const actionsCell = document.createElement("td");
+        const actions = document.createElement("div");
+
+        actions.className = "bex-pa-cycle-actions";
+
+        actions.appendChild(
+          bexPaCreateCycleActionButton({
+            label: `View ${cycle.name}`,
+            icon: "bi-eye",
+            action: "view",
+            cycleId: cycle.id,
+          }),
+        );
+
+        if (cycle.status === "Draft") {
+          actions.appendChild(
+            bexPaCreateCycleActionButton({
+              label: `Edit ${cycle.name}`,
+              icon: "bi-pencil",
+              action: "edit",
+              cycleId: cycle.id,
+            }),
+          );
+
+          actions.appendChild(
+            bexPaCreateCycleActionButton({
+              label: `Activate ${cycle.name}`,
+              icon: "bi-play-fill",
+              action: "activate",
+              cycleId: cycle.id,
+              variant: "outline-primary",
+            }),
+          );
+        }
+
+        actionsCell.appendChild(actions);
+        row.appendChild(actionsCell);
 
         bexPaElements.cycleTableBody.appendChild(row);
       });
@@ -388,7 +560,9 @@
     bexPaClearCycleError();
 
     const cycle = {
-      id: `BEX-PA-CYCLE-${Date.now()}`,
+      id:
+        bexPaState.editingCycleId ||
+        `BEX-PA-CYCLE-${Date.now()}`,
       name: bexPaElements.cycleName.value.trim(),
       startDate: bexPaElements.cycleStartDate.value,
       endDate: bexPaElements.cycleEndDate.value,
@@ -397,7 +571,8 @@
         bexPaElements.employeeReviewDeadline.value,
       managerReviewDeadline:
         bexPaElements.managerReviewDeadline.value,
-      hrReviewDeadline: bexPaElements.hrReviewDeadline.value,
+      hrReviewDeadline:
+        bexPaElements.hrReviewDeadline.value,
       status: "Draft",
     };
 
@@ -408,15 +583,130 @@
       return;
     }
 
-    bexPaState.cycles.push(cycle);
-    bexPaSaveCycles();
+    if (bexPaState.editingCycleId) {
+      const existingIndex = bexPaState.cycles.findIndex(
+        (existingCycle) =>
+          existingCycle.id === bexPaState.editingCycleId,
+      );
 
+      if (existingIndex === -1) {
+        bexPaShowCycleError(
+          "The appraisal cycle could not be found.",
+        );
+        return;
+      }
+
+      const existingCycle =
+        bexPaState.cycles[existingIndex];
+
+      if (existingCycle.status !== "Draft") {
+        bexPaShowCycleError(
+          "Only draft appraisal cycles can be edited.",
+        );
+        return;
+      }
+
+      bexPaState.cycles[existingIndex] = {
+        ...existingCycle,
+        ...cycle,
+        status: existingCycle.status,
+      };
+    } else {
+      bexPaState.cycles.push(cycle);
+    }
+
+    const wasEditing = Boolean(bexPaState.editingCycleId);
+
+    bexPaSaveCycles();
     bexPaRenderCycles();
     bexPaHideCycleForm();
 
     if (bexPaElements.announcement) {
       bexPaElements.announcement.textContent =
-        `${cycle.name} was created successfully.`;
+        wasEditing
+          ? `${cycle.name} was updated successfully.`
+          : `${cycle.name} was created successfully.`;
+    }
+  }
+
+  function bexPaOpenActivationDialog(cycleId) {
+    const cycle = bexPaState.cycles.find(
+      (existingCycle) => existingCycle.id === cycleId,
+    );
+
+    if (!cycle || cycle.status !== "Draft") {
+      return;
+    }
+
+    bexPaState.activatingCycleId = cycle.id;
+
+    if (bexPaElements.activateCycleName) {
+      bexPaElements.activateCycleName.textContent =
+        cycle.name;
+    }
+
+    bexPaElements.activateCycleDialog?.showModal();
+  }
+
+  function bexPaActivateCycle() {
+    if (!bexPaState.activatingCycleId) {
+      return;
+    }
+
+    const cycle = bexPaState.cycles.find(
+      (existingCycle) =>
+        existingCycle.id ===
+        bexPaState.activatingCycleId,
+    );
+
+    if (!cycle || cycle.status !== "Draft") {
+      bexPaState.activatingCycleId = null;
+      bexPaElements.activateCycleDialog?.close();
+      return;
+    }
+
+    cycle.status = "Active";
+
+    bexPaSaveCycles();
+    bexPaRenderCycles();
+
+    bexPaElements.activateCycleDialog?.close();
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        `${cycle.name} is now active.`;
+    }
+  }
+
+  function bexPaHandleCycleTableAction(event) {
+    const actionButton = event.target.closest(
+      "[data-bex-pa-cycle-action]",
+    );
+
+    if (!actionButton) {
+      return;
+    }
+
+    const cycleId = actionButton.dataset.bexPaCycleId;
+    const action =
+      actionButton.dataset.bexPaCycleAction;
+
+    if (!cycleId || !action) {
+      return;
+    }
+
+    if (action === "view") {
+      bexPaShowCycleForm(cycleId, "view");
+      return;
+    }
+
+    if (action === "edit") {
+      bexPaShowCycleForm(cycleId, "edit");
+      return;
+    }
+
+    if (action === "activate") {
+      bexPaOpenActivationDialog(cycleId);
     }
   }
 
@@ -435,12 +725,12 @@
 
     bexPaElements.overviewCreateButton?.addEventListener(
       "click",
-      bexPaShowCycleForm,
+      () => bexPaShowCycleForm(),
     );
 
     bexPaElements.cyclesCreateButton?.addEventListener(
       "click",
-      bexPaShowCycleForm,
+      () => bexPaShowCycleForm(),
     );
 
     bexPaElements.closeCycleFormButton?.addEventListener(
@@ -456,6 +746,23 @@
     bexPaElements.cycleForm?.addEventListener(
       "submit",
       bexPaHandleCycleSubmit,
+    );
+
+    bexPaElements.cycleTableBody?.addEventListener(
+      "click",
+      bexPaHandleCycleTableAction,
+    );
+
+    bexPaElements.confirmActivateCycleButton?.addEventListener(
+      "click",
+      bexPaActivateCycle,
+    );
+
+    bexPaElements.activateCycleDialog?.addEventListener(
+      "close",
+      () => {
+        bexPaState.activatingCycleId = null;
+      },
     );
 
     bexPaRenderCycles();
