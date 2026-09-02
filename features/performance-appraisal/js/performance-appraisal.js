@@ -12,10 +12,25 @@
   const BEX_PA_CYCLE_STORAGE_KEY =
     "bexhr:performance-appraisal:standalone-cycles:v1";
 
+  const BEX_PA_ORGANISATION_GOAL_STORAGE_KEY =
+    "bexhr:performance-appraisal:organisation-goals:v1";
+
+  const BEX_PA_DELIVERABLE_STORAGE_KEY =
+    "bexhr:performance-appraisal:organisational-deliverables:v1";
+
+  const BEX_PA_DEPARTMENT_GOAL_STORAGE_KEY =
+    "bexhr:performance-appraisal:department-goals:v1";
+
   const bexPaState = {
     cycles: [],
+    organisationGoals: [],
+    deliverables: [],
+    departmentGoals: [],
     editingCycleId: null,
     activatingCycleId: null,
+    editingOrganisationGoalId: null,
+    editingDeliverableId: null,
+    editingDepartmentGoalId: null,
   };
 
   function bexPaLoadStoredCycles() {
@@ -55,14 +70,258 @@
     }
   }
 
+  function bexPaLoadOrganisationGoals() {
+    try {
+      const storedGoals = window.localStorage.getItem(
+        BEX_PA_ORGANISATION_GOAL_STORAGE_KEY,
+      );
+
+      if (!storedGoals) {
+        return [];
+      }
+
+      const parsedGoals = JSON.parse(storedGoals);
+
+      return Array.isArray(parsedGoals) ? parsedGoals : [];
+    } catch (error) {
+      console.warn(
+        "Organisation goals could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveOrganisationGoals() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_ORGANISATION_GOAL_STORAGE_KEY,
+        JSON.stringify(bexPaState.organisationGoals),
+      );
+    } catch (error) {
+      console.warn(
+        "Organisation goals could not be saved.",
+        error,
+      );
+    }
+  }
+
+  function bexPaLoadDeliverables() {
+    try {
+      const storedDeliverables = window.localStorage.getItem(
+        BEX_PA_DELIVERABLE_STORAGE_KEY,
+      );
+
+      if (!storedDeliverables) {
+        return [];
+      }
+
+      const parsedDeliverables = JSON.parse(
+        storedDeliverables,
+      );
+
+      return Array.isArray(parsedDeliverables)
+        ? parsedDeliverables
+        : [];
+    } catch (error) {
+      console.warn(
+        "Organisational deliverables could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveDeliverables() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_DELIVERABLE_STORAGE_KEY,
+        JSON.stringify(bexPaState.deliverables),
+      );
+    } catch (error) {
+      console.warn(
+        "Organisational deliverables could not be saved.",
+        error,
+      );
+    }
+  }
+
   const bexPaElements = {
     overviewSection: document.getElementById("bexPaOverviewSection"),
     cyclesSection: document.getElementById("bexPaCyclesSection"),
+    goalsSection: document.getElementById("bexPaGoalsSection"),
 
     overviewNavLink: document.querySelector(
       '#bexPaPrimaryNavigation a[href="#bexPaOverviewSection"]',
     ),
     cyclesNavButton: document.getElementById("bexPaCyclesNavButton"),
+    goalsNavButton: document.getElementById("bexPaGoalsNavButton"),
+    createOrganisationGoalButton: document.getElementById(
+      "bexPaCreateOrganisationGoalButton",
+    ),
+    organisationGoalsList: document.getElementById(
+      "bexPaOrganisationGoalsList",
+    ),
+    organisationGoalDialog: document.getElementById(
+      "bexPaOrganisationGoalDialog",
+    ),
+    organisationGoalForm: document.getElementById(
+      "bexPaOrganisationGoalForm",
+    ),
+    organisationGoalDialogTitle: document.getElementById(
+      "bexPaOrganisationGoalDialogTitle",
+    ),
+    organisationGoalFormError: document.getElementById(
+      "bexPaOrganisationGoalFormError",
+    ),
+    closeOrganisationGoalDialogButton: document.getElementById(
+      "bexPaCloseOrganisationGoalDialogButton",
+    ),
+    cancelOrganisationGoalButton: document.getElementById(
+      "bexPaCancelOrganisationGoalButton",
+    ),
+    organisationGoalSubmitButton: document.getElementById(
+      "bexPaOrganisationGoalSubmitButton",
+    ),
+    organisationGoalCycle: document.getElementById(
+      "bexPaOrganisationGoalCycle",
+    ),
+    organisationGoalTitle: document.getElementById(
+      "bexPaOrganisationGoalTitle",
+    ),
+    organisationGoalDescription: document.getElementById(
+      "bexPaOrganisationGoalDescription",
+    ),
+    organisationGoalTarget: document.getElementById(
+      "bexPaOrganisationGoalTarget",
+    ),
+    organisationGoalOwner: document.getElementById(
+      "bexPaOrganisationGoalOwner",
+    ),
+    organisationGoalStatus: document.getElementById(
+      "bexPaOrganisationGoalStatus",
+    ),
+    organisationGoalStartDate: document.getElementById(
+      "bexPaOrganisationGoalStartDate",
+    ),
+    organisationGoalDueDate: document.getElementById(
+      "bexPaOrganisationGoalDueDate",
+    ),
+
+    createDeliverableButton: document.getElementById(
+      "bexPaCreateDeliverableButton",
+    ),
+    deliverablesList: document.getElementById(
+      "bexPaDeliverablesList",
+    ),
+    deliverableDialog: document.getElementById(
+      "bexPaDeliverableDialog",
+    ),
+    deliverableForm: document.getElementById(
+      "bexPaDeliverableForm",
+    ),
+    deliverableDialogTitle: document.getElementById(
+      "bexPaDeliverableDialogTitle",
+    ),
+    deliverableFormError: document.getElementById(
+      "bexPaDeliverableFormError",
+    ),
+    closeDeliverableDialogButton: document.getElementById(
+      "bexPaCloseDeliverableDialogButton",
+    ),
+    cancelDeliverableButton: document.getElementById(
+      "bexPaCancelDeliverableButton",
+    ),
+    deliverableSubmitButton: document.getElementById(
+      "bexPaDeliverableSubmitButton",
+    ),
+    deliverableOrganisationGoal: document.getElementById(
+      "bexPaDeliverableOrganisationGoal",
+    ),
+    deliverableCycle: document.getElementById(
+      "bexPaDeliverableCycle",
+    ),
+    deliverableTitle: document.getElementById(
+      "bexPaDeliverableTitle",
+    ),
+    deliverableDescription: document.getElementById(
+      "bexPaDeliverableDescription",
+    ),
+    deliverableTarget: document.getElementById(
+      "bexPaDeliverableTarget",
+    ),
+    deliverableOwner: document.getElementById(
+      "bexPaDeliverableOwner",
+    ),
+    deliverableStatus: document.getElementById(
+      "bexPaDeliverableStatus",
+    ),
+    deliverableStartDate: document.getElementById(
+      "bexPaDeliverableStartDate",
+    ),
+    deliverableDueDate: document.getElementById(
+      "bexPaDeliverableDueDate",
+    ),
+
+    createDepartmentGoalButton: document.getElementById(
+      "bexPaCreateDepartmentGoalButton",
+    ),
+    departmentGoalsList: document.getElementById(
+      "bexPaDepartmentGoalsList",
+    ),
+    departmentGoalDialog: document.getElementById(
+      "bexPaDepartmentGoalDialog",
+    ),
+    departmentGoalForm: document.getElementById(
+      "bexPaDepartmentGoalForm",
+    ),
+    departmentGoalDialogTitle: document.getElementById(
+      "bexPaDepartmentGoalDialogTitle",
+    ),
+    departmentGoalFormError: document.getElementById(
+      "bexPaDepartmentGoalFormError",
+    ),
+    closeDepartmentGoalDialogButton: document.getElementById(
+      "bexPaCloseDepartmentGoalDialogButton",
+    ),
+    cancelDepartmentGoalButton: document.getElementById(
+      "bexPaCancelDepartmentGoalButton",
+    ),
+    departmentGoalSubmitButton: document.getElementById(
+      "bexPaDepartmentGoalSubmitButton",
+    ),
+    departmentGoalOrganisationGoal: document.getElementById(
+      "bexPaDepartmentGoalOrganisationGoal",
+    ),
+    departmentGoalCycle: document.getElementById(
+      "bexPaDepartmentGoalCycle",
+    ),
+    departmentGoalDepartment: document.getElementById(
+      "bexPaDepartmentGoalDepartment",
+    ),
+    departmentGoalTitle: document.getElementById(
+      "bexPaDepartmentGoalTitle",
+    ),
+    departmentGoalDescription: document.getElementById(
+      "bexPaDepartmentGoalDescription",
+    ),
+    departmentGoalTarget: document.getElementById(
+      "bexPaDepartmentGoalTarget",
+    ),
+    departmentGoalOwner: document.getElementById(
+      "bexPaDepartmentGoalOwner",
+    ),
+    departmentGoalStatus: document.getElementById(
+      "bexPaDepartmentGoalStatus",
+    ),
+    departmentGoalStartDate: document.getElementById(
+      "bexPaDepartmentGoalStartDate",
+    ),
+    departmentGoalDueDate: document.getElementById(
+      "bexPaDepartmentGoalDueDate",
+    ),
 
     overviewCreateButton: document.getElementById(
       "bexPaOpenCycleFormButton",
@@ -116,42 +375,91 @@
     ),
   };
 
-  function bexPaShowSection(sectionName) {
-    const isCyclesSection = sectionName === "cycles";
+  function bexPaLoadDepartmentGoals() {
+    try {
+      const storedDepartmentGoals =
+        window.localStorage.getItem(
+          BEX_PA_DEPARTMENT_GOAL_STORAGE_KEY,
+        );
 
-    bexPaElements.overviewSection?.classList.toggle(
-      "d-none",
-      isCyclesSection,
-    );
+      if (!storedDepartmentGoals) {
+        return [];
+      }
 
-    bexPaElements.cyclesSection?.classList.toggle(
-      "d-none",
-      !isCyclesSection,
-    );
-
-    bexPaElements.overviewNavLink?.classList.toggle(
-      "active",
-      !isCyclesSection,
-    );
-
-    bexPaElements.cyclesNavButton?.classList.toggle(
-      "active",
-      isCyclesSection,
-    );
-
-    if (isCyclesSection) {
-      bexPaElements.overviewNavLink?.removeAttribute("aria-current");
-      bexPaElements.cyclesNavButton?.setAttribute(
-        "aria-current",
-        "page",
+      const parsedDepartmentGoals = JSON.parse(
+        storedDepartmentGoals,
       );
-    } else {
-      bexPaElements.cyclesNavButton?.removeAttribute("aria-current");
-      bexPaElements.overviewNavLink?.setAttribute(
-        "aria-current",
-        "page",
+
+      return Array.isArray(parsedDepartmentGoals)
+        ? parsedDepartmentGoals
+        : [];
+    } catch (error) {
+      console.warn(
+        "Department goals could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveDepartmentGoals() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_DEPARTMENT_GOAL_STORAGE_KEY,
+        JSON.stringify(bexPaState.departmentGoals),
+      );
+    } catch (error) {
+      console.warn(
+        "Department goals could not be saved.",
+        error,
       );
     }
+  }
+
+  function bexPaShowSection(sectionName) {
+    const sectionMap = {
+      overview: bexPaElements.overviewSection,
+      cycles: bexPaElements.cyclesSection,
+      goals: bexPaElements.goalsSection,
+    };
+
+    const navMap = {
+      overview: bexPaElements.overviewNavLink,
+      cycles: bexPaElements.cyclesNavButton,
+      goals: bexPaElements.goalsNavButton,
+    };
+
+    Object.entries(sectionMap).forEach(
+      ([name, section]) => {
+        section?.classList.toggle(
+          "d-none",
+          name !== sectionName,
+        );
+      },
+    );
+
+    Object.entries(navMap).forEach(
+      ([name, navItem]) => {
+        const isActive = name === sectionName;
+
+        navItem?.classList.toggle(
+          "active",
+          isActive,
+        );
+
+        if (isActive) {
+          navItem?.setAttribute(
+            "aria-current",
+            "page",
+          );
+        } else {
+          navItem?.removeAttribute(
+            "aria-current",
+          );
+        }
+      },
+    );
   }
 
   function bexPaPopulateCycleForm(cycle) {
@@ -710,12 +1018,1568 @@
     }
   }
 
+  function bexPaPopulateOrganisationGoalCycles() {
+    if (!bexPaElements.organisationGoalCycle) {
+      return;
+    }
+
+    const currentValue =
+      bexPaElements.organisationGoalCycle.value;
+
+    bexPaElements.organisationGoalCycle.replaceChildren();
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select appraisal cycle";
+
+    bexPaElements.organisationGoalCycle.appendChild(
+      placeholder,
+    );
+
+    bexPaState.cycles.forEach((cycle) => {
+      const option = document.createElement("option");
+
+      option.value = cycle.id;
+      option.textContent = `${cycle.name} (${cycle.status})`;
+
+      bexPaElements.organisationGoalCycle.appendChild(
+        option,
+      );
+    });
+
+    if (
+      currentValue &&
+      bexPaState.cycles.some(
+        (cycle) => cycle.id === currentValue,
+      )
+    ) {
+      bexPaElements.organisationGoalCycle.value =
+        currentValue;
+    }
+  }
+
+  function bexPaClearOrganisationGoalError() {
+    if (!bexPaElements.organisationGoalFormError) {
+      return;
+    }
+
+    bexPaElements.organisationGoalFormError.textContent = "";
+    bexPaElements.organisationGoalFormError.classList.add(
+      "d-none",
+    );
+  }
+
+  function bexPaShowOrganisationGoalError(message) {
+    if (!bexPaElements.organisationGoalFormError) {
+      return;
+    }
+
+    bexPaElements.organisationGoalFormError.textContent =
+      message;
+
+    bexPaElements.organisationGoalFormError.classList.remove(
+      "d-none",
+    );
+  }
+
+  function bexPaResetOrganisationGoalForm() {
+    bexPaState.editingOrganisationGoalId = null;
+
+    bexPaElements.organisationGoalForm?.reset();
+    bexPaClearOrganisationGoalError();
+
+    if (bexPaElements.organisationGoalDialogTitle) {
+      bexPaElements.organisationGoalDialogTitle.textContent =
+        "Add Organisation Goal";
+    }
+
+    if (bexPaElements.organisationGoalSubmitButton) {
+      bexPaElements.organisationGoalSubmitButton.textContent =
+        "Save Goal";
+    }
+  }
+
+  function bexPaOpenOrganisationGoalDialog(goalId = null) {
+    bexPaResetOrganisationGoalForm();
+    bexPaPopulateOrganisationGoalCycles();
+
+    if (goalId) {
+      const goal = bexPaState.organisationGoals.find(
+        (existingGoal) => existingGoal.id === goalId,
+      );
+
+      if (!goal) {
+        return;
+      }
+
+      bexPaState.editingOrganisationGoalId = goal.id;
+
+      bexPaElements.organisationGoalDialogTitle.textContent =
+        "Edit Organisation Goal";
+
+      bexPaElements.organisationGoalSubmitButton.textContent =
+        "Save Changes";
+
+      bexPaElements.organisationGoalCycle.value =
+        goal.cycleId;
+
+      bexPaElements.organisationGoalTitle.value =
+        goal.title;
+
+      bexPaElements.organisationGoalDescription.value =
+        goal.description;
+
+      bexPaElements.organisationGoalTarget.value =
+        goal.target;
+
+      bexPaElements.organisationGoalOwner.value =
+        goal.owner;
+
+      bexPaElements.organisationGoalStatus.value =
+        goal.status;
+
+      bexPaElements.organisationGoalStartDate.value =
+        goal.startDate;
+
+      bexPaElements.organisationGoalDueDate.value =
+        goal.dueDate;
+    }
+
+    bexPaElements.organisationGoalDialog?.showModal();
+
+    window.requestAnimationFrame(() => {
+      bexPaElements.organisationGoalTitle?.focus();
+    });
+  }
+
+  function bexPaCloseOrganisationGoalDialog() {
+    bexPaElements.organisationGoalDialog?.close();
+    bexPaResetOrganisationGoalForm();
+  }
+
+  function bexPaValidateOrganisationGoal(goal) {
+    const requiredValues = [
+      goal.cycleId,
+      goal.title,
+      goal.description,
+      goal.target,
+      goal.owner,
+      goal.status,
+      goal.startDate,
+      goal.dueDate,
+    ];
+
+    if (requiredValues.some((value) => !value)) {
+      return "Complete all organisation goal fields before saving.";
+    }
+
+    const cycle = bexPaState.cycles.find(
+      (existingCycle) =>
+        existingCycle.id === goal.cycleId,
+    );
+
+    if (!cycle) {
+      return "Select a valid appraisal cycle.";
+    }
+
+    const goalStartDate = bexPaParseDate(
+      goal.startDate,
+    );
+
+    const goalDueDate = bexPaParseDate(
+      goal.dueDate,
+    );
+
+    const cycleStartDate = bexPaParseDate(
+      cycle.startDate,
+    );
+
+    const cycleEndDate = bexPaParseDate(
+      cycle.endDate,
+    );
+
+    if (
+      !goalStartDate ||
+      !goalDueDate ||
+      !cycleStartDate ||
+      !cycleEndDate
+    ) {
+      return "Enter valid goal dates.";
+    }
+
+    if (goalDueDate < goalStartDate) {
+      return "The organisation goal due date cannot be earlier than its start date.";
+    }
+
+    if (
+      goalStartDate < cycleStartDate ||
+      goalDueDate > cycleEndDate
+    ) {
+      return "The organisation goal dates must fall within the selected appraisal cycle.";
+    }
+
+    const duplicateGoal = bexPaState.organisationGoals.some(
+      (existingGoal) =>
+        existingGoal.id !==
+        bexPaState.editingOrganisationGoalId &&
+        existingGoal.cycleId === goal.cycleId &&
+        existingGoal.title.toLowerCase() ===
+        goal.title.toLowerCase(),
+    );
+
+    if (duplicateGoal) {
+      return "An organisation goal with this title already exists in the selected cycle.";
+    }
+
+    return "";
+  }
+
+  function bexPaPopulateDeliverableOrganisationGoals() {
+    if (!bexPaElements.deliverableOrganisationGoal) {
+      return;
+    }
+
+    const currentValue =
+      bexPaElements.deliverableOrganisationGoal.value;
+
+    bexPaElements.deliverableOrganisationGoal.replaceChildren();
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select organisation goal';
+
+    bexPaElements.deliverableOrganisationGoal.appendChild(
+      placeholder,
+    );
+
+    bexPaState.organisationGoals.forEach((goal) => {
+      const cycle = bexPaState.cycles.find(
+        (existingCycle) => existingCycle.id === goal.cycleId,
+      );
+
+      const option = document.createElement('option');
+
+      option.value = goal.id;
+      option.textContent = cycle
+        ? goal.title + ' (' + cycle.name + ')'
+        : goal.title;
+
+      bexPaElements.deliverableOrganisationGoal.appendChild(
+        option,
+      );
+    });
+
+    if (
+      currentValue &&
+      bexPaState.organisationGoals.some(
+        (goal) => goal.id === currentValue,
+      )
+    ) {
+      bexPaElements.deliverableOrganisationGoal.value =
+        currentValue;
+    }
+  }
+
+  function bexPaUpdateDeliverableCycleDisplay() {
+    if (!bexPaElements.deliverableCycle) {
+      return;
+    }
+
+    const goal = bexPaState.organisationGoals.find(
+      (existingGoal) =>
+        existingGoal.id ===
+        bexPaElements.deliverableOrganisationGoal?.value,
+    );
+
+    const cycle = goal
+      ? bexPaState.cycles.find(
+        (existingCycle) => existingCycle.id === goal.cycleId,
+      )
+      : null;
+
+    bexPaElements.deliverableCycle.value = cycle
+      ? cycle.name
+      : '';
+
+    bexPaElements.deliverableCycle.dataset.bexPaCycleId =
+      goal?.cycleId || '';
+  }
+
+  function bexPaClearDeliverableError() {
+    if (!bexPaElements.deliverableFormError) {
+      return;
+    }
+
+    bexPaElements.deliverableFormError.textContent = '';
+    bexPaElements.deliverableFormError.classList.add(
+      'd-none',
+    );
+  }
+
+  function bexPaShowDeliverableError(message) {
+    if (!bexPaElements.deliverableFormError) {
+      return;
+    }
+
+    bexPaElements.deliverableFormError.textContent =
+      message;
+
+    bexPaElements.deliverableFormError.classList.remove(
+      'd-none',
+    );
+  }
+
+  function bexPaResetDeliverableForm() {
+    bexPaState.editingDeliverableId = null;
+
+    bexPaElements.deliverableForm?.reset();
+    bexPaClearDeliverableError();
+    bexPaUpdateDeliverableCycleDisplay();
+
+    if (bexPaElements.deliverableDialogTitle) {
+      bexPaElements.deliverableDialogTitle.textContent =
+        'Add Organisational Deliverable';
+    }
+
+    if (bexPaElements.deliverableSubmitButton) {
+      bexPaElements.deliverableSubmitButton.textContent =
+        'Save Deliverable';
+    }
+  }
+
+  function bexPaOpenDeliverableDialog(deliverableId = null) {
+    bexPaResetDeliverableForm();
+    bexPaPopulateDeliverableOrganisationGoals();
+    bexPaUpdateDeliverableCycleDisplay();
+
+    if (deliverableId) {
+      const deliverable = bexPaState.deliverables.find(
+        (existingDeliverable) =>
+          existingDeliverable.id === deliverableId,
+      );
+
+      if (!deliverable) {
+        return;
+      }
+
+      bexPaState.editingDeliverableId = deliverable.id;
+
+      bexPaElements.deliverableDialogTitle.textContent =
+        'Edit Organisational Deliverable';
+
+      bexPaElements.deliverableSubmitButton.textContent =
+        'Save Changes';
+
+      bexPaElements.deliverableOrganisationGoal.value =
+        deliverable.organisationGoalId;
+
+      bexPaUpdateDeliverableCycleDisplay();
+
+      bexPaElements.deliverableTitle.value =
+        deliverable.title;
+
+      bexPaElements.deliverableDescription.value =
+        deliverable.description;
+
+      bexPaElements.deliverableTarget.value =
+        deliverable.target;
+
+      bexPaElements.deliverableOwner.value =
+        deliverable.owner;
+
+      bexPaElements.deliverableStatus.value =
+        deliverable.status;
+
+      bexPaElements.deliverableStartDate.value =
+        deliverable.startDate;
+
+      bexPaElements.deliverableDueDate.value =
+        deliverable.dueDate;
+    }
+
+    bexPaElements.deliverableDialog?.showModal();
+
+    window.requestAnimationFrame(() => {
+      bexPaElements.deliverableOrganisationGoal?.focus();
+    });
+  }
+
+  function bexPaCloseDeliverableDialog() {
+    bexPaElements.deliverableDialog?.close();
+    bexPaResetDeliverableForm();
+  }
+
+  function bexPaValidateDeliverable(deliverable) {
+    const requiredValues = [
+      deliverable.organisationGoalId,
+      deliverable.title,
+      deliverable.description,
+      deliverable.target,
+      deliverable.owner,
+      deliverable.status,
+      deliverable.startDate,
+      deliverable.dueDate,
+    ];
+
+    if (requiredValues.some((value) => !value)) {
+      return 'Complete all organisational deliverable fields before saving.';
+    }
+
+    const organisationGoal =
+      bexPaState.organisationGoals.find(
+        (goal) => goal.id === deliverable.organisationGoalId,
+      );
+
+    if (!organisationGoal) {
+      return 'Select a valid organisation goal.';
+    }
+
+    const deliverableStartDate = bexPaParseDate(
+      deliverable.startDate,
+    );
+
+    const deliverableDueDate = bexPaParseDate(
+      deliverable.dueDate,
+    );
+
+    const goalStartDate = bexPaParseDate(
+      organisationGoal.startDate,
+    );
+
+    const goalDueDate = bexPaParseDate(
+      organisationGoal.dueDate,
+    );
+
+    if (
+      !deliverableStartDate ||
+      !deliverableDueDate ||
+      !goalStartDate ||
+      !goalDueDate
+    ) {
+      return 'Enter valid deliverable dates.';
+    }
+
+    if (deliverableDueDate < deliverableStartDate) {
+      return 'The deliverable due date cannot be earlier than its start date.';
+    }
+
+    if (
+      deliverableStartDate < goalStartDate ||
+      deliverableDueDate > goalDueDate
+    ) {
+      return 'Deliverable dates must fall within the parent organisation goal dates.';
+    }
+
+    const duplicateDeliverable =
+      bexPaState.deliverables.some(
+        (existingDeliverable) =>
+          existingDeliverable.id !==
+          bexPaState.editingDeliverableId &&
+          existingDeliverable.organisationGoalId ===
+          deliverable.organisationGoalId &&
+          existingDeliverable.title.toLowerCase() ===
+          deliverable.title.toLowerCase(),
+      );
+
+    if (duplicateDeliverable) {
+      return 'A deliverable with this title already exists under the selected organisation goal.';
+    }
+
+    return '';
+  }
+
+  function bexPaPopulateDepartmentGoalOrganisationGoals() {
+    if (!bexPaElements.departmentGoalOrganisationGoal) {
+      return;
+    }
+
+    const currentValue =
+      bexPaElements.departmentGoalOrganisationGoal.value;
+
+    bexPaElements.departmentGoalOrganisationGoal.replaceChildren();
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select organisation goal";
+
+    bexPaElements.departmentGoalOrganisationGoal.appendChild(
+      placeholder,
+    );
+
+    bexPaState.organisationGoals.forEach((goal) => {
+      const cycle = bexPaState.cycles.find(
+        (existingCycle) =>
+          existingCycle.id === goal.cycleId,
+      );
+
+      const option = document.createElement("option");
+
+      option.value = goal.id;
+      option.textContent = cycle
+        ? `${goal.title} (${cycle.name})`
+        : goal.title;
+
+      bexPaElements.departmentGoalOrganisationGoal.appendChild(
+        option,
+      );
+    });
+
+    if (
+      currentValue &&
+      bexPaState.organisationGoals.some(
+        (goal) => goal.id === currentValue,
+      )
+    ) {
+      bexPaElements.departmentGoalOrganisationGoal.value =
+        currentValue;
+    }
+  }
+
+  function bexPaUpdateDepartmentGoalCycleDisplay() {
+    if (!bexPaElements.departmentGoalCycle) {
+      return;
+    }
+
+    const goal = bexPaState.organisationGoals.find(
+      (existingGoal) =>
+        existingGoal.id ===
+        bexPaElements.departmentGoalOrganisationGoal?.value,
+    );
+
+    const cycle = goal
+      ? bexPaState.cycles.find(
+        (existingCycle) =>
+          existingCycle.id === goal.cycleId,
+      )
+      : null;
+
+    bexPaElements.departmentGoalCycle.value =
+      cycle?.name || "";
+
+    bexPaElements.departmentGoalCycle.dataset.bexPaCycleId =
+      goal?.cycleId || "";
+  }
+
+  function bexPaClearDepartmentGoalError() {
+    if (!bexPaElements.departmentGoalFormError) {
+      return;
+    }
+
+    bexPaElements.departmentGoalFormError.textContent = "";
+    bexPaElements.departmentGoalFormError.classList.add(
+      "d-none",
+    );
+  }
+
+  function bexPaShowDepartmentGoalError(message) {
+    if (!bexPaElements.departmentGoalFormError) {
+      return;
+    }
+
+    bexPaElements.departmentGoalFormError.textContent =
+      message;
+
+    bexPaElements.departmentGoalFormError.classList.remove(
+      "d-none",
+    );
+  }
+
+  function bexPaResetDepartmentGoalForm() {
+    bexPaState.editingDepartmentGoalId = null;
+
+    bexPaElements.departmentGoalForm?.reset();
+    bexPaClearDepartmentGoalError();
+    bexPaUpdateDepartmentGoalCycleDisplay();
+
+    if (bexPaElements.departmentGoalDialogTitle) {
+      bexPaElements.departmentGoalDialogTitle.textContent =
+        "Add Department Goal";
+    }
+
+    if (bexPaElements.departmentGoalSubmitButton) {
+      bexPaElements.departmentGoalSubmitButton.textContent =
+        "Save Department Goal";
+    }
+  }
+
+  function bexPaOpenDepartmentGoalDialog(
+    departmentGoalId = null,
+  ) {
+    bexPaResetDepartmentGoalForm();
+    bexPaPopulateDepartmentGoalOrganisationGoals();
+    bexPaUpdateDepartmentGoalCycleDisplay();
+
+    if (departmentGoalId) {
+      const departmentGoal =
+        bexPaState.departmentGoals.find(
+          (existingDepartmentGoal) =>
+            existingDepartmentGoal.id ===
+            departmentGoalId,
+        );
+
+      if (!departmentGoal) {
+        return;
+      }
+
+      bexPaState.editingDepartmentGoalId =
+        departmentGoal.id;
+
+      bexPaElements.departmentGoalDialogTitle.textContent =
+        "Edit Department Goal";
+
+      bexPaElements.departmentGoalSubmitButton.textContent =
+        "Save Changes";
+
+      bexPaElements.departmentGoalOrganisationGoal.value =
+        departmentGoal.organisationGoalId;
+
+      bexPaUpdateDepartmentGoalCycleDisplay();
+
+      bexPaElements.departmentGoalDepartment.value =
+        departmentGoal.department;
+
+      bexPaElements.departmentGoalTitle.value =
+        departmentGoal.title;
+
+      bexPaElements.departmentGoalDescription.value =
+        departmentGoal.description;
+
+      bexPaElements.departmentGoalTarget.value =
+        departmentGoal.target;
+
+      bexPaElements.departmentGoalOwner.value =
+        departmentGoal.owner;
+
+      bexPaElements.departmentGoalStatus.value =
+        departmentGoal.status;
+
+      bexPaElements.departmentGoalStartDate.value =
+        departmentGoal.startDate;
+
+      bexPaElements.departmentGoalDueDate.value =
+        departmentGoal.dueDate;
+    }
+
+    bexPaElements.departmentGoalDialog?.showModal();
+
+    window.requestAnimationFrame(() => {
+      bexPaElements.departmentGoalOrganisationGoal?.focus();
+    });
+  }
+
+  function bexPaCloseDepartmentGoalDialog() {
+    bexPaElements.departmentGoalDialog?.close();
+    bexPaResetDepartmentGoalForm();
+  }
+
+  function bexPaValidateDepartmentGoal(
+    departmentGoal,
+  ) {
+    const requiredValues = [
+      departmentGoal.organisationGoalId,
+      departmentGoal.department,
+      departmentGoal.title,
+      departmentGoal.description,
+      departmentGoal.target,
+      departmentGoal.owner,
+      departmentGoal.status,
+      departmentGoal.startDate,
+      departmentGoal.dueDate,
+    ];
+
+    if (requiredValues.some((value) => !value)) {
+      return "Complete all department goal fields before saving.";
+    }
+
+    const organisationGoal =
+      bexPaState.organisationGoals.find(
+        (goal) =>
+          goal.id ===
+          departmentGoal.organisationGoalId,
+      );
+
+    if (!organisationGoal) {
+      return "Select a valid organisation goal.";
+    }
+
+    const departmentGoalStartDate = bexPaParseDate(
+      departmentGoal.startDate,
+    );
+
+    const departmentGoalDueDate = bexPaParseDate(
+      departmentGoal.dueDate,
+    );
+
+    const organisationGoalStartDate = bexPaParseDate(
+      organisationGoal.startDate,
+    );
+
+    const organisationGoalDueDate = bexPaParseDate(
+      organisationGoal.dueDate,
+    );
+
+    if (
+      !departmentGoalStartDate ||
+      !departmentGoalDueDate ||
+      !organisationGoalStartDate ||
+      !organisationGoalDueDate
+    ) {
+      return "Enter valid department goal dates.";
+    }
+
+    if (
+      departmentGoalDueDate <
+      departmentGoalStartDate
+    ) {
+      return "The department goal due date cannot be earlier than its start date.";
+    }
+
+    if (
+      departmentGoalStartDate <
+      organisationGoalStartDate ||
+      departmentGoalDueDate >
+      organisationGoalDueDate
+    ) {
+      return "Department goal dates must fall within the parent organisation goal dates.";
+    }
+
+    const duplicateDepartmentGoal =
+      bexPaState.departmentGoals.some(
+        (existingDepartmentGoal) =>
+          existingDepartmentGoal.id !==
+          bexPaState.editingDepartmentGoalId &&
+          existingDepartmentGoal.organisationGoalId ===
+          departmentGoal.organisationGoalId &&
+          existingDepartmentGoal.department
+            .toLowerCase() ===
+          departmentGoal.department.toLowerCase() &&
+          existingDepartmentGoal.title.toLowerCase() ===
+          departmentGoal.title.toLowerCase(),
+      );
+
+    if (duplicateDepartmentGoal) {
+      return "A department goal with this title already exists for the selected department under this organisation goal.";
+    }
+
+    return "";
+  }
+
+  function bexPaCreateDepartmentGoalActionButton(
+    departmentGoalId,
+  ) {
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.className =
+      "btn btn-sm btn-outline-secondary";
+
+    button.dataset.bexPaDepartmentGoalAction = "edit";
+    button.dataset.bexPaDepartmentGoalId =
+      departmentGoalId;
+
+    button.innerHTML =
+      '<i class="bi bi-pencil" aria-hidden="true"></i>';
+
+    button.title = "Edit department goal";
+    button.setAttribute(
+      "aria-label",
+      "Edit department goal",
+    );
+
+    return button;
+  }
+
+  function bexPaRenderDepartmentGoals() {
+    if (!bexPaElements.departmentGoalsList) {
+      return;
+    }
+
+    bexPaElements.departmentGoalsList.replaceChildren();
+
+    if (bexPaState.departmentGoals.length === 0) {
+      const emptyState = document.createElement("p");
+
+      emptyState.className =
+        "mb-0 text-body-secondary";
+
+      emptyState.id = "bexPaDepartmentGoalsEmpty";
+
+      emptyState.textContent =
+        "No department goals have been created yet.";
+
+      bexPaElements.departmentGoalsList.appendChild(
+        emptyState,
+      );
+
+      return;
+    }
+
+    bexPaState.departmentGoals.forEach(
+      (departmentGoal) => {
+        const organisationGoal =
+          bexPaState.organisationGoals.find(
+            (goal) =>
+              goal.id ===
+              departmentGoal.organisationGoalId,
+          );
+
+        const cycle = organisationGoal
+          ? bexPaState.cycles.find(
+            (existingCycle) =>
+              existingCycle.id ===
+              organisationGoal.cycleId,
+          )
+          : null;
+
+        const item = document.createElement("article");
+        item.className = "bex-pa-goal-item";
+
+        const header = document.createElement("div");
+        header.className =
+          "d-flex align-items-start justify-content-between gap-3";
+
+        const titleArea = document.createElement("div");
+
+        const title = document.createElement("h3");
+        title.className =
+          "bex-pa-goal-item-title h6";
+
+        title.textContent = departmentGoal.title;
+
+        const meta = document.createElement("div");
+        meta.className = "bex-pa-goal-meta";
+
+        const departmentLabel =
+          document.createElement("span");
+        departmentLabel.textContent =
+          departmentGoal.department;
+
+        const organisationGoalLabel =
+          document.createElement("span");
+        organisationGoalLabel.textContent =
+          organisationGoal?.title ||
+          "Unknown organisation goal";
+
+        const cycleLabel =
+          document.createElement("span");
+        cycleLabel.textContent =
+          cycle?.name || "Unknown cycle";
+
+        const ownerLabel =
+          document.createElement("span");
+        ownerLabel.textContent =
+          `Owner: ${departmentGoal.owner}`;
+
+        meta.append(
+          departmentLabel,
+          organisationGoalLabel,
+          cycleLabel,
+          ownerLabel,
+        );
+
+        titleArea.append(
+          title,
+          meta,
+        );
+
+        const status = document.createElement("span");
+        status.className = "bex-pa-goal-status";
+        status.dataset.status =
+          departmentGoal.status.toLowerCase();
+        status.textContent =
+          departmentGoal.status;
+
+        header.append(
+          titleArea,
+          status,
+        );
+
+        const description =
+          document.createElement("p");
+        description.className =
+          "mt-3 mb-2 text-body-secondary";
+
+        description.textContent =
+          departmentGoal.description;
+
+        const target = document.createElement("p");
+        target.className = "mb-0 small";
+        target.textContent =
+          `Target: ${departmentGoal.target}`;
+
+        const actions =
+          document.createElement("div");
+        actions.className =
+          "bex-pa-goal-item-actions";
+
+        actions.appendChild(
+          bexPaCreateDepartmentGoalActionButton(
+            departmentGoal.id,
+          ),
+        );
+
+        item.append(
+          header,
+          description,
+          target,
+          actions,
+        );
+
+        bexPaElements.departmentGoalsList.appendChild(
+          item,
+        );
+      },
+    );
+  }
+
+  function bexPaHandleDepartmentGoalSubmit(event) {
+    event.preventDefault();
+    bexPaClearDepartmentGoalError();
+
+    const organisationGoal =
+      bexPaState.organisationGoals.find(
+        (goal) =>
+          goal.id ===
+          bexPaElements.departmentGoalOrganisationGoal.value,
+      );
+
+    const departmentGoal = {
+      id:
+        bexPaState.editingDepartmentGoalId ||
+        `BEX-PA-DEPT-GOAL-${Date.now()}`,
+
+      organisationGoalId:
+        bexPaElements.departmentGoalOrganisationGoal.value,
+
+      cycleId:
+        organisationGoal?.cycleId || "",
+
+      department:
+        bexPaElements.departmentGoalDepartment.value.trim(),
+
+      title:
+        bexPaElements.departmentGoalTitle.value.trim(),
+
+      description:
+        bexPaElements.departmentGoalDescription.value.trim(),
+
+      target:
+        bexPaElements.departmentGoalTarget.value.trim(),
+
+      owner:
+        bexPaElements.departmentGoalOwner.value.trim(),
+
+      status:
+        bexPaElements.departmentGoalStatus.value,
+
+      startDate:
+        bexPaElements.departmentGoalStartDate.value,
+
+      dueDate:
+        bexPaElements.departmentGoalDueDate.value,
+    };
+
+    const validationError =
+      bexPaValidateDepartmentGoal(
+        departmentGoal,
+      );
+
+    if (validationError) {
+      bexPaShowDepartmentGoalError(
+        validationError,
+      );
+      return;
+    }
+
+    const wasEditing = Boolean(
+      bexPaState.editingDepartmentGoalId,
+    );
+
+    if (wasEditing) {
+      const departmentGoalIndex =
+        bexPaState.departmentGoals.findIndex(
+          (existingDepartmentGoal) =>
+            existingDepartmentGoal.id ===
+            bexPaState.editingDepartmentGoalId,
+        );
+
+      if (departmentGoalIndex === -1) {
+        bexPaShowDepartmentGoalError(
+          "The department goal could not be found.",
+        );
+        return;
+      }
+
+      bexPaState.departmentGoals[
+        departmentGoalIndex
+      ] = departmentGoal;
+    } else {
+      bexPaState.departmentGoals.push(
+        departmentGoal,
+      );
+    }
+
+    bexPaSaveDepartmentGoals();
+    bexPaRenderDepartmentGoals();
+    bexPaCloseDepartmentGoalDialog();
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        wasEditing
+          ? `${departmentGoal.title} was updated successfully.`
+          : `${departmentGoal.title} was created successfully.`;
+    }
+  }
+
+  function bexPaHandleDepartmentGoalListAction(
+    event,
+  ) {
+    const button = event.target.closest(
+      "[data-bex-pa-department-goal-action]",
+    );
+
+    if (!button) {
+      return;
+    }
+
+    const departmentGoalId =
+      button.dataset.bexPaDepartmentGoalId;
+
+    if (!departmentGoalId) {
+      return;
+    }
+
+    bexPaOpenDepartmentGoalDialog(
+      departmentGoalId,
+    );
+  }
+
+  function bexPaCreateDeliverableActionButton(
+    deliverableId,
+  ) {
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.className =
+      "btn btn-sm btn-outline-secondary";
+
+    button.dataset.bexPaDeliverableAction = "edit";
+    button.dataset.bexPaDeliverableId = deliverableId;
+
+    button.innerHTML =
+      '<i class="bi bi-pencil" aria-hidden="true"></i>';
+
+    button.title = "Edit organisational deliverable";
+    button.setAttribute(
+      "aria-label",
+      "Edit organisational deliverable",
+    );
+
+    return button;
+  }
+
+  function bexPaRenderDeliverables() {
+    if (!bexPaElements.deliverablesList) {
+      return;
+    }
+
+    bexPaElements.deliverablesList.replaceChildren();
+
+    if (bexPaState.deliverables.length === 0) {
+      const emptyState = document.createElement("p");
+
+      emptyState.className =
+        "mb-0 text-body-secondary";
+
+      emptyState.id = "bexPaDeliverablesEmpty";
+
+      emptyState.textContent =
+        "No organisational deliverables have been created yet.";
+
+      bexPaElements.deliverablesList.appendChild(
+        emptyState,
+      );
+
+      return;
+    }
+
+    bexPaState.deliverables.forEach((deliverable) => {
+      const organisationGoal =
+        bexPaState.organisationGoals.find(
+          (goal) =>
+            goal.id ===
+            deliverable.organisationGoalId,
+        );
+
+      const cycle = organisationGoal
+        ? bexPaState.cycles.find(
+          (existingCycle) =>
+            existingCycle.id ===
+            organisationGoal.cycleId,
+        )
+        : null;
+
+      const item = document.createElement("article");
+      item.className = "bex-pa-goal-item";
+
+      const header = document.createElement("div");
+      header.className =
+        "d-flex align-items-start justify-content-between gap-3";
+
+      const titleArea = document.createElement("div");
+
+      const title = document.createElement("h3");
+      title.className =
+        "bex-pa-goal-item-title h6";
+
+      title.textContent = deliverable.title;
+
+      const meta = document.createElement("div");
+      meta.className = "bex-pa-goal-meta";
+
+      const goalLabel = document.createElement("span");
+      goalLabel.textContent =
+        organisationGoal?.title || "Unknown organisation goal";
+
+      const cycleLabel = document.createElement("span");
+      cycleLabel.textContent =
+        cycle?.name || "Unknown cycle";
+
+      const ownerLabel = document.createElement("span");
+      ownerLabel.textContent =
+        `Owner: ${deliverable.owner}`;
+
+      meta.append(
+        goalLabel,
+        cycleLabel,
+        ownerLabel,
+      );
+
+      titleArea.append(
+        title,
+        meta,
+      );
+
+      const status = document.createElement("span");
+      status.className = "bex-pa-goal-status";
+      status.dataset.status =
+        deliverable.status.toLowerCase();
+      status.textContent = deliverable.status;
+
+      header.append(
+        titleArea,
+        status,
+      );
+
+      const description = document.createElement("p");
+      description.className =
+        "mt-3 mb-2 text-body-secondary";
+
+      description.textContent =
+        deliverable.description;
+
+      const target = document.createElement("p");
+      target.className = "mb-0 small";
+      target.textContent =
+        `Target: ${deliverable.target}`;
+
+      const actions = document.createElement("div");
+      actions.className =
+        "bex-pa-goal-item-actions";
+
+      actions.appendChild(
+        bexPaCreateDeliverableActionButton(
+          deliverable.id,
+        ),
+      );
+
+      item.append(
+        header,
+        description,
+        target,
+        actions,
+      );
+
+      bexPaElements.deliverablesList.appendChild(
+        item,
+      );
+    });
+  }
+
+  function bexPaHandleDeliverableSubmit(event) {
+    event.preventDefault();
+    bexPaClearDeliverableError();
+
+    const organisationGoal =
+      bexPaState.organisationGoals.find(
+        (goal) =>
+          goal.id ===
+          bexPaElements.deliverableOrganisationGoal.value,
+      );
+
+    const deliverable = {
+      id:
+        bexPaState.editingDeliverableId ||
+        `BEX-PA-DELIVERABLE-${Date.now()}`,
+
+      organisationGoalId:
+        bexPaElements.deliverableOrganisationGoal.value,
+
+      cycleId:
+        organisationGoal?.cycleId || "",
+
+      title:
+        bexPaElements.deliverableTitle.value.trim(),
+
+      description:
+        bexPaElements.deliverableDescription.value.trim(),
+
+      target:
+        bexPaElements.deliverableTarget.value.trim(),
+
+      owner:
+        bexPaElements.deliverableOwner.value.trim(),
+
+      status:
+        bexPaElements.deliverableStatus.value,
+
+      startDate:
+        bexPaElements.deliverableStartDate.value,
+
+      dueDate:
+        bexPaElements.deliverableDueDate.value,
+    };
+
+    const validationError =
+      bexPaValidateDeliverable(deliverable);
+
+    if (validationError) {
+      bexPaShowDeliverableError(
+        validationError,
+      );
+      return;
+    }
+
+    const wasEditing = Boolean(
+      bexPaState.editingDeliverableId,
+    );
+
+    if (wasEditing) {
+      const deliverableIndex =
+        bexPaState.deliverables.findIndex(
+          (existingDeliverable) =>
+            existingDeliverable.id ===
+            bexPaState.editingDeliverableId,
+        );
+
+      if (deliverableIndex === -1) {
+        bexPaShowDeliverableError(
+          "The organisational deliverable could not be found.",
+        );
+        return;
+      }
+
+      bexPaState.deliverables[deliverableIndex] =
+        deliverable;
+    } else {
+      bexPaState.deliverables.push(
+        deliverable,
+      );
+    }
+
+    bexPaSaveDeliverables();
+    bexPaRenderDeliverables();
+    bexPaCloseDeliverableDialog();
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        wasEditing
+          ? `${deliverable.title} was updated successfully.`
+          : `${deliverable.title} was created successfully.`;
+    }
+  }
+
+  function bexPaHandleDeliverableListAction(
+    event,
+  ) {
+    const button = event.target.closest(
+      "[data-bex-pa-deliverable-action]",
+    );
+
+    if (!button) {
+      return;
+    }
+
+    const deliverableId =
+      button.dataset.bexPaDeliverableId;
+
+    if (!deliverableId) {
+      return;
+    }
+
+    bexPaOpenDeliverableDialog(
+      deliverableId,
+    );
+  }
+
+  function bexPaCreateOrganisationGoalActionButton(
+    goalId,
+  ) {
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.className =
+      "btn btn-sm btn-outline-secondary";
+
+    button.dataset.bexPaOrganisationGoalAction = "edit";
+    button.dataset.bexPaOrganisationGoalId = goalId;
+
+    button.innerHTML =
+      '<i class="bi bi-pencil" aria-hidden="true"></i>';
+
+    button.title = "Edit organisation goal";
+    button.setAttribute(
+      "aria-label",
+      "Edit organisation goal",
+    );
+
+    return button;
+  }
+
+  function bexPaRenderOrganisationGoals() {
+    if (!bexPaElements.organisationGoalsList) {
+      return;
+    }
+
+    bexPaElements.organisationGoalsList.replaceChildren();
+
+    if (bexPaState.organisationGoals.length === 0) {
+      const emptyState = document.createElement("p");
+
+      emptyState.className =
+        "mb-0 text-body-secondary";
+
+      emptyState.id = "bexPaOrganisationGoalsEmpty";
+
+      emptyState.textContent =
+        "No organisation goals have been created yet.";
+
+      bexPaElements.organisationGoalsList.appendChild(
+        emptyState,
+      );
+
+      return;
+    }
+
+    bexPaState.organisationGoals.forEach((goal) => {
+      const cycle = bexPaState.cycles.find(
+        (existingCycle) =>
+          existingCycle.id === goal.cycleId,
+      );
+
+      const item = document.createElement("article");
+      item.className = "bex-pa-goal-item";
+
+      const header = document.createElement("div");
+      header.className =
+        "d-flex align-items-start justify-content-between gap-3";
+
+      const titleArea = document.createElement("div");
+
+      const title = document.createElement("h3");
+      title.className =
+        "bex-pa-goal-item-title h6";
+
+      title.textContent = goal.title;
+
+      const meta = document.createElement("div");
+      meta.className = "bex-pa-goal-meta";
+
+      const cycleLabel = document.createElement("span");
+      cycleLabel.textContent =
+        cycle?.name || "Unknown cycle";
+
+      const ownerLabel = document.createElement("span");
+      ownerLabel.textContent = `Owner: ${goal.owner}`;
+
+      meta.append(
+        cycleLabel,
+        ownerLabel,
+      );
+
+      titleArea.append(
+        title,
+        meta,
+      );
+
+      const status = document.createElement("span");
+      status.className = "bex-pa-goal-status";
+      status.dataset.status =
+        goal.status.toLowerCase();
+      status.textContent = goal.status;
+
+      header.append(
+        titleArea,
+        status,
+      );
+
+      const description = document.createElement("p");
+      description.className =
+        "mt-3 mb-2 text-body-secondary";
+
+      description.textContent =
+        goal.description;
+
+      const result = document.createElement("p");
+      result.className = "mb-0 small";
+
+      result.textContent =
+        `Target: ${goal.target}`;
+
+      const actions = document.createElement("div");
+      actions.className =
+        "bex-pa-goal-item-actions";
+
+      actions.appendChild(
+        bexPaCreateOrganisationGoalActionButton(
+          goal.id,
+        ),
+      );
+
+      item.append(
+        header,
+        description,
+        result,
+        actions,
+      );
+
+      bexPaElements.organisationGoalsList.appendChild(
+        item,
+      );
+    });
+  }
+
+  function bexPaHandleOrganisationGoalSubmit(event) {
+    event.preventDefault();
+    bexPaClearOrganisationGoalError();
+
+    const goal = {
+      id:
+        bexPaState.editingOrganisationGoalId ||
+        `BEX-PA-ORG-GOAL-${Date.now()}`,
+
+      cycleId:
+        bexPaElements.organisationGoalCycle.value,
+
+      title:
+        bexPaElements.organisationGoalTitle.value.trim(),
+
+      description:
+        bexPaElements.organisationGoalDescription.value.trim(),
+
+      target:
+        bexPaElements.organisationGoalTarget.value.trim(),
+
+      owner:
+        bexPaElements.organisationGoalOwner.value.trim(),
+
+      status:
+        bexPaElements.organisationGoalStatus.value,
+
+      startDate:
+        bexPaElements.organisationGoalStartDate.value,
+
+      dueDate:
+        bexPaElements.organisationGoalDueDate.value,
+    };
+
+    const validationError =
+      bexPaValidateOrganisationGoal(goal);
+
+    if (validationError) {
+      bexPaShowOrganisationGoalError(
+        validationError,
+      );
+      return;
+    }
+
+    const wasEditing = Boolean(
+      bexPaState.editingOrganisationGoalId,
+    );
+
+    if (wasEditing) {
+      const goalIndex =
+        bexPaState.organisationGoals.findIndex(
+          (existingGoal) =>
+            existingGoal.id ===
+            bexPaState.editingOrganisationGoalId,
+        );
+
+      if (goalIndex === -1) {
+        bexPaShowOrganisationGoalError(
+          "The organisation goal could not be found.",
+        );
+        return;
+      }
+
+      bexPaState.organisationGoals[goalIndex] = goal;
+    } else {
+      bexPaState.organisationGoals.push(goal);
+    }
+
+    bexPaSaveOrganisationGoals();
+    bexPaRenderOrganisationGoals();
+    bexPaCloseOrganisationGoalDialog();
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        wasEditing
+          ? `${goal.title} was updated successfully.`
+          : `${goal.title} was created successfully.`;
+    }
+  }
+
+  function bexPaHandleOrganisationGoalListAction(
+    event,
+  ) {
+    const button = event.target.closest(
+      "[data-bex-pa-organisation-goal-action]",
+    );
+
+    if (!button) {
+      return;
+    }
+
+    const goalId =
+      button.dataset.bexPaOrganisationGoalId;
+
+    if (!goalId) {
+      return;
+    }
+
+    bexPaOpenOrganisationGoalDialog(goalId);
+  }
+
   function bexPaInitialiseAppraisalCycles() {
     bexPaState.cycles = bexPaLoadStoredCycles();
+
+    bexPaState.organisationGoals =
+      bexPaLoadOrganisationGoals();
+
+    bexPaState.deliverables =
+      bexPaLoadDeliverables();
+
+    bexPaState.departmentGoals =
+      bexPaLoadDepartmentGoals();
 
     bexPaElements.cyclesNavButton?.addEventListener(
       "click",
       () => bexPaShowSection("cycles"),
+    );
+
+    bexPaElements.goalsNavButton?.addEventListener(
+      "click",
+      () => bexPaShowSection("goals"),
     );
 
     bexPaElements.overviewNavLink?.addEventListener(
@@ -765,7 +2629,101 @@
       },
     );
 
+    bexPaElements.createOrganisationGoalButton?.addEventListener(
+      "click",
+      () => bexPaOpenOrganisationGoalDialog(),
+    );
+
+    bexPaElements.closeOrganisationGoalDialogButton?.addEventListener(
+      "click",
+      bexPaCloseOrganisationGoalDialog,
+    );
+
+    bexPaElements.cancelOrganisationGoalButton?.addEventListener(
+      "click",
+      bexPaCloseOrganisationGoalDialog,
+    );
+
+    bexPaElements.organisationGoalForm?.addEventListener(
+      "submit",
+      bexPaHandleOrganisationGoalSubmit,
+    );
+
+    bexPaElements.organisationGoalsList?.addEventListener(
+      "click",
+      bexPaHandleOrganisationGoalListAction,
+    );
+
+    bexPaElements.createDeliverableButton?.addEventListener(
+      "click",
+      () => bexPaOpenDeliverableDialog(),
+    );
+
+    bexPaElements.closeDeliverableDialogButton?.addEventListener(
+      "click",
+      bexPaCloseDeliverableDialog,
+    );
+
+    bexPaElements.cancelDeliverableButton?.addEventListener(
+      "click",
+      bexPaCloseDeliverableDialog,
+    );
+
+    bexPaElements.deliverableOrganisationGoal?.addEventListener(
+      "change",
+      bexPaUpdateDeliverableCycleDisplay,
+    );
+
+    bexPaElements.deliverableForm?.addEventListener(
+      "submit",
+      bexPaHandleDeliverableSubmit,
+    );
+
+    bexPaElements.deliverablesList?.addEventListener(
+      "click",
+      bexPaHandleDeliverableListAction,
+    );
+
+    bexPaElements.createDepartmentGoalButton?.addEventListener(
+      "click",
+      () => bexPaOpenDepartmentGoalDialog(),
+    );
+
+    bexPaElements.closeDepartmentGoalDialogButton?.addEventListener(
+      "click",
+      bexPaCloseDepartmentGoalDialog,
+    );
+
+    bexPaElements.cancelDepartmentGoalButton?.addEventListener(
+      "click",
+      bexPaCloseDepartmentGoalDialog,
+    );
+
+    bexPaElements.departmentGoalOrganisationGoal?.addEventListener(
+      "change",
+      bexPaUpdateDepartmentGoalCycleDisplay,
+    );
+
+    bexPaElements.departmentGoalForm?.addEventListener(
+      "submit",
+      bexPaHandleDepartmentGoalSubmit,
+    );
+
+    bexPaElements.departmentGoalsList?.addEventListener(
+      "click",
+      bexPaHandleDepartmentGoalListAction,
+    );
+
     bexPaRenderCycles();
+
+    bexPaPopulateOrganisationGoalCycles();
+    bexPaRenderOrganisationGoals();
+
+    bexPaPopulateDeliverableOrganisationGoals();
+    bexPaRenderDeliverables();
+
+    bexPaPopulateDepartmentGoalOrganisationGoals();
+    bexPaRenderDepartmentGoals();
   }
 
   document.addEventListener(

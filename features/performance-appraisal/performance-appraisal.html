@@ -87,7 +87,8 @@
                             </li>
 
                             <li class="nav-item">
-                                <button class="nav-link w-100 text-start" type="button" disabled>
+                                <button class="nav-link w-100 text-start" id="bexPaGoalsNavButton" type="button"
+                                    data-bex-pa-target="bexPaGoalsSection">
                                     <i class="bi bi-bullseye me-2" aria-hidden="true"></i>
                                     Goals &amp; Deliverables
                                 </button>
@@ -390,6 +391,510 @@
                                         <button class="btn btn-primary" id="bexPaConfirmActivateCycleButton"
                                             type="button">
                                             Activate Cycle
+                                        </button>
+                                    </div>
+                                </form>
+                            </dialog>
+                        </section>
+
+                        <section class="d-none" id="bexPaGoalsSection" aria-labelledby="bexPaGoalsTitle">
+                            <div class="mb-4 d-flex flex-wrap align-items-start justify-content-between gap-3">
+                                <div>
+                                    <p class="mb-2 small fw-semibold text-uppercase text-primary">
+                                        Goal planning
+                                    </p>
+
+                                    <h1 class="mb-2 h2 fw-bold" id="bexPaGoalsTitle">
+                                        Goals &amp; Deliverables
+                                    </h1>
+
+                                    <p class="mb-0 text-body-secondary">
+                                        Define organisation goals, deliverables and department goals for an appraisal
+                                        cycle.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-12 col-xl-4">
+                                    <section class="bex-pa-goal-panel card border-0 shadow-sm h-100"
+                                        aria-labelledby="bexPaOrganisationGoalsTitle">
+                                        <div
+                                            class="card-header bg-white d-flex align-items-center justify-content-between gap-3 py-3">
+                                            <div>
+                                                <h2 class="mb-1 h5 fw-bold" id="bexPaOrganisationGoalsTitle">
+                                                    Organisation Goals
+                                                </h2>
+
+                                                <p class="mb-0 small text-body-secondary">
+                                                    Set organisation-wide priorities for a selected appraisal cycle.
+                                                </p>
+                                            </div>
+
+                                            <button class="btn btn-sm btn-primary"
+                                                id="bexPaCreateOrganisationGoalButton" type="button">
+                                                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                                Add Goal
+                                            </button>
+                                        </div>
+
+                                        <div class="card-body" id="bexPaOrganisationGoalsList">
+                                            <p class="mb-0 text-body-secondary" id="bexPaOrganisationGoalsEmpty">
+                                                No organisation goals have been created yet.
+                                            </p>
+                                        </div>
+                                    </section>
+                                </div>
+
+                                <div class="col-12 col-xl-4">
+                                    <section class="bex-pa-goal-panel card border-0 shadow-sm h-100"
+                                        aria-labelledby="bexPaDeliverablesTitle">
+                                        <div
+                                            class="card-header bg-white d-flex align-items-center justify-content-between gap-3 py-3">
+                                            <div>
+                                                <h2 class="mb-1 h5 fw-bold" id="bexPaDeliverablesTitle">
+                                                    Organisational Deliverables
+                                                </h2>
+
+                                                <p class="mb-0 small text-body-secondary">
+                                                    Define measurable outputs attached to organisation goals.
+                                                </p>
+                                            </div>
+
+                                            <button class="btn btn-sm btn-primary" id="bexPaCreateDeliverableButton"
+                                                type="button">
+                                                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                                Add Deliverable
+                                            </button>
+                                        </div>
+
+                                        <div class="card-body" id="bexPaDeliverablesList">
+                                            <p class="mb-0 text-body-secondary" id="bexPaDeliverablesEmpty">
+                                                No organisational deliverables have been created yet.
+                                            </p>
+                                        </div>
+                                    </section>
+                                </div>
+
+                                <div class="col-12 col-xl-4">
+                                    <section class="bex-pa-goal-panel card border-0 shadow-sm h-100"
+                                        aria-labelledby="bexPaDepartmentGoalsTitle">
+                                        <div
+                                            class="card-header bg-white d-flex align-items-center justify-content-between gap-3 py-3">
+                                            <div>
+                                                <h2 class="mb-1 h5 fw-bold" id="bexPaDepartmentGoalsTitle">
+                                                    Department Goals
+                                                </h2>
+
+                                                <p class="mb-0 small text-body-secondary">
+                                                    Link department priorities to organisation goals.
+                                                </p>
+                                            </div>
+
+                                            <button class="btn btn-sm btn-primary" id="bexPaCreateDepartmentGoalButton"
+                                                type="button">
+                                                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                                Add Goal
+                                            </button>
+                                        </div>
+
+                                        <div class="card-body" id="bexPaDepartmentGoalsList">
+                                            <p class="mb-0 text-body-secondary" id="bexPaDepartmentGoalsEmpty">
+                                                No department goals have been created yet.
+                                            </p>
+                                        </div>
+                                    </section>
+                                </div>
+                            </div>
+                            <dialog class="bex-pa-confirm-dialog bex-pa-goal-dialog" id="bexPaOrganisationGoalDialog"
+                                aria-labelledby="bexPaOrganisationGoalDialogTitle">
+                                <form id="bexPaOrganisationGoalForm" method="dialog" novalidate>
+                                    <div class="bex-pa-confirm-dialog-header">
+                                        <div>
+                                            <p class="mb-1 small fw-semibold text-uppercase text-primary">
+                                                Organisation goal
+                                            </p>
+
+                                            <h2 class="mb-0 h5 fw-bold" id="bexPaOrganisationGoalDialogTitle">
+                                                Add Organisation Goal
+                                            </h2>
+                                        </div>
+
+                                        <button class="btn-close" id="bexPaCloseOrganisationGoalDialogButton"
+                                            type="button" aria-label="Close organisation goal form"></button>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-body">
+                                        <div class="alert alert-danger d-none" id="bexPaOrganisationGoalFormError"
+                                            role="alert"></div>
+
+                                        <div class="row g-3">
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaOrganisationGoalCycle">
+                                                    Appraisal cycle
+                                                </label>
+
+                                                <select class="form-select" id="bexPaOrganisationGoalCycle" required>
+                                                    <option value="">
+                                                        Select appraisal cycle
+                                                    </option>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaOrganisationGoalTitle">
+                                                    Goal title
+                                                </label>
+
+                                                <input class="form-control" id="bexPaOrganisationGoalTitle" type="text"
+                                                    maxlength="150" placeholder="e.g. Improve customer service"
+                                                    required />
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaOrganisationGoalDescription">
+                                                    Description
+                                                </label>
+
+                                                <textarea class="form-control" id="bexPaOrganisationGoalDescription"
+                                                    rows="3" maxlength="500"
+                                                    placeholder="Describe what the organisation wants to achieve."
+                                                    required></textarea>
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaOrganisationGoalTarget">
+                                                    Target
+                                                </label>
+
+                                                <input class="form-control" id="bexPaOrganisationGoalTarget" type="text"
+                                                    maxlength="150" placeholder="e.g. Increase to 90%" required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaOrganisationGoalOwner">
+                                                    Responsible owner
+                                                </label>
+
+                                                <input class="form-control" id="bexPaOrganisationGoalOwner" type="text"
+                                                    maxlength="120" placeholder="e.g. Head of Operations" required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaOrganisationGoalStatus">
+                                                    Status
+                                                </label>
+
+                                                <select class="form-select" id="bexPaOrganisationGoalStatus" required>
+                                                    <option value="Draft">Draft</option>
+                                                    <option value="Active">Active</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaOrganisationGoalStartDate">
+                                                    Start date
+                                                </label>
+
+                                                <input class="form-control" id="bexPaOrganisationGoalStartDate"
+                                                    type="date" required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaOrganisationGoalDueDate">
+                                                    Due date
+                                                </label>
+
+                                                <input class="form-control" id="bexPaOrganisationGoalDueDate"
+                                                    type="date" required />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-actions">
+                                        <button class="btn btn-outline-secondary" id="bexPaCancelOrganisationGoalButton"
+                                            type="button">
+                                            Cancel
+                                        </button>
+
+                                        <button class="btn btn-primary" id="bexPaOrganisationGoalSubmitButton"
+                                            type="submit">
+                                            Save Goal
+                                        </button>
+                                    </div>
+                                </form>
+                            </dialog>
+                            <dialog class="bex-pa-confirm-dialog bex-pa-goal-dialog" id="bexPaDeliverableDialog"
+                                aria-labelledby="bexPaDeliverableDialogTitle">
+                                <form id="bexPaDeliverableForm" method="dialog" novalidate>
+                                    <div class="bex-pa-confirm-dialog-header">
+                                        <div>
+                                            <p class="mb-1 small fw-semibold text-uppercase text-primary">
+                                                Organisational deliverable
+                                            </p>
+
+                                            <h2 class="mb-0 h5 fw-bold" id="bexPaDeliverableDialogTitle">
+                                                Add Organisational Deliverable
+                                            </h2>
+                                        </div>
+
+                                        <button class="btn-close" id="bexPaCloseDeliverableDialogButton" type="button"
+                                            aria-label="Close organisational deliverable form"></button>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-body">
+                                        <div class="alert alert-danger d-none" id="bexPaDeliverableFormError"
+                                            role="alert"></div>
+
+                                        <div class="row g-3">
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaDeliverableOrganisationGoal">
+                                                    Organisation goal
+                                                </label>
+
+                                                <select class="form-select" id="bexPaDeliverableOrganisationGoal"
+                                                    required>
+                                                    <option value="">
+                                                        Select organisation goal
+                                                    </option>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaDeliverableCycle">
+                                                    Appraisal cycle
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDeliverableCycle" type="text"
+                                                    readonly
+                                                    placeholder="Selected automatically from organisation goal" />
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaDeliverableTitle">
+                                                    Deliverable title
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDeliverableTitle" type="text"
+                                                    maxlength="150" placeholder="e.g. Reduce first-response time"
+                                                    required />
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaDeliverableDescription">
+                                                    Description
+                                                </label>
+
+                                                <textarea class="form-control" id="bexPaDeliverableDescription" rows="3"
+                                                    maxlength="500"
+                                                    placeholder="Describe the measurable output to be delivered."
+                                                    required></textarea>
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaDeliverableTarget">
+                                                    Target
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDeliverableTarget" type="text"
+                                                    maxlength="150" placeholder="e.g. Under 2 hours" required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaDeliverableOwner">
+                                                    Responsible owner
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDeliverableOwner" type="text"
+                                                    maxlength="120" placeholder="e.g. Customer Support Lead" required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaDeliverableStatus">
+                                                    Status
+                                                </label>
+
+                                                <select class="form-select" id="bexPaDeliverableStatus" required>
+                                                    <option value="Draft">Draft</option>
+                                                    <option value="Active">Active</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaDeliverableStartDate">
+                                                    Start date
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDeliverableStartDate" type="date"
+                                                    required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaDeliverableDueDate">
+                                                    Due date
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDeliverableDueDate" type="date"
+                                                    required />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-actions">
+                                        <button class="btn btn-outline-secondary" id="bexPaCancelDeliverableButton"
+                                            type="button">
+                                            Cancel
+                                        </button>
+
+                                        <button class="btn btn-primary" id="bexPaDeliverableSubmitButton" type="submit">
+                                            Save Deliverable
+                                        </button>
+                                    </div>
+                                </form>
+                            </dialog>
+                            <dialog class="bex-pa-confirm-dialog bex-pa-goal-dialog" id="bexPaDepartmentGoalDialog"
+                                aria-labelledby="bexPaDepartmentGoalDialogTitle">
+                                <form id="bexPaDepartmentGoalForm" method="dialog" novalidate>
+                                    <div class="bex-pa-confirm-dialog-header">
+                                        <div>
+                                            <p class="mb-1 small fw-semibold text-uppercase text-primary">
+                                                Department goal
+                                            </p>
+
+                                            <h2 class="mb-0 h5 fw-bold" id="bexPaDepartmentGoalDialogTitle">
+                                                Add Department Goal
+                                            </h2>
+                                        </div>
+
+                                        <button class="btn-close" id="bexPaCloseDepartmentGoalDialogButton"
+                                            type="button" aria-label="Close department goal form"></button>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-body">
+                                        <div class="alert alert-danger d-none" id="bexPaDepartmentGoalFormError"
+                                            role="alert"></div>
+
+                                        <div class="row g-3">
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaDepartmentGoalOrganisationGoal">
+                                                    Organisation goal
+                                                </label>
+
+                                                <select class="form-select" id="bexPaDepartmentGoalOrganisationGoal"
+                                                    required>
+                                                    <option value="">
+                                                        Select organisation goal
+                                                    </option>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaDepartmentGoalCycle">
+                                                    Appraisal cycle
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDepartmentGoalCycle" type="text"
+                                                    readonly
+                                                    placeholder="Selected automatically from organisation goal" />
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaDepartmentGoalDepartment">
+                                                    Department
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDepartmentGoalDepartment"
+                                                    type="text" maxlength="120" placeholder="e.g. Human Resources"
+                                                    required />
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaDepartmentGoalTitle">
+                                                    Department goal title
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDepartmentGoalTitle" type="text"
+                                                    maxlength="150"
+                                                    placeholder="e.g. Improve employee response turnaround" required />
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaDepartmentGoalDescription">
+                                                    Description
+                                                </label>
+
+                                                <textarea class="form-control" id="bexPaDepartmentGoalDescription"
+                                                    rows="3" maxlength="500"
+                                                    placeholder="Describe what the department must achieve."
+                                                    required></textarea>
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaDepartmentGoalTarget">
+                                                    Target
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDepartmentGoalTarget" type="text"
+                                                    maxlength="150" placeholder="e.g. Under 24 hours" required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaDepartmentGoalOwner">
+                                                    Responsible owner
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDepartmentGoalOwner" type="text"
+                                                    maxlength="120" placeholder="e.g. HR Operations Lead" required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaDepartmentGoalStatus">
+                                                    Status
+                                                </label>
+
+                                                <select class="form-select" id="bexPaDepartmentGoalStatus" required>
+                                                    <option value="Draft">Draft</option>
+                                                    <option value="Active">Active</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaDepartmentGoalStartDate">
+                                                    Start date
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDepartmentGoalStartDate"
+                                                    type="date" required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaDepartmentGoalDueDate">
+                                                    Due date
+                                                </label>
+
+                                                <input class="form-control" id="bexPaDepartmentGoalDueDate" type="date"
+                                                    required />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-actions">
+                                        <button class="btn btn-outline-secondary" id="bexPaCancelDepartmentGoalButton"
+                                            type="button">
+                                            Cancel
+                                        </button>
+
+                                        <button class="btn btn-primary" id="bexPaDepartmentGoalSubmitButton"
+                                            type="submit">
+                                            Save Department Goal
                                         </button>
                                     </div>
                                 </form>

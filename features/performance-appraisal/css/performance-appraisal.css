@@ -532,3 +532,117 @@ body.bex-pa-page {
     width: 100%;
   }
 }
+
+/* =========================================================
+   Goals and deliverables
+   ========================================================= */
+
+.bex-pa-goal-panel {
+  overflow: hidden;
+  border-radius: var(--bex-pa-radius);
+  background: var(--bex-pa-surface);
+  box-shadow: var(--bex-pa-shadow) !important;
+}
+
+.bex-pa-goal-panel .card-header {
+  border-bottom: 1px solid var(--bex-pa-border);
+}
+
+.bex-pa-goal-panel .card-body {
+  min-height: 220px;
+}
+
+.bex-pa-goal-panel .btn-sm {
+  white-space: nowrap;
+}
+
+@media (max-width: 1199.98px) {
+  .bex-pa-goal-panel .card-body {
+    min-height: auto;
+  }
+}
+
+/* =========================================================
+   Organisation goals
+   ========================================================= */
+
+.bex-pa-goal-dialog {
+  width: min(calc(100% - 2rem), 760px);
+}
+
+.bex-pa-goal-dialog .form-control,
+.bex-pa-goal-dialog .form-select {
+  min-height: 44px;
+  border-color: var(--bex-pa-border);
+  border-radius: 10px;
+}
+
+.bex-pa-goal-dialog textarea.form-control {
+  min-height: 110px;
+}
+
+.bex-pa-goal-dialog .form-control:focus,
+.bex-pa-goal-dialog .form-select:focus {
+  border-color: var(--bex-pa-primary);
+  box-shadow: 0 0 0 0.2rem rgba(14, 116, 144, 0.12);
+}
+
+.bex-pa-goal-item {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--bex-pa-border);
+}
+
+.bex-pa-goal-item:first-child {
+  padding-top: 0;
+}
+
+.bex-pa-goal-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.bex-pa-goal-item-title {
+  margin-bottom: 0.35rem;
+  color: var(--bex-pa-text);
+  font-weight: 700;
+}
+
+.bex-pa-goal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+  color: var(--bex-pa-text-muted);
+  font-size: 0.82rem;
+}
+
+.bex-pa-goal-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.bex-pa-goal-status[data-status="draft"] {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.bex-pa-goal-status[data-status="active"] {
+  background: #ecfdf5;
+  color: #166534;
+}
+
+.bex-pa-goal-item-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 575.98px) {
+  .bex-pa-goal-dialog {
+    width: calc(100% - 1rem);
+  }
+}
