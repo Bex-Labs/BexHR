@@ -21,16 +21,21 @@
   const BEX_PA_DEPARTMENT_GOAL_STORAGE_KEY =
     "bexhr:performance-appraisal:department-goals:v1";
 
+  const BEX_PA_INDIVIDUAL_GOAL_STORAGE_KEY =
+    "bexhr:performance-appraisal:individual-goals:v1";
+
   const bexPaState = {
     cycles: [],
     organisationGoals: [],
     deliverables: [],
     departmentGoals: [],
+    individualGoals: [],
     editingCycleId: null,
     activatingCycleId: null,
     editingOrganisationGoalId: null,
     editingDeliverableId: null,
     editingDepartmentGoalId: null,
+    editingIndividualGoalId: null,
   };
 
   function bexPaLoadStoredCycles() {
@@ -143,6 +148,90 @@
     } catch (error) {
       console.warn(
         "Organisational deliverables could not be saved.",
+        error,
+      );
+    }
+  }
+
+  function bexPaLoadDepartmentGoals() {
+    try {
+      const storedDepartmentGoals =
+        window.localStorage.getItem(
+          BEX_PA_DEPARTMENT_GOAL_STORAGE_KEY,
+        );
+
+      if (!storedDepartmentGoals) {
+        return [];
+      }
+
+      const parsedDepartmentGoals = JSON.parse(
+        storedDepartmentGoals,
+      );
+
+      return Array.isArray(parsedDepartmentGoals)
+        ? parsedDepartmentGoals
+        : [];
+    } catch (error) {
+      console.warn(
+        "Department goals could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveDepartmentGoals() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_DEPARTMENT_GOAL_STORAGE_KEY,
+        JSON.stringify(bexPaState.departmentGoals),
+      );
+    } catch (error) {
+      console.warn(
+        "Department goals could not be saved.",
+        error,
+      );
+    }
+  }
+
+  function bexPaLoadIndividualGoals() {
+    try {
+      const storedIndividualGoals =
+        window.localStorage.getItem(
+          BEX_PA_INDIVIDUAL_GOAL_STORAGE_KEY,
+        );
+
+      if (!storedIndividualGoals) {
+        return [];
+      }
+
+      const parsedIndividualGoals = JSON.parse(
+        storedIndividualGoals,
+      );
+
+      return Array.isArray(parsedIndividualGoals)
+        ? parsedIndividualGoals
+        : [];
+    } catch (error) {
+      console.warn(
+        "Individual employee goals could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveIndividualGoals() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_INDIVIDUAL_GOAL_STORAGE_KEY,
+        JSON.stringify(bexPaState.individualGoals),
+      );
+    } catch (error) {
+      console.warn(
+        "Individual employee goals could not be saved.",
         error,
       );
     }
@@ -323,6 +412,64 @@
       "bexPaDepartmentGoalDueDate",
     ),
 
+    createIndividualGoalButton: document.getElementById(
+      "bexPaCreateIndividualGoalButton",
+    ),
+    individualGoalsList: document.getElementById(
+      "bexPaIndividualGoalsList",
+    ),
+    individualGoalDialog: document.getElementById(
+      "bexPaIndividualGoalDialog",
+    ),
+    individualGoalForm: document.getElementById(
+      "bexPaIndividualGoalForm",
+    ),
+    individualGoalDialogTitle: document.getElementById(
+      "bexPaIndividualGoalDialogTitle",
+    ),
+    individualGoalFormError: document.getElementById(
+      "bexPaIndividualGoalFormError",
+    ),
+    closeIndividualGoalDialogButton: document.getElementById(
+      "bexPaCloseIndividualGoalDialogButton",
+    ),
+    cancelIndividualGoalButton: document.getElementById(
+      "bexPaCancelIndividualGoalButton",
+    ),
+    individualGoalSubmitButton: document.getElementById(
+      "bexPaIndividualGoalSubmitButton",
+    ),
+    individualGoalEmployee: document.getElementById(
+      "bexPaIndividualGoalEmployee",
+    ),
+    individualGoalDepartmentGoal: document.getElementById(
+      "bexPaIndividualGoalDepartmentGoal",
+    ),
+    individualGoalDepartment: document.getElementById(
+      "bexPaIndividualGoalDepartment",
+    ),
+    individualGoalCycle: document.getElementById(
+      "bexPaIndividualGoalCycle",
+    ),
+    individualGoalTitle: document.getElementById(
+      "bexPaIndividualGoalTitle",
+    ),
+    individualGoalDescription: document.getElementById(
+      "bexPaIndividualGoalDescription",
+    ),
+    individualGoalTarget: document.getElementById(
+      "bexPaIndividualGoalTarget",
+    ),
+    individualGoalStatus: document.getElementById(
+      "bexPaIndividualGoalStatus",
+    ),
+    individualGoalStartDate: document.getElementById(
+      "bexPaIndividualGoalStartDate",
+    ),
+    individualGoalDueDate: document.getElementById(
+      "bexPaIndividualGoalDueDate",
+    ),
+
     overviewCreateButton: document.getElementById(
       "bexPaOpenCycleFormButton",
     ),
@@ -374,48 +521,6 @@
       '[data-bex-pa-summary="active-cycles"] .display-6',
     ),
   };
-
-  function bexPaLoadDepartmentGoals() {
-    try {
-      const storedDepartmentGoals =
-        window.localStorage.getItem(
-          BEX_PA_DEPARTMENT_GOAL_STORAGE_KEY,
-        );
-
-      if (!storedDepartmentGoals) {
-        return [];
-      }
-
-      const parsedDepartmentGoals = JSON.parse(
-        storedDepartmentGoals,
-      );
-
-      return Array.isArray(parsedDepartmentGoals)
-        ? parsedDepartmentGoals
-        : [];
-    } catch (error) {
-      console.warn(
-        "Department goals could not be loaded.",
-        error,
-      );
-
-      return [];
-    }
-  }
-
-  function bexPaSaveDepartmentGoals() {
-    try {
-      window.localStorage.setItem(
-        BEX_PA_DEPARTMENT_GOAL_STORAGE_KEY,
-        JSON.stringify(bexPaState.departmentGoals),
-      );
-    } catch (error) {
-      console.warn(
-        "Department goals could not be saved.",
-        error,
-      );
-    }
-  }
 
   function bexPaShowSection(sectionName) {
     const sectionMap = {
@@ -1764,6 +1869,563 @@
     return "";
   }
 
+  function bexPaPopulateIndividualGoalDepartmentGoals() {
+    if (!bexPaElements.individualGoalDepartmentGoal) {
+      return;
+    }
+
+    const currentValue =
+      bexPaElements.individualGoalDepartmentGoal.value;
+
+    bexPaElements.individualGoalDepartmentGoal.replaceChildren();
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select department goal";
+
+    bexPaElements.individualGoalDepartmentGoal.appendChild(
+      placeholder,
+    );
+
+    bexPaState.departmentGoals.forEach((departmentGoal) => {
+      const option = document.createElement("option");
+
+      option.value = departmentGoal.id;
+      option.textContent =
+        `${departmentGoal.title} (${departmentGoal.department})`;
+
+      bexPaElements.individualGoalDepartmentGoal.appendChild(
+        option,
+      );
+    });
+
+    if (
+      currentValue &&
+      bexPaState.departmentGoals.some(
+        (departmentGoal) =>
+          departmentGoal.id === currentValue,
+      )
+    ) {
+      bexPaElements.individualGoalDepartmentGoal.value =
+        currentValue;
+    }
+  }
+
+  function bexPaUpdateIndividualGoalDerivedFields() {
+    const departmentGoal =
+      bexPaState.departmentGoals.find(
+        (existingDepartmentGoal) =>
+          existingDepartmentGoal.id ===
+          bexPaElements.individualGoalDepartmentGoal?.value,
+      );
+
+    const cycle = departmentGoal
+      ? bexPaState.cycles.find(
+        (existingCycle) =>
+          existingCycle.id ===
+          departmentGoal.cycleId,
+      )
+      : null;
+
+    if (bexPaElements.individualGoalDepartment) {
+      bexPaElements.individualGoalDepartment.value =
+        departmentGoal?.department || "";
+    }
+
+    if (bexPaElements.individualGoalCycle) {
+      bexPaElements.individualGoalCycle.value =
+        cycle?.name || "";
+
+      bexPaElements.individualGoalCycle.dataset.bexPaCycleId =
+        departmentGoal?.cycleId || "";
+    }
+  }
+
+  function bexPaClearIndividualGoalError() {
+    if (!bexPaElements.individualGoalFormError) {
+      return;
+    }
+
+    bexPaElements.individualGoalFormError.textContent = "";
+    bexPaElements.individualGoalFormError.classList.add(
+      "d-none",
+    );
+  }
+
+  function bexPaShowIndividualGoalError(message) {
+    if (!bexPaElements.individualGoalFormError) {
+      return;
+    }
+
+    bexPaElements.individualGoalFormError.textContent =
+      message;
+
+    bexPaElements.individualGoalFormError.classList.remove(
+      "d-none",
+    );
+  }
+
+  function bexPaResetIndividualGoalForm() {
+    bexPaState.editingIndividualGoalId = null;
+
+    bexPaElements.individualGoalForm?.reset();
+    bexPaClearIndividualGoalError();
+    bexPaUpdateIndividualGoalDerivedFields();
+
+    if (bexPaElements.individualGoalDialogTitle) {
+      bexPaElements.individualGoalDialogTitle.textContent =
+        "Add Individual Goal";
+    }
+
+    if (bexPaElements.individualGoalSubmitButton) {
+      bexPaElements.individualGoalSubmitButton.textContent =
+        "Save Individual Goal";
+    }
+  }
+
+  function bexPaOpenIndividualGoalDialog(
+    individualGoalId = null,
+  ) {
+    bexPaResetIndividualGoalForm();
+    bexPaPopulateIndividualGoalDepartmentGoals();
+    bexPaUpdateIndividualGoalDerivedFields();
+
+    if (individualGoalId) {
+      const individualGoal =
+        bexPaState.individualGoals.find(
+          (existingIndividualGoal) =>
+            existingIndividualGoal.id ===
+            individualGoalId,
+        );
+
+      if (!individualGoal) {
+        return;
+      }
+
+      bexPaState.editingIndividualGoalId =
+        individualGoal.id;
+
+      bexPaElements.individualGoalDialogTitle.textContent =
+        "Edit Individual Goal";
+
+      bexPaElements.individualGoalSubmitButton.textContent =
+        "Save Changes";
+
+      bexPaElements.individualGoalEmployee.value =
+        individualGoal.employee;
+
+      bexPaElements.individualGoalDepartmentGoal.value =
+        individualGoal.departmentGoalId;
+
+      bexPaUpdateIndividualGoalDerivedFields();
+
+      bexPaElements.individualGoalTitle.value =
+        individualGoal.title;
+
+      bexPaElements.individualGoalDescription.value =
+        individualGoal.description;
+
+      bexPaElements.individualGoalTarget.value =
+        individualGoal.target;
+
+      bexPaElements.individualGoalStatus.value =
+        individualGoal.status;
+
+      bexPaElements.individualGoalStartDate.value =
+        individualGoal.startDate;
+
+      bexPaElements.individualGoalDueDate.value =
+        individualGoal.dueDate;
+    }
+
+    bexPaElements.individualGoalDialog?.showModal();
+
+    window.requestAnimationFrame(() => {
+      bexPaElements.individualGoalEmployee?.focus();
+    });
+  }
+
+  function bexPaCloseIndividualGoalDialog() {
+    bexPaElements.individualGoalDialog?.close();
+    bexPaResetIndividualGoalForm();
+  }
+
+  function bexPaValidateIndividualGoal(
+    individualGoal,
+  ) {
+    const requiredValues = [
+      individualGoal.employee,
+      individualGoal.departmentGoalId,
+      individualGoal.title,
+      individualGoal.description,
+      individualGoal.target,
+      individualGoal.status,
+      individualGoal.startDate,
+      individualGoal.dueDate,
+    ];
+
+    if (requiredValues.some((value) => !value)) {
+      return "Complete all individual employee goal fields before saving.";
+    }
+
+    const departmentGoal =
+      bexPaState.departmentGoals.find(
+        (existingDepartmentGoal) =>
+          existingDepartmentGoal.id ===
+          individualGoal.departmentGoalId,
+      );
+
+    if (!departmentGoal) {
+      return "Select a valid department goal.";
+    }
+
+    const individualStartDate = bexPaParseDate(
+      individualGoal.startDate,
+    );
+
+    const individualDueDate = bexPaParseDate(
+      individualGoal.dueDate,
+    );
+
+    const departmentStartDate = bexPaParseDate(
+      departmentGoal.startDate,
+    );
+
+    const departmentDueDate = bexPaParseDate(
+      departmentGoal.dueDate,
+    );
+
+    if (
+      !individualStartDate ||
+      !individualDueDate ||
+      !departmentStartDate ||
+      !departmentDueDate
+    ) {
+      return "Enter valid individual goal dates.";
+    }
+
+    if (individualDueDate < individualStartDate) {
+      return "The individual goal due date cannot be earlier than its start date.";
+    }
+
+    if (
+      individualStartDate < departmentStartDate ||
+      individualDueDate > departmentDueDate
+    ) {
+      return "Individual goal dates must fall within the parent department goal dates.";
+    }
+
+    const duplicateIndividualGoal =
+      bexPaState.individualGoals.some(
+        (existingIndividualGoal) =>
+          existingIndividualGoal.id !==
+          bexPaState.editingIndividualGoalId &&
+          existingIndividualGoal.departmentGoalId ===
+          individualGoal.departmentGoalId &&
+          existingIndividualGoal.employee.toLowerCase() ===
+          individualGoal.employee.toLowerCase() &&
+          existingIndividualGoal.title.toLowerCase() ===
+          individualGoal.title.toLowerCase(),
+      );
+
+    if (duplicateIndividualGoal) {
+      return "An individual goal with this title already exists for this employee under the selected department goal.";
+    }
+
+    return "";
+  }
+
+  function bexPaCreateIndividualGoalActionButton(
+    individualGoalId,
+  ) {
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.className =
+      "btn btn-sm btn-outline-secondary";
+
+    button.dataset.bexPaIndividualGoalAction = "edit";
+    button.dataset.bexPaIndividualGoalId =
+      individualGoalId;
+
+    button.innerHTML =
+      '<i class="bi bi-pencil" aria-hidden="true"></i>';
+
+    button.title = "Edit individual goal";
+    button.setAttribute(
+      "aria-label",
+      "Edit individual goal",
+    );
+
+    return button;
+  }
+
+  function bexPaRenderIndividualGoals() {
+    if (!bexPaElements.individualGoalsList) {
+      return;
+    }
+
+    bexPaElements.individualGoalsList.replaceChildren();
+
+    if (bexPaState.individualGoals.length === 0) {
+      const emptyState = document.createElement("p");
+
+      emptyState.className =
+        "mb-0 text-body-secondary";
+
+      emptyState.id = "bexPaIndividualGoalsEmpty";
+
+      emptyState.textContent =
+        "No individual employee goals have been created yet.";
+
+      bexPaElements.individualGoalsList.appendChild(
+        emptyState,
+      );
+
+      return;
+    }
+
+    bexPaState.individualGoals.forEach(
+      (individualGoal) => {
+        const departmentGoal =
+          bexPaState.departmentGoals.find(
+            (existingDepartmentGoal) =>
+              existingDepartmentGoal.id ===
+              individualGoal.departmentGoalId,
+          );
+
+        const cycle = departmentGoal
+          ? bexPaState.cycles.find(
+            (existingCycle) =>
+              existingCycle.id ===
+              departmentGoal.cycleId,
+          )
+          : null;
+
+        const item = document.createElement("article");
+        item.className = "bex-pa-goal-item";
+
+        const header = document.createElement("div");
+        header.className =
+          "d-flex align-items-start justify-content-between gap-3";
+
+        const titleArea = document.createElement("div");
+
+        const title = document.createElement("h3");
+        title.className =
+          "bex-pa-goal-item-title h6";
+
+        title.textContent = individualGoal.title;
+
+        const meta = document.createElement("div");
+        meta.className = "bex-pa-goal-meta";
+
+        const employeeLabel =
+          document.createElement("span");
+        employeeLabel.textContent =
+          individualGoal.employee;
+
+        const departmentLabel =
+          document.createElement("span");
+        departmentLabel.textContent =
+          departmentGoal?.department ||
+          "Unknown department";
+
+        const parentGoalLabel =
+          document.createElement("span");
+        parentGoalLabel.textContent =
+          departmentGoal?.title ||
+          "Unknown department goal";
+
+        const cycleLabel =
+          document.createElement("span");
+        cycleLabel.textContent =
+          cycle?.name || "Unknown cycle";
+
+        meta.append(
+          employeeLabel,
+          departmentLabel,
+          parentGoalLabel,
+          cycleLabel,
+        );
+
+        titleArea.append(
+          title,
+          meta,
+        );
+
+        const status = document.createElement("span");
+        status.className = "bex-pa-goal-status";
+        status.dataset.status =
+          individualGoal.status.toLowerCase();
+        status.textContent =
+          individualGoal.status;
+
+        header.append(
+          titleArea,
+          status,
+        );
+
+        const description =
+          document.createElement("p");
+        description.className =
+          "mt-3 mb-2 text-body-secondary";
+
+        description.textContent =
+          individualGoal.description;
+
+        const target = document.createElement("p");
+        target.className = "mb-0 small";
+        target.textContent =
+          `Target: ${individualGoal.target}`;
+
+        const actions =
+          document.createElement("div");
+        actions.className =
+          "bex-pa-goal-item-actions";
+
+        actions.appendChild(
+          bexPaCreateIndividualGoalActionButton(
+            individualGoal.id,
+          ),
+        );
+
+        item.append(
+          header,
+          description,
+          target,
+          actions,
+        );
+
+        bexPaElements.individualGoalsList.appendChild(
+          item,
+        );
+      },
+    );
+  }
+
+  function bexPaHandleIndividualGoalSubmit(event) {
+    event.preventDefault();
+    bexPaClearIndividualGoalError();
+
+    const departmentGoal =
+      bexPaState.departmentGoals.find(
+        (existingDepartmentGoal) =>
+          existingDepartmentGoal.id ===
+          bexPaElements.individualGoalDepartmentGoal.value,
+      );
+
+    const individualGoal = {
+      id:
+        bexPaState.editingIndividualGoalId ||
+        `BEX-PA-INDIVIDUAL-GOAL-${Date.now()}`,
+
+      employee:
+        bexPaElements.individualGoalEmployee.value.trim(),
+
+      departmentGoalId:
+        bexPaElements.individualGoalDepartmentGoal.value,
+
+      department:
+        departmentGoal?.department || "",
+
+      cycleId:
+        departmentGoal?.cycleId || "",
+
+      title:
+        bexPaElements.individualGoalTitle.value.trim(),
+
+      description:
+        bexPaElements.individualGoalDescription.value.trim(),
+
+      target:
+        bexPaElements.individualGoalTarget.value.trim(),
+
+      status:
+        bexPaElements.individualGoalStatus.value,
+
+      startDate:
+        bexPaElements.individualGoalStartDate.value,
+
+      dueDate:
+        bexPaElements.individualGoalDueDate.value,
+    };
+
+    const validationError =
+      bexPaValidateIndividualGoal(
+        individualGoal,
+      );
+
+    if (validationError) {
+      bexPaShowIndividualGoalError(
+        validationError,
+      );
+      return;
+    }
+
+    const wasEditing = Boolean(
+      bexPaState.editingIndividualGoalId,
+    );
+
+    if (wasEditing) {
+      const individualGoalIndex =
+        bexPaState.individualGoals.findIndex(
+          (existingIndividualGoal) =>
+            existingIndividualGoal.id ===
+            bexPaState.editingIndividualGoalId,
+        );
+
+      if (individualGoalIndex === -1) {
+        bexPaShowIndividualGoalError(
+          "The individual goal could not be found.",
+        );
+        return;
+      }
+
+      bexPaState.individualGoals[
+        individualGoalIndex
+      ] = individualGoal;
+    } else {
+      bexPaState.individualGoals.push(
+        individualGoal,
+      );
+    }
+
+    bexPaSaveIndividualGoals();
+    bexPaRenderIndividualGoals();
+    bexPaCloseIndividualGoalDialog();
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        wasEditing
+          ? `${individualGoal.title} was updated successfully.`
+          : `${individualGoal.title} was created successfully.`;
+    }
+  }
+
+  function bexPaHandleIndividualGoalListAction(
+    event,
+  ) {
+    const button = event.target.closest(
+      "[data-bex-pa-individual-goal-action]",
+    );
+
+    if (!button) {
+      return;
+    }
+
+    const individualGoalId =
+      button.dataset.bexPaIndividualGoalId;
+
+    if (!individualGoalId) {
+      return;
+    }
+
+    bexPaOpenIndividualGoalDialog(
+      individualGoalId,
+    );
+  }
+
   function bexPaCreateDepartmentGoalActionButton(
     departmentGoalId,
   ) {
@@ -2572,6 +3234,9 @@
     bexPaState.departmentGoals =
       bexPaLoadDepartmentGoals();
 
+    bexPaState.individualGoals =
+      bexPaLoadIndividualGoals();
+
     bexPaElements.cyclesNavButton?.addEventListener(
       "click",
       () => bexPaShowSection("cycles"),
@@ -2714,6 +3379,36 @@
       bexPaHandleDepartmentGoalListAction,
     );
 
+        bexPaElements.createIndividualGoalButton?.addEventListener(
+      "click",
+      () => bexPaOpenIndividualGoalDialog(),
+    );
+
+    bexPaElements.closeIndividualGoalDialogButton?.addEventListener(
+      "click",
+      bexPaCloseIndividualGoalDialog,
+    );
+
+    bexPaElements.cancelIndividualGoalButton?.addEventListener(
+      "click",
+      bexPaCloseIndividualGoalDialog,
+    );
+
+    bexPaElements.individualGoalDepartmentGoal?.addEventListener(
+      "change",
+      bexPaUpdateIndividualGoalDerivedFields,
+    );
+
+    bexPaElements.individualGoalForm?.addEventListener(
+      "submit",
+      bexPaHandleIndividualGoalSubmit,
+    );
+
+    bexPaElements.individualGoalsList?.addEventListener(
+      "click",
+      bexPaHandleIndividualGoalListAction,
+    );
+
     bexPaRenderCycles();
 
     bexPaPopulateOrganisationGoalCycles();
@@ -2724,6 +3419,9 @@
 
     bexPaPopulateDepartmentGoalOrganisationGoals();
     bexPaRenderDepartmentGoals();
+
+    bexPaPopulateIndividualGoalDepartmentGoals();
+    bexPaRenderIndividualGoals();
   }
 
   document.addEventListener(

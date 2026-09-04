@@ -506,6 +506,39 @@
                                     </section>
                                 </div>
                             </div>
+
+                            <div class="row g-3 mt-1">
+                                <div class="col-12">
+                                    <section class="bex-pa-goal-panel card border-0 shadow-sm"
+                                        aria-labelledby="bexPaIndividualGoalsTitle">
+                                        <div
+                                            class="card-header bg-white d-flex align-items-center justify-content-between gap-3 py-3">
+                                            <div>
+                                                <h2 class="mb-1 h5 fw-bold" id="bexPaIndividualGoalsTitle">
+                                                    Individual Employee Goals
+                                                </h2>
+
+                                                <p class="mb-0 small text-body-secondary">
+                                                    Assign employee goals linked to department priorities.
+                                                </p>
+                                            </div>
+
+                                            <button class="btn btn-sm btn-primary" id="bexPaCreateIndividualGoalButton"
+                                                type="button">
+                                                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                                Add Goal
+                                            </button>
+                                        </div>
+
+                                        <div class="card-body" id="bexPaIndividualGoalsList">
+                                            <p class="mb-0 text-body-secondary" id="bexPaIndividualGoalsEmpty">
+                                                No individual employee goals have been created yet.
+                                            </p>
+                                        </div>
+                                    </section>
+                                </div>
+                            </div>
+
                             <dialog class="bex-pa-confirm-dialog bex-pa-goal-dialog" id="bexPaOrganisationGoalDialog"
                                 aria-labelledby="bexPaOrganisationGoalDialogTitle">
                                 <form id="bexPaOrganisationGoalForm" method="dialog" novalidate>
@@ -895,6 +928,151 @@
                                         <button class="btn btn-primary" id="bexPaDepartmentGoalSubmitButton"
                                             type="submit">
                                             Save Department Goal
+                                        </button>
+                                    </div>
+                                </form>
+                            </dialog>
+
+                            <dialog class="bex-pa-confirm-dialog bex-pa-goal-dialog" id="bexPaIndividualGoalDialog"
+                                aria-labelledby="bexPaIndividualGoalDialogTitle">
+                                <form id="bexPaIndividualGoalForm" method="dialog" novalidate>
+                                    <div class="bex-pa-confirm-dialog-header">
+                                        <div>
+                                            <p class="mb-1 small fw-semibold text-uppercase text-primary">
+                                                Individual employee goal
+                                            </p>
+
+                                            <h2 class="mb-0 h5 fw-bold" id="bexPaIndividualGoalDialogTitle">
+                                                Add Individual Goal
+                                            </h2>
+                                        </div>
+
+                                        <button class="btn-close" id="bexPaCloseIndividualGoalDialogButton"
+                                            type="button" aria-label="Close individual goal form"></button>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-body">
+                                        <div class="alert alert-danger d-none" id="bexPaIndividualGoalFormError"
+                                            role="alert"></div>
+
+                                        <div class="row g-3">
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaIndividualGoalEmployee">
+                                                    Employee
+                                                </label>
+
+                                                <input class="form-control" id="bexPaIndividualGoalEmployee" type="text"
+                                                    maxlength="120" placeholder="e.g. Jane Doe" required />
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaIndividualGoalDepartmentGoal">
+                                                    Department goal
+                                                </label>
+
+                                                <select class="form-select" id="bexPaIndividualGoalDepartmentGoal"
+                                                    required>
+                                                    <option value="">
+                                                        Select department goal
+                                                    </option>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaIndividualGoalDepartment">
+                                                    Department
+                                                </label>
+
+                                                <input class="form-control" id="bexPaIndividualGoalDepartment"
+                                                    type="text" readonly
+                                                    placeholder="Selected automatically from department goal" />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaIndividualGoalCycle">
+                                                    Appraisal cycle
+                                                </label>
+
+                                                <input class="form-control" id="bexPaIndividualGoalCycle" type="text"
+                                                    readonly
+                                                    placeholder="Selected automatically from department goal" />
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaIndividualGoalTitle">
+                                                    Goal title
+                                                </label>
+
+                                                <input class="form-control" id="bexPaIndividualGoalTitle" type="text"
+                                                    maxlength="150" placeholder="e.g. Reduce onboarding completion time"
+                                                    required />
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaIndividualGoalDescription">
+                                                    Description
+                                                </label>
+
+                                                <textarea class="form-control" id="bexPaIndividualGoalDescription"
+                                                    rows="3" maxlength="500"
+                                                    placeholder="Describe what the employee is expected to achieve."
+                                                    required></textarea>
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaIndividualGoalTarget">
+                                                    Target
+                                                </label>
+
+                                                <input class="form-control" id="bexPaIndividualGoalTarget" type="text"
+                                                    maxlength="150" placeholder="e.g. Complete within 3 working days"
+                                                    required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaIndividualGoalStatus">
+                                                    Status
+                                                </label>
+
+                                                <select class="form-select" id="bexPaIndividualGoalStatus" required>
+                                                    <option value="Draft">Draft</option>
+                                                    <option value="Active">Active</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaIndividualGoalStartDate">
+                                                    Start date
+                                                </label>
+
+                                                <input class="form-control" id="bexPaIndividualGoalStartDate"
+                                                    type="date" required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold" for="bexPaIndividualGoalDueDate">
+                                                    Due date
+                                                </label>
+
+                                                <input class="form-control" id="bexPaIndividualGoalDueDate" type="date"
+                                                    required />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-actions">
+                                        <button class="btn btn-outline-secondary" id="bexPaCancelIndividualGoalButton"
+                                            type="button">
+                                            Cancel
+                                        </button>
+
+                                        <button class="btn btn-primary" id="bexPaIndividualGoalSubmitButton"
+                                            type="submit">
+                                            Save Individual Goal
                                         </button>
                                     </div>
                                 </form>
