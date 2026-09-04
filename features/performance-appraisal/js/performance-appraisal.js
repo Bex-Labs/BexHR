@@ -24,12 +24,16 @@
   const BEX_PA_INDIVIDUAL_GOAL_STORAGE_KEY =
     "bexhr:performance-appraisal:individual-goals:v1";
 
+  const BEX_PA_PROGRESS_UPDATE_STORAGE_KEY =
+    "bexhr:performance-appraisal:progress-updates:v1";
+
   const bexPaState = {
     cycles: [],
     organisationGoals: [],
     deliverables: [],
     departmentGoals: [],
     individualGoals: [],
+    progressUpdates: [],
     editingCycleId: null,
     activatingCycleId: null,
     editingOrganisationGoalId: null,
@@ -232,6 +236,48 @@
     } catch (error) {
       console.warn(
         "Individual employee goals could not be saved.",
+        error,
+      );
+    }
+  }
+
+  function bexPaLoadProgressUpdates() {
+    try {
+      const storedProgressUpdates =
+        window.localStorage.getItem(
+          BEX_PA_PROGRESS_UPDATE_STORAGE_KEY,
+        );
+
+      if (!storedProgressUpdates) {
+        return [];
+      }
+
+      const parsedProgressUpdates = JSON.parse(
+        storedProgressUpdates,
+      );
+
+      return Array.isArray(parsedProgressUpdates)
+        ? parsedProgressUpdates
+        : [];
+    } catch (error) {
+      console.warn(
+        "Progress updates could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveProgressUpdates() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_PROGRESS_UPDATE_STORAGE_KEY,
+        JSON.stringify(bexPaState.progressUpdates),
+      );
+    } catch (error) {
+      console.warn(
+        "Progress updates could not be saved.",
         error,
       );
     }
@@ -468,6 +514,13 @@
     ),
     individualGoalDueDate: document.getElementById(
       "bexPaIndividualGoalDueDate",
+    ),
+
+    progressUpdatesList: document.getElementById(
+      "bexPaProgressUpdatesList",
+    ),
+    progressUpdatesEmpty: document.getElementById(
+      "bexPaProgressUpdatesEmpty",
     ),
 
     overviewCreateButton: document.getElementById(
@@ -2135,6 +2188,148 @@
     return "";
   }
 
+  function bexPaRenderProgressUpdates() {
+    if (!bexPaElements.progressUpdatesList) {
+      return;
+    }
+
+    bexPaElements.progressUpdatesList.replaceChildren();
+
+    if (bexPaState.progressUpdates.length === 0) {
+      const emptyState = document.createElement("p");
+
+      emptyState.className =
+        "mb-0 text-body-secondary";
+
+      emptyState.id = "bexPaProgressUpdatesEmpty";
+
+      emptyState.textContent =
+        "No employee progress updates have been submitted yet.";
+
+      bexPaElements.progressUpdatesList.appendChild(
+        emptyState,
+      );
+
+      return;
+    }
+
+    bexPaState.progressUpdates.forEach(
+      (progressUpdate) => {
+        const individualGoal =
+          bexPaState.individualGoals.find(
+            (existingIndividualGoal) =>
+              existingIndividualGoal.id ===
+              progressUpdate.individualGoalId,
+          );
+
+        const departmentGoal = individualGoal
+          ? bexPaState.departmentGoals.find(
+            (existingDepartmentGoal) =>
+              existingDepartmentGoal.id ===
+              individualGoal.departmentGoalId,
+          )
+          : null;
+
+        const item = document.createElement("article");
+        item.className = "bex-pa-goal-item";
+
+        const header = document.createElement("div");
+        header.className =
+          "d-flex align-items-start justify-content-between gap-3";
+
+        const titleArea = document.createElement("div");
+
+        const title = document.createElement("h3");
+        title.className =
+          "bex-pa-goal-item-title h6";
+
+        title.textContent =
+          individualGoal?.title ||
+          "Unknown individual goal";
+
+        const meta = document.createElement("div");
+        meta.className = "bex-pa-goal-meta";
+
+        const employeeLabel =
+          document.createElement("span");
+        employeeLabel.textContent =
+          individualGoal?.employee ||
+          "Unknown employee";
+
+        const departmentLabel =
+          document.createElement("span");
+        departmentLabel.textContent =
+          departmentGoal?.department ||
+          individualGoal?.department ||
+          "Unknown department";
+
+        const dateLabel =
+          document.createElement("span");
+
+        const submittedDate =
+          progressUpdate.createdAt
+            ? new Date(progressUpdate.createdAt)
+            : null;
+
+        dateLabel.textContent =
+          submittedDate &&
+            !Number.isNaN(submittedDate.getTime())
+            ? new Intl.DateTimeFormat("en-NG", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }).format(submittedDate)
+            : "Unknown submission date";
+
+        meta.append(
+          employeeLabel,
+          departmentLabel,
+          dateLabel,
+        );
+
+        titleArea.append(
+          title,
+          meta,
+        );
+
+        const status = document.createElement("span");
+        status.className = "bex-pa-goal-status";
+        status.dataset.status =
+          progressUpdate.status
+            .toLowerCase()
+            .replaceAll(" ", "-");
+
+        status.textContent =
+          progressUpdate.status;
+
+        header.append(
+          titleArea,
+          status,
+        );
+
+        const updateText =
+          document.createElement("p");
+
+        updateText.className =
+          "mt-3 mb-0 text-body-secondary";
+
+        updateText.textContent =
+          progressUpdate.updateText;
+
+        item.append(
+          header,
+          updateText,
+        );
+
+        bexPaElements.progressUpdatesList.appendChild(
+          item,
+        );
+      },
+    );
+  }
+
   function bexPaCreateIndividualGoalActionButton(
     individualGoalId,
   ) {
@@ -3237,6 +3432,9 @@
     bexPaState.individualGoals =
       bexPaLoadIndividualGoals();
 
+    bexPaState.progressUpdates =
+      bexPaLoadProgressUpdates();
+
     bexPaElements.cyclesNavButton?.addEventListener(
       "click",
       () => bexPaShowSection("cycles"),
@@ -3379,7 +3577,7 @@
       bexPaHandleDepartmentGoalListAction,
     );
 
-        bexPaElements.createIndividualGoalButton?.addEventListener(
+    bexPaElements.createIndividualGoalButton?.addEventListener(
       "click",
       () => bexPaOpenIndividualGoalDialog(),
     );
@@ -3422,6 +3620,8 @@
 
     bexPaPopulateIndividualGoalDepartmentGoals();
     bexPaRenderIndividualGoals();
+
+    bexPaRenderProgressUpdates();
   }
 
   document.addEventListener(
