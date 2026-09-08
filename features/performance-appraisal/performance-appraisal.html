@@ -30,7 +30,7 @@
         Skip to main content
     </a>
 
-    <div class="bex-pa-app min-vh-100" data-bex-pa-app>
+    <div class="bex-pa-app min-vh-100" data-bex-pa-app data-bex-pa-persona="hr-admin">
         <header class="bex-pa-header sticky-top border-bottom bg-white">
             <div
                 class="container-fluid d-flex flex-wrap align-items-center justify-content-between gap-3 px-3 py-3 px-lg-4">
@@ -53,10 +53,16 @@
                 </div>
 
                 <div class="d-flex align-items-center gap-3">
-                    <span class="small fw-semibold text-body-secondary"> <i class="bi bi-person-badge me-1"
-                            aria-hidden="true"></i>
-                        HR Admin
-                    </span>
+                    <label class="visually-hidden" for="bexPaDevelopmentPersona">
+                        Appraisal development persona
+                    </label>
+
+                    <select class="form-select form-select-sm" id="bexPaDevelopmentPersona"
+                        aria-label="Appraisal development persona">
+                        <option value="hr-admin" selected>HR Admin</option>
+                        <option value="primary-manager">Primary Manager</option>
+                        <option value="employee">Employee</option>
+                    </select>
                 </div>
             </div>
         </header>
@@ -984,8 +990,11 @@
                                                     Employee
                                                 </label>
 
-                                                <input class="form-control" id="bexPaIndividualGoalEmployee" type="text"
-                                                    maxlength="120" placeholder="e.g. Jane Doe" required />
+                                                <select class="form-select" id="bexPaIndividualGoalEmployee" required>
+                                                    <option value="">
+                                                        Select employee
+                                                    </option>
+                                                </select>
                                             </div>
 
                                             <div class="col-12">
@@ -1096,6 +1105,94 @@
                                         <button class="btn btn-primary" id="bexPaIndividualGoalSubmitButton"
                                             type="submit">
                                             Save Individual Goal
+                                        </button>
+                                    </div>
+                                </form>
+                            </dialog>
+
+                            <dialog class="bex-pa-confirm-dialog bex-pa-goal-dialog" id="bexPaProgressUpdateDialog"
+                                aria-labelledby="bexPaProgressUpdateDialogTitle">
+                                <form id="bexPaProgressUpdateForm" method="dialog" novalidate>
+                                    <div class="bex-pa-confirm-dialog-header">
+                                        <div>
+                                            <p class="mb-1 small fw-semibold text-uppercase text-primary">
+                                                Progress update
+                                            </p>
+
+                                            <h2 class="mb-0 h5 fw-bold" id="bexPaProgressUpdateDialogTitle">
+                                                Add Progress Update
+                                            </h2>
+                                        </div>
+
+                                        <button class="btn-close" id="bexPaCloseProgressUpdateDialogButton"
+                                            type="button" aria-label="Close progress update form"></button>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-body">
+                                        <div class="alert alert-danger d-none" id="bexPaProgressUpdateFormError"
+                                            role="alert"></div>
+
+                                        <div class="row g-3">
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaProgressUpdateIndividualGoal">
+                                                    Individual goal
+                                                </label>
+
+                                                <select class="form-select" id="bexPaProgressUpdateIndividualGoal"
+                                                    required>
+                                                    <option value="">
+                                                        Select individual goal
+                                                    </option>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaProgressUpdateStatus">
+                                                    Progress status
+                                                </label>
+
+                                                <select class="form-select" id="bexPaProgressUpdateStatus" required>
+                                                    <option value="">
+                                                        Select progress status
+                                                    </option>
+                                                    <option value="Not Started">
+                                                        Not Started
+                                                    </option>
+                                                    <option value="In Progress">
+                                                        In Progress
+                                                    </option>
+                                                    <option value="Blocked">
+                                                        Blocked
+                                                    </option>
+                                                    <option value="Completed">
+                                                        Completed
+                                                    </option>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaProgressUpdateText">
+                                                    Progress update
+                                                </label>
+
+                                                <textarea class="form-control" id="bexPaProgressUpdateText" rows="4"
+                                                    maxlength="1000"
+                                                    placeholder="Describe the progress made against this goal."
+                                                    required></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-actions">
+                                        <button class="btn btn-outline-secondary" id="bexPaCancelProgressUpdateButton"
+                                            type="button">
+                                            Cancel
+                                        </button>
+
+                                        <button class="btn btn-primary" id="bexPaProgressUpdateSubmitButton"
+                                            type="submit">
+                                            Submit Progress Update
                                         </button>
                                     </div>
                                 </form>

@@ -13884,34 +13884,34 @@ async function loadEmployeeReportingLinesForEdit(employeeId) {
       applyAssignedLineManagerSelection();
     }
 
-// EMPLOYEE REPORTING-LINE LEGACY ROW RECOVERY - v1.0.0
-// Only render additional reporting rows that contain a real saved manager.
-//
-// Historical/incomplete database rows with no manager_employee_id must not
-// become blank Secondary Manager controls when HR opens an employee for edit.
-// A blank rendered row is treated as an actively started reporting line and
-// correctly blocks Save, so loading an empty legacy row creates a false
-// validation failure.
-//
-// Important:
-// - Valid Primary/Secondary assignments are preserved.
-// - A new blank row deliberately added by HR still blocks Save.
-// - No role, access, payroll, tenant or authorisation behaviour is changed.
-rows
-  .filter(
-    (row) =>
-      row.id !== primaryRow?.id &&
-      Boolean(String(row.manager_employee_id || "").trim()),
-  )
-  .forEach((row) => {
-    addEmployeeReportingLineRow({
-      managerEmployeeId: row.manager_employee_id,
-      managerType: row.manager_type || "Secondary",
-      effectiveDate: row.effective_date || "",
-      status: row.status || "Active",
-      notes: row.notes || "",
-    });
-  });
+    // EMPLOYEE REPORTING-LINE LEGACY ROW RECOVERY - v1.0.0
+    // Only render additional reporting rows that contain a real saved manager.
+    //
+    // Historical/incomplete database rows with no manager_employee_id must not
+    // become blank Secondary Manager controls when HR opens an employee for edit.
+    // A blank rendered row is treated as an actively started reporting line and
+    // correctly blocks Save, so loading an empty legacy row creates a false
+    // validation failure.
+    //
+    // Important:
+    // - Valid Primary/Secondary assignments are preserved.
+    // - A new blank row deliberately added by HR still blocks Save.
+    // - No role, access, payroll, tenant or authorisation behaviour is changed.
+    rows
+      .filter(
+        (row) =>
+          row.id !== primaryRow?.id &&
+          Boolean(String(row.manager_employee_id || "").trim()),
+      )
+      .forEach((row) => {
+        addEmployeeReportingLineRow({
+          managerEmployeeId: row.manager_employee_id,
+          managerType: row.manager_type || "Secondary",
+          effectiveDate: row.effective_date || "",
+          status: row.status || "Active",
+          notes: row.notes || "",
+        });
+      });
   } catch (error) {
     console.error("Error loading employee reporting lines:", error);
 
@@ -24364,6 +24364,98 @@ function getCurrentHrAccessTitle(profile = {}) {
     : "HR Standard";
 }
 
+function publishHrPerformanceAppraisalContext() {
+  const isHrAdmin =
+    getCurrentHrAccessTitle(
+      state.currentProfile || {},
+    ) === "HR Admin";
+
+  if (!isHrAdmin) {
+    const performanceAppraisalContext = {
+      persona: "hr-standard",
+      employeeId: "",
+      managerEmployeeId: "",
+      managedEmployeeIds: [],
+      availableEmployees: [],
+    };
+
+    window.BexHrPerformanceAppraisalContext =
+      performanceAppraisalContext;
+
+    window.sessionStorage.setItem(
+      "bexhr:performance-appraisal:context:v1",
+      JSON.stringify(
+        performanceAppraisalContext,
+      ),
+    );
+
+    return;
+  }
+
+  const availableEmployees = (
+    Array.isArray(state.employees)
+      ? state.employees
+      : []
+  )
+    .map((employee) => {
+      const employeeName = [
+        employee.first_name,
+        employee.middle_name,
+        employee.last_name,
+      ]
+        .map((namePart) =>
+          String(namePart || "").trim(),
+        )
+        .filter(Boolean)
+        .join(" ");
+
+      return {
+        id: String(
+          employee.id || "",
+        ).trim(),
+
+        name:
+          employeeName ||
+          String(
+            employee.work_email ||
+            "Employee",
+          ).trim(),
+
+        department: String(
+          employee.department || "",
+        ).trim(),
+
+        jobTitle: String(
+          employee.job_title || "",
+        ).trim(),
+      };
+    })
+    .filter((employee) => employee.id)
+    .sort((firstEmployee, secondEmployee) =>
+      firstEmployee.name.localeCompare(
+        secondEmployee.name,
+      ),
+    );
+
+  const performanceAppraisalContext = {
+    persona: "hr-admin",
+    employeeId: "",
+    managerEmployeeId: "",
+    managedEmployeeIds: [],
+    availableEmployees,
+  };
+
+  window.BexHrPerformanceAppraisalContext =
+    performanceAppraisalContext;
+
+  window.sessionStorage.setItem(
+    "bexhr:performance-appraisal:context:v1",
+    JSON.stringify(
+      performanceAppraisalContext,
+    ),
+  );
+}
+
 // HR AND MANAGER RESPONSIBILITY BADGES - v1.0.1
 // Display HR access and reporting responsibility as separate compact pills.
 // Presentation only: no permissions, authority, routing, RLS, or data changes.
@@ -25820,7 +25912,7 @@ function renderHrProfile(profile, user) {
 }
 
 async function loadHrProfileImages(profileImagePath, initials) {
-    // HR PROFILE IMAGE REMOVAL - v1.0.0
+  // HR PROFILE IMAGE REMOVAL - v1.0.0
   // Enable Remove Picture only when the current HR profile
   // genuinely has a stored image reference.
   if (state.dom.removeHrProfileImageBtn) {
@@ -26231,7 +26323,7 @@ async function removeHrProfileImage() {
     showPageAlert(
       "danger",
       error.message ||
-        "Profile picture could not be removed.",
+      "Profile picture could not be removed.",
     );
   } finally {
     if (button) {
@@ -28333,6 +28425,9 @@ async function loadEmployees() {
     state.employees = sortEmployeeRecordsByEmployeeNumber(
       Array.isArray(data) ? data : [],
     );
+
+    publishHrPerformanceAppraisalContext();
+
     applyEmployeeSearch();
   } catch (error) {
     console.error("Error loading employee records:", error);
@@ -28342,6 +28437,9 @@ async function loadEmployees() {
     );
     state.employees = [];
     state.filteredEmployees = [];
+
+    publishHrPerformanceAppraisalContext();
+
     renderEmployeeRecords([]);
     renderEmployeeSummary([]);
   }
@@ -35318,85 +35416,84 @@ async function handleEmployeeSave() {
   }
 
   // =========================================================
-// MANAGER DOWNGRADE / REPORTING RESPONSIBILITY PARITY - v1.0.0
-//
-// Apply the same reporting-responsibility protection used by
-// Manage Employee Access when HR changes System Role through
-// the full Employee Edit form.
-//
-// Business rule:
-// - ordinary biodata edits remain unrestricted;
-// - a role change to Employee is allowed only when this person
-//   no longer has active Primary / Secondary Manager duties;
-// - existing reporting relationships are never removed silently.
-// =========================================================
-if (state.currentEditingEmployee) {
-  const savedSystemRole = normaliseHrBusinessRole(
-    state.currentEditingEmployee.system_role || "",
-  );
+  // MANAGER DOWNGRADE / REPORTING RESPONSIBILITY PARITY - v1.0.0
+  //
+  // Apply the same reporting-responsibility protection used by
+  // Manage Employee Access when HR changes System Role through
+  // the full Employee Edit form.
+  //
+  // Business rule:
+  // - ordinary biodata edits remain unrestricted;
+  // - a role change to Employee is allowed only when this person
+  //   no longer has active Primary / Secondary Manager duties;
+  // - existing reporting relationships are never removed silently.
+  // =========================================================
+  if (state.currentEditingEmployee) {
+    const savedSystemRole = normaliseHrBusinessRole(
+      state.currentEditingEmployee.system_role || "",
+    );
 
-  const selectedSystemRole = normaliseHrBusinessRole(
-    getSelectedEmployeeSystemRoleValue(),
-  );
+    const selectedSystemRole = normaliseHrBusinessRole(
+      getSelectedEmployeeSystemRoleValue(),
+    );
 
-  const isDowngradingToEmployee =
-    selectedSystemRole === "employee" &&
-    selectedSystemRole !== savedSystemRole;
+    const isDowngradingToEmployee =
+      selectedSystemRole === "employee" &&
+      selectedSystemRole !== savedSystemRole;
 
-  if (isDowngradingToEmployee) {
-    try {
-      const responsibilities =
-        await getActiveReportingResponsibilitiesForManager(
-          state.currentEditingEmployee.id,
-        );
-
-      if (responsibilities.length) {
-        const employeeName =
-          getSupportingManagerDisplayName(
-            state.currentEditingEmployee,
+    if (isDowngradingToEmployee) {
+      try {
+        const responsibilities =
+          await getActiveReportingResponsibilitiesForManager(
+            state.currentEditingEmployee.id,
           );
 
-        const responsibilitySummary = responsibilities
-          .map(
-            (responsibility) =>
-              `${responsibility.managedEmployeeName} (${responsibility.managerType})`,
-          )
-          .join(", ");
+        if (responsibilities.length) {
+          const employeeName =
+            getSupportingManagerDisplayName(
+              state.currentEditingEmployee,
+            );
 
-        showPageAlert(
-          "warning",
-          `<strong>${escapeHtml(employeeName)} cannot be changed to Employee yet.</strong>
+          const responsibilitySummary = responsibilities
+            .map(
+              (responsibility) =>
+                `${responsibility.managedEmployeeName} (${responsibility.managerType})`,
+            )
+            .join(", ");
+
+          showPageAlert(
+            "warning",
+            `<strong>${escapeHtml(employeeName)} cannot be changed to Employee yet.</strong>
           This person still has active reporting responsibilities:
           ${escapeHtml(responsibilitySummary)}.
           Reassign or remove these relationships under Manage managers first.`,
+          );
+
+          showDashboardToast(
+            "warning",
+            "Reporting responsibilities must be resolved",
+            `${employeeName} still manages ${responsibilities.length} employee${responsibilities.length === 1 ? "" : "s"
+            }.`,
+          );
+
+          return;
+        }
+      } catch (error) {
+        console.error(
+          "Error validating reporting responsibilities before employee-form role downgrade:",
+          error,
         );
 
-        showDashboardToast(
-          "warning",
-          "Reporting responsibilities must be resolved",
-          `${employeeName} still manages ${responsibilities.length} employee${
-            responsibilities.length === 1 ? "" : "s"
-          }.`,
+        showPageAlert(
+          "danger",
+          error?.message ||
+          "BexHR could not verify this employee's reporting responsibilities. The role was not changed.",
         );
 
         return;
       }
-    } catch (error) {
-      console.error(
-        "Error validating reporting responsibilities before employee-form role downgrade:",
-        error,
-      );
-
-      showPageAlert(
-        "danger",
-        error?.message ||
-          "BexHR could not verify this employee's reporting responsibilities. The role was not changed.",
-      );
-
-      return;
     }
   }
-}
 
   // EMPLOYEE BIODATA COMPLETION - STEP 3G
   // Keep the existing employee line_manager / approver_email snapshot aligned

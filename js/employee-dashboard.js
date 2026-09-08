@@ -842,6 +842,26 @@ function applyResolvedIdentity(employee) {
     employeeRowId: employee?.id || null,
     linkedUserId: employee?.user_id || state.currentUser?.id || null,
   };
+
+  const performanceAppraisalContext = {
+    persona: "employee",
+    employeeId: String(
+      employee?.id || "",
+    ).trim(),
+    managerEmployeeId: "",
+    managedEmployeeIds: [],
+    availableEmployees: [],
+  };
+
+  window.BexHrPerformanceAppraisalContext =
+    performanceAppraisalContext;
+
+  window.sessionStorage.setItem(
+    "bexhr:performance-appraisal:context:v1",
+    JSON.stringify(
+      performanceAppraisalContext,
+    ),
+  );
 }
 
 function cacheDomElements() {

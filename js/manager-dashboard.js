@@ -1444,10 +1444,10 @@ function bindEvents() {
     await saveManagerOwnProfile();
   });
 
-// SYSTEM-WIDE MANAGER EMPLOYEE IDENTITY AUTHORITY - v1.0.0
-// Manager profile identity fields are read-only.
-// Name changes are maintained through the HR People record.
-updateManagerProfileSaveButtonState();
+  // SYSTEM-WIDE MANAGER EMPLOYEE IDENTITY AUTHORITY - v1.0.0
+  // Manager profile identity fields are read-only.
+  // Name changes are maintained through the HR People record.
+  updateManagerProfileSaveButtonState();
 
   updateManagerProfileSaveButtonState();
 
@@ -1456,19 +1456,19 @@ updateManagerProfileSaveButtonState();
     handlePendingProfileImage(file);
   });
 
-state.dom.saveManagerProfileImageBtn?.addEventListener("click", async () => {
-  await uploadManagerProfileImage();
-});
+  state.dom.saveManagerProfileImageBtn?.addEventListener("click", async () => {
+    await uploadManagerProfileImage();
+  });
 
-// MANAGER PROFILE IMAGE REMOVAL - v1.0.0
-// Remove only the signed-in Manager's stored profile-picture reference.
-// This does not affect another employee, tenant, role, or reporting line.
-state.dom.removeManagerProfileImageBtn?.addEventListener(
-  "click",
-  async () => {
-    await removeManagerProfileImage();
-  },
-);
+  // MANAGER PROFILE IMAGE REMOVAL - v1.0.0
+  // Remove only the signed-in Manager's stored profile-picture reference.
+  // This does not affect another employee, tenant, role, or reporting line.
+  state.dom.removeManagerProfileImageBtn?.addEventListener(
+    "click",
+    async () => {
+      await removeManagerProfileImage();
+    },
+  );
 
   state.dom.confirmDecisionBtn?.addEventListener("click", async () => {
     await submitLeaveDecisionFromModal();
@@ -2993,7 +2993,7 @@ async function removeManagerProfileImage() {
     showPageAlert(
       "danger",
       error.message ||
-        "Profile picture could not be removed.",
+      "Profile picture could not be removed.",
     );
   } finally {
     if (button) {
@@ -3309,6 +3309,76 @@ function getReportingLineRelationshipLabel(reportingLineRow = {}) {
 // Additional managers receive processed-decision visibility for cover planning.
 function isPrimaryReportingManagerRelationship(relationshipLabel = "") {
   return normalizeText(relationshipLabel).includes("primary");
+}
+
+function publishManagerPerformanceAppraisalContext() {
+  const primaryEmployees = (
+    Array.isArray(state.teamMembers)
+      ? state.teamMembers
+      : []
+  )
+    .filter((member) =>
+      isPrimaryReportingManagerRelationship(
+        member.relationshipLabel,
+      ),
+    )
+    .map((member) => ({
+      id: String(
+        member.id ||
+        member.raw?.id ||
+        "",
+      ).trim(),
+
+      name: String(
+        member.employeeFullName ||
+        member.raw?.full_name ||
+        member.work_email ||
+        "Employee",
+      ).trim(),
+
+      department: String(
+        member.department ||
+        member.raw?.department ||
+        "",
+      ).trim(),
+
+      jobTitle: String(
+        member.job_title ||
+        member.raw?.job_title ||
+        "",
+      ).trim(),
+    }))
+    .filter((employee) => employee.id);
+
+    const performanceAppraisalContext = {
+    persona: "primary-manager",
+
+    managerEmployeeId: String(
+      state.currentManagerEmployeeRecord?.id || "",
+    ).trim(),
+
+    employeeId: "",
+
+    managedEmployeeIds: [
+      ...new Set(
+        primaryEmployees.map(
+          (employee) => employee.id,
+        ),
+      ),
+    ],
+
+    availableEmployees: primaryEmployees,
+  };
+
+  window.BexHrPerformanceAppraisalContext =
+    performanceAppraisalContext;
+
+  window.sessionStorage.setItem(
+    "bexhr:performance-appraisal:context:v1",
+    JSON.stringify(
+      performanceAppraisalContext,
+    ),
+  );
 }
 
 // LINE MANAGER LEAVE APPROVAL AUTHORITY - STEP 1I
@@ -5142,6 +5212,9 @@ async function loadAssignedTeamMembers() {
     notifyManagerTeamAssignmentChanges(enrichedTeamMembers);
 
     state.teamMembers = enrichedTeamMembers;
+
+    publishManagerPerformanceAppraisalContext();
+
     applyTeamFilter();
 
     if (!enrichedTeamMembers.length) {
@@ -5346,35 +5419,35 @@ function renderManagerActionCoverageCentre() {
     headerCoverageLabel = "Acting Manager";
   }
 
-renderManagerHeaderResponsibilityBadge(
-  headerCoverageLabel,
-  coverageModeKey || "manager",
-);
+  renderManagerHeaderResponsibilityBadge(
+    headerCoverageLabel,
+    coverageModeKey || "manager",
+  );
 
-// MANAGER PROFILE AUTHORITY PARITY - v1.0.0
-// Show the reporting-line authority already calculated for this Manager.
-// Display-only: this does not grant roles, decision rights, or delegation.
-if (state.dom.managerProfileAuthorityText) {
-  state.dom.managerProfileAuthorityText.textContent =
-    `${coverageMode} workspace member`;
-}
+  // MANAGER PROFILE AUTHORITY PARITY - v1.0.0
+  // Show the reporting-line authority already calculated for this Manager.
+  // Display-only: this does not grant roles, decision rights, or delegation.
+  if (state.dom.managerProfileAuthorityText) {
+    state.dom.managerProfileAuthorityText.textContent =
+      `${coverageMode} workspace member`;
+  }
 
-if (state.dom.managerProfileAuthorityPill) {
-  state.dom.managerProfileAuthorityPill.dataset.managerAuthority =
-    coverageModeKey;
-}
+  if (state.dom.managerProfileAuthorityPill) {
+    state.dom.managerProfileAuthorityPill.dataset.managerAuthority =
+      coverageModeKey;
+  }
 
-// Keep the read-only Profile Role field aligned with the Manager's resolved
-// responsibility rather than showing only the generic stored "manager" role.
-if (state.dom.managerProfileRole) {
-  state.dom.managerProfileRole.value = coverageMode;
-  state.dom.managerProfileRole.removeAttribute("placeholder");
-}
+  // Keep the read-only Profile Role field aligned with the Manager's resolved
+  // responsibility rather than showing only the generic stored "manager" role.
+  if (state.dom.managerProfileRole) {
+    state.dom.managerProfileRole.value = coverageMode;
+    state.dom.managerProfileRole.removeAttribute("placeholder");
+  }
 
-setManagerActionCentreText(
-  "managerCoverageModeDescription",
-  coverageDescription,
-);
+  setManagerActionCentreText(
+    "managerCoverageModeDescription",
+    coverageDescription,
+  );
 
   setManagerActionCentreText(
     "managerDecisionAuthority",
