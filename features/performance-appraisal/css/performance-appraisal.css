@@ -568,6 +568,32 @@ body.bex-pa-page {
 
 .bex-pa-goal-dialog {
   width: min(calc(100% - 2rem), 760px);
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow: hidden;
+}
+
+.bex-pa-goal-dialog > form {
+  display: grid;
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.bex-pa-goal-dialog .bex-pa-confirm-dialog-header {
+  min-height: 0;
+}
+
+.bex-pa-goal-dialog .bex-pa-confirm-dialog-body {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.bex-pa-goal-dialog .bex-pa-confirm-dialog-actions {
+  min-height: 0;
 }
 
 .bex-pa-goal-dialog .form-control,
