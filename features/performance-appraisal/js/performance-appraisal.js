@@ -701,32 +701,32 @@
   }
 
   function bexPaApplyGoalAccess() {
-  const canManageGoalFramework =
-    bexPaCanManageGoalFramework();
+    const canManageGoalFramework =
+      bexPaCanManageGoalFramework();
 
-  const canManageIndividualGoals =
-    bexPaCanEditIndividualGoals();
+    const canManageIndividualGoals =
+      bexPaCanEditIndividualGoals();
 
-  bexPaElements.createOrganisationGoalButton?.classList.toggle(
-    "d-none",
-    !canManageGoalFramework,
-  );
+    bexPaElements.createOrganisationGoalButton?.classList.toggle(
+      "d-none",
+      !canManageGoalFramework,
+    );
 
-  bexPaElements.createDeliverableButton?.classList.toggle(
-    "d-none",
-    !canManageGoalFramework,
-  );
+    bexPaElements.createDeliverableButton?.classList.toggle(
+      "d-none",
+      !canManageGoalFramework,
+    );
 
-  bexPaElements.createDepartmentGoalButton?.classList.toggle(
-    "d-none",
-    !bexPaCanManageDepartmentGoals(),
-  );
+    bexPaElements.createDepartmentGoalButton?.classList.toggle(
+      "d-none",
+      !bexPaCanManageDepartmentGoals(),
+    );
 
-  bexPaElements.createIndividualGoalButton?.classList.toggle(
-    "d-none",
-    !canManageIndividualGoals,
-  );
-}
+    bexPaElements.createIndividualGoalButton?.classList.toggle(
+      "d-none",
+      !canManageIndividualGoals,
+    );
+  }
 
   const bexPaElements = {
     overviewSection: document.getElementById("bexPaOverviewSection"),
@@ -2445,7 +2445,7 @@
     if (
       !departmentGoal.cycleId ||
       departmentGoal.cycleId !==
-        organisationGoal.cycleId
+      organisationGoal.cycleId
     ) {
       return "The department goal appraisal cycle must match the selected organisation goal.";
     }
@@ -2593,21 +2593,34 @@
       placeholder,
     );
 
-    bexPaState.departmentGoals.forEach((departmentGoal) => {
-      const option = document.createElement("option");
+    const availableDepartmentGoals =
+      bexPaGetCurrentPersona() === "primary-manager"
+        ? bexPaState.departmentGoals.filter(
+          (departmentGoal) =>
+            bexPaCanManageDepartmentGoal(
+              departmentGoal,
+            ),
+        )
+        : bexPaState.departmentGoals;
 
-      option.value = departmentGoal.id;
-      option.textContent =
-        `${departmentGoal.title} (${departmentGoal.department})`;
+    availableDepartmentGoals.forEach(
+      (departmentGoal) => {
+        const option =
+          document.createElement("option");
 
-      bexPaElements.individualGoalDepartmentGoal.appendChild(
-        option,
-      );
-    });
+        option.value = departmentGoal.id;
+        option.textContent =
+          `${departmentGoal.title} (${departmentGoal.department})`;
+
+        bexPaElements.individualGoalDepartmentGoal.appendChild(
+          option,
+        );
+      },
+    );
 
     if (
       currentValue &&
-      bexPaState.departmentGoals.some(
+      availableDepartmentGoals.some(
         (departmentGoal) =>
           departmentGoal.id === currentValue,
       )
@@ -2815,6 +2828,23 @@
 
     if (!departmentGoal) {
       return "Select a valid department goal.";
+    }
+
+    if (
+      bexPaGetCurrentPersona() === "primary-manager" &&
+      !bexPaCanManageDepartmentGoal(
+        departmentGoal,
+      )
+    ) {
+      return "You can only assign individual goals within departments in your Primary reporting scope.";
+    }
+
+    if (
+      !individualGoal.cycleId ||
+      individualGoal.cycleId !==
+      departmentGoal.cycleId
+    ) {
+      return "The individual goal appraisal cycle must match the selected department goal.";
     }
 
     const individualStartDate = bexPaParseDate(

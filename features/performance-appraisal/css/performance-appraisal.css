@@ -95,7 +95,7 @@ body.bex-pa-page {
   padding-left: 0;
 }
 
-.bex-pa-shell > .row {
+.bex-pa-shell>.row {
   min-height: calc(100vh - 72px);
 }
 
@@ -163,7 +163,7 @@ body.bex-pa-page {
    Main content
    ========================================================= */
 
-.bex-pa-main > div {
+.bex-pa-main>div {
   width: min(100%, 1500px);
   margin-inline: auto;
 }
@@ -206,7 +206,7 @@ body.bex-pa-page {
   color: #0c4a6e;
 }
 
-.bex-pa-page .alert-info > i {
+.bex-pa-page .alert-info>i {
   margin-top: 0.15rem;
   flex: 0 0 auto;
 }
@@ -258,7 +258,7 @@ body.bex-pa-page {
   background: transparent;
 }
 
-.bex-pa-workflow-card .list-group-numbered > .list-group-item::before {
+.bex-pa-workflow-card .list-group-numbered>.list-group-item::before {
   color: var(--bex-pa-primary);
   font-weight: 700;
 }
@@ -310,7 +310,7 @@ body.bex-pa-page {
   }
 
   .bex-pa-shell,
-  .bex-pa-shell > .row {
+  .bex-pa-shell>.row {
     min-height: auto;
   }
 
@@ -350,7 +350,7 @@ body.bex-pa-page {
     grid-template-columns: 1fr;
   }
 
-  .bex-pa-main > div {
+  .bex-pa-main>div {
     padding: 1rem !important;
   }
 
@@ -554,7 +554,9 @@ body.bex-pa-page {
 
 #bexPaOrganisationGoalsList,
 #bexPaDeliverablesList,
-#bexPaDepartmentGoalsList {
+#bexPaDepartmentGoalsList,
+#bexPaIndividualGoalsList,
+#bexPaProgressUpdatesList {
   max-height: 440px;
   overflow-x: hidden;
   overflow-y: auto;
@@ -572,7 +574,9 @@ body.bex-pa-page {
 
   #bexPaOrganisationGoalsList,
   #bexPaDeliverablesList,
-  #bexPaDepartmentGoalsList {
+  #bexPaDepartmentGoalsList,
+  #bexPaIndividualGoalsList,
+  #bexPaProgressUpdatesList {
     max-height: none;
     overflow-y: visible;
   }
@@ -589,7 +593,7 @@ body.bex-pa-page {
   overflow: hidden;
 }
 
-.bex-pa-goal-dialog > form {
+.bex-pa-goal-dialog>form {
   display: grid;
   max-height: calc(100vh - 2rem);
   max-height: calc(100dvh - 2rem);
