@@ -552,6 +552,15 @@ body.bex-pa-page {
   min-height: 220px;
 }
 
+#bexPaOrganisationGoalsList,
+#bexPaDeliverablesList,
+#bexPaDepartmentGoalsList {
+  max-height: 440px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .bex-pa-goal-panel .btn-sm {
   white-space: nowrap;
 }
@@ -559,6 +568,13 @@ body.bex-pa-page {
 @media (max-width: 1199.98px) {
   .bex-pa-goal-panel .card-body {
     min-height: auto;
+  }
+
+  #bexPaOrganisationGoalsList,
+  #bexPaDeliverablesList,
+  #bexPaDepartmentGoalsList {
+    max-height: none;
+    overflow-y: visible;
   }
 }
 

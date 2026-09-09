@@ -295,7 +295,7 @@
     ).trim();
   }
 
-    function bexPaGetIntegratedContext() {
+  function bexPaGetIntegratedContext() {
     const liveContext =
       window.BexHrPerformanceAppraisalContext;
 
@@ -372,7 +372,7 @@
     ).trim();
   }
 
-    function bexPaGetManagedEmployeeIds() {
+  function bexPaGetManagedEmployeeIds() {
     const integratedEmployeeIds =
       bexPaGetIntegratedContext()
         ?.managedEmployeeIds;
@@ -428,6 +428,57 @@
           employee.id &&
           employee.name,
       );
+  }
+
+  function bexPaGetManagedDepartments() {
+    if (bexPaGetCurrentPersona() !== "primary-manager") {
+      return [];
+    }
+
+    return [
+      ...new Set(
+        bexPaGetAvailableEmployees()
+          .map((employee) =>
+            String(employee.department || "").trim(),
+          )
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  function bexPaCanManageDepartmentGoal(
+    departmentGoal = null,
+  ) {
+    const persona = bexPaGetCurrentPersona();
+
+    if (persona === "hr-admin") {
+      return true;
+    }
+
+    if (persona !== "primary-manager") {
+      return false;
+    }
+
+    const managedDepartments =
+      bexPaGetManagedDepartments();
+
+    if (managedDepartments.length === 0) {
+      return false;
+    }
+
+    if (!departmentGoal) {
+      return true;
+    }
+
+    const goalDepartment = String(
+      departmentGoal.department || "",
+    ).trim();
+
+    return managedDepartments.some(
+      (department) =>
+        department.toLowerCase() ===
+        goalDepartment.toLowerCase(),
+    );
   }
 
   function bexPaGetSelectedIndividualGoalEmployee() {
@@ -533,7 +584,7 @@
     return [];
   }
 
-    function bexPaGetCurrentPersona() {
+  function bexPaGetCurrentPersona() {
     const integratedPersona =
       String(
         bexPaGetIntegratedContext()
@@ -598,6 +649,20 @@
     return bexPaGetCurrentPersona() === "hr-admin";
   }
 
+  function bexPaCanManageDepartmentGoals() {
+    const persona = bexPaGetCurrentPersona();
+
+    if (persona === "hr-admin") {
+      return true;
+    }
+
+    if (persona === "primary-manager") {
+      return bexPaGetManagedDepartments().length > 0;
+    }
+
+    return false;
+  }
+
   function bexPaCanEditIndividualGoals() {
     const persona = bexPaGetCurrentPersona();
 
@@ -636,32 +701,32 @@
   }
 
   function bexPaApplyGoalAccess() {
-    const canManageGoalFramework =
-      bexPaCanManageGoalFramework();
+  const canManageGoalFramework =
+    bexPaCanManageGoalFramework();
 
-    const canManageIndividualGoals =
-      bexPaCanEditIndividualGoals();
+  const canManageIndividualGoals =
+    bexPaCanEditIndividualGoals();
 
-    bexPaElements.createOrganisationGoalButton?.classList.toggle(
-      "d-none",
-      !canManageGoalFramework,
-    );
+  bexPaElements.createOrganisationGoalButton?.classList.toggle(
+    "d-none",
+    !canManageGoalFramework,
+  );
 
-    bexPaElements.createDeliverableButton?.classList.toggle(
-      "d-none",
-      !canManageGoalFramework,
-    );
+  bexPaElements.createDeliverableButton?.classList.toggle(
+    "d-none",
+    !canManageGoalFramework,
+  );
 
-    bexPaElements.createDepartmentGoalButton?.classList.toggle(
-      "d-none",
-      !canManageGoalFramework,
-    );
+  bexPaElements.createDepartmentGoalButton?.classList.toggle(
+    "d-none",
+    !bexPaCanManageDepartmentGoals(),
+  );
 
-    bexPaElements.createIndividualGoalButton?.classList.toggle(
-      "d-none",
-      !canManageIndividualGoals,
-    );
-  }
+  bexPaElements.createIndividualGoalButton?.classList.toggle(
+    "d-none",
+    !canManageIndividualGoals,
+  );
+}
 
   const bexPaElements = {
     overviewSection: document.getElementById("bexPaOverviewSection"),
@@ -2199,16 +2264,84 @@
     }
   }
 
+  function bexPaApplyDepartmentGoalDepartmentScope() {
+    const departmentField =
+      bexPaElements.departmentGoalDepartment;
+
+    if (!departmentField) {
+      return;
+    }
+
+    const persona = bexPaGetCurrentPersona();
+
+    departmentField.readOnly = false;
+    departmentField.removeAttribute("list");
+
+    const existingDatalist =
+      document.getElementById(
+        "bexPaManagedDepartmentsDatalist",
+      );
+
+    existingDatalist?.remove();
+
+    if (persona !== "primary-manager") {
+      return;
+    }
+
+    const managedDepartments =
+      bexPaGetManagedDepartments();
+
+    if (managedDepartments.length === 0) {
+      departmentField.value = "";
+      departmentField.readOnly = true;
+      return;
+    }
+
+    if (managedDepartments.length === 1) {
+      departmentField.value =
+        managedDepartments[0];
+
+      departmentField.readOnly = true;
+      return;
+    }
+
+    const datalist =
+      document.createElement("datalist");
+
+    datalist.id =
+      "bexPaManagedDepartmentsDatalist";
+
+    managedDepartments.forEach((department) => {
+      const option =
+        document.createElement("option");
+
+      option.value = department;
+
+      datalist.appendChild(option);
+    });
+
+    departmentField.setAttribute(
+      "list",
+      datalist.id,
+    );
+
+    departmentField.insertAdjacentElement(
+      "afterend",
+      datalist,
+    );
+  }
+
   function bexPaOpenDepartmentGoalDialog(
     departmentGoalId = null,
   ) {
-    if (!bexPaCanManageGoalFramework()) {
+    if (!bexPaCanManageDepartmentGoals()) {
       return;
     }
 
     bexPaResetDepartmentGoalForm();
     bexPaPopulateDepartmentGoalOrganisationGoals();
     bexPaUpdateDepartmentGoalCycleDisplay();
+    bexPaApplyDepartmentGoalDepartmentScope();
 
     if (departmentGoalId) {
       const departmentGoal =
@@ -2219,6 +2352,10 @@
         );
 
       if (!departmentGoal) {
+        return;
+      }
+
+      if (!bexPaCanManageDepartmentGoal(departmentGoal)) {
         return;
       }
 
@@ -2238,6 +2375,8 @@
 
       bexPaElements.departmentGoalDepartment.value =
         departmentGoal.department;
+
+      bexPaApplyDepartmentGoalDepartmentScope();
 
       bexPaElements.departmentGoalTitle.value =
         departmentGoal.title;
@@ -2301,6 +2440,14 @@
 
     if (!organisationGoal) {
       return "Select a valid organisation goal.";
+    }
+
+    if (
+      !departmentGoal.cycleId ||
+      departmentGoal.cycleId !==
+        organisationGoal.cycleId
+    ) {
+      return "The department goal appraisal cycle must match the selected organisation goal.";
     }
 
     const departmentGoalStartDate = bexPaParseDate(
@@ -3611,7 +3758,7 @@
         actions.className =
           "bex-pa-goal-item-actions";
 
-        if (bexPaCanManageGoalFramework()) {
+        if (bexPaCanManageDepartmentGoal(departmentGoal)) {
           actions.appendChild(
             bexPaCreateDepartmentGoalActionButton(
               departmentGoal.id,
@@ -3636,7 +3783,7 @@
   function bexPaHandleDepartmentGoalSubmit(event) {
     event.preventDefault();
 
-    if (!bexPaCanManageGoalFramework()) {
+    if (!bexPaCanManageDepartmentGoals()) {
       return;
     }
     bexPaClearDepartmentGoalError();
@@ -3683,6 +3830,13 @@
       dueDate:
         bexPaElements.departmentGoalDueDate.value,
     };
+
+    if (!bexPaCanManageDepartmentGoal(departmentGoal)) {
+      bexPaShowDepartmentGoalError(
+        "You can only manage goals for departments within your Primary reporting scope.",
+      );
+      return;
+    }
 
     const validationError =
       bexPaValidateDepartmentGoal(
