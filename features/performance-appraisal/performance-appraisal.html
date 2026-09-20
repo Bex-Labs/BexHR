@@ -22,10 +22,80 @@
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
 
+    <link rel="stylesheet" href="../../css/styles.css" />
     <link rel="stylesheet" href="css/performance-appraisal.css" />
+
+    <script>
+        (() => {
+            const navigationEntry =
+                window.performance
+                    .getEntriesByType("navigation")[0];
+
+            if (navigationEntry?.type !== "reload") {
+                return;
+            }
+
+            window.BexPaRefreshLoaderStartedAt =
+                window.performance.now();
+
+            document.documentElement.classList.add(
+                "bex-pa-refreshing"
+            );
+        })();
+    </script>
+
+    <style>
+        html.bex-pa-refreshing .bexhr-workspace-loader {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+    </style>
 </head>
 
 <body class="bex-pa-page bg-body-tertiary">
+    <div class="bexhr-workspace-loader" id="bexPaWorkspaceLoader" aria-live="polite"
+        aria-label="Performance Appraisal workspace loading">
+        <div class="bexhr-workspace-loader-panel">
+            <div class="bexhr-workspace-loader-brand">
+                <span class="bexhr-workspace-loader-logo-shell" aria-hidden="true">
+                    <img class="bexhr-workspace-loader-logo" src="../../assets/favicon/favicon.svg?v=20260801" alt="" />
+                </span>
+
+                <span class="bexhr-workspace-loader-brand-copy">
+                    <strong>BexHR</strong>
+                    <small>Performance Appraisal workspace</small>
+                </span>
+            </div>
+
+            <div class="bexhr-workspace-loader-progress" aria-hidden="true">
+                <span class="bexhr-workspace-loader-spinner"></span>
+
+                <span class="bexhr-workspace-loader-progress-line">
+                    <span></span>
+                </span>
+            </div>
+
+            <div class="bexhr-workspace-loader-message">
+                <strong>
+                    Restoring your appraisal workspace
+                </strong>
+
+                <span>
+                    Preparing your Performance Appraisal workspace securely.
+                </span>
+            </div>
+
+            <div class="bexhr-workspace-loader-status">
+                <span class="bexhr-workspace-loader-status-dot" aria-hidden="true"></span>
+
+                <span>
+                    Checking your appraisal access
+                </span>
+            </div>
+        </div>
+    </div>
+
     <a class="visually-hidden-focusable" href="#bexPaMainContent">
         Skip to main content
     </a>
@@ -101,7 +171,16 @@
                             </li>
 
                             <li class="nav-item">
-                                <button class="nav-link w-100 text-start" type="button" disabled>
+                                <button class="nav-link w-100 text-start" id="bexPaTemplatesNavButton" type="button"
+                                    data-bex-pa-target="bexPaTemplatesSection">
+                                    <i class="bi bi-ui-checks-grid me-2" aria-hidden="true"></i>
+                                    Appraisal Templates
+                                </button>
+                            </li>
+
+                            <li class="nav-item">
+                                <button class="nav-link w-100 text-start" id="bexPaEmployeeAppraisalsNavButton"
+                                    type="button" data-bex-pa-target="bexPaEmployeeAppraisalsSection">
                                     <i class="bi bi-clipboard2-check me-2" aria-hidden="true"></i>
                                     Employee Appraisals
                                 </button>
@@ -119,10 +198,46 @@
 
                 <main class="bex-pa-main col-12 col-lg-9 col-xl-10" id="bexPaMainContent" tabindex="-1">
                     <div class="p-3 p-md-4 p-xl-5">
+                        <div class="bex-pa-integrated-toolbar d-none mb-4" id="bexPaIntegratedToolbar">
+
+                            <div class="bex-pa-integrated-context">
+                                <span class="bex-pa-integrated-icon" aria-hidden="true">
+                                    <i class="bi bi-clipboard2-check"></i>
+                                </span>
+
+                                <div>
+                                    <p class="bex-pa-integrated-title mb-0">
+                                        Performance Appraisal
+                                    </p>
+
+                                    <p class="bex-pa-integrated-subtitle mb-0" id="bexPaIntegratedWorkspaceLabel">
+                                        BexHR workspace
+                                    </p>
+                                </div>
+                            </div>
+
+                            <a class="btn btn-outline-secondary btn-sm bex-pa-integrated-return"
+                                id="bexPaBackToDashboardLink" href="../../index.html">
+                                <i class="bi bi-arrow-left me-2" aria-hidden="true"></i>
+
+                                <span id="bexPaBackToDashboardLabel">
+                                    Back to Dashboard
+                                </span>
+                            </a>
+                        </div>
+
                         <div class="visually-hidden" id="bexPaAnnouncement" role="status" aria-live="polite"></div>
 
+                        <button type="button" id="bexPaBackToTopButton"
+                            class="btn rounded-circle shadow d-none bexhr-back-to-top-btn" aria-label="Back to top"
+                            title="Back to top" style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050;
+           width: 46px; height: 46px; background-color: #087f7a;
+           border-color: #087f7a; color: #fff;">
+                            <i class="bi bi-arrow-up" aria-hidden="true"></i>
+                        </button>
+
                         <section id="bexPaOverviewSection" aria-labelledby="bexPaOverviewTitle">
-                            <div class="mb-4 d-flex flex-wrap align-items-start justify-content-between gap-3">
+                            <div class="mb-4">
                                 <div>
                                     <p class="mb-2 small fw-semibold text-uppercase text-primary">
                                         Appraisal workspace
@@ -137,11 +252,6 @@
                                         appraisal history.
                                     </p>
                                 </div>
-
-                                <button class="btn btn-primary" id="bexPaOpenCycleFormButton" type="button">
-                                    <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>
-                                    Create Appraisal Cycle
-                                </button>
                             </div>
 
                             <div class="row g-3" aria-label="Appraisal summary">
@@ -163,7 +273,7 @@
                                         data-bex-pa-summary="employees">
                                         <div class="card-body">
                                             <p class="mb-2 small text-body-secondary">
-                                                Employees in cycle
+                                                Employees in active cycles
                                             </p>
 
                                             <p class="mb-0 display-6 fw-bold">0</p>
@@ -189,7 +299,7 @@
                                         data-bex-pa-summary="completed">
                                         <div class="card-body">
                                             <p class="mb-2 small text-body-secondary">
-                                                Completed
+                                                Completed appraisals
                                             </p>
 
                                             <p class="mb-0 display-6 fw-bold">0</p>
@@ -243,70 +353,139 @@
                                     <div class="alert alert-danger d-none" id="bexPaCycleFormError" role="alert"></div>
 
                                     <form id="bexPaCycleForm" novalidate>
-                                        <div class="row g-3">
-                                            <div class="col-12">
-                                                <label class="form-label fw-semibold" for="bexPaCycleName">
-                                                    Cycle name
-                                                </label>
+                                        <div class="vstack gap-4">
+                                            <section aria-labelledby="bexPaCyclePeriodTitle">
+                                                <div class="mb-3">
+                                                    <h3 class="mb-1 h6 fw-bold" id="bexPaCyclePeriodTitle">
+                                                        Appraisal period
+                                                    </h3>
 
-                                                <input class="form-control" id="bexPaCycleName" name="cycleName"
-                                                    type="text" maxlength="100"
-                                                    placeholder="e.g. 2027 Annual Performance Appraisal" required />
-                                            </div>
+                                                    <p class="mb-0 small text-body-secondary">
+                                                        Define the name and period covered by this appraisal cycle.
+                                                    </p>
+                                                </div>
 
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaCycleStartDate">
-                                                    Start date
-                                                </label>
+                                                <div class="row g-3">
+                                                    <div class="col-12">
+                                                        <label class="form-label fw-semibold" for="bexPaCycleName">
+                                                            Cycle name
+                                                        </label>
 
-                                                <input class="form-control" id="bexPaCycleStartDate" name="startDate"
-                                                    type="date" required />
-                                            </div>
+                                                        <input class="form-control" id="bexPaCycleName" name="cycleName"
+                                                            type="text" maxlength="100"
+                                                            placeholder="e.g. 2027 Annual Performance Appraisal"
+                                                            required />
+                                                    </div>
 
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaCycleEndDate">
-                                                    End date
-                                                </label>
+                                                    <div class="col-12 col-md-6">
+                                                        <label class="form-label fw-semibold" for="bexPaCycleStartDate">
+                                                            Start date
+                                                        </label>
 
-                                                <input class="form-control" id="bexPaCycleEndDate" name="endDate"
-                                                    type="date" required />
-                                            </div>
+                                                        <input class="form-control" id="bexPaCycleStartDate"
+                                                            name="startDate" type="date" required />
+                                                    </div>
 
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaGoalDeadline">
-                                                    Goal-setting deadline
-                                                </label>
+                                                    <div class="col-12 col-md-6">
+                                                        <label class="form-label fw-semibold" for="bexPaCycleEndDate">
+                                                            End date
+                                                        </label>
 
-                                                <input class="form-control" id="bexPaGoalDeadline" name="goalDeadline"
-                                                    type="date" required />
-                                            </div>
+                                                        <input class="form-control" id="bexPaCycleEndDate"
+                                                            name="endDate" type="date" required />
+                                                    </div>
+                                                </div>
+                                            </section>
 
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaEmployeeReviewDeadline">
-                                                    Employee self-appraisal deadline
-                                                </label>
+                                            <section class="border-top pt-4"
+                                                aria-labelledby="bexPaCycleAssessmentTitle">
+                                                <div class="mb-3">
+                                                    <h3 class="mb-1 h6 fw-bold" id="bexPaCycleAssessmentTitle">
+                                                        How employees will be assessed
+                                                    </h3>
 
-                                                <input class="form-control" id="bexPaEmployeeReviewDeadline"
-                                                    name="employeeReviewDeadline" type="date" required />
-                                            </div>
+                                                    <p class="mb-0 small text-body-secondary">
+                                                        Choose the appraisal format employees and managers will use
+                                                        during this cycle.
+                                                    </p>
+                                                </div>
 
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaManagerReviewDeadline">
-                                                    Manager review deadline
-                                                </label>
+                                                <div>
+                                                    <label class="form-label fw-semibold" for="bexPaCycleTemplate">
+                                                        Appraisal template
+                                                    </label>
 
-                                                <input class="form-control" id="bexPaManagerReviewDeadline"
-                                                    name="managerReviewDeadline" type="date" required />
-                                            </div>
+                                                    <select class="form-select" id="bexPaCycleTemplate"
+                                                        name="templateId" required>
+                                                        <option value="">
+                                                            Select appraisal template
+                                                        </option>
+                                                    </select>
 
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaHrReviewDeadline">
-                                                    HR review deadline
-                                                </label>
+                                                    <div class="form-text">
+                                                        Only active appraisal templates are available for selection.
+                                                    </div>
+                                                    <div class="alert alert-warning d-none mt-3 mb-0"
+                                                        id="bexPaCycleTemplateUnavailable" role="status">
+                                                        No active appraisal template is available. Create or activate a
+                                                        template before creating a cycle.
+                                                    </div>
 
-                                                <input class="form-control" id="bexPaHrReviewDeadline"
-                                                    name="hrReviewDeadline" type="date" required />
-                                            </div>
+                                                </div>
+                                            </section>
+
+                                            <section class="border-top pt-4" aria-labelledby="bexPaCycleDeadlinesTitle">
+                                                <div class="mb-3">
+                                                    <h3 class="mb-1 h6 fw-bold" id="bexPaCycleDeadlinesTitle">
+                                                        Review deadlines
+                                                    </h3>
+
+                                                    <p class="mb-0 small text-body-secondary">
+                                                        Set the deadlines in the order each stage should be completed.
+                                                    </p>
+                                                </div>
+
+                                                <div class="row g-3">
+                                                    <div class="col-12 col-md-6">
+                                                        <label class="form-label fw-semibold" for="bexPaGoalDeadline">
+                                                            Goals due
+                                                        </label>
+
+                                                        <input class="form-control" id="bexPaGoalDeadline"
+                                                            name="goalDeadline" type="date" required />
+                                                    </div>
+
+                                                    <div class="col-12 col-md-6">
+                                                        <label class="form-label fw-semibold"
+                                                            for="bexPaEmployeeReviewDeadline">
+                                                            Employee review due
+                                                        </label>
+
+                                                        <input class="form-control" id="bexPaEmployeeReviewDeadline"
+                                                            name="employeeReviewDeadline" type="date" required />
+                                                    </div>
+
+                                                    <div class="col-12 col-md-6">
+                                                        <label class="form-label fw-semibold"
+                                                            for="bexPaManagerReviewDeadline">
+                                                            Manager review due
+                                                        </label>
+
+                                                        <input class="form-control" id="bexPaManagerReviewDeadline"
+                                                            name="managerReviewDeadline" type="date" required />
+                                                    </div>
+
+                                                    <div class="col-12 col-md-6">
+                                                        <label class="form-label fw-semibold"
+                                                            for="bexPaHrReviewDeadline">
+                                                            HR final review due
+                                                        </label>
+
+                                                        <input class="form-control" id="bexPaHrReviewDeadline"
+                                                            name="hrReviewDeadline" type="date" required />
+                                                    </div>
+                                                </div>
+                                            </section>
                                         </div>
 
                                         <div class="mt-4 d-flex flex-wrap justify-content-end gap-2">
@@ -709,7 +888,8 @@
 
                                     <div class="bex-pa-confirm-dialog-body">
                                         <div class="alert alert-danger d-none" id="bexPaDeliverableFormError"
-                                            role="alert"></div>
+                                            role="alert">
+                                        </div>
 
                                         <div class="row g-3">
                                             <div class="col-12">
@@ -986,15 +1166,19 @@
 
                                         <div class="row g-3">
                                             <div class="col-12">
-                                                <label class="form-label fw-semibold" for="bexPaIndividualGoalEmployee">
-                                                    Employee
-                                                </label>
+                                                <p class="form-label fw-semibold mb-2"
+                                                    id="bexPaIndividualGoalEmployeeLabel">
+                                                    Employees
+                                                </p>
 
-                                                <select class="form-select" id="bexPaIndividualGoalEmployee" required>
-                                                    <option value="">
-                                                        Select employee
-                                                    </option>
-                                                </select>
+                                                <div class="bex-pa-employee-picker border rounded-3 p-2"
+                                                    id="bexPaIndividualGoalEmployee" role="group"
+                                                    aria-labelledby="bexPaIndividualGoalEmployeeLabel">
+                                                </div>
+
+                                                <div class="form-text">
+                                                    Select one or more employees for this shared goal.
+                                                </div>
                                             </div>
 
                                             <div class="col-12">
@@ -1147,7 +1331,17 @@
                                                 </select>
                                             </div>
 
-                                            <div class="col-12">
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaProgressUpdatePercentage">
+                                                    Progress percentage
+                                                </label>
+
+                                                <input class="form-control" id="bexPaProgressUpdatePercentage"
+                                                    type="number" min="0" max="100" step="1" required />
+                                            </div>
+
+                                            <div class="col-12 col-md-6">
                                                 <label class="form-label fw-semibold" for="bexPaProgressUpdateStatus">
                                                     Progress status
                                                 </label>
@@ -1161,9 +1355,6 @@
                                                     </option>
                                                     <option value="In Progress">
                                                         In Progress
-                                                    </option>
-                                                    <option value="Blocked">
-                                                        Blocked
                                                     </option>
                                                     <option value="Completed">
                                                         Completed
@@ -1180,6 +1371,16 @@
                                                     maxlength="1000"
                                                     placeholder="Describe the progress made against this goal."
                                                     required></textarea>
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaProgressUpdateEvidence">
+                                                    Evidence note or reference
+                                                </label>
+
+                                                <textarea class="form-control" id="bexPaProgressUpdateEvidence" rows="3"
+                                                    maxlength="1000"
+                                                    placeholder="Add a concise evidence note or reference, if available."></textarea>
                                             </div>
                                         </div>
                                     </div>
@@ -1198,11 +1399,507 @@
                                 </form>
                             </dialog>
                         </section>
+                        <section class="d-none" id="bexPaTemplatesSection" aria-labelledby="bexPaTemplatesTitle">
+                            <div class="mb-4 d-flex flex-wrap align-items-start justify-content-between gap-3">
+                                <div>
+                                    <p class="mb-2 small fw-semibold text-uppercase text-primary">
+                                        Appraisal configuration
+                                    </p>
+
+                                    <h1 class="mb-2 h2 fw-bold" id="bexPaTemplatesTitle">
+                                        Appraisal Templates
+                                    </h1>
+
+                                    <p class="mb-0 text-body-secondary">
+                                        Create the appraisal format your organisation will use to assess employees.
+                                    </p>
+                                </div>
+
+                                <button class="btn btn-primary" id="bexPaCreateTemplateButton" type="button">
+                                    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                    Add Template
+                                </button>
+                            </div>
+
+                            <section class="card border-0 shadow-sm" aria-labelledby="bexPaTemplateListTitle">
+                                <div class="card-header bg-white py-3">
+                                    <h2 class="mb-1 h5 fw-bold" id="bexPaTemplateListTitle">
+                                        Appraisal Templates
+                                    </h2>
+
+                                    <p class="mb-0 small text-body-secondary">
+                                        Each template defines how employees will be assessed during an appraisal cycle.
+                                    </p>
+                                </div>
+
+                                <div class="card-body" id="bexPaTemplatesList">
+                                    <p class="mb-0 text-body-secondary" id="bexPaTemplatesEmpty">
+                                        No appraisal templates have been created yet.
+                                    </p>
+                                </div>
+                            </section>
+
+                            <dialog class="bex-pa-confirm-dialog bex-pa-goal-dialog" id="bexPaTemplateDialog"
+                                aria-labelledby="bexPaTemplateDialogTitle">
+                                <form id="bexPaTemplateForm" method="dialog" novalidate>
+                                    <div class="bex-pa-confirm-dialog-header">
+                                        <div>
+                                            <p class="mb-1 small fw-semibold text-uppercase text-primary">
+                                                Appraisal template
+                                            </p>
+
+                                            <h2 class="mb-0 h5 fw-bold" id="bexPaTemplateDialogTitle">
+                                                Add Appraisal Template
+                                            </h2>
+                                        </div>
+
+                                        <button class="btn-close" id="bexPaCloseTemplateDialogButton" type="button"
+                                            aria-label="Close appraisal template form"></button>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-body">
+                                        <div class="alert alert-danger d-none" id="bexPaTemplateFormError" role="alert">
+                                        </div>
+
+                                        <div class="alert alert-warning d-none" id="bexPaTemplateInUseWarning"
+                                            role="status">
+                                            This template is already used by an active or historical appraisal cycle.
+                                            Changes will apply only to future appraisals.
+                                        </div>
+
+                                        <div class="row g-3">
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaTemplateName">
+                                                    Template name
+                                                </label>
+
+                                                <input class="form-control" id="bexPaTemplateName" type="text"
+                                                    maxlength="120" required />
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaTemplateDescription">
+                                                    What is this template for?
+                                                </label>
+
+                                                <textarea class="form-control" id="bexPaTemplateDescription" rows="4"
+                                                    maxlength="1500"
+                                                    placeholder="e.g. Annual performance review for all employees."
+                                                    required></textarea>
+
+                                                <div class="form-text">
+                                                    Briefly describe when this appraisal template should be used.
+                                                </div>
+                                            </div>
+
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold" for="bexPaTemplateStatus">
+                                                    Template status
+                                                </label>
+
+                                                <select class="form-select" id="bexPaTemplateStatus" required>
+                                                    <option value="Draft">Draft</option>
+                                                    <option value="Active">Active</option>
+                                                    <option value="Inactive">Inactive</option>
+                                                </select>
+
+                                                <div class="form-text">
+                                                    Only active templates can be selected when creating an appraisal
+                                                    cycle.
+                                                </div>
+                                            </div>
+
+                                            <div class="col-12">
+                                                <div class="border-top pt-3">
+                                                    <div
+                                                        class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                                                        <div>
+                                                            <h3 class="h6 mb-1">
+                                                                How should performance be rated?
+                                                            </h3>
+
+                                                            <p class="mb-0 small text-body-secondary">
+                                                                Add the rating options managers and employees will
+                                                                choose from.
+                                                            </p>
+                                                        </div>
+
+                                                        <button class="btn btn-outline-primary btn-sm"
+                                                            id="bexPaAddTemplateRatingButton" type="button">
+                                                            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                                            Add Rating Option
+                                                        </button>
+                                                    </div>
+
+                                                    <div class="vstack gap-2" id="bexPaTemplateRatingsList">
+                                                    </div>
+
+                                                    <p class="mb-0 small text-body-secondary"
+                                                        id="bexPaTemplateRatingsEmpty">
+                                                        No rating options have been added yet.
+                                                    </p>
+
+                                                    <textarea class="d-none" id="bexPaTemplateRatingScale"
+                                                        aria-hidden="true"></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="col-12">
+                                                <div class="border-top pt-3">
+                                                    <div
+                                                        class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                                                        <div>
+                                                            <h3 class="h6 mb-1">
+                                                                Assessment Areas
+                                                            </h3>
+
+                                                            <p class="mb-0 small text-body-secondary">
+                                                                Add the areas this organisation wants employees to be
+                                                                assessed on.
+                                                            </p>
+                                                        </div>
+
+                                                        <button class="btn btn-outline-primary btn-sm"
+                                                            id="bexPaAddTemplateCompetencyButton" type="button">
+                                                            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                                            Add Assessment Area
+                                                        </button>
+                                                    </div>
+
+                                                    <div class="vstack gap-3" id="bexPaTemplateCompetenciesList">
+                                                    </div>
+
+                                                    <p class="mb-0 small text-body-secondary"
+                                                        id="bexPaTemplateCompetenciesEmpty">
+                                                        No assessment areas have been added yet.
+                                                    </p>
+
+                                                    <div class="border rounded-3 p-3 d-none"
+                                                        id="bexPaTemplateCompetencyEditor">
+
+                                                        <div class="row g-3">
+                                                            <div class="col-12">
+                                                                <label class="form-label fw-semibold"
+                                                                    for="bexPaTemplateCompetencyName">
+                                                                    Assessment area
+                                                                </label>
+
+                                                                <input class="form-control"
+                                                                    id="bexPaTemplateCompetencyName" type="text"
+                                                                    maxlength="120"
+                                                                    placeholder="e.g. Customer Service, Job Knowledge, Teamwork" />
+                                                            </div>
+
+                                                            <div class="col-12">
+                                                                <label class="form-label fw-semibold"
+                                                                    for="bexPaTemplateCompetencyDescription">
+                                                                    What does this assess?
+                                                                </label>
+
+                                                                <textarea class="form-control"
+                                                                    id="bexPaTemplateCompetencyDescription" rows="3"
+                                                                    maxlength="800"
+                                                                    placeholder="Explain what employees should demonstrate in this area."></textarea>
+                                                            </div>
+
+                                                            <div class="col-12 col-md-6">
+                                                                <label class="form-label fw-semibold"
+                                                                    for="bexPaTemplateCompetencyApplicability">
+                                                                    Who does this apply to?
+                                                                </label>
+
+                                                                <select class="form-select"
+                                                                    id="bexPaTemplateCompetencyApplicability">
+                                                                    <option value="All Employees">
+                                                                        All Employees
+                                                                    </option>
+
+                                                                    <option value="Supervisors &amp; Managers">
+                                                                        Supervisors &amp; Managers
+                                                                    </option>
+                                                                </select>
+                                                            </div>
+
+                                                            <div class="d-none">
+                                                                <input id="bexPaTemplateCompetencyOrder" type="number"
+                                                                    min="1" step="1" />
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="mt-3 d-flex justify-content-end gap-2">
+                                                            <button class="btn btn-outline-secondary btn-sm"
+                                                                id="bexPaCancelTemplateCompetencyButton" type="button">
+                                                                Cancel
+                                                            </button>
+
+                                                            <button class="btn btn-primary btn-sm"
+                                                                id="bexPaSaveTemplateCompetencyButton" type="button">
+                                                                Add Assessment Area
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="bex-pa-confirm-dialog-actions">
+                                        <button class="btn btn-outline-secondary" id="bexPaCancelTemplateButton"
+                                            type="button">
+                                            Cancel
+                                        </button>
+
+                                        <button class="btn btn-primary" id="bexPaTemplateSubmitButton" type="submit">
+                                            Save Template
+                                        </button>
+                                    </div>
+                                </form>
+                            </dialog>
+                        </section>
+
+                        <section class="d-none" id="bexPaEmployeeAppraisalsSection"
+                            aria-labelledby="bexPaEmployeeAppraisalsTitle">
+
+                            <div class="mb-4 d-flex flex-wrap align-items-start justify-content-between gap-3">
+                                <div>
+                                    <p class="mb-2 small fw-semibold text-uppercase text-primary">
+                                        Performance reviews
+                                    </p>
+
+                                    <h1 class="mb-2 h2 fw-bold" id="bexPaEmployeeAppraisalsTitle">
+                                        Employee Appraisals
+                                    </h1>
+
+                                    <p class="mb-0 text-body-secondary">
+                                        Complete and review employee performance appraisals.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <section class="card border-0 shadow-sm" aria-labelledby="bexPaEmployeeAppraisalsListTitle">
+
+                                <div class="card-header bg-white py-3">
+                                    <h2 class="mb-1 h5 fw-bold" id="bexPaEmployeeAppraisalsListTitle">
+                                        Appraisals
+                                    </h2>
+
+                                    <p class="mb-0 small text-body-secondary">
+                                        Employee performance reviews for appraisal cycles.
+                                    </p>
+                                </div>
+
+                                <div class="card-body" id="bexPaEmployeeAppraisalsList">
+                                    <p class="mb-0 text-body-secondary" id="bexPaEmployeeAppraisalsEmpty">
+                                        No employee appraisals are available yet.
+                                    </p>
+                                </div>
+                            </section>
+
+                            <section class="card border-0 shadow-sm d-none mt-4" id="bexPaManagerAppraisalSection"
+                                aria-labelledby="bexPaManagerAppraisalTitle">
+                                <div class="card-header bg-white py-3">
+                                    <h2 class="mb-1 h5 fw-bold" id="bexPaManagerAppraisalTitle">
+                                        Manager Appraisal Draft
+                                    </h2>
+
+                                    <p class="mb-0 small text-body-secondary" id="bexPaManagerAppraisalMeta"></p>
+                                </div>
+
+                                <div class="card-body">
+                                    <div class="alert alert-danger d-none" id="bexPaManagerAppraisalError" role="alert">
+                                    </div>
+
+                                    <form id="bexPaManagerAppraisalForm" novalidate>
+                                        <details class="border rounded-3 p-3 mb-4">
+                                            <summary class="fw-semibold">
+                                                View Employee Self-Appraisal
+                                            </summary>
+
+                                            <div class="pt-3" id="bexPaManagerAppraisalSelfAppraisal">
+                                            </div>
+                                        </details>
+
+                                        <div class="mb-3">
+                                            <h3 class="h6 fw-bold mb-1">
+                                                Review Goals
+                                            </h3>
+
+                                            <p class="mb-0 small text-body-secondary">
+                                                Review the employee's progress, then add your rating and comments.
+                                            </p>
+                                        </div>
+
+                                        <div id="bexPaManagerAppraisalGoals"></div>
+
+                                        <div class="mt-4 border-top pt-4">
+                                            <label class="form-label fw-semibold"
+                                                for="bexPaManagerAppraisalOverallComment">
+                                                Overall Manager Summary
+                                            </label>
+
+                                            <p class="mb-2 small text-body-secondary">
+                                                Summarise the employee's overall performance during this review period.
+                                            </p>
+
+                                            <textarea class="form-control" id="bexPaManagerAppraisalOverallComment"
+                                                rows="3" maxlength="2000"
+                                                placeholder="Briefly summarise performance, strengths, and areas to improve."
+                                                required></textarea>
+                                        </div>
+
+                                        <div class="mt-4 d-flex justify-content-end gap-2">
+                                            <button class="btn btn-outline-secondary"
+                                                id="bexPaCloseManagerAppraisalButton" type="button">
+                                                Close
+                                            </button>
+
+                                            <button class="btn btn-primary" id="bexPaSaveManagerAppraisalButton"
+                                                type="submit">
+                                                Save Manager Draft
+                                            </button>
+
+                                            <button class="btn btn-success" id="bexPaSubmitManagerAppraisalButton"
+                                                type="button">
+                                                Submit Manager Appraisal
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </section>
+
+                            <section class="card border-0 shadow-sm d-none mt-4" id="bexPaHrAppraisalReviewSection"
+                                aria-labelledby="bexPaHrAppraisalReviewTitle">
+                                <div class="card-header bg-white py-3">
+                                    <h2 class="mb-1 h5 fw-bold" id="bexPaHrAppraisalReviewTitle">
+                                        HR Appraisal Review
+                                    </h2>
+
+                                    <p class="mb-0 small text-body-secondary" id="bexPaHrAppraisalReviewMeta"></p>
+                                </div>
+
+                                <div class="card-body">
+                                    <div class="alert alert-warning d-none" id="bexPaHrAppraisalReviewPrerequisites"
+                                        role="status">
+                                    </div>
+
+                                    <div id="bexPaHrAppraisalReviewEmployee"></div>
+
+                                    <div class="mt-4" id="bexPaHrAppraisalReviewManager"></div>
+
+                                    <div class="mt-4 d-flex justify-content-end gap-2">
+                                        <button class="btn btn-outline-secondary" id="bexPaCloseHrAppraisalReviewButton"
+                                            type="button">
+                                            Close
+                                        </button>
+
+                                        <button class="btn btn-success d-none" id="bexPaFinaliseHrAppraisalButton"
+                                            type="button">
+                                            Finalise Appraisal
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="card border-0 shadow-sm d-none mt-4" id="bexPaSelfAppraisalSection"
+                                aria-labelledby="bexPaSelfAppraisalTitle">
+                                <div class="card-header bg-white py-3">
+                                    <h2 class="mb-1 h5 fw-bold" id="bexPaSelfAppraisalTitle">
+                                        Complete Your Self-Appraisal
+                                    </h2>
+
+                                    <p class="mb-0 small text-body-secondary" id="bexPaSelfAppraisalMeta"></p>
+                                    <p class="mt-2 mb-0 small text-body-secondary">
+                                        Review your assessment areas and goals, add your comments, then submit when you
+                                        are ready.
+                                    </p>
+                                </div>
+
+                                <div class="card-body">
+                                    <div class="alert alert-danger d-none" id="bexPaSelfAppraisalError" role="alert">
+                                    </div>
+
+                                    <form id="bexPaSelfAppraisalForm" novalidate>
+                                        <div id="bexPaSelfAppraisalCompetencies"></div>
+                                        <div class="mt-4" id="bexPaSelfAppraisalGoals"></div>
+
+                                        <div class="row g-3 mt-1">
+                                            <div class="col-12">
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaSelfAppraisalAchievement">
+                                                    Overall summary
+                                                </label>
+
+                                                <p class="mb-2 small text-body-secondary">
+                                                    Summarise your overall performance during this review period.
+                                                </p>
+
+                                                <textarea class="form-control" id="bexPaSelfAppraisalAchievement"
+                                                    rows="3" maxlength="2000"
+                                                    placeholder="Briefly describe your key achievements, challenges, and anything your manager should know."
+                                                    required></textarea>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-4 d-flex justify-content-end gap-2">
+                                            <button class="btn btn-outline-secondary" id="bexPaCloseSelfAppraisalButton"
+                                                type="button">
+                                                Close
+                                            </button>
+
+                                            <button class="btn btn-primary" id="bexPaSaveSelfAppraisalButton"
+                                                type="submit">
+                                                Save Draft
+                                            </button>
+
+                                            <button class="btn btn-success" id="bexPaSubmitSelfAppraisalButton"
+                                                type="button">
+                                                Submit Self-Appraisal
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </section>
+                        </section>
+
+                        <section class="card border-0 shadow-sm d-none mt-4" id="bexPaFinalAppraisalSection"
+                            aria-labelledby="bexPaFinalAppraisalTitle">
+
+                            <div class="card-header bg-white py-3">
+                                <h2 class="mb-1 h5 fw-bold" id="bexPaFinalAppraisalTitle">
+                                    Final Appraisal
+                                </h2>
+
+                                <p class="mb-0 small text-body-secondary" id="bexPaFinalAppraisalMeta"></p>
+                            </div>
+
+                            <div class="card-body">
+                                <div id="bexPaFinalAppraisalEmployee"></div>
+
+                                <div class="mt-4" id="bexPaFinalAppraisalManager"></div>
+
+                                <div class="mt-4 alert alert-info d-none" id="bexPaFinalAppraisalAcknowledgement"
+                                    role="status">
+                                </div>
+
+                                <div class="mt-4 d-flex justify-content-end gap-2">
+                                    <button class="btn btn-outline-secondary" id="bexPaCloseFinalAppraisalButton"
+                                        type="button">
+                                        Close
+                                    </button>
+
+                                    <button class="btn btn-success" id="bexPaAcknowledgeFinalAppraisalButton"
+                                        type="button">
+                                        Acknowledge Appraisal
+                                    </button>
+                                </div>
+                            </div>
+                        </section>
+
                     </div>
                 </main>
             </div>
         </div>
     </div>
+    <script src="js/performance-appraisal-context.js"></script>
     <script src="js/performance-appraisal.js"></script>
 </body>
 

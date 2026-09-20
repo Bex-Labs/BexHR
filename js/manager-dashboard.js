@@ -594,6 +594,9 @@ function cacheDomElements() {
     // Self-Service workspace tab and section for Managers to manage their own
     // leave and payroll as if they were using the employee dashboard.
     managerTabSelfServiceBtn: document.getElementById("managerTabSelfServiceBtn"),
+    sidebarManagerPerformanceAppraisalBtn: document.getElementById(
+      "sidebarManagerPerformanceAppraisalBtn",
+    ),
     managerDashboardSection: document.getElementById("managerDashboardSection"),
     managerProfileSection: document.getElementById("managerProfileSection"),
     managerTeamSection: document.getElementById("managerTeamSection"),
@@ -1403,6 +1406,11 @@ function bindManagerOperatingGuideFocusManagement() {
 
 function bindEvents() {
   bindManagerOperatingGuideFocusManagement();
+  state.dom.sidebarManagerPerformanceAppraisalBtn?.addEventListener(
+    "click",
+    openManagerPerformanceAppraisal,
+  );
+
   state.dom.logoutBtn?.addEventListener("click", async () => {
     // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
     // Logout must reset the next Manager session to Dashboard.
@@ -1556,6 +1564,20 @@ function bindEvents() {
     state.dom.toggleAssignedEmployeeRecordsCardBtn,
     state.dom.assignedEmployeeRecordsCardCollapse,
     state.dom.assignedEmployeeRecordsCardHeader,
+  );
+}
+
+async function openManagerPerformanceAppraisal() {
+  const teamLoaded = await loadAssignedTeamMembers();
+
+  if (!teamLoaded) {
+    return;
+  }
+
+  publishManagerPerformanceAppraisalContext();
+
+  window.location.assign(
+    "features/performance-appraisal/performance-appraisal.html",
   );
 }
 
@@ -3350,7 +3372,9 @@ function publishManagerPerformanceAppraisalContext() {
     }))
     .filter((employee) => employee.id);
 
-    const performanceAppraisalContext = {
+  const performanceAppraisalContext = {
+    source: "bexhr",
+    issuedAt: new Date().toISOString(),
     persona: "primary-manager",
 
     managerEmployeeId: String(

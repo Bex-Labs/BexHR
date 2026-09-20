@@ -26,6 +26,21 @@
 }
 
 /* =========================================================
+   BexHR shared workspace loader parity
+   The shared loader uses the --hr-* token family.
+   Keep Performance Appraisal on the current BexHR teal
+   identity instead of inheriting legacy amber HR tokens.
+   ========================================================= */
+
+body.bex-pa-page {
+  --hr-primary: #087f7a;
+  --hr-primary-soft: #16b8ae;
+  --hr-primary-dark: #056864;
+  --hr-text: #101828;
+  --hr-muted: #667085;
+}
+
+/* =========================================================
    Base
    ========================================================= */
 
@@ -105,7 +120,12 @@ body.bex-pa-page {
 
 .bex-pa-main {
   min-width: 0;
+  overflow: visible;
   background: var(--bex-pa-background);
+}
+
+.bex-pa-main>div {
+  overflow: visible;
 }
 
 /* =========================================================
@@ -286,12 +306,17 @@ body.bex-pa-page {
 
 @media (min-width: 992px) {
   .bex-pa-sidebar {
+    position: sticky;
+    top: 72px;
     display: flex;
-    min-height: calc(100vh - 72px);
+    height: calc(100vh - 72px);
+    max-height: calc(100vh - 72px);
     flex-direction: column;
+    overflow-y: auto;
   }
 
   .bex-pa-sidebar nav {
+    position: static;
     flex: 1 1 auto;
   }
 
@@ -681,6 +706,11 @@ body.bex-pa-page {
   color: #166534;
 }
 
+.bex-pa-goal-status[data-status="historical"] {
+  background: #f1f5f9;
+  color: #475569;
+}
+
 .bex-pa-goal-item-actions {
   display: flex;
   gap: 0.5rem;
@@ -691,4 +721,72 @@ body.bex-pa-page {
   .bex-pa-goal-dialog {
     width: calc(100% - 1rem);
   }
+}
+
+/* =========================================================
+   Integrated BexHR module context
+   ========================================================= */
+
+.bex-pa-integrated-toolbar {
+  position: sticky !important;
+  top: 88px;
+  z-index: 1025;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+
+  padding: 0.9rem 1rem;
+
+  border: 1px solid var(--bex-pa-border);
+  border-radius: 14px;
+
+  background: #fff;
+  box-shadow: var(--bex-pa-shadow);
+}
+
+.bex-pa-integrated-context {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.bex-pa-integrated-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+
+  border-radius: 10px;
+
+  background: rgba(13, 110, 138, 0.1);
+  color: var(--bex-pa-primary);
+
+  font-size: 1rem;
+}
+
+.bex-pa-integrated-title {
+  color: var(--bex-pa-text);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.bex-pa-integrated-subtitle {
+  margin-top: 0.15rem;
+
+  color: var(--bs-secondary-color);
+  font-size: 0.8rem;
+}
+
+.bex-pa-integrated-return {
+  flex: 0 0 auto;
+}
+
+#bexPaEmployeeAppraisalsList .bex-pa-goal-item:last-child {
+  padding-bottom: 1rem;
 }

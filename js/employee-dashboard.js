@@ -236,18 +236,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     // showInitialEmployeeDashboardSection().
     showInitialEmployeeDashboardSection();
 
-    // EMPLOYEE WORKSPACE LOADER REGRESSION FIX - v1.0.0
-    // Keep the workspace loader visible while the authenticated employee's
-    // essential self-service data is still being prepared.
-    //
-    // Safety:
-    // - authentication and tenant branding remain unchanged;
-    // - profile, reporting-manager, leave and payroll queries are unchanged;
-    // - only the point at which the existing loader is released is corrected.
+    // EMPLOYEE WORKSPACE FIRST PAINT - v1.0.1
+    // Resolve the authenticated employee identity first so the Employee shell
+    // can open against the correct tenant-scoped record.
     await loadEmployeeRecord(
       authResult.session.user.id,
       authResult.session.user.email,
     );
+
+    // Reveal the authenticated Employee workspace as soon as authentication,
+    // tenant branding, profile identity, and the intended top-level workspace
+    // are ready. Slower reporting, image, leave, request, and payroll data
+    // continues loading progressively inside the visible dashboard.
+    releaseEmployeeWorkspaceLoader();
 
     // EMPLOYEE ASSIGNED MANAGERS VISIBILITY - STEP 1
     // The employee record must resolve first because reporting relationships
@@ -265,12 +266,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadLeaveTypes();
     await loadEmployeeLeaveRequests();
     await loadEmployeePayroll();
-
-    // EMPLOYEE WORKSPACE LOADER REGRESSION FIX - v1.0.0
-    // The authenticated Employee workspace is now fully ready for first use.
-    // Release the existing loader only after the initial employee, reporting-line,
-    // profile, leave and payroll data has completed loading.
-    releaseEmployeeWorkspaceLoader();
 
     // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
     // Workspace restore already happened early after authentication.
@@ -844,6 +839,8 @@ function applyResolvedIdentity(employee) {
   };
 
   const performanceAppraisalContext = {
+    source: "bexhr",
+    issuedAt: new Date().toISOString(),
     persona: "employee",
     employeeId: String(
       employee?.id || "",
@@ -886,6 +883,9 @@ function cacheDomElements() {
     navProfileBtn: document.getElementById("navProfileBtn"),
     navLeaveBtn: document.getElementById("navLeaveBtn"),
     navPayrollBtn: document.getElementById("navPayrollBtn"),
+    sidebarEmployeePerformanceAppraisalBtn: document.getElementById(
+      "sidebarEmployeePerformanceAppraisalBtn",
+    ),
     logoutBtn: document.getElementById("logoutBtn"),
 
     overviewSection: document.getElementById("overviewSection"),
@@ -1076,6 +1076,11 @@ function cacheDomElements() {
 }
 
 function bindNavigationEvents() {
+  state.dom.sidebarEmployeePerformanceAppraisalBtn?.addEventListener(
+    "click",
+    openEmployeePerformanceAppraisal,
+  );
+
   state.dom.navOverviewBtn?.addEventListener("click", () => {
     rememberEmployeeWorkspace("overview");
     showSection("overview");
@@ -1177,6 +1182,13 @@ function bindNavigationEvents() {
       });
     });
 
+}
+
+function openEmployeePerformanceAppraisal() {
+  applyResolvedIdentity(state.employeeRecord);
+  window.location.assign(
+    "features/performance-appraisal/performance-appraisal.html",
+  );
 }
 
 function bindUtilityEvents() {

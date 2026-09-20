@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
-<link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css" />
   <!-- EMPLOYEE DASHBOARD APPROVED VISUAL REFRESH - v1.0.0 -->
   <link rel="stylesheet" href="css/employee-dashboard-refresh.css?v=20260806" />
   <!-- EMPLOYEE SYSTEM-WIDE LEAVE CARD PARITY - v1.0.1
@@ -188,6 +188,49 @@
   <link rel="manifest" href="assets/favicon/site.webmanifest?v=20260731" />
   <meta name="msapplication-config" content="assets/favicon/browserconfig.xml?v=20260731" />
   <meta name="theme-color" content="#087f7a" />
+  <script>
+    (() => {
+      const returnKey =
+        "bexhr:return-from-performance-appraisal";
+
+      try {
+        if (
+          window.sessionStorage.getItem(returnKey) !==
+          "1"
+        ) {
+          return;
+        }
+
+        window.sessionStorage.removeItem(returnKey);
+
+        document.documentElement.classList.add(
+          "bexhr-pa-return",
+        );
+      } catch (error) {
+        console.warn(
+          "Performance Appraisal return state could not be restored.",
+          error,
+        );
+      }
+    })();
+  </script>
+
+  <style>
+    /* PERFORMANCE APPRAISAL RETURN NAVIGATION
+     When the Employee returns from Performance Appraisal:
+     - do not show the full-screen workspace loader;
+     - do not keep the Employee shell hidden behind the normal boot gate;
+     - authentication and dashboard startup still run normally. */
+    html.bexhr-pa-return #bexhrWorkspaceLoader {
+      display: none !important;
+    }
+
+    html.bexhr-pa-return body.employee-workspace-booting .bexhr-sidebar,
+    html.bexhr-pa-return body.employee-workspace-booting main {
+      visibility: visible !important;
+    }
+  </style>
+
   <style id="employeeWorkspaceFirstPaintGate">
     body.employee-workspace-booting .bexhr-sidebar,
     body.employee-workspace-booting main {
@@ -373,6 +416,12 @@
           onclick="document.getElementById('navPayrollBtn')?.click()" title="Payroll">
           <i class="bi bi-cash-coin"></i>
           <span>Payroll</span>
+        </button>
+      </li>
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarEmployeePerformanceAppraisalBtn" title="Performance Appraisal">
+          <i class="bi bi-clipboard2-check"></i>
+          <span>Performance Appraisal</span>
         </button>
       </li>
     </ul>

@@ -31,6 +31,30 @@
   const BEX_PA_PROGRESS_UPDATE_STORAGE_KEY =
     "bexhr:performance-appraisal:progress-updates:v1";
 
+  const BEX_PA_TEMPLATE_STORAGE_KEY =
+    "bexhr:performance-appraisal:templates:v1";
+
+  const BEX_PA_EMPLOYEE_APPRAISAL_STORAGE_KEY =
+    "bexhr:performance-appraisal:employee-appraisals:v1";
+
+  const BEX_PA_SELF_APPRAISAL_STORAGE_KEY =
+    "bexhr:performance-appraisal:self-appraisals:v1";
+
+  const BEX_PA_MANAGER_APPRAISAL_STORAGE_KEY =
+    "bexhr:performance-appraisal:manager-appraisals:v1";
+
+  const BEX_PA_HR_FINALISATION_STORAGE_KEY =
+    "bexhr:performance-appraisal:hr-finalisations:v1";
+
+  const BEX_PA_EMPLOYEE_ACKNOWLEDGEMENT_STORAGE_KEY =
+    "bexhr:performance-appraisal:employee-acknowledgements:v1";
+
+  const BEX_PA_WORKSPACE_MEMORY_KEY =
+    "bexhr:performance-appraisal:workspace:v1";
+
+  const BEX_PA_FORM_MEMORY_KEY =
+    "bexhr:performance-appraisal:form-memory:v1";
+
   const bexPaState = {
     cycles: [],
     organisationGoals: [],
@@ -38,13 +62,94 @@
     departmentGoals: [],
     individualGoals: [],
     progressUpdates: [],
+    templates: [],
+    employeeAppraisals: [],
+    selfAppraisals: [],
+    managerAppraisals: [],
+    hrFinalisations: [],
+    employeeAcknowledgements: [],
+    editingSelfAppraisalId: null,
+    editingManagerAppraisalId: null,
+    editingHrAppraisalId: null,
+    editingFinalAppraisalId: null,
     editingCycleId: null,
     activatingCycleId: null,
     editingOrganisationGoalId: null,
     editingDeliverableId: null,
     editingDepartmentGoalId: null,
     editingIndividualGoalId: null,
+    editingTemplateId: null,
+    templateCompetencies: [],
+    editingTemplateCompetencyId: null,
   };
+
+  function bexPaGetFormMemoryScope() {
+    const context = bexPaGetIntegratedContext();
+    const persona = bexPaGetCurrentPersona();
+    const identity =
+      persona === "employee"
+        ? context?.employeeId || bexPaGetCurrentEmployeeId()
+        : persona === "primary-manager"
+          ? context?.managerEmployeeId || bexPaGetCurrentManagerEmployeeId()
+          : "shared";
+
+    return `${persona || "standalone"}:${String(identity || "shared").trim()}`;
+  }
+
+  function bexPaLoadFormMemory() {
+    try {
+      const storedMemory = window.localStorage.getItem(
+        BEX_PA_FORM_MEMORY_KEY,
+      );
+
+      if (!storedMemory) {
+        return {};
+      }
+
+      const parsedMemory = JSON.parse(storedMemory);
+      return parsedMemory && typeof parsedMemory === "object"
+        ? parsedMemory
+        : {};
+    } catch (error) {
+      console.warn("Performance appraisal form memory could not be loaded.", error);
+      return {};
+    }
+  }
+
+  function bexPaRememberFormValues(formType, values) {
+    try {
+      const memory = bexPaLoadFormMemory();
+      const scope = bexPaGetFormMemoryScope();
+
+      memory[scope] = {
+        ...(memory[scope] || {}),
+        [formType]: {
+          ...(memory[scope]?.[formType] || {}),
+          ...values,
+        },
+      };
+
+      window.localStorage.setItem(
+        BEX_PA_FORM_MEMORY_KEY,
+        JSON.stringify(memory),
+      );
+    } catch (error) {
+      console.warn("Performance appraisal form memory could not be saved.", error);
+    }
+  }
+
+  function bexPaGetRememberedFormValues(formType) {
+    const memory = bexPaLoadFormMemory();
+    return memory[bexPaGetFormMemoryScope()]?.[formType] || {};
+  }
+
+  function bexPaApplyRememberedValues(fields, values) {
+    fields.forEach(([field, value]) => {
+      if (field && !field.value && value !== undefined) {
+        field.value = value;
+      }
+    });
+  }
 
   function bexPaLoadStoredCycles() {
     try {
@@ -287,6 +392,256 @@
     }
   }
 
+  function bexPaLoadTemplates() {
+    try {
+      const storedTemplates =
+        window.localStorage.getItem(
+          BEX_PA_TEMPLATE_STORAGE_KEY,
+        );
+
+      if (!storedTemplates) {
+        return [];
+      }
+
+      const parsedTemplates =
+        JSON.parse(storedTemplates);
+
+      return Array.isArray(parsedTemplates)
+        ? parsedTemplates
+        : [];
+    } catch (error) {
+      console.warn(
+        "Appraisal templates could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveTemplates() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_TEMPLATE_STORAGE_KEY,
+        JSON.stringify(bexPaState.templates),
+      );
+    } catch (error) {
+      console.warn(
+        "Appraisal templates could not be saved.",
+        error,
+      );
+    }
+  }
+
+  function bexPaLoadEmployeeAppraisals() {
+    try {
+      const storedEmployeeAppraisals =
+        window.localStorage.getItem(
+          BEX_PA_EMPLOYEE_APPRAISAL_STORAGE_KEY,
+        );
+
+      if (!storedEmployeeAppraisals) {
+        return [];
+      }
+
+      const parsedEmployeeAppraisals =
+        JSON.parse(storedEmployeeAppraisals);
+
+      return Array.isArray(parsedEmployeeAppraisals)
+        ? parsedEmployeeAppraisals
+        : [];
+    } catch (error) {
+      console.warn(
+        "Employee appraisals could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveEmployeeAppraisals() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_EMPLOYEE_APPRAISAL_STORAGE_KEY,
+        JSON.stringify(
+          bexPaState.employeeAppraisals,
+        ),
+      );
+    } catch (error) {
+      console.warn(
+        "Employee appraisals could not be saved.",
+        error,
+      );
+    }
+  }
+
+  function bexPaLoadSelfAppraisals() {
+    try {
+      const storedSelfAppraisals =
+        window.localStorage.getItem(
+          BEX_PA_SELF_APPRAISAL_STORAGE_KEY,
+        );
+
+      if (!storedSelfAppraisals) {
+        return [];
+      }
+
+      const parsedSelfAppraisals =
+        JSON.parse(storedSelfAppraisals);
+
+      return Array.isArray(parsedSelfAppraisals)
+        ? parsedSelfAppraisals
+        : [];
+    } catch (error) {
+      console.warn(
+        "Self-appraisal drafts could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveSelfAppraisals() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_SELF_APPRAISAL_STORAGE_KEY,
+        JSON.stringify(bexPaState.selfAppraisals),
+      );
+    } catch (error) {
+      console.warn(
+        "Self-appraisal drafts could not be saved.",
+        error,
+      );
+    }
+  }
+
+  function bexPaLoadManagerAppraisals() {
+    try {
+      const storedManagerAppraisals =
+        window.localStorage.getItem(
+          BEX_PA_MANAGER_APPRAISAL_STORAGE_KEY,
+        );
+
+      if (!storedManagerAppraisals) {
+        return [];
+      }
+
+      const parsedManagerAppraisals =
+        JSON.parse(storedManagerAppraisals);
+
+      return Array.isArray(parsedManagerAppraisals)
+        ? parsedManagerAppraisals
+        : [];
+    } catch (error) {
+      console.warn(
+        "Manager appraisal drafts could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveManagerAppraisals() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_MANAGER_APPRAISAL_STORAGE_KEY,
+        JSON.stringify(bexPaState.managerAppraisals),
+      );
+    } catch (error) {
+      console.warn(
+        "Manager appraisal drafts could not be saved.",
+        error,
+      );
+    }
+  }
+
+  function bexPaLoadHrFinalisations() {
+    try {
+      const storedHrFinalisations =
+        window.localStorage.getItem(
+          BEX_PA_HR_FINALISATION_STORAGE_KEY,
+        );
+
+      if (!storedHrFinalisations) {
+        return [];
+      }
+
+      const parsedHrFinalisations =
+        JSON.parse(storedHrFinalisations);
+
+      return Array.isArray(parsedHrFinalisations)
+        ? parsedHrFinalisations
+        : [];
+    } catch (error) {
+      console.warn(
+        "HR appraisal finalisations could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveHrFinalisations() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_HR_FINALISATION_STORAGE_KEY,
+        JSON.stringify(bexPaState.hrFinalisations),
+      );
+    } catch (error) {
+      console.warn(
+        "HR appraisal finalisations could not be saved.",
+        error,
+      );
+    }
+  }
+
+  function bexPaLoadEmployeeAcknowledgements() {
+    try {
+      const storedAcknowledgements =
+        window.localStorage.getItem(
+          BEX_PA_EMPLOYEE_ACKNOWLEDGEMENT_STORAGE_KEY,
+        );
+
+      if (!storedAcknowledgements) {
+        return [];
+      }
+
+      const parsedAcknowledgements =
+        JSON.parse(storedAcknowledgements);
+
+      return Array.isArray(parsedAcknowledgements)
+        ? parsedAcknowledgements
+        : [];
+    } catch (error) {
+      console.warn(
+        "Employee appraisal acknowledgements could not be loaded.",
+        error,
+      );
+
+      return [];
+    }
+  }
+
+  function bexPaSaveEmployeeAcknowledgements() {
+    try {
+      window.localStorage.setItem(
+        BEX_PA_EMPLOYEE_ACKNOWLEDGEMENT_STORAGE_KEY,
+        JSON.stringify(
+          bexPaState.employeeAcknowledgements,
+        ),
+      );
+    } catch (error) {
+      console.warn(
+        "Employee appraisal acknowledgements could not be saved.",
+        error,
+      );
+    }
+  }
+
   function bexPaGetIndividualGoalEmployeeId(
     individualGoal,
   ) {
@@ -396,6 +751,13 @@
       .filter(Boolean);
   }
 
+  function bexPaGetCurrentManagerEmployeeId() {
+    return String(
+      bexPaGetIntegratedContext()
+        ?.managerEmployeeId || "",
+    ).trim();
+  }
+
   function bexPaGetAvailableEmployees() {
     const availableEmployees =
       bexPaGetIntegratedContext()
@@ -481,30 +843,25 @@
     );
   }
 
-  function bexPaGetSelectedIndividualGoalEmployee() {
-    const employeeValue = String(
-      bexPaElements.individualGoalEmployee?.value || "",
-    ).trim();
+  function bexPaGetSelectedIndividualGoalEmployees() {
+    const selectedEmployeeIds = Array.from(
+      bexPaElements.individualGoalEmployee?.querySelectorAll(
+        'input[type="checkbox"]:checked',
+      ) || [],
+    )
+      .map((checkbox) => String(checkbox.value || "").trim())
+      .filter(Boolean);
 
     const availableEmployees =
       bexPaGetAvailableEmployees();
 
-    const selectedEmployee =
-      availableEmployees.find(
-        (employee) =>
-          employee.id === employeeValue,
-      );
-
-    if (selectedEmployee) {
-      return selectedEmployee;
-    }
-
-    return {
-      id: "",
-      name: employeeValue,
-      department: "",
-      jobTitle: "",
-    };
+    return selectedEmployeeIds
+      .map((employeeId) =>
+        availableEmployees.find(
+          (employee) => employee.id === employeeId,
+        ),
+      )
+      .filter(Boolean);
   }
 
   function bexPaIsIndividualGoalOwnedByCurrentEmployee(
@@ -584,6 +941,18 @@
     return [];
   }
 
+  function bexPaIsDevelopmentHost() {
+    const hostname = String(
+      window.location.hostname || "",
+    ).toLowerCase();
+
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1"
+    );
+  }
+
   function bexPaGetCurrentPersona() {
     const integratedPersona =
       String(
@@ -601,11 +970,15 @@
       return integratedPersona;
     }
 
-    return (
-      document
-        .querySelector("[data-bex-pa-app]")
-        ?.dataset.bexPaPersona || ""
-    );
+    if (bexPaIsDevelopmentHost()) {
+      return (
+        document
+          .querySelector("[data-bex-pa-app]")
+          ?.dataset.bexPaPersona || ""
+      );
+    }
+
+    return "";
   }
 
   function bexPaSetDevelopmentPersona(persona) {
@@ -631,6 +1004,7 @@
 
     bexPaApplyCycleAccess();
     bexPaApplyGoalAccess();
+    bexPaApplyTemplateAccess();
 
     bexPaRenderCycles();
 
@@ -639,6 +1013,7 @@
     bexPaRenderDepartmentGoals();
     bexPaRenderIndividualGoals();
     bexPaRenderProgressUpdates();
+    bexPaRenderEmployeeAppraisals();
   }
 
   function bexPaCanManageAppraisalCycles() {
@@ -646,6 +1021,10 @@
   }
 
   function bexPaCanManageGoalFramework() {
+    return bexPaGetCurrentPersona() === "hr-admin";
+  }
+
+  function bexPaCanManageTemplates() {
     return bexPaGetCurrentPersona() === "hr-admin";
   }
 
@@ -677,8 +1056,62 @@
     return false;
   }
 
-  function bexPaCanAddProgressUpdates() {
-    return bexPaGetCurrentPersona() === "employee";
+  function bexPaIsIndividualGoalHistorical(
+    individualGoal,
+  ) {
+    if (!individualGoal) {
+      return false;
+    }
+
+    const appraisal =
+      bexPaState.employeeAppraisals.find(
+        (existingAppraisal) =>
+          existingAppraisal.employeeId ===
+          bexPaGetIndividualGoalEmployeeId(
+            individualGoal,
+          ) &&
+          existingAppraisal.cycleId ===
+          individualGoal.cycleId,
+      );
+
+    if (!appraisal) {
+      return false;
+    }
+
+    const hrFinalisation =
+      bexPaState.hrFinalisations.find(
+        (existingFinalisation) =>
+          existingFinalisation.appraisalId ===
+          appraisal.id,
+      );
+
+    const acknowledgement =
+      bexPaState.employeeAcknowledgements.find(
+        (existingAcknowledgement) =>
+          existingAcknowledgement.appraisalId ===
+          appraisal.id,
+      );
+
+    return (
+      hrFinalisation?.status === "Finalised" ||
+      acknowledgement?.status === "Acknowledged"
+    );
+  }
+
+  function bexPaCanAddProgressUpdates(
+    individualGoal = null,
+  ) {
+    if (bexPaGetCurrentPersona() !== "employee") {
+      return false;
+    }
+
+    if (!individualGoal) {
+      return true;
+    }
+
+    return !bexPaIsIndividualGoalHistorical(
+      individualGoal,
+    );
   }
 
   function bexPaCanRespondToProgressUpdates() {
@@ -688,11 +1121,6 @@
   function bexPaApplyCycleAccess() {
     const canManageCycles =
       bexPaCanManageAppraisalCycles();
-
-    bexPaElements.overviewCreateButton?.classList.toggle(
-      "d-none",
-      !canManageCycles,
-    );
 
     bexPaElements.cyclesCreateButton?.classList.toggle(
       "d-none",
@@ -728,12 +1156,174 @@
     );
   }
 
+  function bexPaApplyTemplateAccess() {
+    const canManageTemplates =
+      bexPaCanManageTemplates();
+
+    bexPaElements.templatesNavButton?.classList.toggle(
+      "d-none",
+      !canManageTemplates,
+    );
+
+    bexPaElements.createTemplateButton?.classList.toggle(
+      "d-none",
+      !canManageTemplates,
+    );
+
+    if (
+      !canManageTemplates &&
+      bexPaElements.templatesSection &&
+      !bexPaElements.templatesSection.classList.contains(
+        "d-none",
+      )
+    ) {
+      bexPaShowSection("overview");
+    }
+  }
+
   const bexPaElements = {
     overviewSection: document.getElementById("bexPaOverviewSection"),
     cyclesSection: document.getElementById("bexPaCyclesSection"),
     goalsSection: document.getElementById("bexPaGoalsSection"),
+    templatesSection: document.getElementById("bexPaTemplatesSection"),
+    employeeAppraisalsSection: document.getElementById(
+      "bexPaEmployeeAppraisalsSection",
+    ),
+    employeeAppraisalsList: document.getElementById(
+      "bexPaEmployeeAppraisalsList",
+    ),
+    employeeAppraisalsEmpty: document.getElementById(
+      "bexPaEmployeeAppraisalsEmpty",
+    ),
+    selfAppraisalSection: document.getElementById(
+      "bexPaSelfAppraisalSection",
+    ),
+    hrAppraisalReviewSection: document.getElementById(
+      "bexPaHrAppraisalReviewSection",
+    ),
+    hrAppraisalReviewTitle: document.getElementById(
+      "bexPaHrAppraisalReviewTitle",
+    ),
+    hrAppraisalReviewMeta: document.getElementById(
+      "bexPaHrAppraisalReviewMeta",
+    ),
+    hrAppraisalReviewPrerequisites: document.getElementById(
+      "bexPaHrAppraisalReviewPrerequisites",
+    ),
+    hrAppraisalReviewEmployee: document.getElementById(
+      "bexPaHrAppraisalReviewEmployee",
+    ),
+    hrAppraisalReviewManager: document.getElementById(
+      "bexPaHrAppraisalReviewManager",
+    ),
+    closeHrAppraisalReviewButton: document.getElementById(
+      "bexPaCloseHrAppraisalReviewButton",
+    ),
+    finaliseHrAppraisalButton: document.getElementById(
+      "bexPaFinaliseHrAppraisalButton",
+    ),
+    finalAppraisalSection: document.getElementById(
+      "bexPaFinalAppraisalSection",
+    ),
+    finalAppraisalTitle: document.getElementById(
+      "bexPaFinalAppraisalTitle",
+    ),
+    finalAppraisalMeta: document.getElementById(
+      "bexPaFinalAppraisalMeta",
+    ),
+    finalAppraisalEmployee: document.getElementById(
+      "bexPaFinalAppraisalEmployee",
+    ),
+    finalAppraisalManager: document.getElementById(
+      "bexPaFinalAppraisalManager",
+    ),
+    finalAppraisalAcknowledgement: document.getElementById(
+      "bexPaFinalAppraisalAcknowledgement",
+    ),
+    closeFinalAppraisalButton: document.getElementById(
+      "bexPaCloseFinalAppraisalButton",
+    ),
+    acknowledgeFinalAppraisalButton: document.getElementById(
+      "bexPaAcknowledgeFinalAppraisalButton",
+    ),
+    managerAppraisalSection: document.getElementById(
+      "bexPaManagerAppraisalSection",
+    ),
+    managerAppraisalTitle: document.getElementById(
+      "bexPaManagerAppraisalTitle",
+    ),
+    managerAppraisalMeta: document.getElementById(
+      "bexPaManagerAppraisalMeta",
+    ),
+    managerAppraisalForm: document.getElementById(
+      "bexPaManagerAppraisalForm",
+    ),
+    managerAppraisalError: document.getElementById(
+      "bexPaManagerAppraisalError",
+    ),
+    managerAppraisalSelfAppraisal: document.getElementById(
+      "bexPaManagerAppraisalSelfAppraisal",
+    ),
+    managerAppraisalGoals: document.getElementById(
+      "bexPaManagerAppraisalGoals",
+    ),
+    managerAppraisalOverallComment: document.getElementById(
+      "bexPaManagerAppraisalOverallComment",
+    ),
+    closeManagerAppraisalButton: document.getElementById(
+      "bexPaCloseManagerAppraisalButton",
+    ),
+    saveManagerAppraisalButton: document.getElementById(
+      "bexPaSaveManagerAppraisalButton",
+    ),
+    submitManagerAppraisalButton: document.getElementById(
+      "bexPaSubmitManagerAppraisalButton",
+    ),
+    selfAppraisalMeta: document.getElementById(
+      "bexPaSelfAppraisalMeta",
+    ),
+    selfAppraisalForm: document.getElementById(
+      "bexPaSelfAppraisalForm",
+    ),
+    selfAppraisalError: document.getElementById(
+      "bexPaSelfAppraisalError",
+    ),
+    selfAppraisalCompetencies: document.getElementById(
+      "bexPaSelfAppraisalCompetencies",
+    ),
+    selfAppraisalGoals: document.getElementById(
+      "bexPaSelfAppraisalGoals",
+    ),
+    selfAppraisalAchievement: document.getElementById(
+      "bexPaSelfAppraisalAchievement",
+    ),
+    closeSelfAppraisalButton: document.getElementById(
+      "bexPaCloseSelfAppraisalButton",
+    ),
+    saveSelfAppraisalButton: document.getElementById(
+      "bexPaSaveSelfAppraisalButton",
+    ),
+    submitSelfAppraisalButton: document.getElementById(
+      "bexPaSubmitSelfAppraisalButton",
+    ),
     developmentPersona: document.getElementById(
       "bexPaDevelopmentPersona",
+    ),
+
+    integratedToolbar: document.getElementById(
+      "bexPaIntegratedToolbar",
+    ),
+
+    backToDashboardLink: document.getElementById(
+      "bexPaBackToDashboardLink",
+    ),
+
+    backToDashboardLabel: document.getElementById(
+      "bexPaBackToDashboardLabel",
+    ),
+
+    integratedWorkspaceLabel: document.getElementById(
+      "bexPaIntegratedWorkspaceLabel",
     ),
 
     overviewNavLink: document.querySelector(
@@ -741,6 +1331,91 @@
     ),
     cyclesNavButton: document.getElementById("bexPaCyclesNavButton"),
     goalsNavButton: document.getElementById("bexPaGoalsNavButton"),
+    templatesNavButton: document.getElementById("bexPaTemplatesNavButton"),
+    employeeAppraisalsNavButton: document.getElementById(
+      "bexPaEmployeeAppraisalsNavButton",
+    ),
+    createTemplateButton: document.getElementById(
+      "bexPaCreateTemplateButton",
+    ),
+    templatesList: document.getElementById(
+      "bexPaTemplatesList",
+    ),
+    templateDialog: document.getElementById(
+      "bexPaTemplateDialog",
+    ),
+    templateForm: document.getElementById(
+      "bexPaTemplateForm",
+    ),
+    templateDialogTitle: document.getElementById(
+      "bexPaTemplateDialogTitle",
+    ),
+    templateFormError: document.getElementById(
+      "bexPaTemplateFormError",
+    ),
+    closeTemplateDialogButton: document.getElementById(
+      "bexPaCloseTemplateDialogButton",
+    ),
+    cancelTemplateButton: document.getElementById(
+      "bexPaCancelTemplateButton",
+    ),
+    templateSubmitButton: document.getElementById(
+      "bexPaTemplateSubmitButton",
+    ),
+    templateInUseWarning: document.getElementById(
+      "bexPaTemplateInUseWarning",
+    ),
+    templateName: document.getElementById(
+      "bexPaTemplateName",
+    ),
+    templateDescription: document.getElementById(
+      "bexPaTemplateDescription",
+    ),
+    templateStatus: document.getElementById(
+      "bexPaTemplateStatus",
+    ),
+    templateRatingScale: document.getElementById(
+      "bexPaTemplateRatingScale",
+    ),
+    addTemplateRatingButton: document.getElementById(
+      "bexPaAddTemplateRatingButton",
+    ),
+    templateRatingsList: document.getElementById(
+      "bexPaTemplateRatingsList",
+    ),
+    templateRatingsEmpty: document.getElementById(
+      "bexPaTemplateRatingsEmpty",
+    ),
+    addTemplateCompetencyButton: document.getElementById(
+      "bexPaAddTemplateCompetencyButton",
+    ),
+    templateCompetenciesList: document.getElementById(
+      "bexPaTemplateCompetenciesList",
+    ),
+    templateCompetenciesEmpty: document.getElementById(
+      "bexPaTemplateCompetenciesEmpty",
+    ),
+    templateCompetencyEditor: document.getElementById(
+      "bexPaTemplateCompetencyEditor",
+    ),
+    templateCompetencyName: document.getElementById(
+      "bexPaTemplateCompetencyName",
+    ),
+    templateCompetencyDescription: document.getElementById(
+      "bexPaTemplateCompetencyDescription",
+    ),
+    templateCompetencyApplicability: document.getElementById(
+      "bexPaTemplateCompetencyApplicability",
+    ),
+    templateCompetencyOrder: document.getElementById(
+      "bexPaTemplateCompetencyOrder",
+    ),
+    cancelTemplateCompetencyButton: document.getElementById(
+      "bexPaCancelTemplateCompetencyButton",
+    ),
+    saveTemplateCompetencyButton: document.getElementById(
+      "bexPaSaveTemplateCompetencyButton",
+    ),
     createOrganisationGoalButton: document.getElementById(
       "bexPaCreateOrganisationGoalButton",
     ),
@@ -994,18 +1669,25 @@
     progressUpdateIndividualGoal: document.getElementById(
       "bexPaProgressUpdateIndividualGoal",
     ),
+    progressUpdatePercentage: document.getElementById(
+      "bexPaProgressUpdatePercentage",
+    ),
     progressUpdateStatus: document.getElementById(
       "bexPaProgressUpdateStatus",
     ),
     progressUpdateText: document.getElementById(
       "bexPaProgressUpdateText",
     ),
-
-    overviewCreateButton: document.getElementById(
-      "bexPaOpenCycleFormButton",
+    progressUpdateEvidence: document.getElementById(
+      "bexPaProgressUpdateEvidence",
     ),
+
     cyclesCreateButton: document.getElementById(
       "bexPaCyclesCreateButton",
+    ),
+
+    backToTopButton: document.getElementById(
+      "bexPaBackToTopButton",
     ),
 
     cycleFormCard: document.getElementById("bexPaCycleFormCard"),
@@ -1025,6 +1707,12 @@
     cycleFormError: document.getElementById("bexPaCycleFormError"),
 
     cycleName: document.getElementById("bexPaCycleName"),
+    cycleTemplate: document.getElementById(
+      "bexPaCycleTemplate",
+    ),
+    cycleTemplateUnavailable: document.getElementById(
+      "bexPaCycleTemplateUnavailable",
+    ),
     cycleStartDate: document.getElementById("bexPaCycleStartDate"),
     cycleEndDate: document.getElementById("bexPaCycleEndDate"),
     goalDeadline: document.getElementById("bexPaGoalDeadline"),
@@ -1051,6 +1739,22 @@
     activeCycleSummary: document.querySelector(
       '[data-bex-pa-summary="active-cycles"] .display-6',
     ),
+
+    employeesInCycleLabel: document.querySelector(
+      '[data-bex-pa-summary="employees"] .small',
+    ),
+
+    employeesInCycleSummary: document.querySelector(
+      '[data-bex-pa-summary="employees"] .display-6',
+    ),
+
+    awaitingHrSummary: document.querySelector(
+      '[data-bex-pa-summary="awaiting-hr"] .display-6',
+    ),
+
+    completedSummary: document.querySelector(
+      '[data-bex-pa-summary="completed"] .display-6',
+    ),
   };
 
   function bexPaShowSection(sectionName) {
@@ -1058,13 +1762,42 @@
       overview: bexPaElements.overviewSection,
       cycles: bexPaElements.cyclesSection,
       goals: bexPaElements.goalsSection,
+      templates: bexPaElements.templatesSection,
+      employeeAppraisals:
+        bexPaElements.employeeAppraisalsSection,
     };
 
     const navMap = {
       overview: bexPaElements.overviewNavLink,
       cycles: bexPaElements.cyclesNavButton,
       goals: bexPaElements.goalsNavButton,
+      templates: bexPaElements.templatesNavButton,
+      employeeAppraisals:
+        bexPaElements.employeeAppraisalsNavButton,
     };
+
+    const detailSections = [
+      bexPaElements.selfAppraisalSection,
+      bexPaElements.managerAppraisalSection,
+      bexPaElements.hrAppraisalReviewSection,
+      bexPaElements.finalAppraisalSection,
+    ];
+
+    if (!sectionMap[sectionName]) {
+      return;
+    }
+
+    try {
+      window.sessionStorage.setItem(
+        BEX_PA_WORKSPACE_MEMORY_KEY,
+        sectionName,
+      );
+    } catch (error) {
+      console.warn(
+        "Performance appraisal workspace section could not be saved.",
+        error,
+      );
+    }
 
     Object.entries(sectionMap).forEach(
       ([name, section]) => {
@@ -1096,10 +1829,74 @@
         }
       },
     );
+
+    detailSections.forEach((section) => {
+      section?.classList.add("d-none");
+    });
+  }
+
+  function bexPaPopulateCycleTemplates() {
+    if (!bexPaElements.cycleTemplate) {
+      return;
+    }
+
+    const currentValue =
+      bexPaElements.cycleTemplate.value;
+
+    bexPaElements.cycleTemplate.replaceChildren();
+
+    const placeholder =
+      document.createElement("option");
+
+    placeholder.value = "";
+    placeholder.textContent =
+      "Select appraisal template";
+
+    bexPaElements.cycleTemplate.appendChild(
+      placeholder,
+    );
+
+    const activeTemplates =
+      bexPaState.templates.filter(
+        (template) =>
+          template.status === "Active",
+      );
+
+    if (bexPaElements.cycleTemplateUnavailable) {
+      bexPaElements.cycleTemplateUnavailable.classList.toggle(
+        "d-none",
+        activeTemplates.length > 0,
+      );
+    }
+
+    activeTemplates.forEach((template) => {
+      const option =
+        document.createElement("option");
+
+      option.value = template.id;
+      option.textContent = template.name;
+
+      bexPaElements.cycleTemplate.appendChild(
+        option,
+      );
+    });
+
+    if (
+      currentValue &&
+      bexPaState.templates.some(
+        (template) =>
+          template.id === currentValue,
+      )
+    ) {
+      bexPaElements.cycleTemplate.value =
+        currentValue;
+    }
   }
 
   function bexPaPopulateCycleForm(cycle) {
     bexPaElements.cycleName.value = cycle.name;
+    bexPaElements.cycleTemplate.value =
+      cycle.templateId || "";
     bexPaElements.cycleStartDate.value = cycle.startDate;
     bexPaElements.cycleEndDate.value = cycle.endDate;
     bexPaElements.goalDeadline.value = cycle.goalDeadline;
@@ -1121,6 +1918,43 @@
     });
   }
 
+  function bexPaGetRememberedSection() {
+    const allowedSections = [
+      "overview",
+      "cycles",
+      "goals",
+      "templates",
+      "employeeAppraisals",
+    ];
+
+    try {
+      const rememberedSection =
+        window.sessionStorage.getItem(
+          BEX_PA_WORKSPACE_MEMORY_KEY,
+        );
+
+      if (!allowedSections.includes(rememberedSection)) {
+        return "overview";
+      }
+
+      if (
+        rememberedSection === "templates" &&
+        !bexPaCanManageTemplates()
+      ) {
+        return "overview";
+      }
+
+      return rememberedSection;
+    } catch (error) {
+      console.warn(
+        "Performance appraisal workspace section could not be read.",
+        error,
+      );
+
+      return "overview";
+    }
+  }
+
   function bexPaShowCycleForm(cycleId = null, mode = "create") {
     if (
       mode !== "view" &&
@@ -1131,6 +1965,7 @@
 
     bexPaShowSection("cycles");
     bexPaClearCycleError();
+    bexPaPopulateCycleTemplates();
 
     const cycle = cycleId
       ? bexPaState.cycles.find(
@@ -1244,9 +2079,13 @@
     return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
   }
 
-  function bexPaValidateCycle(cycle) {
+  function bexPaValidateCycle(
+    cycle,
+    excludedCycleId = bexPaState.editingCycleId,
+  ) {
     const requiredValues = [
       cycle.name,
+      cycle.templateId,
       cycle.startDate,
       cycle.endDate,
       cycle.goalDeadline,
@@ -1257,6 +2096,23 @@
 
     if (requiredValues.some((value) => !value)) {
       return "Complete all appraisal cycle fields before creating the cycle.";
+    }
+
+    const template =
+      bexPaState.templates.find(
+        (existingTemplate) =>
+          existingTemplate.id === cycle.templateId,
+      );
+
+    if (!template) {
+      return "Select a valid appraisal template.";
+    }
+
+    if (
+      cycle.status === "Draft" &&
+      template.status !== "Active"
+    ) {
+      return "Select an active appraisal template.";
     }
 
     const startDate = bexPaParseDate(cycle.startDate);
@@ -1314,7 +2170,7 @@
 
     const duplicateName = bexPaState.cycles.some(
       (existingCycle) =>
-        existingCycle.id !== bexPaState.editingCycleId &&
+        existingCycle.id !== excludedCycleId &&
         existingCycle.name.toLowerCase() ===
         cycle.name.toLowerCase(),
     );
@@ -1337,6 +2193,26 @@
       day: "2-digit",
       month: "short",
       year: "numeric",
+    }).format(date);
+  }
+
+  function bexPaFormatTimestamp(dateValue) {
+    if (!dateValue) {
+      return "";
+    }
+
+    const date = new Date(dateValue);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     }).format(date);
   }
 
@@ -1507,6 +2383,88 @@
         bexPaState.cycles.length,
       );
     }
+
+    const activeCycleIds = new Set(
+      bexPaState.cycles
+        .filter((cycle) => cycle.status === "Active")
+        .map((cycle) => cycle.id),
+    );
+
+    if (bexPaElements.employeesInCycleLabel) {
+      bexPaElements.employeesInCycleLabel.textContent =
+        activeCycleIds.size === 1
+          ? "Employees in active cycle"
+          : "Employees in active cycles";
+    }
+
+    const activeEmployeeAppraisals =
+      bexPaState.employeeAppraisals.filter(
+        (appraisal) =>
+          activeCycleIds.has(appraisal.cycleId),
+      );
+
+    const activeEmployeeIds = new Set(
+      activeEmployeeAppraisals
+        .map((appraisal) =>
+          String(appraisal.employeeId || "").trim(),
+        )
+        .filter(Boolean),
+    );
+
+    if (bexPaElements.employeesInCycleSummary) {
+      bexPaElements.employeesInCycleSummary.textContent =
+        String(activeEmployeeIds.size);
+    }
+
+    const awaitingHrCount =
+      bexPaState.employeeAppraisals.filter(
+        (appraisal) => {
+          const managerAppraisal =
+            bexPaState.managerAppraisals.find(
+              (existingManagerAppraisal) =>
+                existingManagerAppraisal.appraisalId ===
+                appraisal.id,
+            );
+
+          const hrFinalisation =
+            bexPaState.hrFinalisations.find(
+              (existingFinalisation) =>
+                existingFinalisation.appraisalId ===
+                appraisal.id,
+            );
+
+          return (
+            managerAppraisal?.status === "Submitted" &&
+            hrFinalisation?.status !== "Finalised"
+          );
+        },
+      ).length;
+
+    if (bexPaElements.awaitingHrSummary) {
+      bexPaElements.awaitingHrSummary.textContent =
+        String(awaitingHrCount);
+    }
+
+    const completedCount =
+      bexPaState.employeeAppraisals.filter(
+        (appraisal) => {
+          const acknowledgement =
+            bexPaState.employeeAcknowledgements.find(
+              (existingAcknowledgement) =>
+                existingAcknowledgement.appraisalId ===
+                appraisal.id,
+            );
+
+          return (
+            acknowledgement?.status === "Acknowledged"
+          );
+        },
+      ).length;
+
+    if (bexPaElements.completedSummary) {
+      bexPaElements.completedSummary.textContent =
+        String(completedCount);
+    }
   }
 
   function bexPaHandleCycleSubmit(event) {
@@ -1518,6 +2476,8 @@
         bexPaState.editingCycleId ||
         `BEX-PA-CYCLE-${Date.now()}`,
       name: bexPaElements.cycleName.value.trim(),
+      templateId:
+        bexPaElements.cycleTemplate.value,
       startDate: bexPaElements.cycleStartDate.value,
       endDate: bexPaElements.cycleEndDate.value,
       goalDeadline: bexPaElements.goalDeadline.value,
@@ -1606,6 +2566,88 @@
     bexPaElements.activateCycleDialog?.showModal();
   }
 
+  function bexPaGenerateEmployeeAppraisals(cycle) {
+    const availableEmployees =
+      bexPaGetAvailableEmployees();
+
+    if (availableEmployees.length === 0) {
+      return;
+    }
+
+    const template = bexPaState.templates.find(
+      (existingTemplate) =>
+        existingTemplate.id === cycle.templateId,
+    );
+
+    if (!template) {
+      return;
+    }
+
+    const templateSnapshot = {
+      id: template.id,
+      name: template.name,
+      description: template.description || "",
+      ratingScale: Array.isArray(template.ratingScale)
+        ? [...template.ratingScale]
+        : [],
+      competencies: Array.isArray(template.competencies)
+        ? template.competencies.map((competency) => ({
+          ...competency,
+        }))
+        : [],
+    };
+
+    const existingEmployeeIds = new Set(
+      bexPaState.employeeAppraisals
+        .filter(
+          (appraisal) =>
+            appraisal.cycleId === cycle.id,
+        )
+        .map((appraisal) => appraisal.employeeId),
+    );
+
+    const newAppraisals = [];
+
+    availableEmployees.forEach((employee) => {
+      if (
+        !employee.id ||
+        existingEmployeeIds.has(employee.id)
+      ) {
+        return;
+      }
+
+      existingEmployeeIds.add(employee.id);
+
+      newAppraisals.push({
+        id: `BEX-PA-EMPLOYEE-APPRAISAL-${Date.now()}-${employee.id}`,
+        cycleId: cycle.id,
+        templateId: cycle.templateId,
+        templateSnapshot: {
+          ...templateSnapshot,
+          ratingScale: [...templateSnapshot.ratingScale],
+          competencies: templateSnapshot.competencies.map(
+            (competency) => ({
+              ...competency,
+            }),
+          ),
+        },
+        employeeId: employee.id,
+        employeeName: employee.name,
+        status: "Draft",
+      });
+    });
+
+    if (newAppraisals.length === 0) {
+      return;
+    }
+
+    bexPaState.employeeAppraisals.push(
+      ...newAppraisals,
+    );
+
+    bexPaSaveEmployeeAppraisals();
+  }
+
   function bexPaActivateCycle() {
     if (!bexPaCanManageAppraisalCycles()) {
       return;
@@ -1627,10 +2669,26 @@
       return;
     }
 
+    const validationError = bexPaValidateCycle(
+      cycle,
+      cycle.id,
+    );
+
+    if (validationError) {
+      if (bexPaElements.announcement) {
+        bexPaElements.announcement.textContent =
+          validationError;
+      }
+
+      return;
+    }
+
     cycle.status = "Active";
 
     bexPaSaveCycles();
+    bexPaGenerateEmployeeAppraisals(cycle);
     bexPaRenderCycles();
+    bexPaRenderEmployeeAppraisals();
 
     bexPaElements.activateCycleDialog?.close();
 
@@ -1760,7 +2818,17 @@
 
     bexPaResetOrganisationGoalForm();
     bexPaPopulateOrganisationGoalCycles();
-
+    const rememberedValues = bexPaGetRememberedFormValues("organisationGoal");
+    bexPaApplyRememberedValues([
+      [bexPaElements.organisationGoalCycle, rememberedValues.cycleId],
+      [bexPaElements.organisationGoalTitle, rememberedValues.title],
+      [bexPaElements.organisationGoalDescription, rememberedValues.description],
+      [bexPaElements.organisationGoalTarget, rememberedValues.target],
+      [bexPaElements.organisationGoalOwner, rememberedValues.owner],
+      [bexPaElements.organisationGoalStatus, rememberedValues.status],
+      [bexPaElements.organisationGoalStartDate, rememberedValues.startDate],
+      [bexPaElements.organisationGoalDueDate, rememberedValues.dueDate],
+    ]);
     if (goalId) {
       const goal = bexPaState.organisationGoals.find(
         (existingGoal) => existingGoal.id === goalId,
@@ -2013,7 +3081,18 @@
     bexPaResetDeliverableForm();
     bexPaPopulateDeliverableOrganisationGoals();
     bexPaUpdateDeliverableCycleDisplay();
-
+    const rememberedValues = bexPaGetRememberedFormValues("deliverable");
+    bexPaApplyRememberedValues([
+      [bexPaElements.deliverableOrganisationGoal, rememberedValues.organisationGoalId],
+      [bexPaElements.deliverableTitle, rememberedValues.title],
+      [bexPaElements.deliverableDescription, rememberedValues.description],
+      [bexPaElements.deliverableTarget, rememberedValues.target],
+      [bexPaElements.deliverableOwner, rememberedValues.owner],
+      [bexPaElements.deliverableStatus, rememberedValues.status],
+      [bexPaElements.deliverableStartDate, rememberedValues.startDate],
+      [bexPaElements.deliverableDueDate, rememberedValues.dueDate],
+    ]);
+    bexPaUpdateDeliverableCycleDisplay();
     if (deliverableId) {
       const deliverable = bexPaState.deliverables.find(
         (existingDeliverable) =>
@@ -2342,7 +3421,19 @@
     bexPaPopulateDepartmentGoalOrganisationGoals();
     bexPaUpdateDepartmentGoalCycleDisplay();
     bexPaApplyDepartmentGoalDepartmentScope();
-
+    const rememberedValues = bexPaGetRememberedFormValues("departmentGoal");
+    bexPaApplyRememberedValues([
+      [bexPaElements.departmentGoalOrganisationGoal, rememberedValues.organisationGoalId],
+      [bexPaElements.departmentGoalDepartment, rememberedValues.department],
+      [bexPaElements.departmentGoalTitle, rememberedValues.title],
+      [bexPaElements.departmentGoalDescription, rememberedValues.description],
+      [bexPaElements.departmentGoalTarget, rememberedValues.target],
+      [bexPaElements.departmentGoalOwner, rememberedValues.owner],
+      [bexPaElements.departmentGoalStatus, rememberedValues.status],
+      [bexPaElements.departmentGoalStartDate, rememberedValues.startDate],
+      [bexPaElements.departmentGoalDueDate, rememberedValues.dueDate],
+    ]);
+    bexPaUpdateDepartmentGoalCycleDisplay();
     if (departmentGoalId) {
       const departmentGoal =
         bexPaState.departmentGoals.find(
@@ -2523,56 +3614,56 @@
     const availableEmployees =
       bexPaGetAvailableEmployees();
 
-    if (availableEmployees.length === 0) {
-      return;
-    }
-
-    if (employeeField.tagName !== "SELECT") {
-      return;
-    }
-
-    const currentValue =
-      employeeField.value;
-
     employeeField.replaceChildren();
 
-    const placeholder =
-      document.createElement("option");
-
-    placeholder.value = "";
-    placeholder.textContent =
-      "Select employee";
-
-    employeeField.appendChild(
-      placeholder,
-    );
-
-    availableEmployees.forEach((employee) => {
-      const option =
-        document.createElement("option");
-
-      option.value = employee.id;
-
-      option.textContent =
-        employee.department
-          ? `${employee.name} (${employee.department})`
-          : employee.name;
-
-      employeeField.appendChild(
-        option,
-      );
-    });
-
-    if (
-      currentValue &&
-      availableEmployees.some(
-        (employee) =>
-          employee.id === currentValue,
-      )
-    ) {
-      employeeField.value =
-        currentValue;
+    if (availableEmployees.length === 0) {
+      const emptyState = document.createElement("p");
+      emptyState.className = "mb-0 small text-body-secondary p-2";
+      emptyState.textContent =
+        "No eligible employees are available.";
+      employeeField.appendChild(emptyState);
+      return;
     }
+
+    availableEmployees.forEach((employee, index) => {
+      const item = document.createElement("label");
+      item.className =
+        "d-flex align-items-start gap-2 rounded-2 p-2";
+      item.htmlFor =
+        `bexPaIndividualGoalEmployee-${employee.id}`;
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "form-check-input mt-1";
+      checkbox.id = item.htmlFor;
+      checkbox.value = employee.id;
+      checkbox.dataset.bexPaIndividualGoalEmployee =
+        employee.id;
+
+      const employeeDetails = document.createElement("span");
+      employeeDetails.className = "d-flex flex-column";
+
+      const employeeName = document.createElement("span");
+      employeeName.className = "fw-semibold";
+      employeeName.textContent = employee.name;
+
+      const employeeDepartment = document.createElement("small");
+      employeeDepartment.className = "text-body-secondary";
+      employeeDepartment.textContent =
+        employee.department || "Department not specified";
+
+      employeeDetails.append(
+        employeeName,
+        employeeDepartment,
+      );
+
+      item.append(
+        checkbox,
+        employeeDetails,
+      );
+
+      employeeField.appendChild(item);
+    });
   }
 
   function bexPaPopulateIndividualGoalDepartmentGoals() {
@@ -2688,6 +3779,14 @@
     bexPaState.editingIndividualGoalId = null;
 
     bexPaElements.individualGoalForm?.reset();
+    if (bexPaElements.individualGoalEmployee) {
+      bexPaElements.individualGoalEmployee
+        .querySelectorAll('input[type="checkbox"]')
+        .forEach((checkbox) => {
+          checkbox.checked = false;
+          checkbox.disabled = false;
+        });
+    }
     bexPaClearIndividualGoalError();
     bexPaUpdateIndividualGoalDerivedFields();
 
@@ -2713,7 +3812,19 @@
     bexPaPopulateIndividualGoalEmployees();
     bexPaPopulateIndividualGoalDepartmentGoals();
     bexPaUpdateIndividualGoalDerivedFields();
-
+    const rememberedValues = bexPaGetRememberedFormValues("individualGoal");
+    bexPaApplyRememberedValues([
+      [bexPaElements.individualGoalDepartmentGoal, rememberedValues.departmentGoalId],
+      [bexPaElements.individualGoalDepartment, rememberedValues.department],
+      [bexPaElements.individualGoalCycle, rememberedValues.cycle],
+      [bexPaElements.individualGoalTitle, rememberedValues.title],
+      [bexPaElements.individualGoalDescription, rememberedValues.description],
+      [bexPaElements.individualGoalTarget, rememberedValues.target],
+      [bexPaElements.individualGoalStatus, rememberedValues.status],
+      [bexPaElements.individualGoalStartDate, rememberedValues.startDate],
+      [bexPaElements.individualGoalDueDate, rememberedValues.dueDate],
+    ]);
+    bexPaUpdateIndividualGoalDerivedFields();
     if (individualGoalId) {
       const individualGoal =
         bexPaState.individualGoals.find(
@@ -2723,6 +3834,14 @@
         );
 
       if (!individualGoal) {
+        return;
+      }
+
+      if (
+        bexPaIsIndividualGoalHistorical(
+          individualGoal,
+        )
+      ) {
         return;
       }
 
@@ -2744,10 +3863,15 @@
       bexPaElements.individualGoalSubmitButton.textContent =
         "Save Changes";
 
-      bexPaElements.individualGoalEmployee.value =
-        bexPaGetIndividualGoalEmployeeId(
-          individualGoal,
-        );
+      const employeeId =
+        bexPaGetIndividualGoalEmployeeId(individualGoal);
+
+      bexPaElements.individualGoalEmployee
+        .querySelectorAll('input[type="checkbox"]')
+        .forEach((checkbox) => {
+          checkbox.checked = checkbox.value === employeeId;
+          checkbox.disabled = checkbox.value !== employeeId;
+        });
 
       bexPaElements.individualGoalDepartmentGoal.value =
         individualGoal.departmentGoalId;
@@ -2776,7 +3900,9 @@
     bexPaElements.individualGoalDialog?.showModal();
 
     window.requestAnimationFrame(() => {
-      bexPaElements.individualGoalEmployee?.focus();
+      bexPaElements.individualGoalEmployee
+        ?.querySelector('input[type="checkbox"]')
+        ?.focus();
     });
   }
 
@@ -2817,6 +3943,14 @@
       )
     ) {
       return "You can only manage individual goals for employees within your Primary Manager reporting scope.";
+    }
+
+    if (
+      bexPaIsIndividualGoalHistorical(
+        individualGoal,
+      )
+    ) {
+      return "Individual goals cannot be changed for a finalised or acknowledged appraisal.";
     }
 
     const departmentGoal =
@@ -2908,9 +4042,23 @@
       return;
     }
 
+    const visibleIndividualGoalIds = new Set(
+      bexPaGetVisibleIndividualGoals().map(
+        (individualGoal) => individualGoal.id,
+      ),
+    );
+
+    const visibleProgressUpdates =
+      bexPaState.progressUpdates.filter(
+        (progressUpdate) =>
+          visibleIndividualGoalIds.has(
+            progressUpdate.individualGoalId,
+          ),
+      );
+
     bexPaElements.progressUpdatesList.replaceChildren();
 
-    if (bexPaState.progressUpdates.length === 0) {
+    if (visibleProgressUpdates.length === 0) {
       const emptyState = document.createElement("p");
 
       emptyState.className =
@@ -2928,7 +4076,7 @@
       return;
     }
 
-    bexPaState.progressUpdates.forEach(
+    visibleProgressUpdates.forEach(
       (progressUpdate) => {
         const individualGoal =
           bexPaState.individualGoals.find(
@@ -2944,6 +4092,19 @@
               individualGoal.departmentGoalId,
           )
           : null;
+
+        const cycle = individualGoal
+          ? bexPaState.cycles.find(
+            (existingCycle) =>
+              existingCycle.id ===
+              individualGoal.cycleId,
+          )
+          : null;
+
+        const isHistorical =
+          bexPaIsIndividualGoalHistorical(
+            individualGoal,
+          );
 
         const item = document.createElement("article");
         item.className = "bex-pa-goal-item";
@@ -2968,15 +4129,26 @@
         const employeeLabel =
           document.createElement("span");
         employeeLabel.textContent =
-          individualGoal?.employee ||
-          "Unknown employee";
+          "Employee: " +
+          (individualGoal?.employee || "Unknown employee");
+
+        const cycleLabel =
+          document.createElement("span");
+        cycleLabel.textContent =
+          `Cycle: ${cycle?.name || "Unknown cycle"}`;
+
+        const historyLabel =
+          document.createElement("span");
+
+        historyLabel.textContent =
+          isHistorical
+            ? `Historical | Last status: ${progressUpdate.status}`
+            : "Active";
 
         const departmentLabel =
           document.createElement("span");
         departmentLabel.textContent =
-          departmentGoal?.department ||
-          individualGoal?.department ||
-          "Unknown department";
+          `Progress: ${progressUpdate.progressPercentage}%`;
 
         const dateLabel =
           document.createElement("span");
@@ -2989,17 +4161,19 @@
         dateLabel.textContent =
           submittedDate &&
             !Number.isNaN(submittedDate.getTime())
-            ? new Intl.DateTimeFormat("en-NG", {
+            ? `Timestamp: ${new Intl.DateTimeFormat("en-NG", {
               day: "2-digit",
               month: "short",
               year: "numeric",
               hour: "2-digit",
               minute: "2-digit",
-            }).format(submittedDate)
-            : "Unknown submission date";
+            }).format(submittedDate)}`
+            : "Timestamp: Unknown submission date";
 
         meta.append(
           employeeLabel,
+          cycleLabel,
+          historyLabel,
           departmentLabel,
           dateLabel,
         );
@@ -3011,13 +4185,18 @@
 
         const status = document.createElement("span");
         status.className = "bex-pa-goal-status";
+
         status.dataset.status =
-          progressUpdate.status
-            .toLowerCase()
-            .replaceAll(" ", "-");
+          isHistorical
+            ? "historical"
+            : progressUpdate.status
+              .toLowerCase()
+              .replaceAll(" ", "-");
 
         status.textContent =
-          progressUpdate.status;
+          isHistorical
+            ? "Historical"
+            : progressUpdate.status;
 
         header.append(
           titleArea,
@@ -3031,11 +4210,18 @@
           "mt-3 mb-0 text-body-secondary";
 
         updateText.textContent =
-          progressUpdate.updateText;
+          `Update: ${progressUpdate.updateText}`;
+
+        const evidence = document.createElement("p");
+        evidence.className = "mb-0 text-body-secondary";
+        evidence.textContent = progressUpdate.evidence
+          ? `Evidence: ${progressUpdate.evidence}`
+          : "Evidence: Not provided";
 
         item.append(
           header,
           updateText,
+          evidence,
         );
 
         bexPaElements.progressUpdatesList.appendChild(
@@ -3056,7 +4242,12 @@
     bexPaElements.progressUpdateIndividualGoal.replaceChildren();
 
     const visibleIndividualGoals =
-      bexPaGetVisibleIndividualGoals();
+      bexPaGetVisibleIndividualGoals().filter(
+        (individualGoal) =>
+          !bexPaIsIndividualGoalHistorical(
+            individualGoal,
+          ),
+      );
 
     const placeholder = document.createElement("option");
     placeholder.value = "";
@@ -3135,6 +4326,11 @@
     bexPaResetProgressUpdateForm();
     bexPaPopulateProgressUpdateIndividualGoals();
 
+    const rememberedValues =
+      bexPaGetRememberedFormValues(
+        "progressUpdate",
+      );
+
     if (individualGoalId) {
       const individualGoal =
         bexPaState.individualGoals.find(
@@ -3157,6 +4353,16 @@
           individualGoalId;
       }
     }
+
+    bexPaApplyRememberedValues([
+      [
+        bexPaElements.progressUpdatePercentage,
+        rememberedValues.progressPercentage,
+      ],
+      [bexPaElements.progressUpdateStatus, rememberedValues.status],
+      [bexPaElements.progressUpdateText, rememberedValues.updateText],
+      [bexPaElements.progressUpdateEvidence, rememberedValues.evidence],
+    ]);
 
     bexPaElements.progressUpdateDialog?.showModal();
 
@@ -3194,6 +4400,22 @@
       return "Select a valid individual goal.";
     }
 
+    if (!bexPaCanAddProgressUpdates()) {
+      return "Only employees can submit progress updates.";
+    }
+
+    if (
+      !bexPaCanAddProgressUpdates(
+        individualGoal,
+      )
+    ) {
+      return "Progress updates cannot be submitted for a finalised or acknowledged appraisal.";
+    }
+
+    if (!progressUpdate.employeeId) {
+      return "Your employee identity could not be resolved.";
+    }
+
     if (
       bexPaGetCurrentPersona() === "employee" &&
       !bexPaIsIndividualGoalOwnedByCurrentEmployee(
@@ -3206,12 +4428,23 @@
     const allowedStatuses = [
       "Not Started",
       "In Progress",
-      "Blocked",
       "Completed",
     ];
 
     if (!allowedStatuses.includes(progressUpdate.status)) {
       return "Select a valid progress status.";
+    }
+
+    if (
+      !Number.isFinite(progressUpdate.progressPercentage) ||
+      progressUpdate.progressPercentage < 0 ||
+      progressUpdate.progressPercentage > 100
+    ) {
+      return "Progress percentage must be a number between 0 and 100.";
+    }
+
+    if (progressUpdate.evidence.length > 1000) {
+      return "Evidence note cannot exceed 1000 characters.";
     }
 
     if (progressUpdate.updateText.length > 1000) {
@@ -3224,6 +4457,10 @@
   function bexPaHandleProgressUpdateSubmit(event) {
     event.preventDefault();
     bexPaClearProgressUpdateError();
+
+    if (!bexPaCanAddProgressUpdates()) {
+      return;
+    }
 
     const individualGoal =
       bexPaState.individualGoals.find(
@@ -3239,14 +4476,24 @@
       individualGoalId:
         bexPaElements.progressUpdateIndividualGoal.value,
 
-      employee:
-        individualGoal?.employee || "",
+      employeeId:
+        bexPaGetCurrentEmployeeId(),
+
+      progressPercentage:
+        bexPaElements.progressUpdatePercentage.value.trim() === ""
+          ? NaN
+          : Number(
+            bexPaElements.progressUpdatePercentage.value,
+          ),
 
       status:
         bexPaElements.progressUpdateStatus.value,
 
       updateText:
         bexPaElements.progressUpdateText.value.trim(),
+
+      evidence:
+        bexPaElements.progressUpdateEvidence.value.trim(),
 
       createdAt:
         new Date().toISOString(),
@@ -3263,6 +4510,25 @@
       );
       return;
     }
+
+    bexPaRememberFormValues(
+      "progressUpdate",
+      {
+        progressPercentage:
+          String(
+            progressUpdate.progressPercentage,
+          ),
+
+        status:
+          progressUpdate.status,
+
+        updateText:
+          progressUpdate.updateText,
+
+        evidence:
+          progressUpdate.evidence,
+      },
+    );
 
     bexPaState.progressUpdates.push(
       progressUpdate,
@@ -3434,12 +4700,23 @@
           meta,
         );
 
+        const isHistorical =
+          bexPaIsIndividualGoalHistorical(
+            individualGoal,
+          );
+
         const status = document.createElement("span");
         status.className = "bex-pa-goal-status";
+
         status.dataset.status =
-          individualGoal.status.toLowerCase();
+          isHistorical
+            ? "historical"
+            : individualGoal.status.toLowerCase();
+
         status.textContent =
-          individualGoal.status;
+          isHistorical
+            ? "Historical"
+            : individualGoal.status;
 
         header.append(
           titleArea,
@@ -3464,7 +4741,12 @@
         actions.className =
           "bex-pa-goal-item-actions";
 
-        if (bexPaCanEditIndividualGoals()) {
+        if (
+          bexPaCanEditIndividualGoals() &&
+          !bexPaIsIndividualGoalHistorical(
+            individualGoal,
+          )
+        ) {
           actions.appendChild(
             bexPaCreateIndividualGoalActionButton(
               individualGoal.id,
@@ -3472,7 +4754,11 @@
           );
         }
 
-        if (bexPaCanAddProgressUpdates()) {
+        if (
+          bexPaCanAddProgressUpdates(
+            individualGoal,
+          )
+        ) {
           actions.appendChild(
             bexPaCreateIndividualGoalProgressButton(
               individualGoal.id,
@@ -3503,6 +4789,18 @@
 
     bexPaClearIndividualGoalError();
 
+    bexPaRememberFormValues("individualGoal", {
+      departmentGoalId: bexPaElements.individualGoalDepartmentGoal.value,
+      department: bexPaElements.individualGoalDepartment.value,
+      cycle: bexPaElements.individualGoalCycle.value,
+      title: bexPaElements.individualGoalTitle.value,
+      description: bexPaElements.individualGoalDescription.value,
+      target: bexPaElements.individualGoalTarget.value,
+      status: bexPaElements.individualGoalStatus.value,
+      startDate: bexPaElements.individualGoalStartDate.value,
+      dueDate: bexPaElements.individualGoalDueDate.value,
+    });
+
     const departmentGoal =
       bexPaState.departmentGoals.find(
         (existingDepartmentGoal) =>
@@ -3510,20 +4808,21 @@
           bexPaElements.individualGoalDepartmentGoal.value,
       );
 
-    const selectedEmployee =
-      bexPaGetSelectedIndividualGoalEmployee();
+    const wasEditing = Boolean(
+      bexPaState.editingIndividualGoalId,
+    );
 
-    const individualGoal = {
-      id:
-        bexPaState.editingIndividualGoalId ||
-        `BEX-PA-INDIVIDUAL-GOAL-${Date.now()}`,
+    const selectedEmployees =
+      bexPaGetSelectedIndividualGoalEmployees();
 
-      employee:
-        selectedEmployee.name,
+    if (selectedEmployees.length === 0) {
+      bexPaShowIndividualGoalError(
+        "Select at least one valid employee.",
+      );
+      return;
+    }
 
-      employeeId:
-        selectedEmployee.id,
-
+    const sharedGoalFields = {
       departmentGoalId:
         bexPaElements.individualGoalDepartmentGoal.value,
 
@@ -3552,10 +4851,31 @@
         bexPaElements.individualGoalDueDate.value,
     };
 
+    const individualGoals = selectedEmployees.map(
+      (selectedEmployee) => ({
+        id:
+          wasEditing
+            ? bexPaState.editingIndividualGoalId
+            : `BEX-PA-INDIVIDUAL-GOAL-${Date.now()}-${selectedEmployee.id}`,
+
+        employee:
+          selectedEmployee.name,
+
+        employeeId:
+          selectedEmployee.id,
+
+        ...sharedGoalFields,
+      }),
+    );
+
     const validationError =
-      bexPaValidateIndividualGoal(
-        individualGoal,
-      );
+      individualGoals
+        .map((individualGoal) =>
+          bexPaValidateIndividualGoal(
+            individualGoal,
+          ),
+        )
+        .find(Boolean);
 
     if (validationError) {
       bexPaShowIndividualGoalError(
@@ -3564,9 +4884,25 @@
       return;
     }
 
-    const wasEditing = Boolean(
-      bexPaState.editingIndividualGoalId,
-    );
+    const duplicateBatchGoal =
+      individualGoals.some((individualGoal, index) =>
+        individualGoals.some(
+          (otherGoal, otherIndex) =>
+            index !== otherIndex &&
+            otherGoal.employeeId === individualGoal.employeeId &&
+            otherGoal.departmentGoalId ===
+            individualGoal.departmentGoalId &&
+            otherGoal.title.toLowerCase() ===
+            individualGoal.title.toLowerCase(),
+        ),
+      );
+
+    if (duplicateBatchGoal) {
+      bexPaShowIndividualGoalError(
+        "An individual goal with this title is duplicated in the selected employees.",
+      );
+      return;
+    }
 
     if (wasEditing) {
       const individualGoalIndex =
@@ -3585,11 +4921,9 @@
 
       bexPaState.individualGoals[
         individualGoalIndex
-      ] = individualGoal;
+      ] = individualGoals[0];
     } else {
-      bexPaState.individualGoals.push(
-        individualGoal,
-      );
+      bexPaState.individualGoals.push(...individualGoals);
     }
 
     bexPaSaveIndividualGoals();
@@ -3599,8 +4933,8 @@
     if (bexPaElements.announcement) {
       bexPaElements.announcement.textContent =
         wasEditing
-          ? `${individualGoal.title} was updated successfully.`
-          : `${individualGoal.title} was created successfully.`;
+          ? `${individualGoals[0].title} was updated successfully.`
+          : `${individualGoals.length} individual goal${individualGoals.length === 1 ? "" : "s"} created successfully.`;
     }
   }
 
@@ -3817,6 +5151,18 @@
       return;
     }
     bexPaClearDepartmentGoalError();
+
+    bexPaRememberFormValues("departmentGoal", {
+      organisationGoalId: bexPaElements.departmentGoalOrganisationGoal.value,
+      department: bexPaElements.departmentGoalDepartment.value,
+      title: bexPaElements.departmentGoalTitle.value,
+      description: bexPaElements.departmentGoalDescription.value,
+      target: bexPaElements.departmentGoalTarget.value,
+      owner: bexPaElements.departmentGoalOwner.value,
+      status: bexPaElements.departmentGoalStatus.value,
+      startDate: bexPaElements.departmentGoalStartDate.value,
+      dueDate: bexPaElements.departmentGoalDueDate.value,
+    });
 
     const organisationGoal =
       bexPaState.organisationGoals.find(
@@ -4105,6 +5451,17 @@
     }
     bexPaClearDeliverableError();
 
+    bexPaRememberFormValues("deliverable", {
+      organisationGoalId: bexPaElements.deliverableOrganisationGoal.value,
+      title: bexPaElements.deliverableTitle.value,
+      description: bexPaElements.deliverableDescription.value,
+      target: bexPaElements.deliverableTarget.value,
+      owner: bexPaElements.deliverableOwner.value,
+      status: bexPaElements.deliverableStatus.value,
+      startDate: bexPaElements.deliverableStartDate.value,
+      dueDate: bexPaElements.deliverableDueDate.value,
+    });
+
     const organisationGoal =
       bexPaState.organisationGoals.find(
         (goal) =>
@@ -4364,6 +5721,17 @@
     }
     bexPaClearOrganisationGoalError();
 
+    bexPaRememberFormValues("organisationGoal", {
+      cycleId: bexPaElements.organisationGoalCycle.value,
+      title: bexPaElements.organisationGoalTitle.value,
+      description: bexPaElements.organisationGoalDescription.value,
+      target: bexPaElements.organisationGoalTarget.value,
+      owner: bexPaElements.organisationGoalOwner.value,
+      status: bexPaElements.organisationGoalStatus.value,
+      startDate: bexPaElements.organisationGoalStartDate.value,
+      dueDate: bexPaElements.organisationGoalDueDate.value,
+    });
+
     const goal = {
       id:
         bexPaState.editingOrganisationGoalId ||
@@ -4461,6 +5829,4105 @@
     bexPaOpenOrganisationGoalDialog(goalId);
   }
 
+  function bexPaClearTemplateError() {
+    if (!bexPaElements.templateFormError) {
+      return;
+    }
+
+    bexPaElements.templateFormError.textContent = "";
+    bexPaElements.templateFormError.classList.add(
+      "d-none",
+    );
+  }
+
+  function bexPaShowTemplateError(message) {
+    if (!bexPaElements.templateFormError) {
+      return;
+    }
+
+    bexPaElements.templateFormError.textContent =
+      message;
+
+    bexPaElements.templateFormError.classList.remove(
+      "d-none",
+    );
+  }
+
+  function bexPaResetTemplateCompetencyEditor() {
+    bexPaState.editingTemplateCompetencyId = null;
+
+    if (bexPaElements.templateCompetencyName) {
+      bexPaElements.templateCompetencyName.value = "";
+    }
+
+    if (bexPaElements.templateCompetencyDescription) {
+      bexPaElements.templateCompetencyDescription.value = "";
+    }
+
+    if (bexPaElements.templateCompetencyApplicability) {
+      bexPaElements.templateCompetencyApplicability.value =
+        "All Employees";
+    }
+
+    if (bexPaElements.templateCompetencyOrder) {
+      bexPaElements.templateCompetencyOrder.value =
+        String(
+          bexPaState.templateCompetencies.length + 1,
+        );
+    }
+
+    if (bexPaElements.saveTemplateCompetencyButton) {
+      bexPaElements.saveTemplateCompetencyButton.textContent =
+        "Add Assessment Area";
+    }
+  }
+
+  function bexPaOpenTemplateCompetencyEditor() {
+    if (!bexPaCanManageTemplates()) {
+      return;
+    }
+
+    bexPaResetTemplateCompetencyEditor();
+
+    bexPaElements.templateCompetencyEditor?.classList.remove(
+      "d-none",
+    );
+
+    window.requestAnimationFrame(() => {
+      bexPaElements.templateCompetencyName?.focus();
+    });
+  }
+
+  function bexPaCloseTemplateCompetencyEditor() {
+    bexPaElements.templateCompetencyEditor?.classList.add(
+      "d-none",
+    );
+
+    bexPaResetTemplateCompetencyEditor();
+  }
+
+  function bexPaValidateTemplateCompetency(
+    competency,
+  ) {
+    if (
+      !competency.name ||
+      !competency.description ||
+      !competency.applicability ||
+      !competency.order
+    ) {
+      return "Complete all assessment area fields before adding.";
+    }
+
+    const allowedApplicability = [
+      "All Employees",
+      "Supervisors & Managers",
+    ];
+
+    if (
+      !allowedApplicability.includes(
+        competency.applicability,
+      )
+    ) {
+      return "Select who this assessment area applies to.";
+    }
+
+    if (
+      !Number.isInteger(competency.order) ||
+      competency.order < 1
+    ) {
+      return "Display order must be a whole number greater than 0.";
+    }
+
+    const duplicateName =
+      bexPaState.templateCompetencies.some(
+        (existingCompetency) =>
+          existingCompetency.id !==
+          bexPaState.editingTemplateCompetencyId &&
+          existingCompetency.name.toLowerCase() ===
+          competency.name.toLowerCase(),
+      );
+
+    if (duplicateName) {
+      return "An assessment area with this name already exists.";
+    }
+
+    return "";
+  }
+
+  function bexPaHandleTemplateCompetencySave() {
+    if (!bexPaCanManageTemplates()) {
+      return;
+    }
+
+    bexPaClearTemplateError();
+
+    const competency = {
+      id:
+        bexPaState.editingTemplateCompetencyId ||
+        `BEX-PA-COMPETENCY-${Date.now()}`,
+
+      name:
+        bexPaElements.templateCompetencyName.value.trim(),
+
+      description:
+        bexPaElements.templateCompetencyDescription.value.trim(),
+
+      applicability:
+        bexPaElements.templateCompetencyApplicability.value,
+
+      order:
+        Number(
+          bexPaElements.templateCompetencyOrder.value,
+        ),
+    };
+
+    const validationError =
+      bexPaValidateTemplateCompetency(
+        competency,
+      );
+
+    if (validationError) {
+      bexPaShowTemplateError(
+        validationError,
+      );
+      return;
+    }
+
+    if (bexPaState.editingTemplateCompetencyId) {
+      const competencyIndex =
+        bexPaState.templateCompetencies.findIndex(
+          (existingCompetency) =>
+            existingCompetency.id ===
+            bexPaState.editingTemplateCompetencyId,
+        );
+
+      if (competencyIndex === -1) {
+        bexPaShowTemplateError(
+          "The assessment area could not be found."
+        );
+        return;
+      }
+
+      bexPaState.templateCompetencies[
+        competencyIndex
+      ] = competency;
+    } else {
+      bexPaState.templateCompetencies.push(
+        competency,
+      );
+    }
+
+    bexPaState.templateCompetencies.sort(
+      (firstCompetency, secondCompetency) =>
+        firstCompetency.order -
+        secondCompetency.order,
+    );
+
+    bexPaRenderTemplateCompetencies();
+    bexPaCloseTemplateCompetencyEditor();
+  }
+
+  function bexPaRenderTemplateCompetencies() {
+    if (!bexPaElements.templateCompetenciesList) {
+      return;
+    }
+
+    bexPaElements.templateCompetenciesList.replaceChildren();
+
+    const competencies =
+      [...bexPaState.templateCompetencies].sort(
+        (firstCompetency, secondCompetency) =>
+          firstCompetency.order -
+          secondCompetency.order,
+      );
+
+    if (bexPaElements.templateCompetenciesEmpty) {
+      bexPaElements.templateCompetenciesEmpty.classList.toggle(
+        "d-none",
+        competencies.length > 0,
+      );
+    }
+
+    competencies.forEach((competency) => {
+      const item = document.createElement("div");
+
+      item.className =
+        "border rounded-3 p-3";
+
+      const header =
+        document.createElement("div");
+
+      header.className =
+        "d-flex align-items-start justify-content-between gap-3";
+
+      const titleArea =
+        document.createElement("div");
+
+      const title =
+        document.createElement("h4");
+
+      title.className =
+        "h6 mb-1";
+
+      title.textContent =
+        `${competency.order}. ${competency.name}`;
+
+      const applicability =
+        document.createElement("p");
+
+      applicability.className =
+        "mb-1 small text-body-secondary";
+
+      applicability.textContent =
+        competency.applicability;
+
+      const description =
+        document.createElement("p");
+
+      description.className =
+        "mb-0 small text-body-secondary";
+
+      description.textContent =
+        competency.description;
+
+      titleArea.append(
+        title,
+        applicability,
+        description,
+      );
+
+      const actions =
+        document.createElement("div");
+
+      actions.className =
+        "d-flex align-items-center gap-2";
+
+      const editButton =
+        document.createElement("button");
+
+      editButton.type = "button";
+      editButton.className =
+        "btn btn-sm btn-outline-secondary";
+
+      editButton.dataset.bexPaTemplateCompetencyAction =
+        "edit";
+
+      editButton.dataset.bexPaTemplateCompetencyId =
+        competency.id;
+
+      editButton.innerHTML =
+        '<i class="bi bi-pencil" aria-hidden="true"></i>';
+
+      editButton.title =
+        `Edit ${competency.name}`;
+
+      editButton.setAttribute(
+        "aria-label",
+        `Edit ${competency.name}`,
+      );
+
+      const removeButton =
+        document.createElement("button");
+
+      removeButton.type = "button";
+      removeButton.className =
+        "btn btn-sm btn-outline-danger";
+
+      removeButton.dataset.bexPaTemplateCompetencyAction =
+        "remove";
+
+      removeButton.dataset.bexPaTemplateCompetencyId =
+        competency.id;
+
+      removeButton.innerHTML =
+        '<i class="bi bi-trash" aria-hidden="true"></i>';
+
+      removeButton.title =
+        `Remove ${competency.name}`;
+
+      removeButton.setAttribute(
+        "aria-label",
+        `Remove ${competency.name}`,
+      );
+
+      actions.append(
+        editButton,
+        removeButton,
+      );
+
+      header.append(
+        titleArea,
+        actions,
+      );
+
+      item.appendChild(
+        header,
+      );
+
+      bexPaElements.templateCompetenciesList.appendChild(
+        item,
+      );
+    });
+  }
+
+  function bexPaHandleTemplateCompetencyListAction(
+    event,
+  ) {
+    const button = event.target.closest(
+      "[data-bex-pa-template-competency-action]",
+    );
+
+    if (!button) {
+      return;
+    }
+
+    const competencyId =
+      button.dataset.bexPaTemplateCompetencyId;
+
+    if (!competencyId) {
+      return;
+    }
+
+    const action =
+      button.dataset.bexPaTemplateCompetencyAction;
+
+    if (action === "remove") {
+      bexPaState.templateCompetencies =
+        bexPaState.templateCompetencies.filter(
+          (existingCompetency) =>
+            existingCompetency.id !== competencyId,
+        );
+
+      bexPaRenderTemplateCompetencies();
+      bexPaCloseTemplateCompetencyEditor();
+
+      return;
+    }
+
+    const competency =
+      bexPaState.templateCompetencies.find(
+        (existingCompetency) =>
+          existingCompetency.id === competencyId,
+      );
+
+    if (!competency) {
+      return;
+    }
+
+    if (action !== "edit") {
+      return;
+    }
+
+    bexPaState.editingTemplateCompetencyId =
+      competency.id;
+
+    bexPaElements.templateCompetencyName.value =
+      competency.name;
+
+    bexPaElements.templateCompetencyDescription.value =
+      competency.description;
+
+    bexPaElements.templateCompetencyApplicability.value =
+      competency.applicability;
+
+    bexPaElements.templateCompetencyOrder.value =
+      String(competency.order);
+
+    bexPaElements.saveTemplateCompetencyButton.textContent =
+      "Save Assessment Area";
+
+    bexPaElements.templateCompetencyEditor?.classList.remove(
+      "d-none",
+    );
+
+    window.requestAnimationFrame(() => {
+      bexPaElements.templateCompetencyName?.focus();
+    });
+  }
+
+  function bexPaSyncTemplateRatingScale() {
+    if (
+      !bexPaElements.templateRatingsList ||
+      !bexPaElements.templateRatingScale
+    ) {
+      return;
+    }
+
+    const ratings = [
+      ...bexPaElements.templateRatingsList.querySelectorAll(
+        "[data-bex-pa-template-rating]",
+      ),
+    ]
+      .map((input) => input.value.trim())
+      .filter(Boolean);
+
+    bexPaElements.templateRatingScale.value =
+      ratings.join("\n");
+
+    bexPaElements.templateRatingsEmpty?.classList.toggle(
+      "d-none",
+      ratings.length > 0,
+    );
+  }
+
+  function bexPaAddTemplateRatingRow(
+    ratingValue = "",
+  ) {
+    if (!bexPaElements.templateRatingsList) {
+      return null;
+    }
+
+    const row = document.createElement("div");
+    row.className =
+      "d-flex align-items-center gap-2";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "form-control";
+    input.maxLength = 120;
+    input.placeholder =
+      "e.g. Meets Expectations";
+    input.value = ratingValue;
+    input.dataset.bexPaTemplateRating = "";
+
+    const removeButton =
+      document.createElement("button");
+
+    removeButton.type = "button";
+    removeButton.className =
+      "btn btn-outline-danger";
+
+    removeButton.innerHTML =
+      '<i class="bi bi-trash" aria-hidden="true"></i>';
+
+    removeButton.title =
+      "Remove rating option";
+
+    removeButton.setAttribute(
+      "aria-label",
+      "Remove rating option",
+    );
+
+    input.addEventListener(
+      "input",
+      bexPaSyncTemplateRatingScale,
+    );
+
+    removeButton.addEventListener(
+      "click",
+      () => {
+        row.remove();
+        bexPaSyncTemplateRatingScale();
+      },
+    );
+
+    row.append(
+      input,
+      removeButton,
+    );
+
+    bexPaElements.templateRatingsList.appendChild(
+      row,
+    );
+
+    bexPaSyncTemplateRatingScale();
+
+    return input;
+  }
+
+  function bexPaRenderTemplateRatings() {
+    if (
+      !bexPaElements.templateRatingsList ||
+      !bexPaElements.templateRatingScale
+    ) {
+      return;
+    }
+
+    const ratings =
+      bexPaElements.templateRatingScale.value
+        .split("\n")
+        .map((rating) => rating.trim())
+        .filter(Boolean);
+
+    bexPaElements.templateRatingsList.replaceChildren();
+
+    ratings.forEach((rating) => {
+      bexPaAddTemplateRatingRow(rating);
+    });
+
+    bexPaElements.templateRatingsEmpty?.classList.toggle(
+      "d-none",
+      ratings.length > 0,
+    );
+  }
+
+  function bexPaResetTemplateForm() {
+    bexPaState.editingTemplateId = null;
+
+    bexPaElements.templateForm?.reset();
+    bexPaClearTemplateError();
+
+    bexPaRenderTemplateRatings();
+
+    bexPaState.templateCompetencies = [];
+    bexPaRenderTemplateCompetencies();
+    bexPaCloseTemplateCompetencyEditor();
+
+    if (bexPaElements.templateDialogTitle) {
+      bexPaElements.templateDialogTitle.textContent =
+        "Add Appraisal Template";
+    }
+
+    if (bexPaElements.templateSubmitButton) {
+      bexPaElements.templateSubmitButton.textContent =
+        "Save Template";
+    }
+  }
+
+  function bexPaOpenTemplateDialog(
+    templateId = null,
+  ) {
+    if (!bexPaCanManageTemplates()) {
+      return;
+    }
+
+    bexPaResetTemplateForm();
+
+    const rememberedValues =
+      bexPaGetRememberedFormValues(
+        "template",
+      );
+
+    if (!templateId) {
+      bexPaApplyRememberedValues([
+        [
+          bexPaElements.templateName,
+          rememberedValues.name,
+        ],
+        [
+          bexPaElements.templateDescription,
+          rememberedValues.description,
+        ],
+        [
+          bexPaElements.templateStatus,
+          rememberedValues.status,
+        ],
+      ]);
+
+      if (
+        Array.isArray(
+          rememberedValues.ratingScale,
+        ) &&
+        rememberedValues.ratingScale.length > 0
+      ) {
+        bexPaElements.templateRatingScale.value =
+          rememberedValues.ratingScale.join("\n");
+
+        bexPaRenderTemplateRatings();
+      }
+
+      if (
+        Array.isArray(
+          rememberedValues.competencies,
+        )
+      ) {
+        bexPaState.templateCompetencies =
+          rememberedValues.competencies.map(
+            (competency) => ({
+              ...competency,
+            }),
+          );
+
+        bexPaRenderTemplateCompetencies();
+      }
+    }
+
+    if (bexPaElements.templateInUseWarning) {
+      const templateIsInUse =
+        Boolean(templateId) &&
+        bexPaState.cycles.some(
+          (cycle) =>
+            cycle.templateId === templateId &&
+            cycle.status !== "Draft",
+        );
+
+      bexPaElements.templateInUseWarning.classList.toggle(
+        "d-none",
+        !templateIsInUse,
+      );
+    }
+
+    if (templateId) {
+      const template =
+        bexPaState.templates.find(
+          (existingTemplate) =>
+            existingTemplate.id === templateId,
+        );
+
+      if (!template) {
+        return;
+      }
+
+      bexPaState.editingTemplateId =
+        template.id;
+
+      bexPaElements.templateDialogTitle.textContent =
+        "Edit Appraisal Template";
+
+      bexPaElements.templateSubmitButton.textContent =
+        "Save Changes";
+
+      bexPaElements.templateName.value =
+        template.name;
+
+      bexPaElements.templateDescription.value =
+        template.description;
+
+      bexPaElements.templateStatus.value =
+        template.status;
+
+      bexPaElements.templateRatingScale.value =
+        Array.isArray(template.ratingScale)
+          ? template.ratingScale.join("\n")
+          : "";
+
+      bexPaRenderTemplateRatings();
+
+      bexPaState.templateCompetencies =
+        Array.isArray(template.competencies)
+          ? template.competencies.map(
+            (competency) => ({
+              ...competency,
+            }),
+          )
+          : [];
+
+      bexPaRenderTemplateCompetencies();
+    }
+
+    bexPaElements.templateDialog?.showModal();
+
+    window.requestAnimationFrame(() => {
+      bexPaElements.templateName?.focus();
+    });
+  }
+
+  function bexPaCloseTemplateDialog() {
+    bexPaElements.templateDialog?.close();
+    bexPaResetTemplateForm();
+  }
+
+  function bexPaValidateTemplate(template) {
+    if (
+      !template.name ||
+      !template.description ||
+      !template.status ||
+      !Array.isArray(template.ratingScale) ||
+      template.ratingScale.length === 0
+    ) {
+      return "Complete all appraisal template fields before saving.";
+    }
+
+    const allowedStatuses = [
+      "Draft",
+      "Active",
+      "Inactive",
+    ];
+
+    if (!allowedStatuses.includes(template.status)) {
+      return "Select a valid template status.";
+    }
+
+    if (template.ratingScale.length < 2) {
+      return "Add at least two rating levels.";
+    }
+
+    const duplicateRating =
+      template.ratingScale.some(
+        (rating, index) =>
+          template.ratingScale.findIndex(
+            (existingRating) =>
+              existingRating.toLowerCase() ===
+              rating.toLowerCase(),
+          ) !== index,
+      );
+
+    if (duplicateRating) {
+      return "Rating levels must be unique.";
+    }
+
+    const duplicateTemplate =
+      bexPaState.templates.some(
+        (existingTemplate) =>
+          existingTemplate.id !==
+          bexPaState.editingTemplateId &&
+          existingTemplate.name.toLowerCase() ===
+          template.name.toLowerCase(),
+      );
+
+    if (duplicateTemplate) {
+      return "An appraisal template with this name already exists.";
+    }
+
+    return "";
+  }
+
+  function bexPaCreateTemplateActionButton(
+    templateId,
+  ) {
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.className =
+      "btn btn-sm btn-outline-secondary";
+
+    button.dataset.bexPaTemplateAction = "edit";
+    button.dataset.bexPaTemplateId =
+      templateId;
+
+    button.innerHTML =
+      '<i class="bi bi-pencil" aria-hidden="true"></i>';
+
+    button.title = "Edit appraisal template";
+    button.setAttribute(
+      "aria-label",
+      "Edit appraisal template",
+    );
+
+    return button;
+  }
+
+  function bexPaRenderTemplates() {
+    if (!bexPaElements.templatesList) {
+      return;
+    }
+
+    bexPaElements.templatesList.replaceChildren();
+
+    if (bexPaState.templates.length === 0) {
+      const emptyState =
+        document.createElement("p");
+
+      emptyState.className =
+        "mb-0 text-body-secondary";
+
+      emptyState.id = "bexPaTemplatesEmpty";
+
+      emptyState.textContent =
+        "No appraisal templates have been created yet.";
+
+      bexPaElements.templatesList.appendChild(
+        emptyState,
+      );
+
+      return;
+    }
+
+    bexPaState.templates.forEach((template) => {
+      const item =
+        document.createElement("article");
+
+      item.className = "bex-pa-goal-item";
+
+      const header =
+        document.createElement("div");
+
+      header.className =
+        "d-flex align-items-start justify-content-between gap-3";
+
+      const titleArea =
+        document.createElement("div");
+
+      const title =
+        document.createElement("h3");
+
+      title.className =
+        "bex-pa-goal-item-title h6";
+
+      title.textContent =
+        template.name;
+
+      const status =
+        document.createElement("span");
+
+      status.className =
+        "bex-pa-goal-status";
+
+      status.dataset.status =
+        template.status.toLowerCase();
+
+      status.textContent =
+        template.status;
+
+      const description =
+        document.createElement("p");
+
+      description.className =
+        "mt-3 mb-0 text-body-secondary";
+
+      description.textContent =
+        template.description;
+
+      const ratingHeading =
+        document.createElement("p");
+
+      ratingHeading.className =
+        "mt-3 mb-1 small fw-semibold";
+
+      ratingHeading.textContent =
+        "Rating options";
+
+      const ratingScale =
+        document.createElement("ol");
+
+      ratingScale.className =
+        "mb-0 small text-body-secondary";
+
+      const templateRatings =
+        Array.isArray(template.ratingScale)
+          ? template.ratingScale
+          : [];
+
+      templateRatings.forEach((rating) => {
+        const ratingItem =
+          document.createElement("li");
+
+        ratingItem.textContent = rating;
+
+        ratingScale.appendChild(
+          ratingItem,
+        );
+      });
+
+      const competencySummary =
+        document.createElement("p");
+
+      competencySummary.className =
+        "mt-3 mb-0 small text-body-secondary";
+
+      const templateCompetencies =
+        Array.isArray(template.competencies)
+          ? template.competencies
+          : [];
+
+      competencySummary.textContent =
+        `${templateCompetencies.length} assessment ${templateCompetencies.length === 1
+          ? "area"
+          : "areas"
+        } configured`;
+
+      const actions =
+        document.createElement("div");
+
+      actions.className =
+        "bex-pa-goal-item-actions";
+
+      if (bexPaCanManageTemplates()) {
+        actions.appendChild(
+          bexPaCreateTemplateActionButton(
+            template.id,
+          ),
+        );
+      }
+
+      titleArea.appendChild(title);
+
+      header.append(
+        titleArea,
+        status,
+      );
+
+      item.append(
+        header,
+        description,
+        ratingHeading,
+        ratingScale,
+        competencySummary,
+        actions,
+      );
+
+      bexPaElements.templatesList.appendChild(
+        item,
+      );
+    });
+  }
+
+  function bexPaHandleTemplateSubmit(event) {
+    event.preventDefault();
+
+    if (!bexPaCanManageTemplates()) {
+      return;
+    }
+
+    bexPaClearTemplateError();
+
+    const template = {
+      id:
+        bexPaState.editingTemplateId ||
+        `BEX-PA-TEMPLATE-${Date.now()}`,
+
+      name:
+        bexPaElements.templateName.value.trim(),
+
+      description:
+        bexPaElements.templateDescription.value.trim(),
+
+      status:
+        bexPaElements.templateStatus.value,
+
+      ratingScale:
+        bexPaElements.templateRatingScale.value
+          .split("\n")
+          .map((rating) => rating.trim())
+          .filter(Boolean),
+
+      competencies:
+        bexPaState.templateCompetencies.map(
+          (competency) => ({
+            ...competency,
+          }),
+        ),
+    };
+
+    const validationError =
+      bexPaValidateTemplate(template);
+
+    if (validationError) {
+      bexPaShowTemplateError(
+        validationError,
+      );
+      return;
+    }
+
+    bexPaRememberFormValues(
+      "template",
+      {
+        name:
+          template.name,
+
+        description:
+          template.description,
+
+        status:
+          template.status,
+
+        ratingScale:
+          [...template.ratingScale],
+
+        competencies:
+          template.competencies.map(
+            (competency) => ({
+              ...competency,
+            }),
+          ),
+      },
+    );
+
+    const wasEditing = Boolean(
+      bexPaState.editingTemplateId,
+    );
+
+    if (wasEditing) {
+      const templateIndex =
+        bexPaState.templates.findIndex(
+          (existingTemplate) =>
+            existingTemplate.id ===
+            bexPaState.editingTemplateId,
+        );
+
+      if (templateIndex === -1) {
+        bexPaShowTemplateError(
+          "The appraisal template could not be found.",
+        );
+        return;
+      }
+
+      bexPaState.templates[
+        templateIndex
+      ] = template;
+    } else {
+      bexPaState.templates.push(template);
+    }
+
+    bexPaSaveTemplates();
+    bexPaRenderTemplates();
+    bexPaCloseTemplateDialog();
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        wasEditing
+          ? `${template.name} was updated successfully.`
+          : `${template.name} was created successfully.`;
+    }
+  }
+
+  function bexPaHandleTemplateListAction(
+    event,
+  ) {
+    const button = event.target.closest(
+      "[data-bex-pa-template-action]",
+    );
+
+    if (!button) {
+      return;
+    }
+
+    const templateId =
+      button.dataset.bexPaTemplateId;
+
+    if (!templateId) {
+      return;
+    }
+
+    bexPaOpenTemplateDialog(
+      templateId,
+    );
+  }
+
+  function bexPaGetAppraisalTemplate(appraisal) {
+    if (
+      appraisal?.templateSnapshot &&
+      typeof appraisal.templateSnapshot === "object"
+    ) {
+      return appraisal.templateSnapshot;
+    }
+
+    return bexPaState.templates.find(
+      (existingTemplate) =>
+        existingTemplate.id === appraisal?.templateId,
+    ) || null;
+  }
+
+  function bexPaGetEligibleEmployeeAppraisals() {
+    if (bexPaGetCurrentPersona() !== "employee") {
+      return [];
+    }
+
+    const currentEmployeeId =
+      bexPaGetCurrentEmployeeId();
+
+    if (!currentEmployeeId) {
+      return [];
+    }
+
+    return bexPaState.employeeAppraisals.filter(
+      (appraisal) => {
+        const cycle = bexPaState.cycles.find(
+          (existingCycle) =>
+            existingCycle.id === appraisal.cycleId,
+        );
+
+        const template =
+          bexPaGetAppraisalTemplate(appraisal);
+
+        return (
+          appraisal.employeeId === currentEmployeeId &&
+          appraisal.status === "Draft" &&
+          cycle?.status === "Active" &&
+          Boolean(template)
+        );
+      },
+    );
+  }
+
+  function bexPaGetEligibleManagerAppraisals() {
+    if (bexPaGetCurrentPersona() !== "primary-manager") {
+      return [];
+    }
+
+    const managedEmployeeIds =
+      bexPaGetManagedEmployeeIds();
+
+    if (managedEmployeeIds.length === 0) {
+      return [];
+    }
+
+    return bexPaState.employeeAppraisals.filter(
+      (appraisal) => {
+        const cycle = bexPaState.cycles.find(
+          (existingCycle) =>
+            existingCycle.id === appraisal.cycleId,
+        );
+
+        const template =
+          bexPaGetAppraisalTemplate(appraisal);
+
+        const selfAppraisal =
+          bexPaState.selfAppraisals.find(
+            (existingSelfAppraisal) =>
+              existingSelfAppraisal.appraisalId ===
+              appraisal.id,
+          );
+
+        return (
+          managedEmployeeIds.includes(appraisal.employeeId) &&
+          Boolean(cycle) &&
+          Boolean(template) &&
+          selfAppraisal?.status === "Submitted"
+        );
+      },
+    );
+  }
+
+  function bexPaGetVisibleEmployeeAppraisals() {
+    const persona = bexPaGetCurrentPersona();
+
+    if (persona === "employee") {
+      const currentEmployeeId =
+        bexPaGetCurrentEmployeeId();
+
+      if (!currentEmployeeId) {
+        return [];
+      }
+
+      return bexPaState.employeeAppraisals.filter(
+        (appraisal) =>
+          appraisal.employeeId === currentEmployeeId,
+      );
+    }
+
+    if (persona === "primary-manager") {
+      const managedEmployeeIds =
+        bexPaGetManagedEmployeeIds();
+
+      return bexPaState.employeeAppraisals.filter(
+        (appraisal) =>
+          managedEmployeeIds.includes(appraisal.employeeId),
+      );
+    }
+
+    return bexPaState.employeeAppraisals;
+  }
+
+  function bexPaHasSavedDraft(draft) {
+    return Boolean(
+      draft &&
+      draft.status === "Draft" &&
+      (
+        draft.updatedAt ||
+        draft.competencyResponses?.some(
+          (response) =>
+            response.rating ||
+            response.comment,
+        ) ||
+        draft.goalResponses?.some(
+          (response) =>
+            response.achievement ||
+            response.rating ||
+            response.comment,
+        ) ||
+        draft.employeeAchievement ||
+        draft.overallSummary ||
+        draft.overallComment
+      ),
+    );
+  }
+
+  function bexPaGetDraftDisplayStatus(draft) {
+    if (draft?.status === "Submitted") {
+      return "Submitted";
+    }
+
+    return bexPaHasSavedDraft(draft)
+      ? "In Progress"
+      : "Not Started";
+  }
+
+  function bexPaGetAppraisalDisplayStatus(
+    appraisal,
+    selfAppraisal,
+    managerAppraisal,
+    hrFinalisation,
+    acknowledgement,
+  ) {
+    if (acknowledgement?.status === "Acknowledged") {
+      return "Acknowledged";
+    }
+
+    if (hrFinalisation?.status === "Finalised") {
+      return "Finalised";
+    }
+
+    if (bexPaGetCurrentPersona() === "primary-manager") {
+      return bexPaGetDraftDisplayStatus(managerAppraisal);
+    }
+
+    if (bexPaGetCurrentPersona() === "hr-admin") {
+      if (managerAppraisal?.status === "Submitted") {
+        return "Submitted";
+      }
+
+      return selfAppraisal?.status === "Submitted" ||
+        bexPaHasSavedDraft(selfAppraisal)
+        ? "In Progress"
+        : "Not Started";
+    }
+
+    return bexPaGetDraftDisplayStatus(selfAppraisal);
+  }
+
+  function bexPaRenderHrAppraisalReview(appraisal) {
+    if (bexPaGetCurrentPersona() !== "hr-admin") {
+      return;
+    }
+
+    const cycle = bexPaState.cycles.find(
+      (existingCycle) =>
+        existingCycle.id === appraisal.cycleId,
+    );
+
+    const template =
+      bexPaGetAppraisalTemplate(appraisal);
+
+    const selfAppraisal = bexPaState.selfAppraisals.find(
+      (existingSelfAppraisal) =>
+        existingSelfAppraisal.appraisalId === appraisal.id,
+    );
+
+    const managerAppraisal =
+      bexPaState.managerAppraisals.find(
+        (existingManagerAppraisal) =>
+          existingManagerAppraisal.appraisalId === appraisal.id,
+      );
+
+    const selfSubmitted =
+      selfAppraisal?.status === "Submitted";
+
+    const managerSubmitted =
+      managerAppraisal?.status === "Submitted";
+
+    const hrFinalisation =
+      bexPaState.hrFinalisations.find(
+        (existingFinalisation) =>
+          existingFinalisation.appraisalId === appraisal.id,
+      );
+
+    const isFinalised =
+      hrFinalisation?.status === "Finalised";
+
+    const canFinalise =
+      selfSubmitted &&
+      managerSubmitted &&
+      !isFinalised;
+
+    bexPaElements.finaliseHrAppraisalButton?.classList.toggle(
+      "d-none",
+      !canFinalise,
+    );
+
+    bexPaElements.hrAppraisalReviewMeta.textContent =
+      `${appraisal.employeeName || "Employee"} | ${cycle?.name || "Unknown cycle"} | ${template?.name || "Unknown template"}${isFinalised ? ` | Status: Finalised${hrFinalisation?.finalisedAt ? ` | Finalised: ${bexPaFormatTimestamp(hrFinalisation.finalisedAt)}` : ""}` : ""}`;
+
+    const missingPrerequisites = [];
+
+    if (!selfSubmitted) {
+      missingPrerequisites.push(
+        "Employee Self-Appraisal has not been submitted.",
+      );
+    }
+
+    if (!managerSubmitted) {
+      missingPrerequisites.push(
+        "Manager Appraisal has not been submitted.",
+      );
+    }
+
+    if (missingPrerequisites.length > 0) {
+      bexPaElements.hrAppraisalReviewPrerequisites.textContent =
+        missingPrerequisites.join(" ");
+
+      bexPaElements.hrAppraisalReviewPrerequisites.classList.remove(
+        "d-none",
+      );
+    } else {
+      bexPaElements.hrAppraisalReviewPrerequisites.textContent =
+        "Employee Self-Appraisal and Manager Appraisal have both been submitted.";
+
+      bexPaElements.hrAppraisalReviewPrerequisites.classList.remove(
+        "d-none",
+      );
+    }
+
+    bexPaElements.hrAppraisalReviewEmployee.replaceChildren();
+
+    const employeeHeading =
+      document.createElement("h3");
+
+    employeeHeading.className =
+      "h6 fw-bold";
+
+    employeeHeading.textContent =
+      "Employee Self-Appraisal";
+
+    bexPaElements.hrAppraisalReviewEmployee.appendChild(
+      employeeHeading,
+    );
+
+    const employeeStatus =
+      document.createElement("p");
+
+    employeeStatus.className =
+      "small text-body-secondary";
+
+    const selfReviewDisplayStatus =
+      bexPaGetDraftDisplayStatus(selfAppraisal);
+
+    employeeStatus.textContent =
+      `Status: ${selfReviewDisplayStatus}${selfSubmitted && selfAppraisal?.submittedAt ? ` | Submitted: ${bexPaFormatTimestamp(selfAppraisal.submittedAt)}` : ""}`;
+
+    bexPaElements.hrAppraisalReviewEmployee.appendChild(
+      employeeStatus,
+    );
+
+    if (selfSubmitted) {
+      const competencyResponses =
+        Array.isArray(selfAppraisal.competencyResponses)
+          ? selfAppraisal.competencyResponses
+          : [];
+
+      competencyResponses.forEach((response) => {
+        const competency =
+          template?.competencies?.find(
+            (existingCompetency) =>
+              existingCompetency.id ===
+              response.competencyId,
+          );
+
+        const item = document.createElement("div");
+
+        item.className =
+          "border rounded-3 p-3 mb-3 bg-body-tertiary";
+
+        const title = document.createElement("p");
+
+        title.className =
+          "mb-2 fw-semibold";
+
+        title.textContent =
+          competency?.name || response.competencyId;
+
+        const ratingLabel =
+          document.createElement("p");
+
+        ratingLabel.className =
+          "small fw-semibold mb-1";
+
+        ratingLabel.textContent =
+          "Employee rating";
+
+        const ratingText =
+          document.createElement("p");
+
+        ratingText.className =
+          "small mb-2 text-body-secondary";
+
+        ratingText.textContent =
+          response.rating || "Not provided";
+
+        const commentLabel =
+          document.createElement("p");
+
+        commentLabel.className =
+          "small fw-semibold mb-1";
+
+        commentLabel.textContent =
+          "Employee comment";
+
+        const commentText =
+          document.createElement("p");
+
+        commentText.className =
+          "small mb-0 text-body-secondary";
+
+        commentText.textContent =
+          response.comment || "Not provided";
+
+        item.append(
+          title,
+          ratingLabel,
+          ratingText,
+          commentLabel,
+          commentText,
+        );
+
+        bexPaElements.hrAppraisalReviewEmployee.appendChild(
+          item,
+        );
+      });
+
+      const employeeAchievementBlock =
+        document.createElement("div");
+
+      employeeAchievementBlock.className =
+        "border rounded-3 p-3 mb-3 bg-body-tertiary";
+
+      const employeeAchievementLabel =
+        document.createElement("p");
+
+      employeeAchievementLabel.className =
+        "fw-semibold mb-1";
+
+      employeeAchievementLabel.textContent =
+        "Overall Employee Summary";
+
+      const employeeAchievementText =
+        document.createElement("p");
+
+      employeeAchievementText.className =
+        "small mb-0 text-body-secondary";
+
+      employeeAchievementText.textContent =
+        selfAppraisal.employeeAchievement ||
+        selfAppraisal.overallSummary ||
+        "Not provided";
+
+      employeeAchievementBlock.append(
+        employeeAchievementLabel,
+        employeeAchievementText,
+      );
+
+      bexPaElements.hrAppraisalReviewEmployee.appendChild(
+        employeeAchievementBlock,
+      );
+
+      const goals =
+        bexPaGetSelfAppraisalGoals(appraisal);
+
+      goals.forEach((individualGoal) => {
+        const employeeResponse =
+          selfAppraisal.goalResponses?.find(
+            (response) =>
+              response.individualGoalId ===
+              individualGoal.id,
+          );
+
+        const goalItem =
+          document.createElement("article");
+
+        goalItem.className =
+          "bex-pa-goal-item border rounded-3 p-3 mb-4";
+
+        const title =
+          document.createElement("h4");
+
+        title.className =
+          "h6 fw-bold mb-3";
+
+        title.textContent =
+          individualGoal.title;
+
+        const targetBlock =
+          document.createElement("div");
+
+        targetBlock.className =
+          "mb-3";
+
+        const targetLabel =
+          document.createElement("p");
+
+        targetLabel.className =
+          "small fw-semibold mb-1";
+
+        targetLabel.textContent =
+          "Target";
+
+        const targetText =
+          document.createElement("p");
+
+        targetText.className =
+          "small mb-0 text-body-secondary";
+
+        targetText.textContent =
+          individualGoal.target || "Not provided";
+
+        targetBlock.append(
+          targetLabel,
+          targetText,
+        );
+
+        const progress =
+          bexPaState.progressUpdates.filter(
+            (progressUpdate) =>
+              progressUpdate.individualGoalId ===
+              individualGoal.id,
+          );
+
+        const progressBlock =
+          document.createElement("div");
+
+        progressBlock.className =
+          "border rounded-3 p-3 mb-3 bg-body-tertiary";
+
+        const progressLabel =
+          document.createElement("p");
+
+        progressLabel.className =
+          "small fw-semibold mb-1";
+
+        progressLabel.textContent =
+          "Progress";
+
+        const progressText =
+          document.createElement("p");
+
+        progressText.className =
+          "small mb-0 text-body-secondary";
+
+        progressText.textContent =
+          progress.length === 0
+            ? "No progress evidence submitted yet."
+            : progress
+              .map(
+                (progressUpdate) =>
+                  `${progressUpdate.progressPercentage}% - ${progressUpdate.status}: ${progressUpdate.updateText}${progressUpdate.evidence ? ` (${progressUpdate.evidence})` : ""}`,
+              )
+              .join(" | ");
+
+        progressBlock.append(
+          progressLabel,
+          progressText,
+        );
+
+        const achievementBlock =
+          document.createElement("div");
+
+        achievementBlock.className =
+          "border rounded-3 p-3 bg-body-tertiary";
+
+        const achievementLabel =
+          document.createElement("p");
+
+        achievementLabel.className =
+          "small fw-semibold mb-1";
+
+        achievementLabel.textContent =
+          "Employee achievement";
+
+        const achievementText =
+          document.createElement("p");
+
+        achievementText.className =
+          "small mb-0 text-body-secondary";
+
+        achievementText.textContent =
+          employeeResponse?.achievement ||
+          "Not provided";
+
+        achievementBlock.append(
+          achievementLabel,
+          achievementText,
+        );
+
+        goalItem.append(
+          title,
+          targetBlock,
+          progressBlock,
+          achievementBlock,
+        );
+
+        bexPaElements.hrAppraisalReviewEmployee.appendChild(
+          goalItem,
+        );
+      });
+    }
+
+    bexPaElements.hrAppraisalReviewManager.replaceChildren();
+
+    const managerHeading =
+      document.createElement("h3");
+
+    managerHeading.className =
+      "h6 fw-bold";
+
+    managerHeading.textContent =
+      "Manager Appraisal";
+
+    bexPaElements.hrAppraisalReviewManager.appendChild(
+      managerHeading,
+    );
+
+    const managerStatus =
+      document.createElement("p");
+
+    managerStatus.className =
+      "small text-body-secondary";
+
+    const managerReviewDisplayStatus =
+      bexPaGetDraftDisplayStatus(managerAppraisal);
+
+    managerStatus.textContent =
+      `Status: ${managerReviewDisplayStatus}${managerSubmitted && managerAppraisal?.submittedAt ? ` | Submitted: ${bexPaFormatTimestamp(managerAppraisal.submittedAt)}` : ""}`;
+
+    bexPaElements.hrAppraisalReviewManager.appendChild(
+      managerStatus,
+    );
+
+    if (managerSubmitted) {
+      const goals =
+        bexPaGetSelfAppraisalGoals(appraisal);
+
+      goals.forEach((individualGoal) => {
+        const managerResponse =
+          managerAppraisal.goalResponses?.find(
+            (response) =>
+              response.individualGoalId ===
+              individualGoal.id,
+          );
+
+        const item =
+          document.createElement("article");
+
+        item.className =
+          "bex-pa-goal-item border rounded-3 p-3 mt-3";
+
+        const title =
+          document.createElement("h4");
+
+        title.className =
+          "h6 fw-bold mb-3";
+
+        title.textContent =
+          individualGoal.title;
+
+        const ratingBlock =
+          document.createElement("div");
+
+        ratingBlock.className =
+          "border rounded-3 p-3 bg-body-tertiary mb-3";
+
+        const ratingLabel =
+          document.createElement("p");
+
+        ratingLabel.className =
+          "small fw-semibold mb-1";
+
+        ratingLabel.textContent =
+          "Manager rating";
+
+        const ratingText =
+          document.createElement("p");
+
+        ratingText.className =
+          "small mb-0 text-body-secondary";
+
+        ratingText.textContent =
+          managerResponse?.rating ||
+          "Not provided";
+
+        ratingBlock.append(
+          ratingLabel,
+          ratingText,
+        );
+
+        const commentBlock =
+          document.createElement("div");
+
+        commentBlock.className =
+          "border rounded-3 p-3 bg-body-tertiary";
+
+        const commentLabel =
+          document.createElement("p");
+
+        commentLabel.className =
+          "small fw-semibold mb-1";
+
+        commentLabel.textContent =
+          "Manager comment";
+
+        const commentText =
+          document.createElement("p");
+
+        commentText.className =
+          "small mb-0 text-body-secondary";
+
+        commentText.textContent =
+          managerResponse?.comment ||
+          "Not provided";
+
+        commentBlock.append(
+          commentLabel,
+          commentText,
+        );
+
+        item.append(
+          title,
+          ratingBlock,
+          commentBlock,
+        );
+
+        bexPaElements.hrAppraisalReviewManager.appendChild(
+          item,
+        );
+      });
+
+      const overallCommentBlock =
+        document.createElement("div");
+
+      overallCommentBlock.className =
+        "border rounded-3 p-3 mt-3 bg-body-tertiary";
+
+      const overallCommentLabel =
+        document.createElement("p");
+
+      overallCommentLabel.className =
+        "fw-semibold mb-1";
+
+      overallCommentLabel.textContent =
+        "Overall Manager Summary";
+
+      const overallCommentText =
+        document.createElement("p");
+
+      overallCommentText.className =
+        "small mb-0 text-body-secondary";
+
+      overallCommentText.textContent =
+        managerAppraisal.overallComment ||
+        "Not provided";
+
+      overallCommentBlock.append(
+        overallCommentLabel,
+        overallCommentText,
+      );
+
+      bexPaElements.hrAppraisalReviewManager.appendChild(
+        overallCommentBlock,
+      );
+    }
+
+    bexPaElements.hrAppraisalReviewSection.classList.remove(
+      "d-none",
+    );
+  }
+
+  function bexPaOpenHrAppraisalReview(appraisalId) {
+    if (bexPaGetCurrentPersona() !== "hr-admin") {
+      return;
+    }
+
+    const appraisal =
+      bexPaState.employeeAppraisals.find(
+        (existingAppraisal) =>
+          existingAppraisal.id === appraisalId,
+      );
+
+    if (!appraisal) {
+      return;
+    }
+
+    bexPaState.editingHrAppraisalId = appraisal.id;
+
+    bexPaElements.selfAppraisalSection?.classList.add(
+      "d-none",
+    );
+
+    bexPaElements.managerAppraisalSection?.classList.add(
+      "d-none",
+    );
+
+    bexPaRenderHrAppraisalReview(appraisal);
+
+    bexPaElements.hrAppraisalReviewSection?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
+  function bexPaCloseHrAppraisalReview() {
+    bexPaState.editingHrAppraisalId = null;
+    bexPaElements.hrAppraisalReviewSection?.classList.add(
+      "d-none",
+    );
+
+    if (bexPaElements.hrAppraisalReviewPrerequisites) {
+      bexPaElements.hrAppraisalReviewPrerequisites.textContent =
+        "";
+
+      bexPaElements.hrAppraisalReviewPrerequisites.classList.add(
+        "d-none",
+      );
+    }
+  }
+
+  function bexPaRenderFinalAppraisal(appraisal) {
+    if (bexPaGetCurrentPersona() !== "employee") {
+      return;
+    }
+
+    const currentEmployeeId =
+      bexPaGetCurrentEmployeeId();
+
+    if (appraisal.employeeId !== currentEmployeeId) {
+      return;
+    }
+
+    const cycle = bexPaState.cycles.find(
+      (existingCycle) =>
+        existingCycle.id === appraisal.cycleId,
+    );
+
+    const template =
+      bexPaGetAppraisalTemplate(appraisal);
+
+    const selfAppraisal =
+      bexPaState.selfAppraisals.find(
+        (existingSelfAppraisal) =>
+          existingSelfAppraisal.appraisalId === appraisal.id,
+      );
+
+    const managerAppraisal =
+      bexPaState.managerAppraisals.find(
+        (existingManagerAppraisal) =>
+          existingManagerAppraisal.appraisalId === appraisal.id,
+      );
+
+    const hrFinalisation =
+      bexPaState.hrFinalisations.find(
+        (existingFinalisation) =>
+          existingFinalisation.appraisalId === appraisal.id,
+      );
+
+    if (
+      selfAppraisal?.status !== "Submitted" ||
+      managerAppraisal?.status !== "Submitted" ||
+      hrFinalisation?.status !== "Finalised"
+    ) {
+      return;
+    }
+
+    const acknowledgement =
+      bexPaState.employeeAcknowledgements.find(
+        (existingAcknowledgement) =>
+          existingAcknowledgement.appraisalId === appraisal.id,
+      );
+
+    bexPaState.editingFinalAppraisalId =
+      appraisal.id;
+
+    const finalDisplayStatus =
+      acknowledgement?.status === "Acknowledged"
+        ? "Acknowledged"
+        : "Finalised";
+
+    bexPaElements.finalAppraisalMeta.textContent =
+      `${appraisal.employeeName || "Employee"} | ${cycle?.name || "Unknown cycle"} | ${template?.name || "Unknown template"} | Status: ${finalDisplayStatus}${hrFinalisation.finalisedAt ? ` | Finalised: ${bexPaFormatTimestamp(hrFinalisation.finalisedAt)}` : ""}`;
+
+    bexPaElements.finalAppraisalEmployee.replaceChildren();
+
+    const employeeHeading =
+      document.createElement("h3");
+
+    employeeHeading.className =
+      "h6 fw-bold";
+
+    employeeHeading.textContent =
+      "Employee Self-Appraisal";
+
+    bexPaElements.finalAppraisalEmployee.appendChild(
+      employeeHeading,
+    );
+
+    const employeeStatus =
+      document.createElement("p");
+
+    employeeStatus.className =
+      "small text-body-secondary";
+
+    employeeStatus.textContent =
+      `Status: Submitted${selfAppraisal.submittedAt ? ` | Submitted: ${bexPaFormatTimestamp(selfAppraisal.submittedAt)}` : ""}`;
+
+    bexPaElements.finalAppraisalEmployee.appendChild(
+      employeeStatus,
+    );
+
+    const competencyResponses =
+      Array.isArray(selfAppraisal.competencyResponses)
+        ? selfAppraisal.competencyResponses
+        : [];
+
+    competencyResponses.forEach((response) => {
+      const competency =
+        template?.competencies?.find(
+          (existingCompetency) =>
+            existingCompetency.id ===
+            response.competencyId,
+        );
+
+      const item =
+        document.createElement("div");
+
+      item.className =
+        "border rounded-3 p-3 mb-3 bg-body-tertiary";
+
+      const title =
+        document.createElement("h4");
+
+      title.className =
+        "h6 fw-bold mb-3";
+
+      title.textContent =
+        competency?.name || response.competencyId;
+
+      const ratingBlock =
+        document.createElement("div");
+
+      ratingBlock.className =
+        "border rounded-3 p-3 bg-white mb-3";
+
+      const ratingLabel =
+        document.createElement("p");
+
+      ratingLabel.className =
+        "small fw-semibold mb-1";
+
+      ratingLabel.textContent =
+        "Employee rating";
+
+      const rating =
+        document.createElement("p");
+
+      rating.className =
+        "small mb-0 text-body-secondary";
+
+      rating.textContent =
+        response.rating || "Not provided";
+
+      ratingBlock.append(
+        ratingLabel,
+        rating,
+      );
+
+      const commentBlock =
+        document.createElement("div");
+
+      commentBlock.className =
+        "border rounded-3 p-3 bg-white";
+
+      const commentLabel =
+        document.createElement("p");
+
+      commentLabel.className =
+        "small fw-semibold mb-1";
+
+      commentLabel.textContent =
+        "Employee comment";
+
+      const comment =
+        document.createElement("p");
+
+      comment.className =
+        "small mb-0 text-body-secondary";
+
+      comment.textContent =
+        response.comment || "Not provided";
+
+      item.append(
+        title,
+        ratingBlock,
+        commentBlock,
+      );
+
+      commentBlock.append(
+        commentLabel,
+        comment,
+      );
+
+      bexPaElements.finalAppraisalEmployee.appendChild(
+        item,
+      );
+    });
+
+    const employeeSummary =
+      document.createElement("div");
+
+    employeeSummary.className =
+      "border rounded-3 p-3 mb-3 bg-body-tertiary";
+
+    const employeeSummaryLabel =
+      document.createElement("p");
+
+    employeeSummaryLabel.className =
+      "fw-semibold mb-1";
+
+    employeeSummaryLabel.textContent =
+      "Overall Employee Summary";
+
+    const employeeSummaryText =
+      document.createElement("p");
+
+    employeeSummaryText.className =
+      "small mb-0 text-body-secondary";
+
+    employeeSummaryText.textContent =
+      selfAppraisal.employeeAchievement ||
+      selfAppraisal.overallSummary ||
+      "Not provided";
+
+    employeeSummary.append(
+      employeeSummaryLabel,
+      employeeSummaryText,
+    );
+
+    bexPaElements.finalAppraisalEmployee.appendChild(
+      employeeSummary,
+    );
+
+    const goals =
+      bexPaGetSelfAppraisalGoals(appraisal);
+
+    goals.forEach((individualGoal) => {
+      const employeeResponse =
+        selfAppraisal.goalResponses?.find(
+          (response) =>
+            response.individualGoalId ===
+            individualGoal.id,
+        );
+
+      const goalItem =
+        document.createElement("article");
+
+      goalItem.className =
+        "bex-pa-goal-item border rounded-3 p-3 mt-3";
+
+      const title =
+        document.createElement("h4");
+
+      title.className =
+        "h6 fw-bold mb-3";
+
+      title.textContent =
+        individualGoal.title;
+
+      const targetBlock =
+        document.createElement("div");
+
+      targetBlock.className =
+        "border rounded-3 p-3 bg-body-tertiary mb-3";
+
+      const targetLabel =
+        document.createElement("p");
+
+      targetLabel.className =
+        "small fw-semibold mb-1";
+
+      targetLabel.textContent =
+        "Target";
+
+      const targetText =
+        document.createElement("p");
+
+      targetText.className =
+        "small mb-0 text-body-secondary";
+
+      targetText.textContent =
+        individualGoal.target ||
+        "Not provided";
+
+      targetBlock.append(
+        targetLabel,
+        targetText,
+      );
+
+      const progress =
+        bexPaState.progressUpdates.filter(
+          (progressUpdate) =>
+            progressUpdate.individualGoalId ===
+            individualGoal.id,
+        );
+
+      const progressBlock =
+        document.createElement("div");
+
+      progressBlock.className =
+        "border rounded-3 p-3 bg-body-tertiary mb-3";
+
+      const progressLabel =
+        document.createElement("p");
+
+      progressLabel.className =
+        "small fw-semibold mb-1";
+
+      progressLabel.textContent =
+        "Progress";
+
+      const progressText =
+        document.createElement("p");
+
+      progressText.className =
+        "small mb-0 text-body-secondary";
+
+      progressText.textContent =
+        progress.length === 0
+          ? "No progress evidence submitted yet."
+          : progress
+            .map(
+              (progressUpdate) =>
+                `${progressUpdate.progressPercentage}% - ${progressUpdate.status}: ${progressUpdate.updateText}${progressUpdate.evidence ? ` (${progressUpdate.evidence})` : ""}`,
+            )
+            .join(" | ");
+
+      progressBlock.append(
+        progressLabel,
+        progressText,
+      );
+
+      const achievementBlock =
+        document.createElement("div");
+
+      achievementBlock.className =
+        "border rounded-3 p-3 bg-body-tertiary";
+
+      const achievementLabel =
+        document.createElement("p");
+
+      achievementLabel.className =
+        "small fw-semibold mb-1";
+
+      achievementLabel.textContent =
+        "Employee achievement";
+
+      const achievement =
+        document.createElement("p");
+
+      achievement.className =
+        "small mb-0 text-body-secondary";
+
+      achievement.textContent =
+        employeeResponse?.achievement ||
+        "Not provided";
+
+      achievementBlock.append(
+        achievementLabel,
+        achievement,
+      );
+
+      goalItem.append(
+        title,
+        targetBlock,
+        progressBlock,
+        achievementBlock,
+      );
+
+      bexPaElements.finalAppraisalEmployee.appendChild(
+        goalItem,
+      );
+    });
+
+    bexPaElements.finalAppraisalManager.replaceChildren();
+
+    const managerHeading =
+      document.createElement("h3");
+
+    managerHeading.className =
+      "h6 fw-bold";
+
+    managerHeading.textContent =
+      "Manager Appraisal";
+
+    bexPaElements.finalAppraisalManager.appendChild(
+      managerHeading,
+    );
+
+    const managerStatus =
+      document.createElement("p");
+
+    managerStatus.className =
+      "small text-body-secondary";
+
+    managerStatus.textContent =
+      `Status: Submitted${managerAppraisal.submittedAt ? ` | Submitted: ${bexPaFormatTimestamp(managerAppraisal.submittedAt)}` : ""}`;
+
+    bexPaElements.finalAppraisalManager.appendChild(
+      managerStatus,
+    );
+
+    goals.forEach((individualGoal) => {
+      const managerResponse =
+        managerAppraisal.goalResponses?.find(
+          (response) =>
+            response.individualGoalId ===
+            individualGoal.id,
+        );
+
+      const item =
+        document.createElement("article");
+
+      item.className =
+        "bex-pa-goal-item border rounded-3 p-3 mt-3";
+
+      const title =
+        document.createElement("h4");
+
+      title.className =
+        "h6 fw-bold mb-3";
+
+      title.textContent =
+        individualGoal.title;
+
+      const ratingBlock =
+        document.createElement("div");
+
+      ratingBlock.className =
+        "border rounded-3 p-3 bg-body-tertiary mb-3";
+
+      const ratingLabel =
+        document.createElement("p");
+
+      ratingLabel.className =
+        "small fw-semibold mb-1";
+
+      ratingLabel.textContent =
+        "Manager rating";
+
+      const rating =
+        document.createElement("p");
+
+      rating.className =
+        "small mb-0 text-body-secondary";
+
+      rating.textContent =
+        managerResponse?.rating ||
+        "Not provided";
+
+      ratingBlock.append(
+        ratingLabel,
+        rating,
+      );
+
+      const commentBlock =
+        document.createElement("div");
+
+      commentBlock.className =
+        "border rounded-3 p-3 bg-body-tertiary";
+
+      const commentLabel =
+        document.createElement("p");
+
+      commentLabel.className =
+        "small fw-semibold mb-1";
+
+      commentLabel.textContent =
+        "Manager comment";
+
+      const comment =
+        document.createElement("p");
+
+      comment.className =
+        "small mb-0 text-body-secondary";
+
+      comment.textContent =
+        managerResponse?.comment ||
+        "Not provided";
+
+      commentBlock.append(
+        commentLabel,
+        comment,
+      );
+
+      item.append(
+        title,
+        ratingBlock,
+        commentBlock,
+      );
+
+      bexPaElements.finalAppraisalManager.appendChild(
+        item,
+      );
+    });
+
+    const overallComment =
+      document.createElement("div");
+
+    overallComment.className =
+      "border rounded-3 p-3 mt-3 bg-body-tertiary";
+
+    const overallCommentLabel =
+      document.createElement("p");
+
+    overallCommentLabel.className =
+      "fw-semibold mb-1";
+
+    overallCommentLabel.textContent =
+      "Overall Manager Summary";
+
+    const overallCommentText =
+      document.createElement("p");
+
+    overallCommentText.className =
+      "small mb-0 text-body-secondary";
+
+    overallCommentText.textContent =
+      managerAppraisal.overallComment ||
+      "Not provided";
+
+    overallComment.append(
+      overallCommentLabel,
+      overallCommentText,
+    );
+
+    bexPaElements.finalAppraisalManager.appendChild(
+      overallComment,
+    );
+
+    if (acknowledgement?.status === "Acknowledged") {
+      bexPaElements.finalAppraisalAcknowledgement.textContent =
+        `Status: Acknowledged${acknowledgement.acknowledgedAt ? ` | Acknowledged: ${bexPaFormatTimestamp(acknowledgement.acknowledgedAt)}` : ""}`;
+
+      bexPaElements.finalAppraisalAcknowledgement.classList.remove(
+        "d-none",
+      );
+
+      bexPaElements.acknowledgeFinalAppraisalButton?.classList.add(
+        "d-none",
+      );
+    } else {
+      bexPaElements.finalAppraisalAcknowledgement.textContent =
+        "";
+
+      bexPaElements.finalAppraisalAcknowledgement.classList.add(
+        "d-none",
+      );
+
+      bexPaElements.acknowledgeFinalAppraisalButton?.classList.remove(
+        "d-none",
+      );
+    }
+
+    bexPaElements.finalAppraisalSection?.classList.remove(
+      "d-none",
+    );
+  }
+
+  function bexPaOpenFinalAppraisal(appraisalId) {
+    if (bexPaGetCurrentPersona() !== "employee") {
+      return;
+    }
+
+    const currentEmployeeId =
+      bexPaGetCurrentEmployeeId();
+
+    const appraisal =
+      bexPaState.employeeAppraisals.find(
+        (existingAppraisal) =>
+          existingAppraisal.id === appraisalId &&
+          existingAppraisal.employeeId === currentEmployeeId,
+      );
+
+    if (!appraisal) {
+      return;
+    }
+
+    const hrFinalisation =
+      bexPaState.hrFinalisations.find(
+        (existingFinalisation) =>
+          existingFinalisation.appraisalId === appraisal.id,
+      );
+
+    if (hrFinalisation?.status !== "Finalised") {
+      return;
+    }
+
+    bexPaElements.selfAppraisalSection?.classList.add(
+      "d-none",
+    );
+
+    bexPaElements.managerAppraisalSection?.classList.add(
+      "d-none",
+    );
+
+    bexPaElements.hrAppraisalReviewSection?.classList.add(
+      "d-none",
+    );
+
+    bexPaRenderFinalAppraisal(appraisal);
+
+    bexPaElements.finalAppraisalSection?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
+  function bexPaCloseFinalAppraisal() {
+    bexPaState.editingFinalAppraisalId = null;
+
+    bexPaElements.finalAppraisalSection?.classList.add(
+      "d-none",
+    );
+  }
+
+  function bexPaCompleteEligibleCycles() {
+    let cyclesChanged = false;
+
+    bexPaState.cycles.forEach((cycle) => {
+      if (cycle.status !== "Active") {
+        return;
+      }
+
+      const cycleAppraisals =
+        bexPaState.employeeAppraisals.filter(
+          (appraisal) =>
+            appraisal.cycleId === cycle.id,
+        );
+
+      if (cycleAppraisals.length === 0) {
+        return;
+      }
+
+      const acknowledgements =
+        cycleAppraisals.map((appraisal) =>
+          bexPaState.employeeAcknowledgements.find(
+            (acknowledgement) =>
+              acknowledgement.appraisalId ===
+              appraisal.id,
+          ),
+        );
+
+      const allAcknowledged =
+        acknowledgements.every(
+          (acknowledgement) =>
+            acknowledgement?.status ===
+            "Acknowledged",
+        );
+
+      if (!allAcknowledged) {
+        return;
+      }
+
+      const acknowledgementTimestamps =
+        acknowledgements
+          .map(
+            (acknowledgement) =>
+              acknowledgement?.acknowledgedAt ||
+              acknowledgement?.updatedAt ||
+              "",
+          )
+          .filter(Boolean)
+          .sort();
+
+      cycle.status = "Completed";
+      cycle.completedAt =
+        acknowledgementTimestamps[
+        acknowledgementTimestamps.length - 1
+        ] || new Date().toISOString();
+
+      cyclesChanged = true;
+    });
+
+    if (cyclesChanged) {
+      bexPaSaveCycles();
+    }
+
+    return cyclesChanged;
+  }
+
+  function bexPaAcknowledgeFinalAppraisal() {
+    if (bexPaGetCurrentPersona() !== "employee") {
+      return;
+    }
+
+    const currentEmployeeId =
+      bexPaGetCurrentEmployeeId();
+
+    const appraisal =
+      bexPaState.employeeAppraisals.find(
+        (existingAppraisal) =>
+          existingAppraisal.id ===
+          bexPaState.editingFinalAppraisalId &&
+          existingAppraisal.employeeId ===
+          currentEmployeeId,
+      );
+
+    if (!appraisal) {
+      return;
+    }
+
+    const hrFinalisation =
+      bexPaState.hrFinalisations.find(
+        (existingFinalisation) =>
+          existingFinalisation.appraisalId ===
+          appraisal.id,
+      );
+
+    if (hrFinalisation?.status !== "Finalised") {
+      return;
+    }
+
+    const existingAcknowledgement =
+      bexPaState.employeeAcknowledgements.find(
+        (acknowledgement) =>
+          acknowledgement.appraisalId ===
+          appraisal.id,
+      );
+
+    if (
+      existingAcknowledgement?.status ===
+      "Acknowledged"
+    ) {
+      return;
+    }
+
+    const timestamp =
+      new Date().toISOString();
+
+    const acknowledgement = {
+      id:
+        `BEX-PA-ACKNOWLEDGEMENT-${appraisal.id}`,
+      appraisalId: appraisal.id,
+      employeeId: currentEmployeeId,
+      status: "Acknowledged",
+      acknowledgedAt: timestamp,
+      updatedAt: timestamp,
+    };
+
+    const existingIndex =
+      bexPaState.employeeAcknowledgements.findIndex(
+        (existingAcknowledgement) =>
+          existingAcknowledgement.appraisalId ===
+          appraisal.id,
+      );
+
+    if (existingIndex === -1) {
+      bexPaState.employeeAcknowledgements.push(
+        acknowledgement,
+      );
+    } else {
+      bexPaState.employeeAcknowledgements[
+        existingIndex
+      ] = acknowledgement;
+    }
+
+    bexPaSaveEmployeeAcknowledgements();
+    bexPaCompleteEligibleCycles();
+
+    bexPaRenderFinalAppraisal(appraisal);
+    bexPaRenderEmployeeAppraisals();
+    bexPaRenderCycles();
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        "Appraisal acknowledged successfully.";
+    }
+  }
+
+  function bexPaFinaliseHrAppraisal() {
+    if (bexPaGetCurrentPersona() !== "hr-admin") {
+      return;
+    }
+
+    const appraisal =
+      bexPaState.employeeAppraisals.find(
+        (existingAppraisal) =>
+          existingAppraisal.id ===
+          bexPaState.editingHrAppraisalId,
+      );
+
+    if (!appraisal) {
+      return;
+    }
+
+    const selfAppraisal =
+      bexPaState.selfAppraisals.find(
+        (existingSelfAppraisal) =>
+          existingSelfAppraisal.appraisalId === appraisal.id,
+      );
+
+    const managerAppraisal =
+      bexPaState.managerAppraisals.find(
+        (existingManagerAppraisal) =>
+          existingManagerAppraisal.appraisalId === appraisal.id,
+      );
+
+    if (
+      selfAppraisal?.status !== "Submitted" ||
+      managerAppraisal?.status !== "Submitted"
+    ) {
+      if (bexPaElements.announcement) {
+        bexPaElements.announcement.textContent =
+          "Employee and Manager appraisals must both be submitted before HR can finalise the appraisal.";
+      }
+
+      return;
+    }
+
+    const existingFinalisation =
+      bexPaState.hrFinalisations.find(
+        (finalisation) =>
+          finalisation.appraisalId === appraisal.id,
+      );
+
+    if (existingFinalisation?.status === "Finalised") {
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+
+    const hrFinalisation = {
+      id:
+        `BEX-PA-HR-FINALISATION-${appraisal.id}`,
+      appraisalId: appraisal.id,
+      employeeId: appraisal.employeeId,
+      status: "Finalised",
+      finalisedAt: timestamp,
+      updatedAt: timestamp,
+    };
+
+    const existingIndex =
+      bexPaState.hrFinalisations.findIndex(
+        (finalisation) =>
+          finalisation.appraisalId === appraisal.id,
+      );
+
+    if (existingIndex === -1) {
+      bexPaState.hrFinalisations.push(
+        hrFinalisation,
+      );
+    } else {
+      bexPaState.hrFinalisations[existingIndex] =
+        hrFinalisation;
+    }
+
+    bexPaSaveHrFinalisations();
+
+    bexPaRenderHrAppraisalReview(appraisal);
+    bexPaRenderEmployeeAppraisals();
+    bexPaRenderCycles();
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        "Appraisal finalised successfully.";
+    }
+  }
+
+  function bexPaShowManagerAppraisalError(message) {
+    if (!bexPaElements.managerAppraisalError) {
+      return;
+    }
+
+    bexPaElements.managerAppraisalError.textContent = message;
+    bexPaElements.managerAppraisalError.classList.remove(
+      "d-none",
+    );
+  }
+
+  function bexPaClearManagerAppraisalError() {
+    if (!bexPaElements.managerAppraisalError) {
+      return;
+    }
+
+    bexPaElements.managerAppraisalError.textContent = "";
+    bexPaElements.managerAppraisalError.classList.add(
+      "d-none",
+    );
+  }
+
+  function bexPaCreateManagerRatingField(
+    individualGoal,
+    ratingScale,
+    response,
+    isReadOnly = false,
+  ) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "mt-3";
+
+    const ratingLabel = document.createElement("label");
+    ratingLabel.className = "form-label small fw-semibold";
+    ratingLabel.textContent = "Manager Rating";
+    ratingLabel.htmlFor =
+      `bexPaManagerRating-${individualGoal.id}`;
+
+    const rating = document.createElement("select");
+    rating.className = "form-select";
+    rating.required = true;
+    rating.id = ratingLabel.htmlFor;
+    rating.dataset.bexPaManagerRating = individualGoal.id;
+    rating.disabled = isReadOnly;
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select rating";
+    rating.appendChild(placeholder);
+
+    ratingScale.forEach((configuredRating) => {
+      const option = document.createElement("option");
+      option.value = configuredRating;
+      option.textContent = configuredRating;
+      rating.appendChild(option);
+    });
+
+    rating.value = response?.rating || "";
+
+    const commentLabel = document.createElement("label");
+    commentLabel.className = "form-label small fw-semibold mt-3";
+    commentLabel.textContent = "Manager Comment";
+    commentLabel.htmlFor =
+      `bexPaManagerComment-${individualGoal.id}`;
+
+    const comment = document.createElement("textarea");
+    comment.className = "form-control";
+    comment.rows = 3;
+    comment.maxLength = 1500;
+    comment.id = commentLabel.htmlFor;
+    comment.dataset.bexPaManagerComment = individualGoal.id;
+    comment.value = response?.comment || "";
+    comment.readOnly = isReadOnly;
+
+    wrapper.append(
+      ratingLabel,
+      rating,
+      commentLabel,
+      comment,
+    );
+
+    return wrapper;
+  }
+
+  function bexPaRenderManagerAppraisalDetail(appraisal) {
+    const cycle = bexPaState.cycles.find(
+      (existingCycle) =>
+        existingCycle.id === appraisal.cycleId,
+    );
+
+    const template =
+      bexPaGetAppraisalTemplate(appraisal);
+
+    const selfAppraisal = bexPaState.selfAppraisals.find(
+      (existingSelfAppraisal) =>
+        existingSelfAppraisal.appraisalId === appraisal.id,
+    );
+
+    const managerAppraisal =
+      bexPaState.managerAppraisals.find(
+        (existingManagerAppraisal) =>
+          existingManagerAppraisal.appraisalId === appraisal.id,
+      );
+
+    const isSubmitted =
+      managerAppraisal?.status === "Submitted";
+    const managerDisplayStatus =
+      bexPaGetAppraisalDisplayStatus(
+        appraisal,
+        selfAppraisal,
+        managerAppraisal,
+        null,
+        null,
+      );
+
+    if (bexPaElements.managerAppraisalTitle) {
+      bexPaElements.managerAppraisalTitle.textContent =
+        isSubmitted
+          ? "Manager Appraisal"
+          : "Complete Manager Appraisal";
+    }
+
+    const ratingScale = Array.isArray(template?.ratingScale)
+      ? template.ratingScale
+      : [];
+
+    const goals = bexPaGetSelfAppraisalGoals(appraisal);
+
+    bexPaState.editingManagerAppraisalId = appraisal.id;
+    bexPaElements.managerAppraisalMeta.textContent =
+      `${appraisal.employeeName || "Employee"} | ${cycle?.name || "Unknown cycle"} | ${template?.name || "Unknown template"} | Employee Self-Appraisal: Submitted${selfAppraisal?.submittedAt ? ` | Submitted: ${bexPaFormatTimestamp(selfAppraisal.submittedAt)}` : ""}`;
+
+    bexPaElements.managerAppraisalSelfAppraisal.replaceChildren();
+
+    const selfAppraisalHeading = document.createElement("h3");
+    selfAppraisalHeading.className = "h6 fw-bold";
+    selfAppraisalHeading.textContent = "Employee Self-Appraisal";
+    bexPaElements.managerAppraisalSelfAppraisal.appendChild(
+      selfAppraisalHeading,
+    );
+
+    const selfCompetencies = Array.isArray(
+      selfAppraisal?.competencyResponses,
+    )
+      ? selfAppraisal.competencyResponses
+      : [];
+
+    selfCompetencies.forEach((response) => {
+      const competency = template?.competencies?.find(
+        (existingCompetency) =>
+          existingCompetency.id === response.competencyId,
+      );
+
+      const item = document.createElement("div");
+      item.className =
+        "border rounded-3 p-3 mb-3 bg-body-tertiary";
+
+      const title = document.createElement("p");
+      title.className = "mb-1 fw-semibold";
+      title.textContent = competency?.name || response.competencyId;
+
+      const rating = document.createElement("p");
+      rating.className = "mb-1 small";
+      rating.textContent = `Employee Rating: ${response.rating || "Not provided"}`;
+
+      const comment = document.createElement("p");
+      comment.className = "mb-0 small text-body-secondary";
+      comment.textContent = `Employee Comment: ${response.comment || "Not provided"}`;
+
+      item.append(title, rating, comment);
+      bexPaElements.managerAppraisalSelfAppraisal.appendChild(item);
+    });
+
+    const employeeAchievement = document.createElement("div");
+
+    employeeAchievement.className =
+      "border rounded-3 p-3 bg-body-tertiary";
+
+    const employeeAchievementTitle =
+      document.createElement("p");
+
+    employeeAchievementTitle.className =
+      "mb-1 fw-semibold";
+
+    employeeAchievementTitle.textContent =
+      "Overall Employee Summary";
+
+    const employeeAchievementText =
+      document.createElement("p");
+
+    employeeAchievementText.className =
+      "mb-0 small text-body-secondary";
+
+    employeeAchievementText.textContent =
+      selfAppraisal?.employeeAchievement ||
+      selfAppraisal?.overallSummary ||
+      "Not provided";
+
+    employeeAchievement.append(
+      employeeAchievementTitle,
+      employeeAchievementText,
+    );
+
+    bexPaElements.managerAppraisalSelfAppraisal.appendChild(
+      employeeAchievement,
+    );
+
+    bexPaElements.managerAppraisalGoals.replaceChildren();
+
+    const goalsHeading = document.createElement("h3");
+    goalsHeading.className = "h6 fw-bold";
+    goalsHeading.textContent = "Goals and Progress";
+    bexPaElements.managerAppraisalGoals.appendChild(goalsHeading);
+
+    goals.forEach((individualGoal) => {
+      const response = selfAppraisal?.goalResponses?.find(
+        (existingResponse) =>
+          existingResponse.individualGoalId === individualGoal.id,
+      );
+
+      const managerResponse = managerAppraisal?.goalResponses?.find(
+        (existingResponse) =>
+          existingResponse.individualGoalId === individualGoal.id,
+      );
+
+      const goalItem = document.createElement("article");
+      goalItem.className =
+        "bex-pa-goal-item border rounded-3 p-3 mb-4";
+
+      const title = document.createElement("h4");
+      title.className = "h6 fw-bold";
+      title.textContent = individualGoal.title;
+
+      const target = document.createElement("p");
+      target.className = "small mb-2";
+      target.textContent = `Target: ${individualGoal.target}`;
+
+      const progress = bexPaState.progressUpdates.filter(
+        (progressUpdate) =>
+          progressUpdate.individualGoalId === individualGoal.id,
+      );
+
+      const progressHistory = document.createElement("div");
+      progressHistory.className = "small text-body-secondary mb-3";
+      progressHistory.textContent = progress.length === 0
+        ? "No progress evidence submitted yet."
+        : progress
+          .map(
+            (progressUpdate) =>
+              `${progressUpdate.progressPercentage}% - ${progressUpdate.status}: ${progressUpdate.updateText}${progressUpdate.evidence ? ` (${progressUpdate.evidence})` : ""}`,
+          )
+          .join(" | ");
+
+      const achievementBlock = document.createElement("div");
+      achievementBlock.className =
+        "border rounded-3 p-3 mt-3 bg-body-tertiary";
+
+      const achievementLabel = document.createElement("p");
+      achievementLabel.className =
+        "small fw-semibold mb-1";
+      achievementLabel.textContent =
+        "Employee achievement";
+
+      const achievementText = document.createElement("p");
+      achievementText.className =
+        "small mb-0 text-body-secondary";
+      achievementText.textContent =
+        response?.achievement || "Not provided";
+
+      achievementBlock.append(
+        achievementLabel,
+        achievementText,
+      );
+
+      goalItem.append(
+        title,
+        target,
+        progressHistory,
+        achievementBlock,
+        bexPaCreateManagerRatingField(
+          individualGoal,
+          ratingScale,
+          managerResponse,
+          isSubmitted,
+        ),
+      );
+
+      bexPaElements.managerAppraisalGoals.appendChild(goalItem);
+    });
+
+    const rememberedValues =
+      bexPaGetRememberedFormValues(
+        `managerAppraisal:${appraisal.id}`,
+      );
+
+    bexPaElements.managerAppraisalOverallComment.value =
+      managerAppraisal?.overallComment ||
+      "";
+
+    if (!managerAppraisal) {
+      if (Array.isArray(rememberedValues.goalResponses)) {
+        rememberedValues.goalResponses.forEach(
+          (response) => {
+            bexPaApplyRememberedValues([
+              [
+                bexPaElements.managerAppraisalGoals.querySelector(
+                  `[data-bex-pa-manager-rating="${CSS.escape(response.individualGoalId)}"]`,
+                ),
+                response.rating,
+              ],
+              [
+                bexPaElements.managerAppraisalGoals.querySelector(
+                  `[data-bex-pa-manager-comment="${CSS.escape(response.individualGoalId)}"]`,
+                ),
+                response.comment,
+              ],
+            ]);
+          },
+        );
+      }
+
+      bexPaApplyRememberedValues([
+        [
+          bexPaElements.managerAppraisalOverallComment,
+          rememberedValues.overallComment,
+        ],
+      ]);
+    }
+    bexPaElements.managerAppraisalOverallComment.readOnly =
+      isSubmitted;
+    bexPaElements.saveManagerAppraisalButton?.classList.toggle(
+      "d-none",
+      isSubmitted,
+    );
+
+    bexPaElements.submitManagerAppraisalButton?.classList.toggle(
+      "d-none",
+      isSubmitted,
+    );
+
+    if (isSubmitted) {
+      bexPaElements.managerAppraisalMeta.textContent +=
+        ` | Manager Appraisal: Submitted${managerAppraisal?.submittedAt ? ` | Submitted: ${bexPaFormatTimestamp(managerAppraisal.submittedAt)}` : ""}`;
+    } else {
+      bexPaElements.managerAppraisalMeta.textContent +=
+        ` | Manager Appraisal: ${managerDisplayStatus}`;
+    }
+    bexPaElements.managerAppraisalSection.classList.remove(
+      "d-none",
+    );
+  }
+
+  function bexPaCloseManagerAppraisalDetail() {
+    bexPaState.editingManagerAppraisalId = null;
+    bexPaElements.managerAppraisalSection?.classList.add(
+      "d-none",
+    );
+    bexPaClearManagerAppraisalError();
+  }
+
+  function bexPaOpenManagerAppraisal(appraisalId) {
+    const appraisal =
+      bexPaGetEligibleManagerAppraisals().find(
+        (existingAppraisal) =>
+          existingAppraisal.id === appraisalId,
+      );
+
+    if (!appraisal) {
+      return;
+    }
+
+    bexPaClearManagerAppraisalError();
+    bexPaRenderManagerAppraisalDetail(appraisal);
+    bexPaElements.selfAppraisalSection?.classList.add(
+      "d-none",
+    );
+    bexPaElements.managerAppraisalSection.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
+  function bexPaValidateManagerAppraisalDraft(
+    managerAppraisal,
+    appraisal,
+    goals,
+    ratingScale,
+  ) {
+    if (
+      !bexPaGetEligibleManagerAppraisals().some(
+        (eligibleAppraisal) =>
+          eligibleAppraisal.id === appraisal.id,
+      )
+    ) {
+      return "Only an eligible submitted self-appraisal for your direct report can be saved.";
+    }
+
+    if (
+      managerAppraisal.goalResponses.length !== goals.length ||
+      managerAppraisal.goalResponses.some(
+        (response) =>
+          !response.rating ||
+          !ratingScale.includes(response.rating) ||
+          !goals.some(
+            (individualGoal) =>
+              individualGoal.id === response.individualGoalId,
+          ),
+      )
+    ) {
+      return "Select a manager rating for every displayed goal.";
+    }
+
+    if (!managerAppraisal.overallComment.trim()) {
+      return "Enter Manager's Overall Comments before saving the draft.";
+    }
+
+    return "";
+  }
+
+  function bexPaHandleManagerAppraisalSave(
+    event,
+    isFinalSubmission = false,
+  ) {
+    event.preventDefault();
+    bexPaClearManagerAppraisalError();
+
+    const appraisal =
+      bexPaGetEligibleManagerAppraisals().find(
+        (existingAppraisal) =>
+          existingAppraisal.id ===
+          bexPaState.editingManagerAppraisalId,
+      );
+
+    if (!appraisal) {
+      bexPaShowManagerAppraisalError(
+        "Only an eligible submitted self-appraisal for your direct report can be saved.",
+      );
+      return;
+    }
+
+    const existingManagerAppraisal =
+      bexPaState.managerAppraisals.find(
+        (managerAppraisal) =>
+          managerAppraisal.appraisalId === appraisal.id,
+      );
+
+    if (existingManagerAppraisal?.status === "Submitted") {
+      bexPaShowManagerAppraisalError(
+        "This manager appraisal has already been submitted.",
+      );
+      return;
+    }
+
+    const template =
+      bexPaGetAppraisalTemplate(appraisal);
+
+    const ratingScale = Array.isArray(template?.ratingScale)
+      ? template.ratingScale
+      : [];
+
+    const goals = bexPaGetSelfAppraisalGoals(appraisal);
+
+    const managerAppraisal = {
+      id:
+        `BEX-PA-MANAGER-APPRAISAL-${appraisal.id}`,
+      appraisalId: appraisal.id,
+      employeeId: appraisal.employeeId,
+      managerEmployeeId: bexPaGetCurrentManagerEmployeeId(),
+      status: isFinalSubmission ? "Submitted" : "Draft",
+      goalResponses: goals.map((individualGoal) => ({
+        individualGoalId: individualGoal.id,
+        rating:
+          bexPaElements.managerAppraisalGoals.querySelector(
+            `[data-bex-pa-manager-rating="${CSS.escape(individualGoal.id)}"]`,
+          )?.value || "",
+        comment:
+          bexPaElements.managerAppraisalGoals.querySelector(
+            `[data-bex-pa-manager-comment="${CSS.escape(individualGoal.id)}"]`,
+          )?.value.trim() || "",
+      })),
+      overallComment:
+        bexPaElements.managerAppraisalOverallComment.value.trim(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (isFinalSubmission) {
+      managerAppraisal.submittedAt =
+        new Date().toISOString();
+    }
+
+    const validationError =
+      bexPaValidateManagerAppraisalDraft(
+        managerAppraisal,
+        appraisal,
+        goals,
+        ratingScale,
+      );
+
+    if (validationError) {
+      bexPaShowManagerAppraisalError(validationError);
+      return;
+    }
+
+    bexPaRememberFormValues(
+      `managerAppraisal:${appraisal.id}`,
+      {
+        goalResponses: managerAppraisal.goalResponses.map(
+          (response) => ({ ...response }),
+        ),
+        overallComment: managerAppraisal.overallComment,
+      },
+    );
+
+    const existingIndex =
+      bexPaState.managerAppraisals.findIndex(
+        (storedManagerAppraisal) =>
+          storedManagerAppraisal.appraisalId === appraisal.id,
+      );
+
+    if (existingIndex === -1) {
+      bexPaState.managerAppraisals.push(managerAppraisal);
+    } else {
+      bexPaState.managerAppraisals[existingIndex] =
+        managerAppraisal;
+    }
+
+    bexPaSaveManagerAppraisals();
+    bexPaRenderManagerAppraisalDetail(appraisal);
+    bexPaRenderEmployeeAppraisals();
+    bexPaRenderCycles();
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        isFinalSubmission
+          ? "Manager appraisal submitted successfully."
+          : "Manager appraisal draft saved successfully.";
+    }
+  }
+
+  function bexPaGetSelfAppraisalGoals(appraisal) {
+    return bexPaState.individualGoals.filter(
+      (individualGoal) =>
+        individualGoal.employeeId === appraisal.employeeId &&
+        individualGoal.cycleId === appraisal.cycleId,
+    );
+  }
+
+  function bexPaGetApplicableSelfAppraisalCompetencies(
+    template,
+  ) {
+    return (
+      Array.isArray(template?.competencies)
+        ? template.competencies
+        : []
+    )
+      .filter(
+        (competency) =>
+          competency.applicability === "All Employees",
+      )
+      .sort(
+        (firstCompetency, secondCompetency) =>
+          firstCompetency.order - secondCompetency.order,
+      );
+  }
+
+  function bexPaShowSelfAppraisalError(message) {
+    if (!bexPaElements.selfAppraisalError) {
+      return;
+    }
+
+    bexPaElements.selfAppraisalError.textContent = message;
+    bexPaElements.selfAppraisalError.classList.remove(
+      "d-none",
+    );
+  }
+
+  function bexPaClearSelfAppraisalError() {
+    if (!bexPaElements.selfAppraisalError) {
+      return;
+    }
+
+    bexPaElements.selfAppraisalError.textContent = "";
+    bexPaElements.selfAppraisalError.classList.add(
+      "d-none",
+    );
+  }
+
+  function bexPaCreateSelfAppraisalRatingField(
+    competency,
+    ratingScale,
+    response,
+  ) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "mb-4";
+
+    const label = document.createElement("label");
+    label.className = "form-label fw-semibold";
+    label.textContent = competency.name;
+
+    const select = document.createElement("select");
+    select.className = "form-select";
+    select.required = true;
+    select.dataset.bexPaSelfAppraisalCompetencyRating =
+      competency.id;
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select rating";
+    select.appendChild(placeholder);
+
+    ratingScale.forEach((rating) => {
+      const option = document.createElement("option");
+      option.value = rating;
+      option.textContent = rating;
+      select.appendChild(option);
+    });
+
+    select.value = response?.rating || "";
+    label.htmlFor = select.id =
+      `bexPaSelfAppraisalRating-${competency.id}`;
+
+    const description = document.createElement("p");
+    description.className = "mb-2 small text-body-secondary";
+    description.textContent = competency.description;
+
+    const commentLabel = document.createElement("label");
+    commentLabel.className = "form-label small fw-semibold";
+    commentLabel.textContent = "Your comments";
+    commentLabel.htmlFor =
+      `bexPaSelfAppraisalCompetencyComment-${competency.id}`;
+
+    const comment = document.createElement("textarea");
+    comment.className = "form-control";
+    comment.rows = 3;
+    comment.maxLength = 1000;
+    comment.id = commentLabel.htmlFor;
+    comment.dataset.bexPaSelfAppraisalCompetencyComment =
+      competency.id;
+    comment.value = response?.comment || "";
+
+    wrapper.append(
+      label,
+      description,
+      select,
+      commentLabel,
+      comment,
+    );
+
+    return wrapper;
+  }
+
+  function bexPaRenderSelfAppraisalDetail(appraisal) {
+    const cycle = bexPaState.cycles.find(
+      (existingCycle) =>
+        existingCycle.id === appraisal.cycleId,
+    );
+
+    const template =
+      bexPaGetAppraisalTemplate(appraisal);
+
+    const selfAppraisal = bexPaState.selfAppraisals.find(
+      (existingSelfAppraisal) =>
+        existingSelfAppraisal.appraisalId === appraisal.id,
+    );
+
+    const competencies =
+      bexPaGetApplicableSelfAppraisalCompetencies(
+        template,
+      );
+
+    const ratingScale = Array.isArray(template?.ratingScale)
+      ? template.ratingScale
+      : [];
+
+    const goals = bexPaGetSelfAppraisalGoals(appraisal);
+    const isSubmitted = selfAppraisal?.status === "Submitted";
+    const selfDisplayStatus =
+      bexPaGetAppraisalDisplayStatus(
+        appraisal,
+        selfAppraisal,
+        null,
+        null,
+        null,
+      );
+
+    bexPaState.editingSelfAppraisalId = appraisal.id;
+    bexPaElements.selfAppraisalMeta.textContent =
+      `${cycle?.name || "Unknown cycle"} | ${template?.name || "Unknown template"} | Status: ${selfDisplayStatus}${isSubmitted && selfAppraisal.submittedAt ? ` | Submitted: ${bexPaFormatTimestamp(selfAppraisal.submittedAt)}` : ""}`;
+
+    bexPaElements.selfAppraisalCompetencies.replaceChildren();
+
+    const competencyHeading = document.createElement("h3");
+    competencyHeading.className = "h6 fw-bold";
+    competencyHeading.textContent = "Assessment Areas";
+    bexPaElements.selfAppraisalCompetencies.appendChild(
+      competencyHeading,
+    );
+
+    if (competencies.length === 0) {
+      const emptyCompetencies = document.createElement("p");
+      emptyCompetencies.className = "text-body-secondary";
+      emptyCompetencies.textContent =
+        "No employee-applicable competencies are configured for this template.";
+      bexPaElements.selfAppraisalCompetencies.appendChild(
+        emptyCompetencies,
+      );
+    } else {
+      competencies.forEach((competency) => {
+        const response = selfAppraisal?.competencyResponses?.find(
+          (existingResponse) =>
+            existingResponse.competencyId === competency.id,
+        );
+
+        bexPaElements.selfAppraisalCompetencies.appendChild(
+          bexPaCreateSelfAppraisalRatingField(
+            competency,
+            ratingScale,
+            response,
+          ),
+        );
+      });
+    }
+
+    bexPaElements.selfAppraisalGoals.replaceChildren();
+
+    const goalsHeading = document.createElement("h3");
+    goalsHeading.className = "h6 fw-bold";
+    goalsHeading.textContent = "Your Goals & Progress";
+    bexPaElements.selfAppraisalGoals.appendChild(goalsHeading);
+
+    if (goals.length === 0) {
+      const emptyGoals = document.createElement("p");
+      emptyGoals.className = "text-body-secondary";
+      emptyGoals.textContent =
+        "No individual goals are assigned for this appraisal cycle.";
+      bexPaElements.selfAppraisalGoals.appendChild(emptyGoals);
+    }
+
+    goals.forEach((individualGoal) => {
+      const response = selfAppraisal?.goalResponses?.find(
+        (existingResponse) =>
+          existingResponse.individualGoalId ===
+          individualGoal.id,
+      );
+
+      const goalItem = document.createElement("article");
+      goalItem.className = "bex-pa-goal-item mb-3";
+
+      const title = document.createElement("h4");
+      title.className = "h6 fw-bold";
+      title.textContent = individualGoal.title;
+
+      const target = document.createElement("p");
+      target.className = "small mb-2";
+      target.textContent = `Target: ${individualGoal.target}`;
+
+      const progress = bexPaState.progressUpdates.filter(
+        (progressUpdate) =>
+          progressUpdate.individualGoalId === individualGoal.id,
+      );
+
+      const progressHistory = document.createElement("div");
+      progressHistory.className = "small text-body-secondary mb-3";
+      progressHistory.textContent = progress.length === 0
+        ? "No progress evidence submitted yet."
+        : progress
+          .map(
+            (progressUpdate) =>
+              `${progressUpdate.progressPercentage}% - ${progressUpdate.status}: ${progressUpdate.updateText}${progressUpdate.evidence ? ` (${progressUpdate.evidence})` : ""}`,
+          )
+          .join(" | ");
+
+      const achievementLabel = document.createElement("label");
+      achievementLabel.className = "form-label small fw-semibold";
+      achievementLabel.textContent =
+        "What did you achieve?";
+      achievementLabel.htmlFor =
+        `bexPaSelfAppraisalAchievement-${individualGoal.id}`;
+
+      const achievement = document.createElement("textarea");
+      achievement.className = "form-control mb-2";
+      achievement.rows = 3;
+      achievement.maxLength = 1500;
+      achievement.required = true;
+      achievement.id = achievementLabel.htmlFor;
+      achievement.dataset.bexPaSelfAppraisalAchievement =
+        individualGoal.id;
+      achievement.value = response?.achievement || "";
+
+      goalItem.append(
+        title,
+        target,
+        progressHistory,
+        achievementLabel,
+        achievement,
+      );
+
+      bexPaElements.selfAppraisalGoals.appendChild(goalItem);
+    });
+
+    const rememberedValues =
+      bexPaGetRememberedFormValues(
+        `selfAppraisal:${appraisal.id}`,
+      );
+
+    bexPaElements.selfAppraisalAchievement.value =
+      selfAppraisal?.employeeAchievement ||
+      selfAppraisal?.overallSummary ||
+      "";
+
+    if (!selfAppraisal) {
+      if (Array.isArray(rememberedValues.competencyResponses)) {
+        rememberedValues.competencyResponses.forEach(
+          (response) => {
+            bexPaApplyRememberedValues([
+              [
+                bexPaElements.selfAppraisalCompetencies.querySelector(
+                  `[data-bex-pa-self-appraisal-competency-rating="${CSS.escape(response.competencyId)}"]`,
+                ),
+                response.rating,
+              ],
+              [
+                bexPaElements.selfAppraisalCompetencies.querySelector(
+                  `[data-bex-pa-self-appraisal-competency-comment="${CSS.escape(response.competencyId)}"]`,
+                ),
+                response.comment,
+              ],
+            ]);
+          },
+        );
+      }
+
+      if (Array.isArray(rememberedValues.goalResponses)) {
+        rememberedValues.goalResponses.forEach(
+          (response) => {
+            bexPaApplyRememberedValues([
+              [
+                bexPaElements.selfAppraisalGoals.querySelector(
+                  `[data-bex-pa-self-appraisal-achievement="${CSS.escape(response.individualGoalId)}"]`,
+                ),
+                response.achievement,
+              ],
+            ]);
+          },
+        );
+      }
+
+      bexPaApplyRememberedValues([
+        [
+          bexPaElements.selfAppraisalAchievement,
+          rememberedValues.employeeAchievement,
+        ],
+      ]);
+    }
+    bexPaElements.selfAppraisalForm
+      .querySelectorAll("select, textarea")
+      .forEach((field) => {
+        field.disabled = isSubmitted;
+      });
+    bexPaElements.saveSelfAppraisalButton.classList.toggle(
+      "d-none",
+      isSubmitted,
+    );
+
+    bexPaElements.submitSelfAppraisalButton.classList.toggle(
+      "d-none",
+      isSubmitted,
+    );
+    bexPaElements.selfAppraisalSection.classList.remove(
+      "d-none",
+    );
+  }
+
+  function bexPaCloseSelfAppraisalDetail() {
+    bexPaState.editingSelfAppraisalId = null;
+    bexPaElements.selfAppraisalSection?.classList.add(
+      "d-none",
+    );
+    bexPaClearSelfAppraisalError();
+  }
+
+  function bexPaOpenSelfAppraisal(appraisalId) {
+    if (bexPaGetCurrentPersona() !== "employee") {
+      return;
+    }
+
+    const appraisal =
+      bexPaGetEligibleEmployeeAppraisals().find(
+        (existingAppraisal) =>
+          existingAppraisal.id === appraisalId,
+      );
+
+    if (!appraisal) {
+      return;
+    }
+
+    bexPaClearSelfAppraisalError();
+    bexPaRenderSelfAppraisalDetail(appraisal);
+    bexPaElements.selfAppraisalSection.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
+  function bexPaValidateSelfAppraisalDraft(
+    selfAppraisal,
+    appraisal,
+    competencies,
+    goals,
+    ratingScale,
+  ) {
+    if (!selfAppraisal.employeeAchievement.trim()) {
+      return "Enter your Employee's Achievement before saving the draft.";
+    }
+
+    if (
+      selfAppraisal.competencyResponses.length !==
+      competencies.length
+    ) {
+      return "Complete every applicable competency rating.";
+    }
+
+    if (
+      selfAppraisal.competencyResponses.some(
+        (response) =>
+          !response.rating ||
+          !ratingScale.includes(response.rating) ||
+          !competencies.some(
+            (competency) =>
+              competency.id === response.competencyId,
+          ),
+      )
+    ) {
+      return "Complete every applicable competency rating.";
+    }
+
+    if (
+      selfAppraisal.goalResponses.length !== goals.length ||
+      selfAppraisal.goalResponses.some(
+        (response) =>
+          !response.achievement.trim() ||
+          !goals.some(
+            (individualGoal) =>
+              individualGoal.id === response.individualGoalId,
+          ),
+      )
+    ) {
+      return "Complete the achievement response for every assigned goal.";
+    }
+
+    if (
+      selfAppraisal.employeeId !== appraisal.employeeId
+    ) {
+      return "This self-appraisal does not belong to the authenticated employee.";
+    }
+
+    return "";
+  }
+
+  function bexPaHandleSelfAppraisalSubmit(
+    event,
+    isFinalSubmission = false,
+  ) {
+    event.preventDefault();
+    bexPaClearSelfAppraisalError();
+
+    const appraisal =
+      bexPaGetEligibleEmployeeAppraisals().find(
+        (existingAppraisal) =>
+          existingAppraisal.id ===
+          bexPaState.editingSelfAppraisalId,
+      );
+
+    if (!appraisal) {
+      bexPaShowSelfAppraisalError(
+        isFinalSubmission
+          ? "Only your own eligible appraisal can be submitted."
+          : "Only your own eligible appraisal can be edited.",
+      );
+      return;
+    }
+
+    const existingSelfAppraisal =
+      bexPaState.selfAppraisals.find(
+        (selfAppraisal) =>
+          selfAppraisal.appraisalId === appraisal.id,
+      );
+
+    if (existingSelfAppraisal?.status === "Submitted") {
+      bexPaShowSelfAppraisalError(
+        "This self-appraisal has already been submitted.",
+      );
+      return;
+    }
+
+    const template =
+      bexPaGetAppraisalTemplate(appraisal);
+
+    const ratingScale = Array.isArray(template?.ratingScale)
+      ? template.ratingScale
+      : [];
+
+    const competencies =
+      bexPaGetApplicableSelfAppraisalCompetencies(
+        template,
+      );
+    const goals = bexPaGetSelfAppraisalGoals(appraisal);
+
+    const selfAppraisal = {
+      id:
+        `BEX-PA-SELF-APPRAISAL-${appraisal.id}`,
+      appraisalId: appraisal.id,
+      employeeId: bexPaGetCurrentEmployeeId(),
+      status: isFinalSubmission ? "Submitted" : "Draft",
+      competencyResponses: competencies.map(
+        (competency) => ({
+          competencyId: competency.id,
+          rating:
+            bexPaElements.selfAppraisalCompetencies
+              .querySelector(
+                `[data-bex-pa-self-appraisal-competency-rating="${CSS.escape(competency.id)}"]`,
+              )?.value || "",
+          comment:
+            bexPaElements.selfAppraisalCompetencies
+              .querySelector(
+                `[data-bex-pa-self-appraisal-competency-comment="${CSS.escape(competency.id)}"]`,
+              )?.value.trim() || "",
+        }),
+      ),
+      goalResponses: goals.map((individualGoal) => ({
+        individualGoalId: individualGoal.id,
+        achievement:
+          bexPaElements.selfAppraisalGoals
+            .querySelector(
+              `[data-bex-pa-self-appraisal-achievement="${CSS.escape(individualGoal.id)}"]`,
+            )?.value.trim() || "",
+      })),
+      employeeAchievement:
+        bexPaElements.selfAppraisalAchievement.value.trim(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (isFinalSubmission) {
+      selfAppraisal.submittedAt = new Date().toISOString();
+    }
+
+    const validationError =
+      bexPaValidateSelfAppraisalDraft(
+        selfAppraisal,
+        appraisal,
+        competencies,
+        goals,
+        ratingScale,
+      );
+
+    if (validationError) {
+      bexPaShowSelfAppraisalError(validationError);
+      return;
+    }
+
+    bexPaRememberFormValues(
+      `selfAppraisal:${appraisal.id}`,
+      {
+        competencyResponses:
+          selfAppraisal.competencyResponses.map(
+            (response) => ({
+              ...response,
+            }),
+          ),
+        goalResponses:
+          selfAppraisal.goalResponses.map(
+            (response) => ({
+              ...response,
+            }),
+          ),
+        employeeAchievement:
+          selfAppraisal.employeeAchievement,
+      },
+    );
+
+    const existingIndex =
+      bexPaState.selfAppraisals.findIndex(
+        (existingSelfAppraisal) =>
+          existingSelfAppraisal.appraisalId ===
+          appraisal.id,
+      );
+
+    if (existingIndex === -1) {
+      bexPaState.selfAppraisals.push(selfAppraisal);
+    } else {
+      bexPaState.selfAppraisals[existingIndex] =
+        selfAppraisal;
+    }
+
+    bexPaSaveSelfAppraisals();
+
+    bexPaRenderSelfAppraisalDetail(appraisal);
+    bexPaRenderEmployeeAppraisals();
+    bexPaRenderCycles();
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        isFinalSubmission
+          ? "Self-appraisal submitted successfully."
+          : "Self-appraisal draft saved successfully.";
+    }
+  }
+
+  function bexPaRenderEmployeeAppraisals() {
+    if (!bexPaElements.employeeAppraisalsList) {
+      return;
+    }
+
+    bexPaElements.employeeAppraisalsList.replaceChildren();
+
+    const appraisals =
+      bexPaGetVisibleEmployeeAppraisals();
+
+    if (appraisals.length === 0) {
+      const emptyState =
+        document.createElement("p");
+
+      emptyState.className =
+        "mb-0 text-body-secondary";
+
+      emptyState.id =
+        "bexPaEmployeeAppraisalsEmpty";
+
+      emptyState.textContent =
+        "No employee appraisals are available yet.";
+
+      bexPaElements.employeeAppraisalsList.appendChild(
+        emptyState,
+      );
+
+      return;
+    }
+
+    const employeeGroups = new Map();
+
+    appraisals.forEach(
+      (appraisal) => {
+        const employeeKey =
+          String(
+            appraisal.employeeId ||
+            appraisal.employeeName ||
+            appraisal.id,
+          ).trim();
+
+        let employeeGroupBody =
+          employeeGroups.get(employeeKey);
+
+        if (!employeeGroupBody) {
+          const employeeGroup =
+            document.createElement("section");
+
+          employeeGroup.className =
+            "border rounded-3 mb-3 overflow-hidden";
+
+          const employeeHeader =
+            document.createElement("div");
+
+          employeeHeader.className =
+            "bg-body-tertiary border-bottom px-3 py-3";
+
+          const employeeName =
+            document.createElement("h3");
+
+          employeeName.className =
+            "mb-0 h6 fw-bold";
+
+          employeeName.textContent =
+            appraisal.employeeName ||
+            "Employee";
+
+          employeeGroupBody =
+            document.createElement("div");
+
+          employeeGroupBody.className =
+            "px-3";
+
+          employeeHeader.appendChild(
+            employeeName,
+          );
+
+          employeeGroup.append(
+            employeeHeader,
+            employeeGroupBody,
+          );
+
+          bexPaElements.employeeAppraisalsList.appendChild(
+            employeeGroup,
+          );
+
+          employeeGroups.set(
+            employeeKey,
+            employeeGroupBody,
+          );
+        }
+
+        const cycle =
+          bexPaState.cycles.find(
+            (existingCycle) =>
+              existingCycle.id === appraisal.cycleId,
+          );
+
+        const template =
+          bexPaGetAppraisalTemplate(appraisal);
+
+        const selfAppraisal =
+          bexPaState.selfAppraisals.find(
+            (existingSelfAppraisal) =>
+              existingSelfAppraisal.appraisalId === appraisal.id,
+          );
+
+        const managerAppraisal =
+          bexPaState.managerAppraisals.find(
+            (existingManagerAppraisal) =>
+              existingManagerAppraisal.appraisalId === appraisal.id,
+          );
+
+        const hrFinalisation =
+          bexPaState.hrFinalisations.find(
+            (existingFinalisation) =>
+              existingFinalisation.appraisalId === appraisal.id,
+          );
+
+        const acknowledgement =
+          bexPaState.employeeAcknowledgements.find(
+            (existingAcknowledgement) =>
+              existingAcknowledgement.appraisalId === appraisal.id,
+          );
+
+        const displayStatus =
+          bexPaGetAppraisalDisplayStatus(
+            appraisal,
+            selfAppraisal,
+            managerAppraisal,
+            hrFinalisation,
+            acknowledgement,
+          );
+
+        const item =
+          document.createElement("article");
+
+        item.className =
+          "bex-pa-goal-item";
+
+        const header =
+          document.createElement("div");
+
+        header.className =
+          "d-flex align-items-start justify-content-between gap-3";
+
+        const titleArea =
+          document.createElement("div");
+
+        const title =
+          document.createElement("h3");
+
+        title.className =
+          "bex-pa-goal-item-title h6";
+
+        title.textContent =
+          cycle?.name ||
+          "Unknown appraisal cycle";
+
+        const meta =
+          document.createElement("div");
+
+        meta.className =
+          "bex-pa-goal-meta";
+
+        const templateLabel =
+          document.createElement("span");
+
+        templateLabel.textContent =
+          `Template: ${template?.name || "Unknown template"}`;
+
+        meta.append(
+          templateLabel,
+        );
+
+        titleArea.append(
+          title,
+          meta,
+        );
+
+        const status =
+          document.createElement("span");
+
+        status.className =
+          "bex-pa-goal-status";
+
+        status.dataset.status =
+          String(displayStatus)
+            .toLowerCase()
+            .replaceAll(" ", "-");
+
+        status.textContent =
+          displayStatus;
+
+        header.append(
+          titleArea,
+          status,
+        );
+
+        item.appendChild(
+          header,
+        );
+
+        if (
+          bexPaGetCurrentPersona() === "employee" &&
+          bexPaGetEligibleEmployeeAppraisals().some(
+            (eligibleAppraisal) =>
+              eligibleAppraisal.id === appraisal.id,
+          )
+        ) {
+          const openButton = document.createElement("button");
+          openButton.type = "button";
+          openButton.className =
+            "btn btn-sm btn-outline-primary";
+          openButton.dataset.bexPaEmployeeAppraisalId =
+            appraisal.id;
+
+          if (hrFinalisation?.status === "Finalised") {
+            openButton.dataset.bexPaEmployeeAppraisalAction =
+              "open-final";
+            openButton.textContent = "View Final Appraisal";
+            openButton.setAttribute(
+              "aria-label",
+              `View final appraisal for ${appraisal.employeeName}`,
+            );
+          } else {
+            openButton.dataset.bexPaEmployeeAppraisalAction =
+              "open";
+
+            const selfAppraisalIsSubmitted =
+              selfAppraisal?.status === "Submitted";
+
+            const hasSelfAppraisalDraft =
+              bexPaHasSavedDraft(selfAppraisal);
+
+            openButton.textContent =
+              selfAppraisalIsSubmitted
+                ? "View Self-Appraisal"
+                : hasSelfAppraisalDraft
+                  ? "Continue Self-Appraisal"
+                  : "Start Self-Appraisal";
+
+            openButton.setAttribute(
+              "aria-label",
+              selfAppraisalIsSubmitted
+                ? `View self-appraisal for ${appraisal.employeeName}`
+                : hasSelfAppraisalDraft
+                  ? `Continue self-appraisal for ${appraisal.employeeName}`
+                  : `Start self-appraisal for ${appraisal.employeeName}`,
+            );
+          }
+
+          item.appendChild(openButton);
+        }
+
+        if (bexPaGetCurrentPersona() === "hr-admin") {
+          const reviewButton = document.createElement("button");
+
+          reviewButton.type = "button";
+          reviewButton.className =
+            "btn btn-sm btn-outline-primary";
+
+          reviewButton.dataset.bexPaEmployeeAppraisalAction =
+            "open-hr-review";
+
+          reviewButton.dataset.bexPaEmployeeAppraisalId =
+            appraisal.id;
+
+          reviewButton.textContent =
+            "Review Appraisal";
+
+          reviewButton.setAttribute(
+            "aria-label",
+            `Review appraisal for ${appraisal.employeeName}`,
+          );
+
+          item.appendChild(reviewButton);
+        }
+
+        if (
+          bexPaGetCurrentPersona() === "primary-manager" &&
+          bexPaGetEligibleManagerAppraisals().some(
+            (eligibleAppraisal) =>
+              eligibleAppraisal.id === appraisal.id,
+          )
+        ) {
+          const openButton = document.createElement("button");
+          openButton.type = "button";
+          openButton.className =
+            "btn btn-sm btn-outline-primary";
+          openButton.dataset.bexPaEmployeeAppraisalAction =
+            "open-manager";
+          openButton.dataset.bexPaEmployeeAppraisalId =
+            appraisal.id;
+          const managerAppraisalIsSubmitted =
+            managerAppraisal?.status === "Submitted";
+          const hasManagerAppraisalDraft =
+            bexPaHasSavedDraft(managerAppraisal);
+
+          openButton.textContent =
+            managerAppraisalIsSubmitted
+              ? "View Manager Appraisal"
+              : hasManagerAppraisalDraft
+                ? "Continue Manager Appraisal"
+                : "Start Manager Appraisal";
+          openButton.setAttribute(
+            "aria-label",
+            managerAppraisalIsSubmitted
+              ? `View manager appraisal for ${appraisal.employeeName}`
+              : hasManagerAppraisalDraft
+                ? `Continue manager appraisal for ${appraisal.employeeName}`
+                : `Start manager appraisal for ${appraisal.employeeName}`,
+          );
+          item.appendChild(openButton);
+        }
+
+        employeeGroupBody.appendChild(
+          item,
+        );
+      },
+    );
+  }
+
   function bexPaInitialiseAppraisalCycles() {
     bexPaState.cycles = bexPaLoadStoredCycles();
 
@@ -4479,6 +9946,181 @@
     bexPaState.progressUpdates =
       bexPaLoadProgressUpdates();
 
+    bexPaState.templates =
+      bexPaLoadTemplates();
+
+    bexPaState.employeeAppraisals =
+      bexPaLoadEmployeeAppraisals();
+
+    bexPaState.selfAppraisals =
+      bexPaLoadSelfAppraisals();
+
+    bexPaState.managerAppraisals =
+      bexPaLoadManagerAppraisals();
+
+    bexPaState.hrFinalisations =
+      bexPaLoadHrFinalisations();
+
+    bexPaState.employeeAcknowledgements =
+      bexPaLoadEmployeeAcknowledgements();
+
+    bexPaCompleteEligibleCycles();
+
+    const hasIntegratedContext =
+      Boolean(bexPaGetIntegratedContext());
+
+    document.body.classList.toggle(
+      "bex-pa-integrated",
+      hasIntegratedContext,
+    );
+
+    bexPaElements.integratedToolbar?.classList.toggle(
+      "d-none",
+      !hasIntegratedContext,
+    );
+
+    if (hasIntegratedContext) {
+      const persona = bexPaGetCurrentPersona();
+
+      const dashboardByPersona = {
+        employee: {
+          href: "../../employee-dashboard.html",
+          label: "Back to Employee Dashboard",
+          workspace: "Employee workspace",
+        },
+
+        "primary-manager": {
+          href: "../../manager-dashboard.html",
+          label: "Back to Manager Dashboard",
+          workspace: "Manager workspace",
+        },
+
+        "hr-admin": {
+          href: "../../hr-dashboard.html",
+          label: "Back to HR Dashboard",
+          workspace: "HR workspace",
+        },
+      };
+
+      const dashboard =
+        dashboardByPersona[persona];
+
+      if (
+        dashboard &&
+        bexPaElements.backToDashboardLink
+      ) {
+        bexPaElements.backToDashboardLink.href =
+          dashboard.href;
+
+        bexPaElements.backToDashboardLink.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+
+            const referrer = String(
+              document.referrer || "",
+            );
+
+            const expectedDashboardUrl =
+              new URL(
+                dashboard.href,
+                window.location.href,
+              ).href;
+
+            if (
+              referrer &&
+              referrer.split("#")[0] ===
+              expectedDashboardUrl.split("#")[0]
+            ) {
+              window.history.back();
+              return;
+            }
+
+            window.location.assign(
+              dashboard.href,
+            );
+          },
+        );
+
+        if (
+          bexPaElements.backToDashboardLabel
+        ) {
+          bexPaElements.backToDashboardLabel.textContent =
+            dashboard.label;
+        }
+
+        if (
+          bexPaElements.integratedWorkspaceLabel
+        ) {
+          bexPaElements.integratedWorkspaceLabel.textContent =
+            dashboard.workspace;
+        }
+      }
+    }
+
+    if (bexPaElements.developmentPersona) {
+      bexPaElements.developmentPersona.classList.toggle(
+        "d-none",
+        !bexPaIsDevelopmentHost() ||
+        hasIntegratedContext,
+      );
+    }
+
+    bexPaElements.createTemplateButton?.addEventListener(
+      "click",
+      () => bexPaOpenTemplateDialog(),
+    );
+
+    bexPaElements.closeTemplateDialogButton?.addEventListener(
+      "click",
+      bexPaCloseTemplateDialog,
+    );
+
+    bexPaElements.cancelTemplateButton?.addEventListener(
+      "click",
+      bexPaCloseTemplateDialog,
+    );
+
+    bexPaElements.templateForm?.addEventListener(
+      "submit",
+      bexPaHandleTemplateSubmit,
+    );
+
+    bexPaElements.templatesList?.addEventListener(
+      "click",
+      bexPaHandleTemplateListAction,
+    );
+
+    bexPaElements.addTemplateRatingButton?.addEventListener(
+      "click",
+      () => {
+        const input =
+          bexPaAddTemplateRatingRow();
+
+        input?.focus();
+      },
+    );
+
+    bexPaElements.addTemplateCompetencyButton?.addEventListener(
+      "click",
+      bexPaOpenTemplateCompetencyEditor,
+    );
+
+    bexPaElements.cancelTemplateCompetencyButton?.addEventListener(
+      "click",
+      bexPaCloseTemplateCompetencyEditor,
+    );
+
+    bexPaElements.saveTemplateCompetencyButton?.addEventListener(
+      "click",
+      bexPaHandleTemplateCompetencySave,
+    );
+
+    bexPaElements.templateCompetenciesList?.addEventListener(
+      "click",
+      bexPaHandleTemplateCompetencyListAction,
+    );
+
     bexPaElements.cyclesNavButton?.addEventListener(
       "click",
       () => bexPaShowSection("cycles"),
@@ -4487,6 +10129,128 @@
     bexPaElements.goalsNavButton?.addEventListener(
       "click",
       () => bexPaShowSection("goals"),
+    );
+
+    bexPaElements.templatesNavButton?.addEventListener(
+      "click",
+      () => {
+        if (!bexPaCanManageTemplates()) {
+          return;
+        }
+
+        bexPaShowSection("templates");
+      },
+    );
+
+    bexPaElements.employeeAppraisalsNavButton?.addEventListener(
+      "click",
+      () => {
+        bexPaShowSection("employeeAppraisals");
+      },
+    );
+
+    bexPaElements.employeeAppraisalsList?.addEventListener(
+      "click",
+      (event) => {
+        const button = event.target.closest(
+          "[data-bex-pa-employee-appraisal-action]",
+        );
+
+        if (!button) {
+          return;
+        }
+
+        if (
+          button.dataset.bexPaEmployeeAppraisalAction ===
+          "open"
+        ) {
+          bexPaOpenSelfAppraisal(
+            button.dataset.bexPaEmployeeAppraisalId,
+          );
+          return;
+        }
+
+        if (
+          button.dataset.bexPaEmployeeAppraisalAction ===
+          "open-final"
+        ) {
+          bexPaOpenFinalAppraisal(
+            button.dataset.bexPaEmployeeAppraisalId,
+          );
+          return;
+        }
+
+        if (
+          button.dataset.bexPaEmployeeAppraisalAction ===
+          "open-manager"
+        ) {
+          bexPaOpenManagerAppraisal(
+            button.dataset.bexPaEmployeeAppraisalId,
+          );
+          return;
+        }
+
+        if (
+          button.dataset.bexPaEmployeeAppraisalAction ===
+          "open-hr-review"
+        ) {
+          bexPaOpenHrAppraisalReview(
+            button.dataset.bexPaEmployeeAppraisalId,
+          );
+        }
+      },
+    );
+
+    bexPaElements.closeFinalAppraisalButton?.addEventListener(
+      "click",
+      bexPaCloseFinalAppraisal,
+    );
+
+    bexPaElements.acknowledgeFinalAppraisalButton?.addEventListener(
+      "click",
+      bexPaAcknowledgeFinalAppraisal,
+    );
+
+    bexPaElements.closeSelfAppraisalButton?.addEventListener(
+      "click",
+      bexPaCloseSelfAppraisalDetail,
+    );
+
+    bexPaElements.selfAppraisalForm?.addEventListener(
+      "submit",
+      bexPaHandleSelfAppraisalSubmit,
+    );
+
+    bexPaElements.submitSelfAppraisalButton?.addEventListener(
+      "click",
+      (event) =>
+        bexPaHandleSelfAppraisalSubmit(event, true),
+    );
+
+    bexPaElements.closeHrAppraisalReviewButton?.addEventListener(
+      "click",
+      bexPaCloseHrAppraisalReview,
+    );
+
+    bexPaElements.finaliseHrAppraisalButton?.addEventListener(
+      "click",
+      bexPaFinaliseHrAppraisal,
+    );
+
+    bexPaElements.closeManagerAppraisalButton?.addEventListener(
+      "click",
+      bexPaCloseManagerAppraisalDetail,
+    );
+
+    bexPaElements.managerAppraisalForm?.addEventListener(
+      "submit",
+      bexPaHandleManagerAppraisalSave,
+    );
+
+    bexPaElements.submitManagerAppraisalButton?.addEventListener(
+      "click",
+      (event) =>
+        bexPaHandleManagerAppraisalSave(event, true),
     );
 
     bexPaElements.overviewNavLink?.addEventListener(
@@ -4503,14 +10267,30 @@
       },
     );
 
-    bexPaElements.overviewCreateButton?.addEventListener(
+    bexPaElements.cyclesCreateButton?.addEventListener(
       "click",
       () => bexPaShowCycleForm(),
     );
 
-    bexPaElements.cyclesCreateButton?.addEventListener(
+    bexPaElements.backToTopButton?.addEventListener(
       "click",
-      () => bexPaShowCycleForm(),
+      () => {
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth",
+        });
+      },
+    );
+
+    window.addEventListener(
+      "scroll",
+      () => {
+        bexPaElements.backToTopButton?.classList.toggle(
+          "d-none",
+          window.scrollY <= 320,
+        );
+      },
+      { passive: true },
     );
 
     bexPaElements.closeCycleFormButton?.addEventListener(
@@ -4677,6 +10457,7 @@
 
     bexPaApplyCycleAccess();
     bexPaApplyGoalAccess();
+    bexPaApplyTemplateAccess();
 
     bexPaRenderCycles();
 
@@ -4694,10 +10475,65 @@
     bexPaRenderIndividualGoals();
 
     bexPaRenderProgressUpdates();
+    bexPaRenderTemplates();
+    bexPaRenderEmployeeAppraisals();
 
     if (bexPaElements.developmentPersona) {
       bexPaElements.developmentPersona.value =
         bexPaGetCurrentPersona();
+    }
+
+    const navigationEntry =
+      window.performance
+        .getEntriesByType("navigation")[0];
+
+    const isPageRefresh =
+      navigationEntry?.type === "reload";
+
+    bexPaShowSection(
+      isPageRefresh
+        ? bexPaGetRememberedSection()
+        : "overview",
+    );
+
+    if (isPageRefresh) {
+      const workspaceLoader =
+        document.getElementById(
+          "bexPaWorkspaceLoader",
+        );
+
+      const loaderStartedAt =
+        Number(
+          window.BexPaRefreshLoaderStartedAt,
+        ) || window.performance.now();
+
+      const loaderElapsed =
+        window.performance.now() -
+        loaderStartedAt;
+
+      const minimumLoaderTime = 450;
+
+      const remainingLoaderTime =
+        Math.max(
+          0,
+          minimumLoaderTime - loaderElapsed,
+        );
+
+      window.setTimeout(() => {
+        document.documentElement.classList.remove(
+          "bex-pa-refreshing",
+        );
+
+        workspaceLoader?.setAttribute(
+          "aria-hidden",
+          "true",
+        );
+
+        workspaceLoader?.setAttribute(
+          "aria-busy",
+          "false",
+        );
+      }, remainingLoaderTime);
     }
   }
 

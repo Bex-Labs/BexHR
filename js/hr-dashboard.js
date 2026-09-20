@@ -4407,6 +4407,9 @@ function cacheDomElements() {
 
     hrTabPayrollBtn: document.getElementById("hrTabPayrollBtn"),
     hrTabSelfServiceBtn: document.getElementById("hrTabSelfServiceBtn"),
+    sidebarPerformanceAppraisalBtn: document.getElementById(
+      "sidebarPerformanceAppraisalBtn",
+    ),
 
     // RUN PAYROLL - STEP 1
     // Cache the primary Run Payroll workflow button in the HR workspace header.
@@ -9792,6 +9795,11 @@ function bindEvents() {
     switchHrWorkspace("dashboard");
     renderHrModernOverview();
   });
+
+  state.dom.sidebarPerformanceAppraisalBtn?.addEventListener(
+    "click",
+    openHrPerformanceAppraisal,
+  );
 
   state.dom.hrTabProfileBtn?.addEventListener("click", () => {
     // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
@@ -24371,22 +24379,10 @@ function publishHrPerformanceAppraisalContext() {
     ) === "HR Admin";
 
   if (!isHrAdmin) {
-    const performanceAppraisalContext = {
-      persona: "hr-standard",
-      employeeId: "",
-      managerEmployeeId: "",
-      managedEmployeeIds: [],
-      availableEmployees: [],
-    };
+    window.BexHrPerformanceAppraisalContext = null;
 
-    window.BexHrPerformanceAppraisalContext =
-      performanceAppraisalContext;
-
-    window.sessionStorage.setItem(
+    window.sessionStorage.removeItem(
       "bexhr:performance-appraisal:context:v1",
-      JSON.stringify(
-        performanceAppraisalContext,
-      ),
     );
 
     return;
@@ -24438,6 +24434,8 @@ function publishHrPerformanceAppraisalContext() {
     );
 
   const performanceAppraisalContext = {
+    source: "bexhr",
+    issuedAt: new Date().toISOString(),
     persona: "hr-admin",
     employeeId: "",
     managerEmployeeId: "",
@@ -24453,6 +24451,13 @@ function publishHrPerformanceAppraisalContext() {
     JSON.stringify(
       performanceAppraisalContext,
     ),
+  );
+}
+
+function openHrPerformanceAppraisal() {
+  publishHrPerformanceAppraisalContext();
+  window.location.assign(
+    "features/performance-appraisal/performance-appraisal.html",
   );
 }
 

@@ -188,6 +188,43 @@
   <link rel="manifest" href="assets/favicon/site.webmanifest?v=20260731" />
   <meta name="msapplication-config" content="assets/favicon/browserconfig.xml?v=20260731" />
   <meta name="theme-color" content="#087f7a" />
+  <script>
+    (() => {
+      const returnKey =
+        "bexhr:return-from-performance-appraisal";
+
+      try {
+        if (
+          window.sessionStorage.getItem(returnKey) !==
+          "1"
+        ) {
+          return;
+        }
+
+        window.sessionStorage.removeItem(returnKey);
+
+        document.documentElement.classList.add(
+          "bexhr-pa-return",
+        );
+      } catch (error) {
+        console.warn(
+          "Performance Appraisal return state could not be restored.",
+          error,
+        );
+      }
+    })();
+  </script>
+
+  <style>
+    html.bexhr-pa-return #bexhrWorkspaceLoader {
+      display: none !important;
+    }
+
+    html.bexhr-pa-return body.manager-workspace-booting .bexhr-sidebar,
+    html.bexhr-pa-return body.manager-workspace-booting main {
+      visibility: visible !important;
+    }
+  </style>
 </head>
 
 <body class="dashboard-page bexhr-has-sidebar bexhr-manager-visual-refresh manager-workspace-booting" aria-busy="true">
@@ -371,6 +408,12 @@
           onclick="document.getElementById('managerTabSelfServiceBtn')?.click()" title="My Self-Service">
           <i class="bi bi-person-badge"></i>
           <span>Self-Service</span>
+        </button>
+      </li>
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarManagerPerformanceAppraisalBtn" title="Performance Appraisal">
+          <i class="bi bi-clipboard2-check"></i>
+          <span>Performance Appraisal</span>
         </button>
       </li>
     </ul>
