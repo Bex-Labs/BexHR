@@ -187,7 +187,8 @@
                             </li>
 
                             <li class="nav-item">
-                                <button class="nav-link w-100 text-start" type="button" disabled>
+                                <button class="nav-link w-100 text-start d-none" id="bexPaReportsNavButton"
+                                    type="button" data-bex-pa-target="bexPaReportsSection">
                                     <i class="bi bi-bar-chart me-2" aria-hidden="true"></i>
                                     Reports
                                 </button>
@@ -1654,6 +1655,188 @@
                                     </div>
                                 </form>
                             </dialog>
+                        </section>
+
+                        <section class="d-none" id="bexPaReportsSection" aria-labelledby="bexPaReportsTitle">
+
+                            <div class="mb-4">
+                                <p class="mb-2 small fw-semibold text-uppercase text-primary">
+                                    Operational reporting
+                                </p>
+
+                                <h1 class="mb-2 h2 fw-bold" id="bexPaReportsTitle">
+                                    Appraisal Reports
+                                </h1>
+
+                                <p class="mb-0 text-body-secondary">
+                                    Track appraisal completion and outstanding review work across appraisal cycles.
+                                </p>
+                            </div>
+
+                            <section class="card border-0 shadow-sm" aria-labelledby="bexPaOperationalReportsTitle">
+                                <div class="card-header bg-white py-3">
+                                    <h2 class="mb-1 h5 fw-bold" id="bexPaOperationalReportsTitle">
+                                        Operational Report
+                                    </h2>
+
+                                    <p class="mb-0 small text-body-secondary">
+                                        Cycle-level appraisal progress and workflow status.
+                                    </p>
+                                </div>
+
+                                <div class="card-body">
+                                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                                        <div>
+                                            <label class="form-label small fw-semibold mb-1"
+                                                for="bexPaReportCycleSelect">
+                                                Appraisal cycle
+                                            </label>
+
+                                            <select class="form-select" id="bexPaReportCycleSelect">
+                                                <option value="">Select an appraisal cycle</option>
+                                            </select>
+                                        </div>
+
+                                        <p class="mb-0 small text-body-secondary" id="bexPaReportCycleSummary">
+                                            Select a cycle to view its operational status.
+                                        </p>
+                                    </div>
+
+                                    <div class="d-none" id="bexPaOperationalReportContent">
+                                        <div class="row g-3" aria-label="Appraisal operational status counts">
+                                            <div class="col-12 col-sm-6 col-xl">
+                                                <div class="border rounded-3 p-3 h-100">
+                                                    <p class="small text-body-secondary mb-1">
+                                                        Assigned
+                                                    </p>
+                                                    <p class="h3 fw-bold mb-0" id="bexPaReportAssignedCount">
+                                                        0
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-12 col-sm-6 col-xl">
+                                                <div class="border rounded-3 p-3 h-100">
+                                                    <p class="small text-body-secondary mb-1">
+                                                        In Progress
+                                                    </p>
+                                                    <p class="h3 fw-bold mb-0" id="bexPaReportInProgressCount">
+                                                        0
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-12 col-sm-6 col-xl">
+                                                <div class="border rounded-3 p-3 h-100">
+                                                    <p class="small text-body-secondary mb-1">
+                                                        Submitted
+                                                    </p>
+                                                    <p class="h3 fw-bold mb-0" id="bexPaReportSubmittedCount">
+                                                        0
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-12 col-sm-6 col-xl">
+                                                <div class="border rounded-3 p-3 h-100">
+                                                    <p class="small text-body-secondary mb-1">
+                                                        Finalised
+                                                    </p>
+                                                    <p class="h3 fw-bold mb-0" id="bexPaReportFinalisedCount">
+                                                        0
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-12 col-sm-6 col-xl">
+                                                <div class="border rounded-3 p-3 h-100">
+                                                    <p class="small text-body-secondary mb-1">
+                                                        Acknowledged
+                                                    </p>
+                                                    <p class="h3 fw-bold mb-0" id="bexPaReportAcknowledgedCount">
+                                                        0
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="border-top mt-4 pt-3">
+                                            <p class="mb-0 small text-body-secondary">
+                                                Total assigned appraisals:
+                                                <strong class="text-body" id="bexPaReportTotalCount">0</strong>
+                                            </p>
+                                        </div>
+
+                                        <div class="border-top mt-4 pt-4">
+                                            <h3 class="h5 fw-semibold mb-1">Operational Summary</h3>
+                                            <p class="text-body-secondary small mb-3">
+                                                Completion and outstanding review work for the selected cycle.
+                                            </p>
+
+                                            <div class="row g-3">
+                                                <div class="col-12 col-lg-5">
+                                                    <div class="border rounded-3 p-3 h-100">
+                                                        <p class="small fw-semibold text-body-secondary mb-2">
+                                                            Completion
+                                                        </p>
+
+                                                        <p class="h4 fw-bold mb-1" id="bexPaReportCompletionSummary">
+                                                            0 of 0 acknowledged
+                                                        </p>
+
+                                                        <p class="small text-body-secondary mb-0"
+                                                            id="bexPaReportCompletionPercentage">
+                                                            0% complete
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div class="col-12 col-lg-7">
+                                                    <div class="border rounded-3 p-3 h-100">
+                                                        <p class="small fw-semibold text-body-secondary mb-2">
+                                                            Outstanding Work
+                                                        </p>
+
+                                                        <ul class="mb-0 ps-3 small" id="bexPaReportOutstandingSummary">
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="border-top mt-4 pt-4">
+                                            <h3 class="h5 fw-semibold mb-1">Appraisal Status Detail</h3>
+                                            <p class="text-body-secondary small mb-3">
+                                                Current appraisal stage and the next outstanding action for each
+                                                employee.
+                                            </p>
+
+                                            <div class="table-responsive">
+                                                <table class="table align-middle mb-0">
+                                                    <thead>
+                                                        <tr>
+                                                            <th scope="col">Employee</th>
+                                                            <th scope="col">Current stage</th>
+                                                            <th scope="col">Outstanding action</th>
+                                                        </tr>
+                                                    </thead>
+
+                                                    <tbody id="bexPaReportStatusDetail"></tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="text-center py-4 d-none" id="bexPaOperationalReportEmpty">
+                                        <p class="mb-1 fw-semibold">
+                                            No assigned appraisals
+                                        </p>
+                                        <p class="mb-0 small text-body-secondary">
+                                            This cycle does not currently have any employee appraisals to report.
+                                        </p>
+                                    </div>
+                                </div>
+                            </section>
                         </section>
 
                         <section class="d-none" id="bexPaEmployeeAppraisalsSection"
