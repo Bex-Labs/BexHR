@@ -1865,6 +1865,15 @@
       return;
     }
 
+    if (
+      (sectionName === "templates" &&
+        !bexPaCanManageTemplates()) ||
+      (sectionName === "reports" &&
+        !bexPaCanViewReports())
+    ) {
+      return;
+    }
+
     try {
       window.sessionStorage.setItem(
         BEX_PA_WORKSPACE_MEMORY_KEY,
@@ -2563,6 +2572,10 @@
   function bexPaHandleCycleSubmit(event) {
     event.preventDefault();
     bexPaClearCycleError();
+
+    if (!bexPaCanManageAppraisalCycles()) {
+      return;
+    }
 
     const cycle = {
       id:
@@ -7089,7 +7102,11 @@
       );
     }
 
-    return bexPaState.employeeAppraisals;
+    if (persona === "hr-admin") {
+      return bexPaState.employeeAppraisals;
+    }
+
+    return [];
   }
 
   function bexPaHasSavedDraft(draft) {
