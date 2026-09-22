@@ -1567,13 +1567,7 @@ function bindEvents() {
   );
 }
 
-async function openManagerPerformanceAppraisal() {
-  const teamLoaded = await loadAssignedTeamMembers();
-
-  if (!teamLoaded) {
-    return;
-  }
-
+function openManagerPerformanceAppraisal() {
   publishManagerPerformanceAppraisalContext();
 
   window.location.assign(

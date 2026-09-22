@@ -347,7 +347,6 @@
       .from("employees")
       .select("id, tenant_id, work_email")
       .eq("user_id", user.id)
-      .eq("is_active", true)
       .eq("tenant_id", profile.tenant_id)
       .limit(1)
       .maybeSingle();
@@ -366,7 +365,6 @@
         .from("employees")
         .select("id, tenant_id, work_email")
         .ilike("work_email", user.email)
-        .eq("is_active", true)
         .eq("tenant_id", profile.tenant_id)
         .limit(1)
         .maybeSingle();
@@ -11394,29 +11392,13 @@
   async function bexPaInitialiseAppraisalCycles() {
     const hasIntegratedContext =
       Boolean(bexPaGetIntegratedContext());
-
-    if (hasIntegratedContext) {
-      try {
-        await bexPaResolvePersistenceIdentity();
-        await bexPaHydrateRemoteState();
-      } catch (error) {
-        bexPaPersistence.mode = "remote-error";
-        bexPaPersistence.ready = false;
-        bexPaPersistence.lastError = error;
-
-        console.error(
-          "Performance appraisal production persistence could not initialise.",
-          error,
-        );
-      }
-    } else {
-      bexPaHydrateStandaloneState();
-      bexPaPersistence.mode = "standalone";
-      bexPaPersistence.ready = true;
-      bexPaPersistence.lastError = null;
+    if (bexPaElements.developmentPersona) {
+      bexPaElements.developmentPersona.classList.toggle(
+        "d-none",
+        !bexPaIsDevelopmentHost() ||
+        hasIntegratedContext,
+      );
     }
-
-    await bexPaCompleteEligibleCycles();
 
     document.body.classList.toggle(
       "bex-pa-integrated",
@@ -11507,13 +11489,32 @@
       }
     }
 
-    if (bexPaElements.developmentPersona) {
-      bexPaElements.developmentPersona.classList.toggle(
-        "d-none",
-        !bexPaIsDevelopmentHost() ||
-        hasIntegratedContext,
-      );
+    bexPaApplyTemplateAccess();
+    bexPaApplyReportAccess();
+
+    if (hasIntegratedContext) {
+      try {
+        await bexPaResolvePersistenceIdentity();
+        await bexPaHydrateRemoteState();
+      } catch (error) {
+        bexPaPersistence.mode = "remote-error";
+        bexPaPersistence.ready = false;
+        bexPaPersistence.lastError = error;
+
+        console.error(
+          "Performance appraisal production persistence could not initialise.",
+          error,
+        );
+      }
+    } else {
+      bexPaHydrateStandaloneState();
+      bexPaPersistence.mode = "standalone";
+      bexPaPersistence.ready = true;
+      bexPaPersistence.lastError = null;
     }
+
+    await bexPaCompleteEligibleCycles();
+
 
     bexPaElements.createTemplateButton?.addEventListener(
       "click",
