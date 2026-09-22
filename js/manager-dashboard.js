@@ -9,6 +9,8 @@ try {
 } catch (error) {
   console.warn("Manager dashboard scroll restoration could not be set to manual.", error);
 }
+let managerWorkspaceRefreshPromise = null;
+
 document.addEventListener("DOMContentLoaded", async () => {
   try {
     cacheDomElements();
@@ -62,7 +64,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // - tenant branding and remembered navigation are already restored;
     // - existing reporting-line, leave, delegation, RLS, and Supabase logic
     //   continues through refreshManagerWorkspace().
-    const managerWorkspaceRefreshPromise = refreshManagerWorkspace();
+    managerWorkspaceRefreshPromise = refreshManagerWorkspace();
 
     // Reveal the authenticated Manager shell immediately after profile,
     // tenant branding, navigation, title, and subtitle are ready.
@@ -1567,7 +1569,11 @@ function bindEvents() {
   );
 }
 
-function openManagerPerformanceAppraisal() {
+async function openManagerPerformanceAppraisal() {
+  if (managerWorkspaceRefreshPromise) {
+    await managerWorkspaceRefreshPromise;
+  }
+
   publishManagerPerformanceAppraisalContext();
 
   window.location.assign(

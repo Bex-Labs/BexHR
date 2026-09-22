@@ -9550,6 +9550,13 @@
   }
 
   async function bexPaCompleteEligibleCycles() {
+    if (
+      bexPaIsIntegratedPersistenceContext() &&
+      bexPaGetCurrentPersona() !== "hr-admin"
+    ) {
+      return false;
+    }
+
     const completedCycles = [];
 
     bexPaState.cycles.forEach((cycle) => {
