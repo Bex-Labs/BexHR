@@ -63,7 +63,7 @@
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, email, full_name, role, hr_access_level, department, is_active, must_change_password",
+        "id, email, full_name, role, hr_access_level, tenant_id, department, is_active, must_change_password",
       )
       .eq("id", userId)
       .single();

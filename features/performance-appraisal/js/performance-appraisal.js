@@ -58,6 +58,491 @@
   const BEX_PA_FORM_MEMORY_KEY =
     "bexhr:performance-appraisal:form-memory:v1";
 
+  const BEX_PA_PERSISTENCE_TABLES = Object.freeze({
+    cycles: "pa_cycles",
+    organisationGoals: "pa_organisation_goals",
+    deliverables: "pa_deliverables",
+    departmentGoals: "pa_department_goals",
+    templates: "pa_templates",
+    individualGoals: "pa_individual_goals",
+    progressUpdates: "pa_progress_updates",
+    employeeAppraisals: "pa_employee_appraisals",
+    selfAppraisals: "pa_self_appraisals",
+    managerAppraisals: "pa_manager_appraisals",
+    hrFinalisations: "pa_hr_finalisations",
+    employeeAcknowledgements: "pa_employee_acknowledgements",
+  });
+
+  const BEX_PA_REMOTE_PERSISTENCE_DATASETS = Object.freeze([
+    "cycles",
+    "organisationGoals",
+    "deliverables",
+    "departmentGoals",
+    "templates",
+    "individualGoals",
+    "progressUpdates",
+    "employeeAppraisals",
+    "selfAppraisals",
+    "managerAppraisals",
+    "hrFinalisations",
+    "employeeAcknowledgements",
+  ]);
+
+  /*
+   * PA-017 localStorage migration path.
+   *
+   * Standalone business records may be considered for an explicit,
+   * HR Admin-controlled migration to integrated BexHR persistence.
+   * Migration is never automatic during integrated initialisation,
+   * and existing localStorage records are never deleted automatically.
+   *
+   * BEX_PA_FORM_MEMORY_KEY is excluded because form memory is UI state.
+   * The migration dataset list deliberately reuses the canonical remote
+   * persistence dataset list rather than maintaining a second list.
+   *
+   * Before migration, employee and department references must resolve
+   * to canonical BexHR IDs. Unresolved or noncanonical references fail
+   * closed. Remote BexHR data remains authoritative. progressUpdates and
+   * employeeAcknowledgements remain append-only.
+   */
+  const BEX_PA_LOCALSTORAGE_MIGRATION_DATASETS =
+    BEX_PA_REMOTE_PERSISTENCE_DATASETS;
+
+  const bexPaPersistence = {
+    mode: "standalone",
+    ready: false,
+    tenantId: null,
+    userId: null,
+    lastError: null,
+  };
+
+  function bexPaIsIntegratedPersistenceContext() {
+    return Boolean(bexPaGetIntegratedContext());
+  }
+
+  function bexPaCanUseRemotePersistence() {
+    return (
+      bexPaIsIntegratedPersistenceContext() &&
+      Boolean(window.supabaseClient) &&
+      Boolean(window.SessionManager)
+    );
+  }
+  function bexPaCreatePersistenceRow(
+    datasetName,
+    record,
+    tenantId,
+  ) {
+    if (
+      !BEX_PA_PERSISTENCE_TABLES[datasetName] ||
+      !record ||
+      typeof record !== "object" ||
+      !record.id ||
+      !tenantId
+    ) {
+      return null;
+    }
+
+    const row = {
+      id: record.id,
+      tenant_id: tenantId,
+      payload: record,
+    };
+
+    if (record.status) {
+      row.status = record.status;
+    }
+
+    switch (datasetName) {
+      case "organisationGoals":
+      case "deliverables":
+        row.cycle_id = record.cycleId;
+        break;
+
+      case "departmentGoals":
+        row.department_id = record.departmentId;
+        row.cycle_id = record.cycleId;
+        break;
+
+      case "individualGoals":
+        row.employee_id = record.employeeId;
+        row.department_id = record.departmentId;
+        row.cycle_id = record.cycleId;
+        break;
+
+      case "progressUpdates":
+        row.employee_id = record.employeeId;
+        row.individual_goal_id = record.individualGoalId;
+        row.cycle_id = record.cycleId;
+        break;
+
+      case "employeeAppraisals":
+        row.employee_id = record.employeeId;
+        row.manager_employee_id = record.managerEmployeeId;
+        row.cycle_id = record.cycleId;
+        break;
+
+      case "selfAppraisals":
+        row.appraisal_id = record.appraisalId;
+        row.employee_id = record.employeeId;
+        break;
+
+      case "managerAppraisals":
+        row.appraisal_id = record.appraisalId;
+        row.employee_id = record.employeeId;
+        row.manager_employee_id = record.managerEmployeeId;
+        break;
+
+      case "hrFinalisations":
+      case "employeeAcknowledgements":
+        row.appraisal_id = record.appraisalId;
+        row.employee_id = record.employeeId;
+        break;
+
+      case "cycles":
+      case "templates":
+        break;
+
+      default:
+        return null;
+    }
+
+    return row;
+  }
+  function bexPaCreatePersistenceRows(
+    datasetName,
+    records,
+    tenantId,
+  ) {
+    if (!Array.isArray(records)) {
+      return [];
+    }
+
+    return records
+      .map((record) =>
+        bexPaCreatePersistenceRow(
+          datasetName,
+          record,
+          tenantId,
+        ),
+      )
+      .filter(Boolean);
+  }
+
+  function bexPaRestorePersistenceRecords(
+    datasetName,
+    rows,
+  ) {
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+
+    return rows
+      .map((row) => {
+        const payload = row?.payload;
+
+        if (
+          !payload ||
+          typeof payload !== "object" ||
+          Array.isArray(payload)
+        ) {
+          return null;
+        }
+
+        const record = {
+          ...payload,
+          id: row.id,
+        };
+
+        if (row.status != null) {
+          record.status = row.status;
+        }
+
+        switch (datasetName) {
+          case "organisationGoals":
+          case "deliverables":
+            record.cycleId = row.cycle_id;
+            break;
+
+          case "departmentGoals":
+            record.departmentId = row.department_id;
+            record.cycleId = row.cycle_id;
+            break;
+
+          case "individualGoals":
+            record.employeeId = row.employee_id;
+            record.departmentId = row.department_id;
+            record.cycleId = row.cycle_id;
+            break;
+
+          case "progressUpdates":
+            record.employeeId = row.employee_id;
+            record.individualGoalId =
+              row.individual_goal_id;
+            record.cycleId = row.cycle_id;
+            break;
+
+          case "employeeAppraisals":
+            record.employeeId = row.employee_id;
+            record.managerEmployeeId =
+              row.manager_employee_id || null;
+            record.cycleId = row.cycle_id;
+            break;
+
+          case "selfAppraisals":
+            record.appraisalId = row.appraisal_id;
+            record.employeeId = row.employee_id;
+            break;
+
+          case "managerAppraisals":
+            record.appraisalId = row.appraisal_id;
+            record.employeeId = row.employee_id;
+            record.managerEmployeeId =
+              row.manager_employee_id;
+            break;
+
+          case "hrFinalisations":
+          case "employeeAcknowledgements":
+            record.appraisalId = row.appraisal_id;
+            record.employeeId = row.employee_id;
+            break;
+
+          case "cycles":
+          case "templates":
+            break;
+
+          default:
+            return null;
+        }
+
+        return record;
+      })
+      .filter(Boolean);
+  }
+  async function bexPaResolvePersistenceIdentity() {
+    if (!bexPaCanUseRemotePersistence()) {
+      return null;
+    }
+
+    const session =
+      await window.SessionManager.getSession();
+
+    const user = session?.user;
+
+    if (!user?.id) {
+      throw new Error(
+        "Performance appraisal persistence requires an authenticated BexHR session.",
+      );
+    }
+
+    const profile =
+      await window.SessionManager.getProfile(user.id);
+
+    if (!profile?.tenant_id) {
+      throw new Error(
+        "The authenticated BexHR profile does not have a canonical tenant.",
+      );
+    }
+
+    let employeeResult = await window.supabaseClient
+      .from("employees")
+      .select("id, tenant_id, work_email")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .eq("tenant_id", profile.tenant_id)
+      .limit(1)
+      .maybeSingle();
+
+    if (
+      employeeResult.error &&
+      employeeResult.error.code !== "PGRST116"
+    ) {
+      throw employeeResult.error;
+    }
+
+    let employee = employeeResult.data;
+
+    if (!employee && user.email) {
+      employeeResult = await window.supabaseClient
+        .from("employees")
+        .select("id, tenant_id, work_email")
+        .ilike("work_email", user.email)
+        .eq("is_active", true)
+        .eq("tenant_id", profile.tenant_id)
+        .limit(1)
+        .maybeSingle();
+
+      if (
+        employeeResult.error &&
+        employeeResult.error.code !== "PGRST116"
+      ) {
+        throw employeeResult.error;
+      }
+
+      employee = employeeResult.data;
+    }
+
+    bexPaPersistence.mode = "remote";
+    bexPaPersistence.ready = true;
+    bexPaPersistence.tenantId = profile.tenant_id;
+    bexPaPersistence.userId = user.id;
+    bexPaPersistence.lastError = null;
+
+    return {
+      userId: user.id,
+      employeeId: employee?.id || null,
+      tenantId: profile.tenant_id,
+    };
+  }
+  async function bexPaLoadRemoteDataset(datasetName) {
+    const tableName =
+      BEX_PA_PERSISTENCE_TABLES[datasetName];
+
+    if (
+      !tableName ||
+      !bexPaPersistence.ready ||
+      !bexPaPersistence.tenantId
+    ) {
+      return [];
+    }
+
+    const { data, error } =
+      await window.supabaseClient
+        .from(tableName)
+        .select("*")
+        .eq(
+          "tenant_id",
+          bexPaPersistence.tenantId,
+        );
+
+    if (error) {
+      throw error;
+    }
+
+    return bexPaRestorePersistenceRecords(datasetName, data);
+  }
+
+  async function bexPaPersistRemoteRecords(
+    datasetName,
+    records,
+  ) {
+    const tableName =
+      BEX_PA_PERSISTENCE_TABLES[datasetName];
+
+    if (
+      !tableName ||
+      !bexPaPersistence.ready ||
+      !bexPaPersistence.tenantId
+    ) {
+      throw new Error(
+        `Remote persistence is not ready for ${datasetName}.`,
+      );
+    }
+
+    const recordsToPersist = Array.isArray(records)
+      ? records
+      : [records];
+
+    const rows = bexPaCreatePersistenceRows(
+      datasetName,
+      recordsToPersist,
+      bexPaPersistence.tenantId,
+    );
+
+    if (rows.length === 0) {
+      return;
+    }
+
+    const appendOnly =
+      datasetName === "progressUpdates" ||
+      datasetName === "employeeAcknowledgements";
+
+    if (appendOnly && rows.length !== 1) {
+      throw new Error(
+        `${datasetName} persistence requires exactly one new append-only record.`,
+      );
+    }
+
+    const query = appendOnly
+      ? window.supabaseClient
+        .from(tableName)
+        .insert(rows)
+      : window.supabaseClient
+        .from(tableName)
+        .upsert(rows, {
+          onConflict: "id",
+        });
+
+    const { error } = await query;
+
+    if (error) {
+      throw error;
+    }
+  }
+  async function bexPaPersistDatasetMutation(
+    datasetName,
+    record,
+    standaloneSave,
+  ) {
+    if (
+      !BEX_PA_REMOTE_PERSISTENCE_DATASETS.includes(
+        datasetName,
+      )
+    ) {
+      throw new Error(
+        `Unknown performance appraisal persistence dataset: ${datasetName}.`,
+      );
+    }
+
+    if (
+      !record ||
+      typeof record !== "object" ||
+      Array.isArray(record)
+    ) {
+      throw new Error(
+        `${datasetName} persistence requires one record.`,
+      );
+    }
+
+    if (bexPaIsIntegratedPersistenceContext()) {
+      if (
+        bexPaPersistence.mode !== "remote" ||
+        !bexPaPersistence.ready
+      ) {
+        throw new Error(
+          `Integrated persistence is unavailable for ${datasetName}.`,
+        );
+      }
+
+      await bexPaPersistRemoteRecords(
+        datasetName,
+        record,
+      );
+
+      return;
+    }
+
+    if (typeof standaloneSave !== "function") {
+      throw new Error(
+        `Standalone persistence callback is missing for ${datasetName}.`,
+      );
+    }
+
+    standaloneSave();
+  }
+  async function bexPaHydrateRemoteState() {
+    const results = await Promise.all(
+      BEX_PA_REMOTE_PERSISTENCE_DATASETS.map(
+        async (datasetName) => [
+          datasetName,
+          await bexPaLoadRemoteDataset(datasetName),
+        ],
+      ),
+    );
+
+    results.forEach(([datasetName, records]) => {
+      bexPaState[datasetName] = records;
+    });
+  }
   const bexPaState = {
     cycles: [],
     organisationGoals: [],
@@ -782,6 +1267,10 @@
 
         department: String(
           employee?.department || "",
+        ).trim(),
+
+        departmentId: String(
+          employee?.departmentId || "",
         ).trim(),
 
         jobTitle: String(
@@ -2288,7 +2777,7 @@
     const date = bexPaParseDate(dateValue);
 
     if (!date) {
-      return "—";
+      return "\u2014";
     }
 
     return new Intl.DateTimeFormat("en-NG", {
@@ -2392,7 +2881,7 @@
           bexPaCreateTableCell(
             `${bexPaFormatDate(
               cycle.startDate,
-            )} – ${bexPaFormatDate(cycle.endDate)}`,
+            )} \u2013 ${bexPaFormatDate(cycle.endDate)}`,
           ),
         );
 
@@ -2569,7 +3058,7 @@
     }
   }
 
-  function bexPaHandleCycleSubmit(event) {
+  async function bexPaHandleCycleSubmit(event) {
     event.preventDefault();
     bexPaClearCycleError();
 
@@ -2637,7 +3126,40 @@
 
     const wasEditing = Boolean(bexPaState.editingCycleId);
 
-    bexPaSaveCycles();
+    const persistedCycle = wasEditing
+      ? bexPaState.cycles.find(
+        (existingCycle) =>
+          existingCycle.id === cycle.id,
+      )
+      : cycle;
+
+    try {
+      await bexPaPersistDatasetMutation(
+        "cycles",
+        persistedCycle,
+        bexPaSaveCycles,
+      );
+    } catch (error) {
+      console.error(
+        "Performance appraisal cycle persistence failed.",
+        error,
+      );
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      bexPaShowCycleError(
+        "The appraisal cycle could not be saved. Please try again.",
+      );
+      return;
+    }
     bexPaRenderCycles();
     bexPaHideCycleForm();
 
@@ -2677,7 +3199,7 @@
       bexPaGetAvailableEmployees();
 
     if (availableEmployees.length === 0) {
-      return;
+      return [];
     }
 
     const template = bexPaState.templates.find(
@@ -2686,7 +3208,7 @@
     );
 
     if (!template) {
-      return;
+      return [];
     }
 
     const templateSnapshot = {
@@ -2744,17 +3266,17 @@
     });
 
     if (newAppraisals.length === 0) {
-      return;
+      return [];
     }
 
     bexPaState.employeeAppraisals.push(
       ...newAppraisals,
     );
 
-    bexPaSaveEmployeeAppraisals();
+    return newAppraisals;
   }
 
-  function bexPaActivateCycle() {
+  async function bexPaActivateCycle() {
     if (!bexPaCanManageAppraisalCycles()) {
       return;
     }
@@ -2791,8 +3313,51 @@
 
     cycle.status = "Active";
 
-    bexPaSaveCycles();
-    bexPaGenerateEmployeeAppraisals(cycle);
+    const newAppraisals =
+      bexPaGenerateEmployeeAppraisals(cycle);
+
+    try {
+      await bexPaPersistDatasetMutation(
+        "cycles",
+        cycle,
+        bexPaSaveCycles,
+      );
+
+      if (newAppraisals.length > 0) {
+        if (bexPaIsIntegratedPersistenceContext()) {
+          await bexPaPersistRemoteRecords(
+            "employeeAppraisals",
+            newAppraisals,
+          );
+        } else {
+          bexPaSaveEmployeeAppraisals();
+        }
+      }
+    } catch (error) {
+      console.error(
+        "Performance appraisal cycle activation persistence failed.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      if (bexPaElements.announcement) {
+        bexPaElements.announcement.textContent =
+          "The appraisal cycle could not be activated. Please try again.";
+      }
+
+      return;
+    }
+
     bexPaRenderCycles();
     bexPaRenderEmployeeAppraisals();
 
@@ -2803,7 +3368,6 @@
         `${cycle.name} is now active.`;
     }
   }
-
   function bexPaHandleCycleTableAction(event) {
     const actionButton = event.target.closest(
       "[data-bex-pa-cycle-action]",
@@ -4560,7 +5124,7 @@
     return "";
   }
 
-  function bexPaHandleProgressUpdateSubmit(event) {
+  async function bexPaHandleProgressUpdateSubmit(event) {
     event.preventDefault();
     bexPaClearProgressUpdateError();
 
@@ -4640,7 +5204,34 @@
       progressUpdate,
     );
 
-    bexPaSaveProgressUpdates();
+    try {
+      await bexPaPersistDatasetMutation(
+        "progressUpdates",
+        progressUpdate,
+        bexPaSaveProgressUpdates,
+      );
+    } catch (error) {
+      console.error(
+        "Performance appraisal progress-update persistence failed.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      bexPaShowProgressUpdateError(
+        "The progress update could not be saved. Please try again.",
+      );
+      return;
+    }
     bexPaRenderProgressUpdates();
     bexPaCloseProgressUpdateDialog();
 
@@ -4886,7 +5477,7 @@
     );
   }
 
-  function bexPaHandleIndividualGoalSubmit(event) {
+  async function bexPaHandleIndividualGoalSubmit(event) {
     event.preventDefault();
 
     if (!bexPaCanEditIndividualGoals()) {
@@ -4934,6 +5525,9 @@
 
       department:
         departmentGoal?.department || "",
+
+      departmentId:
+        departmentGoal?.departmentId || "",
 
       cycleId:
         departmentGoal?.cycleId || "",
@@ -5032,7 +5626,48 @@
       bexPaState.individualGoals.push(...individualGoals);
     }
 
-    bexPaSaveIndividualGoals();
+    try {
+      if (bexPaIsIntegratedPersistenceContext()) {
+        if (
+          bexPaPersistence.mode !== "remote" ||
+          !bexPaPersistence.ready
+        ) {
+          throw new Error(
+            "Integrated appraisal persistence is unavailable.",
+          );
+        }
+
+        await bexPaPersistRemoteRecords(
+          "individualGoals",
+          wasEditing
+            ? individualGoals[0]
+            : individualGoals,
+        );
+      } else {
+        bexPaSaveIndividualGoals();
+      }
+    } catch (error) {
+      console.error(
+        "Performance appraisal individual-goal persistence failed.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      bexPaShowIndividualGoalError(
+        "The individual goal could not be saved. Please try again.",
+      );
+      return;
+    }
     bexPaRenderIndividualGoals();
     bexPaCloseIndividualGoalDialog();
 
@@ -5250,7 +5885,7 @@
     );
   }
 
-  function bexPaHandleDepartmentGoalSubmit(event) {
+  async function bexPaHandleDepartmentGoalSubmit(event) {
     event.preventDefault();
 
     if (!bexPaCanManageDepartmentGoals()) {
@@ -5277,6 +5912,41 @@
           bexPaElements.departmentGoalOrganisationGoal.value,
       );
 
+    const selectedDepartment =
+      bexPaElements.departmentGoalDepartment.value.trim();
+
+    const matchingDepartmentIds = [
+      ...new Set(
+        bexPaGetAvailableEmployees()
+          .filter(
+            (employee) =>
+              String(employee.department || "")
+                .trim()
+                .toLowerCase() ===
+              selectedDepartment.toLowerCase(),
+          )
+          .map((employee) =>
+            String(employee.departmentId || "").trim(),
+          )
+          .filter(Boolean),
+      ),
+    ];
+
+    const canonicalDepartmentId =
+      matchingDepartmentIds.length === 1
+        ? matchingDepartmentIds[0]
+        : "";
+
+    if (
+      bexPaIsIntegratedPersistenceContext() &&
+      !canonicalDepartmentId
+    ) {
+      bexPaShowDepartmentGoalError(
+        "The selected department does not have one canonical BexHR department ID.",
+      );
+      return;
+    }
+
     const departmentGoal = {
       id:
         bexPaState.editingDepartmentGoalId ||
@@ -5290,6 +5960,9 @@
 
       department:
         bexPaElements.departmentGoalDepartment.value.trim(),
+
+      departmentId:
+        canonicalDepartmentId,
 
       title:
         bexPaElements.departmentGoalTitle.value.trim(),
@@ -5360,7 +6033,34 @@
       );
     }
 
-    bexPaSaveDepartmentGoals();
+    try {
+      await bexPaPersistDatasetMutation(
+        "departmentGoals",
+        departmentGoal,
+        bexPaSaveDepartmentGoals,
+      );
+    } catch (error) {
+      console.error(
+        "Performance appraisal department-goal persistence failed.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      bexPaShowDepartmentGoalError(
+        "The department goal could not be saved. Please try again.",
+      );
+      return;
+    }
     bexPaRenderDepartmentGoals();
     bexPaCloseDepartmentGoalDialog();
 
@@ -5549,7 +6249,7 @@
     });
   }
 
-  function bexPaHandleDeliverableSubmit(event) {
+  async function bexPaHandleDeliverableSubmit(event) {
     event.preventDefault();
 
     if (!bexPaCanManageGoalFramework()) {
@@ -5645,7 +6345,35 @@
       );
     }
 
-    bexPaSaveDeliverables();
+    try {
+      await bexPaPersistDatasetMutation(
+        "deliverables",
+        deliverable,
+        bexPaSaveDeliverables,
+      );
+    } catch (error) {
+      console.error(
+        "BexHR Performance Appraisal could not persist the deliverable.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+          bexPaRenderDeliverables();
+        } catch (recoveryError) {
+          console.error(
+            "BexHR Performance Appraisal could not restore deliverables after the persistence failure.",
+            recoveryError,
+          );
+        }
+      }
+
+      bexPaShowDeliverableError(
+        "The organisational deliverable could not be saved. Please try again.",
+      );
+      return;
+    }
     bexPaRenderDeliverables();
     bexPaCloseDeliverableDialog();
 
@@ -5819,7 +6547,7 @@
     });
   }
 
-  function bexPaHandleOrganisationGoalSubmit(event) {
+  async function bexPaHandleOrganisationGoalSubmit(event) {
     event.preventDefault();
 
     if (!bexPaCanManageGoalFramework()) {
@@ -5902,7 +6630,34 @@
       bexPaState.organisationGoals.push(goal);
     }
 
-    bexPaSaveOrganisationGoals();
+    try {
+      await bexPaPersistDatasetMutation(
+        "organisationGoals",
+        goal,
+        bexPaSaveOrganisationGoals,
+      );
+    } catch (error) {
+      console.error(
+        "Performance appraisal organisation-goal persistence failed.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      bexPaShowOrganisationGoalError(
+        "The organisation goal could not be saved. Please try again.",
+      );
+      return;
+    }
     bexPaRenderOrganisationGoals();
     bexPaCloseOrganisationGoalDialog();
 
@@ -6858,7 +7613,7 @@
     });
   }
 
-  function bexPaHandleTemplateSubmit(event) {
+  async function bexPaHandleTemplateSubmit(event) {
     event.preventDefault();
 
     if (!bexPaCanManageTemplates()) {
@@ -6955,7 +7710,34 @@
       bexPaState.templates.push(template);
     }
 
-    bexPaSaveTemplates();
+    try {
+      await bexPaPersistDatasetMutation(
+        "templates",
+        template,
+        bexPaSaveTemplates,
+      );
+    } catch (error) {
+      console.error(
+        "Performance appraisal template persistence failed.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      bexPaShowTemplateError(
+        "The appraisal template could not be saved. Please try again.",
+      );
+      return;
+    }
     bexPaRenderTemplates();
     bexPaCloseTemplateDialog();
 
@@ -8769,8 +9551,8 @@
     );
   }
 
-  function bexPaCompleteEligibleCycles() {
-    let cyclesChanged = false;
+  async function bexPaCompleteEligibleCycles() {
+    const completedCycles = [];
 
     bexPaState.cycles.forEach((cycle) => {
       if (cycle.status !== "Active") {
@@ -8824,17 +9606,34 @@
         acknowledgementTimestamps.length - 1
         ] || new Date().toISOString();
 
-      cyclesChanged = true;
+      completedCycles.push(cycle);
     });
 
-    if (cyclesChanged) {
+    if (completedCycles.length === 0) {
+      return false;
+    }
+
+    if (bexPaIsIntegratedPersistenceContext()) {
+      if (
+        bexPaPersistence.mode !== "remote" ||
+        !bexPaPersistence.ready
+      ) {
+        throw new Error(
+          "Integrated cycle completion persistence is unavailable.",
+        );
+      }
+
+      await bexPaPersistRemoteRecords(
+        "cycles",
+        completedCycles,
+      );
+    } else {
       bexPaSaveCycles();
     }
 
-    return cyclesChanged;
+    return true;
   }
-
-  function bexPaAcknowledgeFinalAppraisal() {
+  async function bexPaAcknowledgeFinalAppraisal() {
     if (bexPaGetCurrentPersona() !== "employee") {
       return;
     }
@@ -8910,8 +9709,38 @@
       ] = acknowledgement;
     }
 
-    bexPaSaveEmployeeAcknowledgements();
-    bexPaCompleteEligibleCycles();
+    try {
+      await bexPaPersistDatasetMutation(
+        "employeeAcknowledgements",
+        acknowledgement,
+        bexPaSaveEmployeeAcknowledgements,
+      );
+    } catch (error) {
+      console.error(
+        "Performance appraisal acknowledgement persistence failed.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      if (bexPaElements.announcement) {
+        bexPaElements.announcement.textContent =
+          "The appraisal acknowledgement could not be saved. Please try again.";
+      }
+
+      return;
+    }
+
+    await bexPaCompleteEligibleCycles();
 
     bexPaRenderFinalAppraisal(appraisal);
     bexPaRenderEmployeeAppraisals();
@@ -8923,7 +9752,7 @@
     }
   }
 
-  function bexPaFinaliseHrAppraisal() {
+  async function bexPaFinaliseHrAppraisal() {
     if (bexPaGetCurrentPersona() !== "hr-admin") {
       return;
     }
@@ -9000,7 +9829,36 @@
         hrFinalisation;
     }
 
-    bexPaSaveHrFinalisations();
+    try {
+      await bexPaPersistDatasetMutation(
+        "hrFinalisations",
+        hrFinalisation,
+        bexPaSaveHrFinalisations,
+      );
+    } catch (error) {
+      console.error(
+        "Performance appraisal HR finalisation persistence failed.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      if (bexPaElements.announcement) {
+        bexPaElements.announcement.textContent =
+          "The appraisal finalisation could not be saved. Please try again.";
+      }
+
+      return;
+    }
 
     bexPaRenderHrAppraisalReview(appraisal);
     bexPaRenderEmployeeAppraisals();
@@ -9430,7 +10288,7 @@
     return "";
   }
 
-  function bexPaHandleManagerAppraisalSave(
+  async function bexPaHandleManagerAppraisalSave(
     event,
     isFinalSubmission = false,
   ) {
@@ -9537,7 +10395,34 @@
         managerAppraisal;
     }
 
-    bexPaSaveManagerAppraisals();
+    try {
+      await bexPaPersistDatasetMutation(
+        "managerAppraisals",
+        managerAppraisal,
+        bexPaSaveManagerAppraisals,
+      );
+    } catch (error) {
+      console.error(
+        "Performance appraisal manager persistence failed.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      bexPaShowManagerAppraisalError(
+        "The manager appraisal could not be saved. Please try again.",
+      );
+      return;
+    }
     bexPaRenderManagerAppraisalDetail(appraisal);
     bexPaRenderEmployeeAppraisals();
     bexPaRenderCycles();
@@ -9970,7 +10855,7 @@
     return "";
   }
 
-  function bexPaHandleSelfAppraisalSubmit(
+  async function bexPaHandleSelfAppraisalSubmit(
     event,
     isFinalSubmission = false,
   ) {
@@ -10105,7 +10990,34 @@
         selfAppraisal;
     }
 
-    bexPaSaveSelfAppraisals();
+    try {
+      await bexPaPersistDatasetMutation(
+        "selfAppraisals",
+        selfAppraisal,
+        bexPaSaveSelfAppraisals,
+      );
+    } catch (error) {
+      console.error(
+        "Performance appraisal self-appraisal persistence failed.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      bexPaShowSelfAppraisalError(
+        "The self-appraisal could not be saved. Please try again.",
+      );
+      return;
+    }
 
     bexPaRenderSelfAppraisalDetail(appraisal);
     bexPaRenderEmployeeAppraisals();
@@ -10442,7 +11354,7 @@
     );
   }
 
-  function bexPaInitialiseAppraisalCycles() {
+  function bexPaHydrateStandaloneState() {
     bexPaState.cycles = bexPaLoadStoredCycles();
 
     bexPaState.organisationGoals =
@@ -10477,11 +11389,34 @@
 
     bexPaState.employeeAcknowledgements =
       bexPaLoadEmployeeAcknowledgements();
+  }
 
-    bexPaCompleteEligibleCycles();
-
+  async function bexPaInitialiseAppraisalCycles() {
     const hasIntegratedContext =
       Boolean(bexPaGetIntegratedContext());
+
+    if (hasIntegratedContext) {
+      try {
+        await bexPaResolvePersistenceIdentity();
+        await bexPaHydrateRemoteState();
+      } catch (error) {
+        bexPaPersistence.mode = "remote-error";
+        bexPaPersistence.ready = false;
+        bexPaPersistence.lastError = error;
+
+        console.error(
+          "Performance appraisal production persistence could not initialise.",
+          error,
+        );
+      }
+    } else {
+      bexPaHydrateStandaloneState();
+      bexPaPersistence.mode = "standalone";
+      bexPaPersistence.ready = true;
+      bexPaPersistence.lastError = null;
+    }
+
+    await bexPaCompleteEligibleCycles();
 
     document.body.classList.toggle(
       "bex-pa-integrated",

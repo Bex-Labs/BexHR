@@ -3792,7 +3792,7 @@ function getHrWorkspaceMemoryKey() {
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
 // Save only the active workspace key. Do not store employee, payroll,
 // bank, salary, payslip, or form data in browser storage.
-// In-memory fallback — survives within the page session even when
+// In-memory fallback â€” survives within the page session even when
 // sessionStorage is blocked by browser tracking prevention.
 let _hrWorkspaceInMemory = null;
 
@@ -5827,7 +5827,7 @@ function renderHrp85TestRecipients() {
       option.value = recipient.recipientEmail;
       option.dataset.recipientId = recipient.id;
       option.dataset.recipientName = recipient.recipientName;
-      option.textContent = `${recipient.recipientName} — ${recipient.recipientEmail}`;
+      option.textContent = `${recipient.recipientName} â€” ${recipient.recipientEmail}`;
 
       select.appendChild(option);
     });
@@ -6429,7 +6429,7 @@ async function handleHrp85EmailIntegrationSubmit() {
   const recipientEmail = String(select?.value || "").trim().toLowerCase();
   const recipientName = String(
     selectedOption?.dataset?.recipientName ||
-    selectedOption?.textContent?.split("—")?.[0] ||
+    selectedOption?.textContent?.split("â€”")?.[0] ||
     recipientEmail,
   ).trim();
 
@@ -6893,14 +6893,14 @@ function populatePayrollOtherDeductionMasterOptions() {
 
     const gradeLabel = getPayrollMasterGradeDisplay(record);
     const gradeSegment = gradeLabel && gradeLabel !== "--"
-      ? ` — ${gradeLabel}`
+      ? ` â€” ${gradeLabel}`
       : "";
 
     option.value = record.id;
     option.textContent =
-      `${fullName}${gradeSegment} — ` +
-      `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${record.salary_effective_date || "--"} — ` +
+      `${fullName}${gradeSegment} â€” ` +
+      `${formatCurrency(record.basic_salary, "NGN")} â€” ` +
+      `${record.salary_effective_date || "--"} â€” ` +
       `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
@@ -8042,7 +8042,7 @@ function populatePayrollEmployeeOverrideMasterOptions() {
 
     const gradeSegment =
       gradeLabel && gradeLabel !== "--"
-        ? ` — ${gradeLabel}`
+        ? ` â€” ${gradeLabel}`
         : "";
 
     const effectiveDate = String(
@@ -8058,9 +8058,9 @@ function populatePayrollEmployeeOverrideMasterOptions() {
       versionLabel.toLowerCase();
 
     option.textContent =
-      `${fullName}${gradeSegment} — ` +
-      `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${effectiveDate || "--"} — ${versionLabel}`;
+      `${fullName}${gradeSegment} â€” ` +
+      `${formatCurrency(record.basic_salary, "NGN")} â€” ` +
+      `${effectiveDate || "--"} â€” ${versionLabel}`;
 
     select.appendChild(option);
   });
@@ -11945,7 +11945,7 @@ async function handleBatchEmployeeSubmit() {
                 <span class="badge ${category === "duplicate" ? "text-bg-info" : "text-bg-danger"} me-1">
                   ${category === "duplicate" ? "Duplicate" : "Failed"}
                 </span>
-                Row ${escapeHtml(employee.rowNumber)} — ${escapeHtml(employee.work_email)}: ${escapeHtml(reason)}
+                Row ${escapeHtml(employee.rowNumber)} â€” ${escapeHtml(employee.work_email)}: ${escapeHtml(reason)}
               </li>`).join("")}
           </ul>`;
       } else {
@@ -12703,7 +12703,7 @@ function renderImportedBatchEmployeeCsvRows(preparedRows = [], skippedRows = [])
       employee.next_of_kin_full_name ? "Next of kin" : "",
       employee.education_institution ? "Education" : "",
       employee.dependant_full_name ? "Dependant" : "",
-    ].filter(Boolean).join(" • ");
+    ].filter(Boolean).join(" â€¢ ");
 
     const rowElement = document.createElement("tr");
     rowElement.className = needsCompletion ? "hr-batch-row-needs-completion" : "";
@@ -12765,7 +12765,7 @@ function renderImportedBatchEmployeeCsvRows(preparedRows = [], skippedRows = [])
               <span class="badge ${item.category === "duplicate" ? "text-bg-info" : "text-bg-danger"} me-1">
                 ${item.category === "duplicate" ? "Duplicate" : "Blocked"}
               </span>
-              Row ${escapeHtml(item.rowNumber)} — ${escapeHtml(item.employeeName || item.workEmail)}: ${escapeHtml(item.reason)}
+              Row ${escapeHtml(item.rowNumber)} â€” ${escapeHtml(item.employeeName || item.workEmail)}: ${escapeHtml(item.reason)}
             </li>`).join("")}
         </ul>
       `;
@@ -13476,7 +13476,7 @@ function buildEmployeeReportingLineManagerOptions(selectedManagerId = "") {
       <option value="${escapeHtml(employeeId)}"${selected}
         data-manager-name="${escapeHtml(getEmployeeManagerDisplayName(employee))}"
         data-manager-email="${escapeHtml(String(employee.work_email || "").trim().toLowerCase())}">
-        ${escapeHtml(getEmployeeManagerDisplayName(employee))} — ${escapeHtml(employee.work_email || "--")}
+        ${escapeHtml(getEmployeeManagerDisplayName(employee))} â€” ${escapeHtml(employee.work_email || "--")}
       </option>
     `);
   });
@@ -15149,10 +15149,10 @@ function renderEmployeeDependantRecords(records = []) {
       const relationship = escapeHtml(record.relationship || "--");
       const coverageType = escapeHtml(record.coverage_type || "--");
       const dateOfBirth = record.date_of_birth
-        ? ` • DOB: ${escapeHtml(record.date_of_birth)}`
+        ? ` â€¢ DOB: ${escapeHtml(record.date_of_birth)}`
         : "";
       const phoneNumber = record.phone_number
-        ? ` • ${escapeHtml(record.phone_number)}`
+        ? ` â€¢ ${escapeHtml(record.phone_number)}`
         : "";
 
       return `
@@ -15416,7 +15416,7 @@ function renderEmployeeEducationRecords(records = []) {
       const qualification = escapeHtml(record.qualification || "--");
       const fieldOfStudy = escapeHtml(record.field_of_study || "--");
       const year = record.graduation_year
-        ? ` • ${escapeHtml(String(record.graduation_year))}`
+        ? ` â€¢ ${escapeHtml(String(record.graduation_year))}`
         : "";
       const status = escapeHtml(record.education_status || "Completed");
       const highestBadge = record.is_highest_qualification
@@ -16524,21 +16524,21 @@ function updateEmployeeFormSteps() {
   ].every(hasVal) && emailPattern.test(workEmail);
 
   const stepDone = [
-    // Step 1: Core Details — complete only when required manual-form fields are valid.
+    // Step 1: Core Details â€” complete only when required manual-form fields are valid.
     hasCompleteCoreDetails,
-    // Step 2: Reporting Lines — primary line manager selected.
+    // Step 2: Reporting Lines â€” primary line manager selected.
     hasVal(state.dom.assignedLineManagerEmployeeId),
-    // Step 3: Dependants — staged or visible dependant information exists.
+    // Step 3: Dependants â€” staged or visible dependant information exists.
     hasVal(state.dom.employeeDependantFullName) ||
     Boolean(state.pendingEmployeeDependants?.length) ||
     Boolean(state.dom.employeeDependantsRecordsList?.querySelector("[data-dependant-record]")),
-    // Step 4: Address — current or permanent primary address line entered.
+    // Step 4: Address â€” current or permanent primary address line entered.
     hasVal(state.dom.employeeCurrentAddressLine1) || hasVal(state.dom.employeePermanentAddressLine1),
-    // Step 5: Next of Kin — full name entered.
+    // Step 5: Next of Kin â€” full name entered.
     hasVal(state.dom.employeeNextOfKinFullName),
-    // Step 6: Education — institution entered.
+    // Step 6: Education â€” institution entered.
     hasVal(state.dom.employeeEducationInstitutionName),
-    // Step 7: Documents — pending or saved document exists.
+    // Step 7: Documents â€” pending or saved document exists.
     state.pendingFiles?.length > 0 ||
     Boolean(state.dom.attachedDocumentsList?.querySelector("[data-document-id]")),
   ];
@@ -16821,7 +16821,7 @@ function getProfileCorrectionDecisionGuidance(status = "") {
   const cleanStatus = normalizeProfileCorrectionRequestStatus(status);
 
   if (cleanStatus === "in review") {
-    return "Use while HR is checking the employee’s request.";
+    return "Use while HR is checking the employeeâ€™s request.";
   }
 
   if (cleanStatus === "approved") {
@@ -17891,7 +17891,7 @@ function renderRecentManagerLeaveDecisions(records = []) {
 
               <strong>
                 ${escapeHtml(leaveStartDate)}
-                <span aria-hidden="true">–</span>
+                <span aria-hidden="true">â€“</span>
                 ${escapeHtml(leaveEndDate)}
               </strong>
             </div>
@@ -18454,12 +18454,12 @@ async function handlePayrollMasterFormClear() {
 
 // DESCRIPTION ITEM 3 - STEP 2A-4
 // Build the user-facing Payroll Grade / Level label.
-// Example: GL-01 — Junior Level
+// Example: GL-01 â€” Junior Level
 function getPayrollGradeLevelLabel(grade = {}) {
   const code = String(grade.grade_code || "").trim();
   const name = String(grade.grade_name || "").trim();
 
-  if (code && name) return `${code} — ${name}`;
+  if (code && name) return `${code} â€” ${name}`;
   return code || name || "";
 }
 
@@ -19444,16 +19444,16 @@ function populatePayrollAllowanceMasterOptions() {
 
     // DESCRIPTION ITEM 3 - STEP 2A-4A
     // Only show Grade / Level in the Allowance dropdown when a real grade exists.
-    // This prevents awkward labels like "Employee — -- — ₦300,000.00".
+    // This prevents awkward labels like "Employee â€” -- â€” â‚¦300,000.00".
     const gradeLabel = getPayrollMasterGradeDisplay(record);
     const gradeSegment = gradeLabel && gradeLabel !== "--"
-      ? ` — ${gradeLabel}`
+      ? ` â€” ${gradeLabel}`
       : "";
 
     option.textContent =
-      `${fullName}${gradeSegment} — ` +
-      `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${record.salary_effective_date || "--"} — ` +
+      `${fullName}${gradeSegment} â€” ` +
+      `${formatCurrency(record.basic_salary, "NGN")} â€” ` +
+      `${record.salary_effective_date || "--"} â€” ` +
       `${getPayrollMasterVersionLabel(record)}`;
     select.appendChild(option);
   });
@@ -19519,7 +19519,7 @@ function populatePayrollStatutoryMasterOptions() {
 
     const gradeLabel = getPayrollMasterGradeDisplay(record);
     const gradeSegment = gradeLabel && gradeLabel !== "--"
-      ? ` — ${gradeLabel}`
+      ? ` â€” ${gradeLabel}`
       : "";
 
     option.value = record.id;
@@ -19528,9 +19528,9 @@ function populatePayrollStatutoryMasterOptions() {
     // Show employee, grade context, salary, and effective date so HR selects
     // the correct payroll profile before configuring statutory deductions.
     option.textContent =
-      `${fullName}${gradeSegment} — ` +
-      `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${record.salary_effective_date || "--"} — ` +
+      `${fullName}${gradeSegment} â€” ` +
+      `${formatCurrency(record.basic_salary, "NGN")} â€” ` +
+      `${record.salary_effective_date || "--"} â€” ` +
       `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
@@ -22108,7 +22108,7 @@ function startBankDirectoryEdit(bankId) {
     return;
   }
 
-  // ðŸ”´ CRITICAL: set edit mode
+  // Ã°Å¸â€Â´ CRITICAL: set edit mode
   state.currentEditingBankDirectory = record;
   setBankDirectoryEditMode();
 
@@ -23387,7 +23387,7 @@ function getBatchPayrollCsvValue(row = [], headerMap = new Map(), headerNames = 
 // Handles commas, currency symbols, empty cells, and normal numeric values.
 function parseBatchPayrollCsvAmount(value = "") {
   const cleaned = String(value || "")
-    .replace(/[₦,\s]/g, "")
+    .replace(/[â‚¦,\s]/g, "")
     .trim();
 
   if (!cleaned) return 0;
@@ -24372,6 +24372,39 @@ function getCurrentHrAccessTitle(profile = {}) {
     : "HR Standard";
 }
 
+function getPerformanceAppraisalDepartmentId(departmentName = "") {
+  const normalizedDepartmentName = String(
+    departmentName || "",
+  )
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedDepartmentName) {
+    return "";
+  }
+
+  const matchingDepartments = (
+    Array.isArray(state.organizationDepartments)
+      ? state.organizationDepartments
+      : []
+  ).filter(
+    (department) =>
+      String(
+        department?.department_name || "",
+      )
+        .trim()
+        .toLowerCase() === normalizedDepartmentName,
+  );
+
+  if (matchingDepartments.length !== 1) {
+    return "";
+  }
+
+  return String(
+    matchingDepartments[0]?.id || "",
+  ).trim();
+}
+
 function publishHrPerformanceAppraisalContext() {
   const isHrAdmin =
     getCurrentHrAccessTitle(
@@ -24420,6 +24453,11 @@ function publishHrPerformanceAppraisalContext() {
         department: String(
           employee.department || "",
         ).trim(),
+
+        departmentId:
+          getPerformanceAppraisalDepartmentId(
+            employee.department,
+          ),
 
         jobTitle: String(
           employee.job_title || "",
@@ -24706,14 +24744,14 @@ function renderHrOverviewRecentActivityWithSalarySetups() {
     return buildActivity({
       type: "salary",
       title: "Employee salary setup updated",
-      subtitle: `${resolveEmployeeName(record)} · ${salaryStatus}${versionSuffix}`,
+      subtitle: `${resolveEmployeeName(record)} Â· ${salaryStatus}${versionSuffix}`,
       timestamp: record.updated_at || record.created_at,
     });
   });
 
   const payrollActivities = payrollRecords.map((record) => {
     const payCycle = String(record.pay_cycle || "").trim();
-    const cycleSuffix = payCycle ? ` · ${payCycle}` : "";
+    const cycleSuffix = payCycle ? ` Â· ${payCycle}` : "";
 
     return buildActivity({
       type: "payroll",
@@ -25312,7 +25350,7 @@ function formatCurrency(value, currency = "NGN") {
   // For Nigerian payroll, use the Naira symbol instead of plain "NGN"
   // so values read naturally across tables, previews, and summaries.
   if (resolvedCurrency === "NGN") {
-    return `₦${formattedAmount}`;
+    return `â‚¦${formattedAmount}`;
   }
 
   try {
@@ -30823,12 +30861,12 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
         </div>
 
         ${organizationContactLines.length
-      ? `<div class="text-secondary small mt-1">${escapeHtml(organizationContactLines.join(" • "))}</div>`
+      ? `<div class="text-secondary small mt-1">${escapeHtml(organizationContactLines.join(" â€¢ "))}</div>`
       : ""
     }
 
         ${organizationRegistrationLines.length
-      ? `<div class="text-secondary small mt-1">${escapeHtml(organizationRegistrationLines.join(" • "))}</div>`
+      ? `<div class="text-secondary small mt-1">${escapeHtml(organizationRegistrationLines.join(" â€¢ "))}</div>`
       : ""
     }
       </div>
@@ -30928,7 +30966,7 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
       (kin) => `
           <div class="fw-semibold">${escapeHtml(kin.full_name || "--")}</div>
           <div class="text-secondary small">
-            ${escapeHtml(kin.relationship || "--")} • ${escapeHtml(kin.phone_number || "--")}
+            ${escapeHtml(kin.relationship || "--")} â€¢ ${escapeHtml(kin.phone_number || "--")}
           </div>
           <div class="text-secondary small text-break">${escapeHtml(kin.email || "--")}</div>
           <div class="text-secondary small text-break">${escapeHtml(kin.address || "--")}</div>
@@ -30948,10 +30986,10 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
       (dependant) => `
           <div class="fw-semibold">${escapeHtml(dependant.full_name || "--")}</div>
           <div class="text-secondary small">
-            ${escapeHtml(dependant.relationship || "--")} • ${escapeHtml(dependant.coverage_type || "--")}
+            ${escapeHtml(dependant.relationship || "--")} â€¢ ${escapeHtml(dependant.coverage_type || "--")}
           </div>
           <div class="text-secondary small">
-            DOB: ${formatDate(dependant.date_of_birth)} • Phone: ${escapeHtml(dependant.phone_number || "--")}
+            DOB: ${formatDate(dependant.date_of_birth)} â€¢ Phone: ${escapeHtml(dependant.phone_number || "--")}
           </div>
         `,
     )}
@@ -30973,7 +31011,7 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
           </div>
           <div class="text-secondary small text-break">${escapeHtml(record.institution_name || "--")}</div>
           <div class="text-secondary small">
-            ${escapeHtml(record.field_of_study || "--")} • ${escapeHtml(record.graduation_year || "--")} • ${escapeHtml(record.education_status || "Completed")}
+            ${escapeHtml(record.field_of_study || "--")} â€¢ ${escapeHtml(record.graduation_year || "--")} â€¢ ${escapeHtml(record.education_status || "Completed")}
           </div>
         `,
     )}
@@ -30991,9 +31029,9 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
       (documentRow) => `
           <div class="fw-semibold text-break">${escapeHtml(documentRow.file_name || "--")}</div>
           <div class="text-secondary small">
-            ${escapeHtml(documentRow.document_type || "Unclassified")} •
-            ${escapeHtml(documentRow.mime_type || "Unknown type")} •
-            ${formatBytes(documentRow.file_size_bytes)} •
+            ${escapeHtml(documentRow.document_type || "Unclassified")} â€¢
+            ${escapeHtml(documentRow.mime_type || "Unknown type")} â€¢
+            ${formatBytes(documentRow.file_size_bytes)} â€¢
             ${formatDateTime(documentRow.uploaded_at)}
           </div>
         `,
@@ -32646,8 +32684,8 @@ function renderPendingFiles() {
       <div>
         <div class="fw-semibold">${escapeHtml(file.name || "Unnamed file")}</div>
         <div class="text-secondary small">
-          ${escapeHtml(documentType)} •
-          ${escapeHtml(file.type || "Unknown type")} •
+          ${escapeHtml(documentType)} â€¢
+          ${escapeHtml(file.type || "Unknown type")} â€¢
           ${formatBytes(file.size)}
         </div>
       </div>
@@ -32748,9 +32786,9 @@ function renderAttachedDocuments() {
       <div>
         <div class="fw-semibold">${escapeHtml(documentRow.file_name)}</div>
         <div class="text-secondary small">
-          ${escapeHtml(documentRow.document_type || "Unclassified")} •
-          ${escapeHtml(documentRow.mime_type || "Unknown type")} •
-          ${formatBytes(documentRow.file_size_bytes)} •
+          ${escapeHtml(documentRow.document_type || "Unclassified")} â€¢
+          ${escapeHtml(documentRow.mime_type || "Unknown type")} â€¢
+          ${formatBytes(documentRow.file_size_bytes)} â€¢
           ${formatDateTime(documentRow.uploaded_at)}
         </div>
       </div>
@@ -34965,9 +35003,9 @@ function populateHrEmployeeAccessManagedEmployeeOptions(managerEmployeeId = "") 
       const meta = [employee.employee_number, employee.department]
         .map((value) => String(value || "").trim())
         .filter(Boolean)
-        .join(" · ");
+        .join(" Â· ");
 
-      return `<option value="${escapeHtml(employeeId)}">${escapeHtml(displayName)}${meta ? ` — ${escapeHtml(meta)}` : ""}</option>`;
+      return `<option value="${escapeHtml(employeeId)}">${escapeHtml(displayName)}${meta ? ` â€” ${escapeHtml(meta)}` : ""}</option>`;
     }),
   ].join("");
 }
@@ -35758,7 +35796,7 @@ async function handleEmployeeSave() {
     // EMPLOYEE BIODATA COMPLETION - STEP 3G / 3K
     // Save multiple reporting lines after the employee record exists.
     // Create mode needs the newly returned employee id before child rows can be inserted.
-    // Called once — the delete-then-insert pattern handles both create and edit correctly.
+    // Called once â€” the delete-then-insert pattern handles both create and edit correctly.
     // EMPLOYEE SAVE PERFORMANCE - STEP 1
     // Independent child biodata tables save concurrently after the
     // employee record exists. Validation and tenant controls remain unchanged.
@@ -35840,7 +35878,7 @@ async function handleEmployeeSave() {
         ? ` A login invite has been sent to <strong>${escapeHtml(employeePayload.work_email)}</strong> and the employee account is now linked.`
         : loginInviteExistingAccount
           ? ` <span class="text-success">Existing login account found for <strong>${escapeHtml(employeePayload.work_email)}</strong>. Employee record was saved and linked. Ask the employee to sign in or use password reset if needed.</span>`
-          : ` <span class="text-warning">⚠ Login invite could not be sent${loginInviteError ? ` — ${escapeHtml(loginInviteError)}` : ""}. You can resend it from the employee's profile.</span>`;
+          : ` <span class="text-warning">âš  Login invite could not be sent${loginInviteError ? ` â€” ${escapeHtml(loginInviteError)}` : ""}. You can resend it from the employee's profile.</span>`;
 
       employeeSaveSuccessMessage =
         `Employee profile for <strong>${escapeHtml(savedEmployeeName)}</strong> was created successfully` +
@@ -38534,7 +38572,7 @@ function getPayrollSummaryScopeText() {
     scopeParts.push(`Search: "${searchTerm}"`);
   }
 
-  return `Scope: ${scopeParts.join(" • ")}`;
+  return `Scope: ${scopeParts.join(" â€¢ ")}`;
 }
 
 function renderPayrollSummary(records) {
@@ -38802,7 +38840,7 @@ function renderPayrollRecords(records) {
 </div>
 ${recentlyEditedPayrollBadgeHtml}
 <div class="text-secondary small">
-  ${escapeHtml(record.department || "--")} • ${escapeHtml(record.job_title || "--")}
+  ${escapeHtml(record.department || "--")} â€¢ ${escapeHtml(record.job_title || "--")}
 </div>
       </td>
 
@@ -39617,7 +39655,7 @@ function renderPayslipPreview(payrollRecord) {
           <h3>${escapeHtml(employeeName)}</h3>
           <div class="bexhr-payslip-contact-lines">
             <span>${escapeHtml(payrollRecord.work_email || "--")}</span>
-            <span>${escapeHtml(payslipDepartment)} · ${escapeHtml(payslipJobTitle)}</span>
+            <span>${escapeHtml(payslipDepartment)} Â· ${escapeHtml(payslipJobTitle)}</span>
           </div>
           <div class="bexhr-payslip-employee-number">
             <span>Employee No.</span>
@@ -41811,7 +41849,7 @@ function getPayrollStructurePreviewConfig() {
         // PAYROLL TAX DEDUCTION CALCULATION - STEP 3
         // PAYE is now auto-calculated for Regular payroll.
         // WHT remains manual because it is not normally applied to regular salary.
-        "PAYE auto-calculated • WHT manual if applicable",
+        "PAYE auto-calculated â€¢ WHT manual if applicable",
       ],
     };
   }
@@ -43116,7 +43154,7 @@ function initHrSelfServiceOnFirstOpen() {
     );
 
     const employeeName = visibleLines[0] || "Employee";
-    const employeeContext = visibleLines.slice(1).join(" • ");
+    const employeeContext = visibleLines.slice(1).join(" â€¢ ");
 
     const identity = makeElement("div", "hr-payroll-record-identity");
     const avatar = makeElement(
