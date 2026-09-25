@@ -840,6 +840,7 @@ function applyResolvedIdentity(employee) {
 
   const performanceAppraisalContext = {
     source: "bexhr",
+    sourceDashboard: "employee-dashboard",
     issuedAt: new Date().toISOString(),
     persona: "employee",
     employeeId: String(

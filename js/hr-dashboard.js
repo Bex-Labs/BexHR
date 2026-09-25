@@ -2757,27 +2757,56 @@ function normaliseHrBusinessRole(value = "") {
 }
 
 // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
-// Resolve the logged-in HR Dashboard user's employee record when one exists.
-// Match linked user_id first, then work_email. This supports old, recent,
-// new, and future users without targeting one employee.
+// Resolve the logged-in HR Dashboard user's canonical employee record.
+// The employee lookup must stay tenant-safe and fail closed when the identity
+// is ambiguous or cannot be mapped back to the same tenant's employees row.
 function getCurrentHrEmployeeRecord() {
   const userId = String(state.currentUser?.id || "").trim();
-  const profileEmail = normaliseHrBusinessRole(state.currentProfile?.email || "");
+  const profileEmail = normaliseHrBusinessRole(
+    state.currentProfile?.email || state.currentUser?.email || "",
+  );
+  const tenantId = String(state.currentProfile?.tenant_id || "").trim();
+  const employeeRows = Array.isArray(state.employees) ? state.employees : [];
 
-  const employee =
-    (state.employees || []).find((record) => {
-      const employeeUserId = String(record.user_id || record.auth_user_id || "").trim();
-      return Boolean(userId && employeeUserId && employeeUserId === userId);
-    }) ||
-    (state.employees || []).find((record) => {
-      const workEmail = normaliseHrBusinessRole(record.work_email || "");
-      return Boolean(profileEmail && workEmail && workEmail === profileEmail);
-    }) ||
-    null;
+  const tenantScopedMatches = employeeRows.filter((record) => {
+    const recordTenantId = String(record.tenant_id || "").trim();
+    return !tenantId || !recordTenantId || tenantId === recordTenantId;
+  });
 
-  state.currentHrEmployeeRecord = employee;
+  const userMatches = tenantScopedMatches.filter((record) => {
+    const employeeUserId = String(
+      record.user_id || record.auth_user_id || "",
+    ).trim();
+    return Boolean(userId && employeeUserId && employeeUserId === userId);
+  });
 
-  return employee;
+  if (userMatches.length === 1) {
+    state.currentHrEmployeeRecord = userMatches[0];
+    return userMatches[0];
+  }
+
+  if (userMatches.length > 1) {
+    state.currentHrEmployeeRecord = null;
+    return null;
+  }
+
+  const emailMatches = tenantScopedMatches.filter((record) => {
+    const workEmail = normaliseHrBusinessRole(record.work_email || record.email || "");
+    return Boolean(profileEmail && workEmail && workEmail === profileEmail);
+  });
+
+  if (emailMatches.length === 1) {
+    state.currentHrEmployeeRecord = emailMatches[0];
+    return emailMatches[0];
+  }
+
+  if (emailMatches.length > 1) {
+    state.currentHrEmployeeRecord = null;
+    return null;
+  }
+
+  state.currentHrEmployeeRecord = null;
+  return null;
 }
 
 // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
@@ -24405,11 +24434,107 @@ function getPerformanceAppraisalDepartmentId(departmentName = "") {
   ).trim();
 }
 
-function publishHrPerformanceAppraisalContext() {
+function publishHrPerformanceAppraisalContext({ mode = "hr-admin" } = {}) {
   const isHrAdmin =
-    getCurrentHrAccessTitle(
-      state.currentProfile || {},
-    ) === "HR Admin";
+    canCurrentUserMaintainOrganizationSetupData();
+
+  const isHrStandard =
+    state.currentProfile?.is_active === true &&
+    normaliseHrBusinessRole(
+      state.currentProfile?.role || "",
+    ) === "hr" &&
+    normaliseHrBusinessRole(
+      state.currentProfile?.hr_access_level || "standard",
+    ) !== "tenant_admin" &&
+    Boolean(
+      String(
+        state.currentProfile?.tenant_id || "",
+      ).trim(),
+    );
+
+  if (
+    mode === "employee" ||
+    mode === "hr-standard"
+  ) {
+    const employee = getCurrentHrEmployeeRecord();
+    const employeeId = String(employee?.id || "").trim();
+
+    if (!employeeId) {
+      window.BexHrPerformanceAppraisalContext = null;
+      window.sessionStorage.removeItem("bexhr:performance-appraisal:context:v1");
+      showPageAlert(
+        "warning",
+        "Your employee record could not be resolved for Performance Appraisal. Please contact an administrator.",
+      );
+      return false;
+    }
+
+    const hrStandardEmployees =
+      mode === "hr-standard" && isHrStandard
+        ? (Array.isArray(state.employees)
+          ? state.employees
+          : []
+        )
+          .map((employee) => ({
+            id: String(
+              employee?.id || "",
+            ).trim(),
+
+            name: String(
+              employee?.full_name ||
+              employee?.fullName ||
+              employee?.name ||
+              employee?.work_email ||
+              "Employee",
+            ).trim(),
+
+            department: String(
+              employee?.department ||
+              "",
+            ).trim(),
+
+            departmentId: String(
+              employee?.department_id ||
+              employee?.departmentId ||
+              "",
+            ).trim(),
+
+            jobTitle: String(
+              employee?.job_title ||
+              employee?.jobTitle ||
+              "",
+            ).trim(),
+          }))
+          .filter(
+            (employee) =>
+              employee.id &&
+              employee.name,
+          )
+        : [];
+
+    const performanceAppraisalContext = {
+      source: "bexhr",
+      sourceDashboard: "hr-dashboard",
+      issuedAt: new Date().toISOString(),
+      persona:
+        mode === "hr-standard"
+          ? "hr-standard"
+          : "employee",
+      hrStandardCapability: isHrStandard,
+      employeeId,
+      managerEmployeeId: "",
+      managedEmployeeIds: [],
+      availableEmployees: hrStandardEmployees,
+    };
+
+    window.BexHrPerformanceAppraisalContext = performanceAppraisalContext;
+    window.sessionStorage.setItem(
+      "bexhr:performance-appraisal:context:v1",
+      JSON.stringify(performanceAppraisalContext),
+    );
+
+    return true;
+  }
 
   if (!isHrAdmin) {
     window.BexHrPerformanceAppraisalContext = null;
@@ -24418,7 +24543,7 @@ function publishHrPerformanceAppraisalContext() {
       "bexhr:performance-appraisal:context:v1",
     );
 
-    return;
+    return false;
   }
 
   const availableEmployees = (
@@ -24471,14 +24596,38 @@ function publishHrPerformanceAppraisalContext() {
       ),
     );
 
+  const availableDepartments = Array.isArray(state.organizationDepartments)
+    ? state.organizationDepartments
+      .map((department) => ({
+        id: String(department?.id || "").trim(),
+        name: String(department?.department_name || "").trim(),
+      }))
+      .filter(
+        (department) =>
+          Boolean(department.id) &&
+          Boolean(department.name),
+      )
+    : [];
+
+
+  const currentEmployeeRecord =
+    getCurrentHrEmployeeRecord();
+
+  const currentEmployeeId = String(
+    currentEmployeeRecord?.id || "",
+  ).trim();
+
   const performanceAppraisalContext = {
     source: "bexhr",
+    sourceDashboard: "hr-dashboard",
     issuedAt: new Date().toISOString(),
     persona: "hr-admin",
-    employeeId: "",
+    hrAdminCapability: true,
+    employeeId: currentEmployeeId,
     managerEmployeeId: "",
     managedEmployeeIds: [],
     availableEmployees,
+    availableDepartments,
   };
 
   window.BexHrPerformanceAppraisalContext =
@@ -24490,13 +24639,575 @@ function publishHrPerformanceAppraisalContext() {
       performanceAppraisalContext,
     ),
   );
+
+  return true;
 }
 
-function openHrPerformanceAppraisal() {
-  publishHrPerformanceAppraisalContext();
-  window.location.assign(
-    "features/performance-appraisal/performance-appraisal.html",
+function publishHrPerformanceAppraisalManagerContext(
+  managerScope,
+) {
+  const employeeRecord =
+    getCurrentHrEmployeeRecord();
+
+  const employeeId = String(
+    employeeRecord?.id || "",
+  ).trim();
+
+  const managerEmployeeId = String(
+    managerScope?.managerEmployeeId || "",
+  ).trim();
+
+  if (!employeeId || !managerEmployeeId) {
+    showPageAlert(
+      "warning",
+      "Your manager reporting scope could not be resolved for Performance Appraisal. Please refresh and try again.",
+    );
+    return false;
+  }
+
+  const primaryEmployeeIds = [
+    ...new Set(
+      Array.isArray(
+        managerScope?.primaryEmployeeIds,
+      )
+        ? managerScope.primaryEmployeeIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+        : [],
+    ),
+  ];
+
+  const secondaryEmployeeIds = [
+    ...new Set(
+      Array.isArray(
+        managerScope?.secondaryEmployeeIds,
+      )
+        ? managerScope.secondaryEmployeeIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+        : [],
+    ),
+  ];
+
+  if (
+    primaryEmployeeIds.length === 0 &&
+    secondaryEmployeeIds.length === 0
+  ) {
+    return false;
+  }
+
+  const primaryEmployeeIdSet =
+    new Set(primaryEmployeeIds);
+
+  const secondaryEmployeeIdSet =
+    new Set(secondaryEmployeeIds);
+
+  const primaryEmployees =
+    (Array.isArray(state.employees)
+      ? state.employees
+      : []
+    ).filter((employee) =>
+      primaryEmployeeIdSet.has(
+        String(employee?.id || "").trim(),
+      ),
+    );
+
+  const secondaryEmployees =
+    (Array.isArray(state.employees)
+      ? state.employees
+      : []
+    ).filter((employee) =>
+      secondaryEmployeeIdSet.has(
+        String(employee?.id || "").trim(),
+      ),
+    );
+
+  const performanceAppraisalContext = {
+    source: "bexhr",
+    sourceDashboard: "hr-dashboard",
+    issuedAt: new Date().toISOString(),
+    persona: "primary-manager",
+
+    employeeId,
+    managerEmployeeId,
+
+    managedEmployeeIds:
+      primaryEmployeeIds,
+
+    availableEmployees:
+      primaryEmployees,
+
+    secondaryEmployeeIds,
+
+    secondaryEmployees,
+
+    canonicalDepartments:
+      Array.isArray(state.organizationDepartments)
+        ? state.organizationDepartments
+        : [],
+  };
+
+  try {
+    window.BexHrPerformanceAppraisalContext =
+      performanceAppraisalContext;
+
+    window.sessionStorage.setItem(
+      "bexhr:performance-appraisal:context:v1",
+      JSON.stringify(
+        performanceAppraisalContext,
+      ),
+    );
+
+    return true;
+  } catch (error) {
+    console.error(
+      "Performance Appraisal manager context could not be published:",
+      error,
+    );
+
+    showPageAlert(
+      "warning",
+      "Performance Appraisal could not prepare your Manager Reviews workspace. Please refresh and try again.",
+    );
+
+    return false;
+  }
+}
+
+async function getHrPerformanceAppraisalManagerScope() {
+  const employeeRecord =
+    getCurrentHrEmployeeRecord();
+
+  const managerEmployeeId = String(
+    employeeRecord?.id || "",
+  ).trim();
+
+  if (!managerEmployeeId) {
+    return {
+      managerEmployeeId: "",
+      primaryEmployeeIds: [],
+      secondaryEmployeeIds: [],
+    };
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.rpc(
+      "get_manager_reporting_line_assignments",
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    const assignments =
+      Array.isArray(data)
+        ? data
+        : [];
+
+    const primaryEmployeeIds = [
+      ...new Set(
+        assignments
+          .filter(
+            (assignment) =>
+              normalizeText(
+                assignment?.status || "active",
+              ) === "active" &&
+              normalizeText(
+                assignment?.manager_type,
+              ) === "primary",
+          )
+          .map((assignment) =>
+            String(
+              assignment?.employee_id || "",
+            ).trim(),
+          )
+          .filter(Boolean),
+      ),
+    ];
+
+    const secondaryEmployeeIds = [
+      ...new Set(
+        assignments
+          .filter(
+            (assignment) =>
+              normalizeText(
+                assignment?.status || "active",
+              ) === "active" &&
+              normalizeText(
+                assignment?.manager_type,
+              ) === "secondary",
+          )
+          .map((assignment) =>
+            String(
+              assignment?.employee_id || "",
+            ).trim(),
+          )
+          .filter(Boolean),
+      ),
+    ];
+
+    return {
+      managerEmployeeId,
+      primaryEmployeeIds,
+      secondaryEmployeeIds,
+    };
+  } catch (error) {
+    console.error(
+      "Performance Appraisal manager scope could not be resolved:",
+      error,
+    );
+
+    return {
+      managerEmployeeId: "",
+      primaryEmployeeIds: [],
+      secondaryEmployeeIds: [],
+    };
+  }
+}
+
+async function showHrPerformanceAppraisalChooser() {
+  const managerScope =
+    await getHrPerformanceAppraisalManagerScope();
+
+  const hasManagerReviewCapability =
+    managerScope.primaryEmployeeIds.length > 0 ||
+    managerScope.secondaryEmployeeIds.length > 0;
+  const existingChooser = document.getElementById(
+    "hrPerformanceAppraisalChooser",
   );
+
+  if (existingChooser) {
+    existingChooser.remove();
+  }
+
+  const overlay = document.createElement("div");
+  overlay.id = "hrPerformanceAppraisalChooser";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute(
+    "aria-labelledby",
+    "hrPerformanceAppraisalChooserTitle",
+  );
+
+  Object.assign(overlay.style, {
+    position: "fixed",
+    inset: "0",
+    zIndex: "10000",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "24px",
+    background: "rgba(15, 23, 42, 0.48)",
+  });
+
+  const dialog = document.createElement("div");
+
+  Object.assign(dialog.style, {
+    width: "min(520px, 100%)",
+    background: "#ffffff",
+    borderRadius: "16px",
+    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.24)",
+    padding: "24px",
+    position: "relative",
+  });
+
+  const title = document.createElement("h2");
+  title.id = "hrPerformanceAppraisalChooserTitle";
+  title.textContent = "Open Performance Appraisal";
+
+  Object.assign(title.style, {
+    margin: "0 0 8px",
+    fontSize: "20px",
+  });
+
+  const description = document.createElement("p");
+  description.textContent =
+    "Choose the Performance Appraisal workspace you want to open.";
+
+  Object.assign(description.style, {
+    margin: "0 0 24px",
+    color: "#475569",
+  });
+
+  const actions = document.createElement("div");
+
+  Object.assign(actions.style, {
+    display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: "12px",
+  });
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.textContent = "Cancel";
+
+  const employeeButton = document.createElement("button");
+  employeeButton.type = "button";
+  employeeButton.textContent = "My Appraisal";
+
+  const isHrAdmin =
+    canCurrentUserMaintainOrganizationSetupData();
+
+  const managerButton =
+    document.createElement("button");
+
+  managerButton.type = "button";
+  managerButton.textContent = "Manager Reviews";
+
+  const hrWorkspaceButton = document.createElement("button");
+  hrWorkspaceButton.type = "button";
+  hrWorkspaceButton.textContent =
+    isHrAdmin
+      ? "HR Administration"
+      : "HR Standard View";
+
+  [closeButton, employeeButton, hrWorkspaceButton].forEach(
+    (button) => {
+      Object.assign(button.style, {
+        minHeight: "40px",
+        padding: "8px 16px",
+        borderRadius: "8px",
+        cursor: "pointer",
+      });
+    },
+  );
+
+  Object.assign(closeButton.style, {
+    position: "absolute",
+    top: "1rem",
+    right: "1rem",
+    border: "0",
+    background: "transparent",
+    color: "#64748b",
+    fontSize: "0.875rem",
+    fontWeight: "600",
+    padding: "0.35rem 0.5rem",
+    cursor: "pointer",
+  });
+
+  Object.assign(employeeButton.style, {
+    border: "1px solid #0f6f8f",
+    background: "#ffffff",
+    color: "#0f6f8f",
+  });
+
+  Object.assign(managerButton.style, {
+    border: "1px solid #0f6f8f",
+    background: "#ffffff",
+    color: "#0f6f8f",
+  });
+
+  Object.assign(hrWorkspaceButton.style, {
+    border: "1px solid #0f6f8f",
+    background: "#0f6f8f",
+    color: "#ffffff",
+  });
+
+  const closeChooser = () => {
+    document.removeEventListener(
+      "keydown",
+      handleKeydown,
+    );
+
+    overlay.remove();
+  };
+
+  closeButton.addEventListener(
+    "click",
+    closeChooser,
+  );
+
+  employeeButton.addEventListener(
+    "click",
+    () => {
+      closeChooser();
+      openHrPerformanceAppraisal("employee");
+    },
+  );
+
+  managerButton.addEventListener(
+    "click",
+    async () => {
+      const departmentsLoaded =
+        await ensureHrPerformanceAppraisalDepartmentsLoaded();
+
+      if (!departmentsLoaded) {
+        showPageAlert(
+          "warning",
+          "Performance Appraisal could not load the canonical BexHR departments. Please try again.",
+        );
+        return;
+      }
+
+      if (
+        !publishHrPerformanceAppraisalManagerContext(
+          managerScope,
+        )
+      ) {
+        return;
+      }
+
+      closeChooser();
+
+      window.location.assign(
+        "features/performance-appraisal/performance-appraisal.html",
+      );
+    },
+  );
+
+hrWorkspaceButton.addEventListener(
+  "click",
+  async () => {
+    closeChooser();
+
+    const departmentsLoaded =
+      await ensureHrPerformanceAppraisalDepartmentsLoaded();
+
+    if (!departmentsLoaded) {
+      showPageAlert(
+        "warning",
+        "Performance Appraisal could not load the canonical BexHR departments. Please try again.",
+      );
+      return;
+    }
+
+    if (
+      !publishHrPerformanceAppraisalContext({
+        mode: isHrAdmin
+          ? "hr-admin"
+          : "hr-standard",
+      })
+    ) {
+      return;
+    }
+
+    window.location.assign(
+      "features/performance-appraisal/performance-appraisal.html",
+    );
+  },
+);
+
+overlay.addEventListener("click", (event) => {
+  if (event.target === overlay) {
+    closeChooser();
+  }
+});
+
+const handleKeydown = (event) => {
+  if (event.key !== "Escape") {
+    return;
+  }
+
+  document.removeEventListener(
+    "keydown",
+    handleKeydown,
+  );
+
+  closeChooser();
+};
+
+document.addEventListener(
+  "keydown",
+  handleKeydown,
+);
+
+actions.append(employeeButton);
+
+if (hasManagerReviewCapability) {
+  actions.append(managerButton);
+}
+
+actions.append(hrWorkspaceButton);
+
+dialog.append(
+  closeButton,
+  title,
+  description,
+  actions,
+);
+
+overlay.append(dialog);
+document.body.append(overlay);
+
+employeeButton.focus();
+}
+
+async function ensureHrPerformanceAppraisalDepartmentsLoaded() {
+  if (
+    Array.isArray(state.organizationDepartments) &&
+    state.organizationDepartments.length > 0
+  ) {
+    return true;
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("organization_departments")
+      .select("*")
+      .order("department_name", { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    state.organizationDepartments =
+      Array.isArray(data) ? data : [];
+
+    return state.organizationDepartments.length > 0;
+  } catch (error) {
+    console.error(
+      "Performance Appraisal canonical departments could not be loaded:",
+      error,
+    );
+
+    return false;
+  }
+}
+
+function openHrPerformanceAppraisal(mode = "auto") {
+  const isHrAdmin =
+    canCurrentUserMaintainOrganizationSetupData();
+
+  const employeeRecord = getCurrentHrEmployeeRecord();
+
+  if (mode === "employee") {
+    if (!employeeRecord || !String(employeeRecord.id || "").trim()) {
+      showPageAlert(
+        "warning",
+        "Your employee record could not be resolved for Performance Appraisal. Please contact an administrator.",
+      );
+      return;
+    }
+
+    publishHrPerformanceAppraisalContext({ mode: "employee" });
+    window.location.assign(
+      "features/performance-appraisal/performance-appraisal.html",
+    );
+    return;
+  }
+
+  if (!isHrAdmin) {
+    if (!employeeRecord || !String(employeeRecord.id || "").trim()) {
+      showPageAlert(
+        "warning",
+        "Your employee record could not be resolved for Performance Appraisal. Please contact an administrator.",
+      );
+      return;
+    }
+
+    showHrPerformanceAppraisalChooser();
+    return;
+  }
+
+  if (isHrAdmin) {
+    showHrPerformanceAppraisalChooser();
+    return;
+  }
 }
 
 // HR AND MANAGER RESPONSIBILITY BADGES - v1.0.1

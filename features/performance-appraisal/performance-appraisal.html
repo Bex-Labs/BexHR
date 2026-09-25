@@ -1052,9 +1052,9 @@
                                                     Department
                                                 </label>
 
-                                                <input class="form-control" id="bexPaDepartmentGoalDepartment"
-                                                    type="text" maxlength="120" placeholder="e.g. Human Resources"
-                                                    required />
+                                                <select class="form-select" id="bexPaDepartmentGoalDepartment" required>
+                                                    <option value="">Select department</option>
+                                                </select>
                                             </div>
 
                                             <div class="col-12">
@@ -1167,18 +1167,29 @@
 
                                         <div class="row g-3">
                                             <div class="col-12">
-                                                <p class="form-label fw-semibold mb-2"
-                                                    id="bexPaIndividualGoalEmployeeLabel">
-                                                    Employees
-                                                </p>
+                                                <label class="form-label fw-semibold"
+                                                    for="bexPaIndividualGoalEmployeeSearch">
+                                                    Employee
+                                                </label>
 
-                                                <div class="bex-pa-employee-picker border rounded-3 p-2"
-                                                    id="bexPaIndividualGoalEmployee" role="group"
-                                                    aria-labelledby="bexPaIndividualGoalEmployeeLabel">
+                                                <div class="position-relative" id="bexPaIndividualGoalEmployee">
+                                                    <input class="form-control" id="bexPaIndividualGoalEmployeeSearch"
+                                                        type="search" autocomplete="off"
+                                                        placeholder="Search employee by name..." role="combobox"
+                                                        aria-autocomplete="list" aria-expanded="false"
+                                                        aria-controls="bexPaIndividualGoalEmployeeResults" />
+
+                                                    <input id="bexPaIndividualGoalEmployeeId" type="hidden" />
+
+                                                    <div class="bex-pa-employee-picker border rounded-3 mt-1 d-none"
+                                                        id="bexPaIndividualGoalEmployeeResults" role="listbox"
+                                                        aria-label="Eligible employees">
+                                                    </div>
                                                 </div>
 
                                                 <div class="form-text">
-                                                    Select one or more employees for this shared goal.
+                                                    Select one employee. Department and department goals will be derived
+                                                    automatically.
                                                 </div>
                                             </div>
 
@@ -1338,8 +1349,26 @@
                                                     Progress percentage
                                                 </label>
 
-                                                <input class="form-control" id="bexPaProgressUpdatePercentage"
-                                                    type="number" min="0" max="100" step="1" required />
+                                                <select class="form-select" id="bexPaProgressUpdatePercentage" required>
+                                                    <option value="">
+                                                        Select progress percentage
+                                                    </option>
+                                                    <option value="0">0%</option>
+                                                    <option value="10">10%</option>
+                                                    <option value="20">20%</option>
+                                                    <option value="30">30%</option>
+                                                    <option value="40">40%</option>
+                                                    <option value="50">50%</option>
+                                                    <option value="60">60%</option>
+                                                    <option value="70">70%</option>
+                                                    <option value="80">80%</option>
+                                                    <option value="90">90%</option>
+                                                    <option value="100">100%</option>
+                                                </select>
+
+                                                <div class="form-text">
+                                                    Choose the closest progress estimate in 10% increments.
+                                                </div>
                                             </div>
 
                                             <div class="col-12 col-md-6">

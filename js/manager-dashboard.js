@@ -118,6 +118,12 @@ const state = {
 
   teamMembers: [],
   filteredTeamMembers: [],
+
+  // PERFORMANCE APPRAISAL - CANONICAL DEPARTMENT CONTEXT
+  // Read-only tenant department master used to resolve the canonical
+  // department UUID for employees in the manager's PRIMARY PA scope.
+  organizationDepartments: [],
+
   pendingLeaveRequests: [],
   processedLeaveRequests: [],
   teamLeaveSchedule: [],
@@ -1410,7 +1416,9 @@ function bindEvents() {
   bindManagerOperatingGuideFocusManagement();
   state.dom.sidebarManagerPerformanceAppraisalBtn?.addEventListener(
     "click",
-    openManagerPerformanceAppraisal,
+    () => {
+      openManagerPerformanceAppraisal();
+    },
   );
 
   state.dom.logoutBtn?.addEventListener("click", async () => {
@@ -1569,12 +1577,222 @@ function bindEvents() {
   );
 }
 
-async function openManagerPerformanceAppraisal() {
+function showManagerPerformanceAppraisalChooser() {
+  const existingChooser = document.getElementById(
+    "managerPerformanceAppraisalChooser",
+  );
+
+  if (existingChooser) {
+    existingChooser.remove();
+  }
+
+  const overlay = document.createElement("div");
+  overlay.id = "managerPerformanceAppraisalChooser";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute(
+    "aria-labelledby",
+    "managerPerformanceAppraisalChooserTitle",
+  );
+
+  Object.assign(overlay.style, {
+    position: "fixed",
+    inset: "0",
+    zIndex: "10000",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "24px",
+    background: "rgba(15, 23, 42, 0.48)",
+  });
+
+  const dialog = document.createElement("div");
+
+  Object.assign(dialog.style, {
+    width: "min(520px, 100%)",
+    background: "#ffffff",
+    borderRadius: "16px",
+    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.24)",
+    padding: "24px",
+  });
+
+  const title = document.createElement("h2");
+  title.id = "managerPerformanceAppraisalChooserTitle";
+  title.textContent = "Open Performance Appraisal";
+
+  Object.assign(title.style, {
+    margin: "0 0 8px",
+    fontSize: "20px",
+  });
+
+  const description = document.createElement("p");
+  description.textContent =
+    "Choose the Performance Appraisal workspace you want to open.";
+
+  Object.assign(description.style, {
+    margin: "0 0 24px",
+    color: "#475569",
+  });
+
+  const actions = document.createElement("div");
+
+  Object.assign(actions.style, {
+    display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: "12px",
+  });
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.textContent = "Cancel";
+
+  const employeeButton = document.createElement("button");
+  employeeButton.type = "button";
+  employeeButton.textContent = "My Appraisal";
+
+  const managerButton = document.createElement("button");
+  managerButton.type = "button";
+  managerButton.textContent = "Manager Reviews";
+
+  [closeButton, employeeButton, managerButton].forEach(
+    (button) => {
+      Object.assign(button.style, {
+        minHeight: "40px",
+        padding: "8px 16px",
+        borderRadius: "8px",
+        cursor: "pointer",
+      });
+    },
+  );
+
+  Object.assign(closeButton.style, {
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+  });
+
+  Object.assign(employeeButton.style, {
+    border: "1px solid #0f6f8f",
+    background: "#ffffff",
+    color: "#0f6f8f",
+  });
+
+  Object.assign(managerButton.style, {
+    border: "1px solid #0f6f8f",
+    background: "#0f6f8f",
+    color: "#ffffff",
+  });
+
+  const closeChooser = () => {
+    document.removeEventListener(
+      "keydown",
+      handleKeydown,
+    );
+
+    overlay.remove();
+  };
+
+  closeButton.addEventListener(
+    "click",
+    closeChooser,
+  );
+
+  employeeButton.addEventListener(
+    "click",
+    () => {
+      closeChooser();
+      openManagerPerformanceAppraisal("employee");
+    },
+  );
+
+  managerButton.addEventListener(
+    "click",
+    () => {
+      closeChooser();
+      openManagerPerformanceAppraisal("primary-manager");
+    },
+  );
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) {
+      closeChooser();
+    }
+  });
+
+  const handleKeydown = (event) => {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    closeChooser();
+  };
+
+  document.addEventListener(
+    "keydown",
+    handleKeydown,
+  );
+
+  actions.append(
+    closeButton,
+    employeeButton,
+    managerButton,
+  );
+
+  dialog.append(
+    title,
+    description,
+    actions,
+  );
+
+  overlay.append(dialog);
+  document.body.append(overlay);
+
+  employeeButton.focus();
+}
+
+async function openManagerPerformanceAppraisal(
+  mode = "auto",
+) {
   if (managerWorkspaceRefreshPromise) {
     await managerWorkspaceRefreshPromise;
   }
 
-  publishManagerPerformanceAppraisalContext();
+  if (mode === "auto") {
+    showManagerPerformanceAppraisalChooser();
+    return;
+  }
+
+  if (
+    mode !== "employee" &&
+    mode !== "primary-manager"
+  ) {
+    return;
+  }
+
+  const employeeId = String(
+    state.currentManagerEmployeeRecord?.id || "",
+  ).trim();
+
+  if (!employeeId) {
+    showPageAlert(
+      "warning",
+      "Your employee record could not be resolved for Performance Appraisal. Please contact an administrator.",
+    );
+    return;
+  }
+
+  const departmentsLoaded =
+    await loadManagerPerformanceAppraisalDepartments();
+
+  if (!departmentsLoaded) {
+    showPageAlert(
+      "warning",
+      "Performance Appraisal could not resolve the canonical department list. Please refresh and try again.",
+    );
+    return;
+  }
+
+  publishManagerPerformanceAppraisalContext(mode);
 
   window.location.assign(
     "features/performance-appraisal/performance-appraisal.html",
@@ -3333,7 +3551,89 @@ function isPrimaryReportingManagerRelationship(relationshipLabel = "") {
   return normalizeText(relationshipLabel).includes("primary");
 }
 
-function publishManagerPerformanceAppraisalContext() {
+// PERFORMANCE APPRAISAL - CANONICAL DEPARTMENT CONTEXT
+// Loads the existing BexHR department master for canonical ID resolution.
+// Manager PA authority is still restricted separately to active PRIMARY
+// reporting relationships; loading this reference data does not widen scope.
+async function loadManagerPerformanceAppraisalDepartments() {
+  const tenantId = String(
+    state.currentProfile?.tenant_id || "",
+  ).trim();
+
+  if (!tenantId) {
+    state.organizationDepartments = [];
+    return false;
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("organization_departments")
+      .select("id, department_name")
+      .eq("tenant_id", tenantId)
+      .order("department_name", {
+        ascending: true,
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    state.organizationDepartments = Array.isArray(data)
+      ? data
+      : [];
+
+    return true;
+  } catch (error) {
+    console.error(
+      "Manager Performance Appraisal departments could not be loaded:",
+      error,
+    );
+
+    state.organizationDepartments = [];
+    return false;
+  }
+}
+
+function getManagerPerformanceAppraisalDepartmentId(
+  departmentName = "",
+) {
+  const normalizedDepartmentName = String(
+    departmentName || "",
+  )
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedDepartmentName) {
+    return "";
+  }
+
+  const matchingDepartments = (
+    Array.isArray(state.organizationDepartments)
+      ? state.organizationDepartments
+      : []
+  ).filter(
+    (department) =>
+      String(
+        department?.department_name || "",
+      )
+        .trim()
+        .toLowerCase() === normalizedDepartmentName,
+  );
+
+  if (matchingDepartments.length !== 1) {
+    return "";
+  }
+
+  return String(
+    matchingDepartments[0]?.id || "",
+  ).trim();
+}
+
+function publishManagerPerformanceAppraisalContext(
+  mode = "primary-manager",
+) {
   const primaryEmployees = (
     Array.isArray(state.teamMembers)
       ? state.teamMembers
@@ -3364,6 +3664,13 @@ function publishManagerPerformanceAppraisalContext() {
         "",
       ).trim(),
 
+      departmentId:
+        getManagerPerformanceAppraisalDepartmentId(
+          member.department ||
+          member.raw?.department ||
+          "",
+        ),
+
       jobTitle: String(
         member.job_title ||
         member.raw?.job_title ||
@@ -3372,26 +3679,103 @@ function publishManagerPerformanceAppraisalContext() {
     }))
     .filter((employee) => employee.id);
 
+  const secondaryEmployees = (
+    Array.isArray(state.teamMembers)
+      ? state.teamMembers
+      : []
+  )
+    .filter(
+      (member) =>
+        !isPrimaryReportingManagerRelationship(
+          member.relationshipLabel,
+        ) &&
+        normalizeText(
+          member.relationshipLabel,
+        ).includes("secondary"),
+    )
+    .map((member) => ({
+      id: String(
+        member.id ||
+        member.raw?.id ||
+        "",
+      ).trim(),
+
+      name: String(
+        member.employeeFullName ||
+        member.raw?.full_name ||
+        member.work_email ||
+        "Employee",
+      ).trim(),
+
+      department: String(
+        member.department ||
+        member.raw?.department ||
+        "",
+      ).trim(),
+
+      departmentId:
+        getManagerPerformanceAppraisalDepartmentId(
+          member.department ||
+          member.raw?.department ||
+          "",
+        ),
+
+      jobTitle: String(
+        member.job_title ||
+        member.raw?.job_title ||
+        "",
+      ).trim(),
+    }))
+    .filter((employee) => employee.id);
+
+  const employeeId = String(
+    state.currentManagerEmployeeRecord?.id || "",
+  ).trim();
+
+  const isEmployeeMode =
+    mode === "employee";
+
   const performanceAppraisalContext = {
     source: "bexhr",
+    sourceDashboard: "manager-dashboard",
     issuedAt: new Date().toISOString(),
-    persona: "primary-manager",
+    persona: isEmployeeMode
+      ? "employee"
+      : "primary-manager",
 
-    managerEmployeeId: String(
-      state.currentManagerEmployeeRecord?.id || "",
-    ).trim(),
+    managerEmployeeId: isEmployeeMode
+      ? ""
+      : employeeId,
 
-    employeeId: "",
+    employeeId,
 
-    managedEmployeeIds: [
-      ...new Set(
-        primaryEmployees.map(
-          (employee) => employee.id,
+    managedEmployeeIds: isEmployeeMode
+      ? []
+      : [
+        ...new Set(
+          primaryEmployees.map(
+            (employee) => employee.id,
+          ),
         ),
-      ),
-    ],
+      ],
 
-    availableEmployees: primaryEmployees,
+    availableEmployees: isEmployeeMode
+      ? []
+      : primaryEmployees,
+
+    secondaryEmployeeIds: isEmployeeMode
+      ? []
+      : [
+        ...new Set(
+          secondaryEmployees.map(
+            (employee) => employee.id,
+          ),
+        ),
+      ],
+
+    secondaryEmployees: isEmployeeMode
+      ? []
+      : secondaryEmployees,
   };
 
   window.BexHrPerformanceAppraisalContext =

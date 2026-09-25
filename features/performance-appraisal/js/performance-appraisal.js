@@ -571,15 +571,15 @@
 
   function bexPaGetFormMemoryScope() {
     const context = bexPaGetIntegratedContext();
-    const persona = bexPaGetCurrentPersona();
+    const activeMode = bexPaGetActiveMode();
     const identity =
-      persona === "employee"
+      activeMode === "employee"
         ? context?.employeeId || bexPaGetCurrentEmployeeId()
-        : persona === "primary-manager"
+        : activeMode === "primary-manager"
           ? context?.managerEmployeeId || bexPaGetCurrentManagerEmployeeId()
           : "shared";
 
-    return `${persona || "standalone"}:${String(identity || "shared").trim()}`;
+    return `${activeMode || "standalone"}:${String(identity || "shared").trim()}`;
   }
 
   function bexPaLoadFormMemory() {
@@ -1177,13 +1177,13 @@
   }
 
   function bexPaResolveIndividualGoalEmployeeId() {
-    const persona = bexPaGetCurrentPersona();
+    const activeMode = bexPaGetActiveMode();
 
-    if (persona === "employee") {
+    if (activeMode === "employee") {
       return bexPaGetCurrentEmployeeId();
     }
 
-    if (persona === "primary-manager") {
+    if (activeMode === "primary-manager") {
       const managedEmployeeIds =
         bexPaGetManagedEmployeeIds();
 
@@ -1211,6 +1211,102 @@
         .querySelector("[data-bex-pa-app]")
         ?.dataset.bexPaEmployeeId || "",
     ).trim();
+  }
+
+  function bexPaHasEmployeeCapability() {
+    return Boolean(
+      bexPaGetCurrentEmployeeId(),
+    );
+  }
+
+  function bexPaHasHrStandardCapability() {
+    const context =
+      bexPaGetIntegratedContext();
+
+    return (
+      context?.hrStandardCapability === true &&
+      context?.hrAdminCapability !== true
+    );
+  }
+
+  function bexPaHasHrAdminCapability() {
+    return (
+      bexPaGetIntegratedContext()
+        ?.hrAdminCapability === true
+    );
+  }
+
+  let bexPaActiveMode = "";
+
+  function bexPaGetActiveMode() {
+    return (
+      bexPaActiveMode ||
+      bexPaGetCurrentPersona()
+    );
+  }
+
+  function bexPaSetActiveMode(mode) {
+    const allowedModes = new Set([
+      "employee",
+      "primary-manager",
+      "hr-standard",
+      "hr-admin",
+    ]);
+
+    if (!allowedModes.has(mode)) {
+      return false;
+    }
+
+    const hasCapabilityByMode = {
+      employee: bexPaHasEmployeeCapability(),
+      "primary-manager":
+        bexPaHasManagerReviewVisibilityCapability(),
+      "hr-standard":
+        bexPaHasHrStandardCapability(),
+      "hr-admin": bexPaHasHrAdminCapability(),
+    };
+
+    if (!hasCapabilityByMode[mode]) {
+      return false;
+    }
+
+    bexPaActiveMode = mode;
+    return true;
+  }
+
+  function bexPaIsEmployeeMode() {
+    return (
+      bexPaHasEmployeeCapability() &&
+      bexPaGetActiveMode() === "employee"
+    );
+  }
+
+  function bexPaIsPrimaryManagerMode() {
+    return (
+      bexPaHasPrimaryManagerCapability() &&
+      bexPaGetActiveMode() === "primary-manager"
+    );
+  }
+
+  function bexPaIsManagerReviewMode() {
+    return (
+      bexPaHasManagerReviewVisibilityCapability() &&
+      bexPaGetActiveMode() === "primary-manager"
+    );
+  }
+
+  function bexPaIsHrStandardMode() {
+    return (
+      bexPaHasHrStandardCapability() &&
+      bexPaGetActiveMode() === "hr-standard"
+    );
+  }
+
+  function bexPaIsHrAdminMode() {
+    return (
+      bexPaHasHrAdminCapability() &&
+      bexPaGetActiveMode() === "hr-admin"
+    );
   }
 
   function bexPaGetManagedEmployeeIds() {
@@ -1242,6 +1338,77 @@
       bexPaGetIntegratedContext()
         ?.managerEmployeeId || "",
     ).trim();
+  }
+
+  function bexPaGetSecondaryEmployeeIds() {
+    const integratedEmployeeIds =
+      bexPaGetIntegratedContext()
+        ?.secondaryEmployeeIds;
+
+    if (!Array.isArray(integratedEmployeeIds)) {
+      return [];
+    }
+
+    return integratedEmployeeIds
+      .map((employeeId) =>
+        String(employeeId || "").trim(),
+      )
+      .filter(Boolean);
+  }
+
+  function bexPaGetSecondaryEmployees() {
+    const secondaryEmployees =
+      bexPaGetIntegratedContext()
+        ?.secondaryEmployees;
+
+    if (!Array.isArray(secondaryEmployees)) {
+      return [];
+    }
+
+    return secondaryEmployees
+      .map((employee) => ({
+        id: String(
+          employee?.id || "",
+        ).trim(),
+
+        name: String(
+          employee?.name || "",
+        ).trim(),
+
+        department: String(
+          employee?.department || "",
+        ).trim(),
+
+        departmentId: String(
+          employee?.departmentId || "",
+        ).trim(),
+
+        jobTitle: String(
+          employee?.jobTitle || "",
+        ).trim(),
+      }))
+      .filter(
+        (employee) =>
+          employee.id &&
+          employee.name,
+      );
+  }
+
+  function bexPaHasPrimaryManagerCapability() {
+    return Boolean(
+      bexPaGetCurrentManagerEmployeeId() &&
+      bexPaGetManagedEmployeeIds().length > 0
+    );
+  }
+
+  function bexPaHasManagerReviewVisibilityCapability() {
+    return Boolean(
+      bexPaGetCurrentManagerEmployeeId() &&
+      (
+        bexPaGetManagedEmployeeIds().length > 0 ||
+        bexPaGetSecondaryEmployeeIds().length > 0
+      )
+    );
   }
 
   function bexPaGetAvailableEmployees() {
@@ -1282,32 +1449,110 @@
       );
   }
 
+  function bexPaGetAvailableDepartments() {
+    const integratedDepartments =
+      bexPaGetIntegratedContext()
+        ?.availableDepartments;
+
+    if (Array.isArray(integratedDepartments)) {
+      return integratedDepartments
+        .map((department) => ({
+          id: String(
+            department?.id || "",
+          ).trim(),
+
+          name: String(
+            department?.name || "",
+          ).trim(),
+        }))
+        .filter(
+          (department) =>
+            department.id &&
+            department.name,
+        );
+    }
+
+    const departmentsById = new Map();
+
+    bexPaGetAvailableEmployees().forEach(
+      (employee) => {
+        const departmentId = String(
+          employee.departmentId || "",
+        ).trim();
+
+        const departmentName = String(
+          employee.department || "",
+        ).trim();
+
+        if (
+          !departmentId ||
+          !departmentName
+        ) {
+          return;
+        }
+
+        departmentsById.set(
+          departmentId,
+          {
+            id: departmentId,
+            name: departmentName,
+          },
+        );
+      },
+    );
+
+    return [
+      ...departmentsById.values(),
+    ];
+  }
+
   function bexPaGetManagedDepartments() {
-    if (bexPaGetCurrentPersona() !== "primary-manager") {
+    if (!bexPaIsPrimaryManagerMode()) {
       return [];
     }
 
+    const departmentsById = new Map();
+
+    bexPaGetAvailableEmployees().forEach(
+      (employee) => {
+        const departmentId = String(
+          employee.departmentId || "",
+        ).trim();
+
+        const departmentName = String(
+          employee.department || "",
+        ).trim();
+
+        if (
+          !departmentId ||
+          !departmentName
+        ) {
+          return;
+        }
+
+        departmentsById.set(
+          departmentId,
+          {
+            id: departmentId,
+            name: departmentName,
+          },
+        );
+      },
+    );
+
     return [
-      ...new Set(
-        bexPaGetAvailableEmployees()
-          .map((employee) =>
-            String(employee.department || "").trim(),
-          )
-          .filter(Boolean),
-      ),
+      ...departmentsById.values(),
     ];
   }
 
   function bexPaCanManageDepartmentGoal(
     departmentGoal = null,
   ) {
-    const persona = bexPaGetCurrentPersona();
-
-    if (persona === "hr-admin") {
+    if (bexPaIsHrAdminMode()) {
       return true;
     }
 
-    if (persona !== "primary-manager") {
+    if (!bexPaIsPrimaryManagerMode()) {
       return false;
     }
 
@@ -1322,36 +1567,100 @@
       return true;
     }
 
-    const goalDepartment = String(
+    const goalDepartmentId = String(
+      departmentGoal.departmentId || "",
+    ).trim();
+
+    if (
+      bexPaIsIntegratedPersistenceContext()
+    ) {
+      if (!goalDepartmentId) {
+        return false;
+      }
+
+      return managedDepartments.some(
+        (department) =>
+          department.id === goalDepartmentId,
+      );
+    }
+
+    if (goalDepartmentId) {
+      const matchesDepartmentId =
+        managedDepartments.some(
+          (department) =>
+            department.id === goalDepartmentId,
+        );
+
+      if (matchesDepartmentId) {
+        return true;
+      }
+    }
+
+    const goalDepartmentName = String(
       departmentGoal.department || "",
     ).trim();
 
     return managedDepartments.some(
       (department) =>
-        department.toLowerCase() ===
-        goalDepartment.toLowerCase(),
+        department.name &&
+        goalDepartmentName &&
+        department.name.toLowerCase() ===
+        goalDepartmentName.toLowerCase(),
     );
   }
 
-  function bexPaGetSelectedIndividualGoalEmployees() {
-    const selectedEmployeeIds = Array.from(
-      bexPaElements.individualGoalEmployee?.querySelectorAll(
-        'input[type="checkbox"]:checked',
-      ) || [],
-    )
-      .map((checkbox) => String(checkbox.value || "").trim())
-      .filter(Boolean);
+  function bexPaGetSelectedIndividualGoalEmployee() {
+    const selectedEmployeeId = String(
+      bexPaElements.individualGoalEmployee
+        ?.querySelector(
+          "#bexPaIndividualGoalEmployeeId",
+        )
+        ?.value || "",
+    ).trim();
 
-    const availableEmployees =
-      bexPaGetAvailableEmployees();
+    if (!selectedEmployeeId) {
+      return null;
+    }
 
-    return selectedEmployeeIds
-      .map((employeeId) =>
-        availableEmployees.find(
-          (employee) => employee.id === employeeId,
-        ),
-      )
-      .filter(Boolean);
+    return (
+      bexPaGetAvailableEmployees().find(
+        (employee) =>
+          employee.id === selectedEmployeeId,
+      ) || null
+    );
+  }
+
+  function bexPaGetSelectedIndividualGoalDepartment() {
+    const selectedEmployee =
+      bexPaGetSelectedIndividualGoalEmployee();
+
+    if (!selectedEmployee) {
+      return null;
+    }
+
+    const departmentId = String(
+      selectedEmployee.departmentId || "",
+    ).trim();
+
+    const departmentName = String(
+      selectedEmployee.department || "",
+    ).trim();
+
+    if (
+      bexPaIsIntegratedPersistenceContext() &&
+      (!departmentId || !departmentName)
+    ) {
+      return null;
+    }
+
+    if (!departmentId && !departmentName) {
+      return null;
+    }
+
+    return {
+      id: departmentId,
+      name: departmentName,
+    };
   }
 
   function bexPaIsIndividualGoalOwnedByCurrentEmployee(
@@ -1390,29 +1699,57 @@
   }
 
   function bexPaGetVisibleIndividualGoals() {
-    const persona = bexPaGetCurrentPersona();
+    const activeMode = bexPaGetActiveMode();
 
-    if (persona === "hr-admin") {
+    if (activeMode === "hr-admin") {
       return bexPaState.individualGoals;
     }
 
-    if (persona === "primary-manager") {
-      const managedEmployeeIds =
-        bexPaGetManagedEmployeeIds();
+    if (activeMode === "hr-standard") {
+      const visibleEmployeeIds =
+        bexPaGetAvailableEmployees()
+          .map((employee) =>
+            String(employee?.id || "").trim(),
+          )
+          .filter(Boolean);
 
-      if (managedEmployeeIds.length === 0) {
+      if (visibleEmployeeIds.length === 0) {
         return [];
       }
 
       return bexPaState.individualGoals.filter(
         (individualGoal) =>
-          bexPaIsIndividualGoalInPrimaryManagerScope(
-            individualGoal,
+          visibleEmployeeIds.includes(
+            bexPaGetIndividualGoalEmployeeId(
+              individualGoal,
+            ),
           ),
       );
     }
 
-    if (persona === "employee") {
+    if (activeMode === "primary-manager") {
+      const visibleEmployeeIds = [
+        ...new Set([
+          ...bexPaGetManagedEmployeeIds(),
+          ...bexPaGetSecondaryEmployeeIds(),
+        ]),
+      ];
+
+      if (visibleEmployeeIds.length === 0) {
+        return [];
+      }
+
+      return bexPaState.individualGoals.filter(
+        (individualGoal) =>
+          visibleEmployeeIds.includes(
+            bexPaGetIndividualGoalEmployeeId(
+              individualGoal,
+            ),
+          ),
+      );
+    }
+
+    if (activeMode === "employee") {
       const currentEmployeeId =
         bexPaGetCurrentEmployeeId();
 
@@ -1453,6 +1790,7 @@
     if (
       [
         "hr-admin",
+        "hr-standard",
         "primary-manager",
         "employee",
       ].includes(integratedPersona)
@@ -1508,29 +1846,27 @@
   }
 
   function bexPaCanManageAppraisalCycles() {
-    return bexPaGetCurrentPersona() === "hr-admin";
+    return bexPaIsHrAdminMode();
   }
 
   function bexPaCanManageGoalFramework() {
-    return bexPaGetCurrentPersona() === "hr-admin";
+    return bexPaIsHrAdminMode();
   }
 
   function bexPaCanManageTemplates() {
-    return bexPaGetCurrentPersona() === "hr-admin";
+    return bexPaIsHrAdminMode();
   }
 
   function bexPaCanViewReports() {
-    return bexPaGetCurrentPersona() === "hr-admin";
+    return bexPaIsHrAdminMode();
   }
 
   function bexPaCanManageDepartmentGoals() {
-    const persona = bexPaGetCurrentPersona();
-
-    if (persona === "hr-admin") {
+    if (bexPaIsHrAdminMode()) {
       return true;
     }
 
-    if (persona === "primary-manager") {
+    if (bexPaIsPrimaryManagerMode()) {
       return bexPaGetManagedDepartments().length > 0;
     }
 
@@ -1538,13 +1874,11 @@
   }
 
   function bexPaCanEditIndividualGoals() {
-    const persona = bexPaGetCurrentPersona();
-
-    if (persona === "hr-admin") {
+    if (bexPaIsHrAdminMode()) {
       return true;
     }
 
-    if (persona === "primary-manager") {
+    if (bexPaIsPrimaryManagerMode()) {
       return bexPaGetManagedEmployeeIds().length > 0;
     }
 
@@ -1596,7 +1930,7 @@
   function bexPaCanAddProgressUpdates(
     individualGoal = null,
   ) {
-    if (bexPaGetCurrentPersona() !== "employee") {
+    if (!bexPaIsEmployeeMode()) {
       return false;
     }
 
@@ -1607,10 +1941,6 @@
     return !bexPaIsIndividualGoalHistorical(
       individualGoal,
     );
-  }
-
-  function bexPaCanRespondToProgressUpdates() {
-    return bexPaGetCurrentPersona() === "primary-manager";
   }
 
   function bexPaApplyCycleAccess() {
@@ -2979,21 +3309,26 @@
         .map((cycle) => cycle.id),
     );
 
-    if (bexPaElements.employeesInCycleLabel) {
-      bexPaElements.employeesInCycleLabel.textContent =
-        activeCycleIds.size === 1
-          ? "Employees in active cycle"
-          : "Employees in active cycles";
-    }
+    const visibleEmployeeAppraisals =
+      bexPaGetVisibleEmployeeAppraisals();
 
-    const activeEmployeeAppraisals =
-      bexPaState.employeeAppraisals.filter(
+    const activeVisibleEmployeeAppraisals =
+      visibleEmployeeAppraisals.filter(
         (appraisal) =>
           activeCycleIds.has(appraisal.cycleId),
       );
 
+    if (bexPaElements.employeesInCycleLabel) {
+      bexPaElements.employeesInCycleLabel.textContent =
+        bexPaIsEmployeeMode()
+          ? "My active appraisals"
+          : activeCycleIds.size === 1
+            ? "Employees in active cycle"
+            : "Employees in active cycles";
+    }
+
     const activeEmployeeIds = new Set(
-      activeEmployeeAppraisals
+      activeVisibleEmployeeAppraisals
         .map((appraisal) =>
           String(appraisal.employeeId || "").trim(),
         )
@@ -3006,7 +3341,7 @@
     }
 
     const awaitingHrCount =
-      bexPaState.employeeAppraisals.filter(
+      visibleEmployeeAppraisals.filter(
         (appraisal) => {
           const managerAppraisal =
             bexPaState.managerAppraisals.find(
@@ -3035,19 +3370,9 @@
     }
 
     const completedCount =
-      bexPaState.employeeAppraisals.filter(
-        (appraisal) => {
-          const acknowledgement =
-            bexPaState.employeeAcknowledgements.find(
-              (existingAcknowledgement) =>
-                existingAcknowledgement.appraisalId ===
-                appraisal.id,
-            );
-
-          return (
-            acknowledgement?.status === "Acknowledged"
-          );
-        },
+      visibleEmployeeAppraisals.filter(
+        (appraisal) =>
+          appraisal.status === "Acknowledged",
       ).length;
 
     if (bexPaElements.completedSummary) {
@@ -4019,63 +4344,78 @@
       return;
     }
 
-    const persona = bexPaGetCurrentPersona();
+    const currentValue =
+      String(departmentField.value || "").trim();
 
-    departmentField.readOnly = false;
-    departmentField.removeAttribute("list");
+    let availableDepartments =
+      bexPaGetAvailableDepartments();
 
-    const existingDatalist =
-      document.getElementById(
-        "bexPaManagedDepartmentsDatalist",
-      );
+    if (bexPaIsPrimaryManagerMode()) {
+      const managedDepartmentIds =
+        new Set(
+          bexPaGetAvailableEmployees()
+            .map((employee) =>
+              String(
+                employee.departmentId || "",
+              ).trim(),
+            )
+            .filter(Boolean),
+        );
 
-    existingDatalist?.remove();
+      availableDepartments =
+        availableDepartments.filter(
+          (department) =>
+            managedDepartmentIds.has(
+              department.id,
+            ),
+        );
+    }
 
-    if (persona !== "primary-manager") {
+    departmentField.replaceChildren();
+
+    const placeholder =
+      document.createElement("option");
+
+    placeholder.value = "";
+    placeholder.textContent =
+      availableDepartments.length > 0
+        ? "Select department"
+        : "No departments available";
+
+    departmentField.appendChild(
+      placeholder,
+    );
+
+    availableDepartments.forEach(
+      (department) => {
+        const option =
+          document.createElement("option");
+
+        option.value = department.id;
+        option.textContent = department.name;
+
+        departmentField.appendChild(option);
+      },
+    );
+
+    departmentField.disabled =
+      availableDepartments.length === 0;
+
+    if (
+      currentValue &&
+      availableDepartments.some(
+        (department) =>
+          department.id === currentValue,
+      )
+    ) {
+      departmentField.value = currentValue;
       return;
     }
 
-    const managedDepartments =
-      bexPaGetManagedDepartments();
-
-    if (managedDepartments.length === 0) {
-      departmentField.value = "";
-      departmentField.readOnly = true;
-      return;
-    }
-
-    if (managedDepartments.length === 1) {
+    if (availableDepartments.length === 1) {
       departmentField.value =
-        managedDepartments[0];
-
-      departmentField.readOnly = true;
-      return;
+        availableDepartments[0].id;
     }
-
-    const datalist =
-      document.createElement("datalist");
-
-    datalist.id =
-      "bexPaManagedDepartmentsDatalist";
-
-    managedDepartments.forEach((department) => {
-      const option =
-        document.createElement("option");
-
-      option.value = department;
-
-      datalist.appendChild(option);
-    });
-
-    departmentField.setAttribute(
-      "list",
-      datalist.id,
-    );
-
-    departmentField.insertAdjacentElement(
-      "afterend",
-      datalist,
-    );
   }
 
   function bexPaOpenDepartmentGoalDialog(
@@ -4092,7 +4432,7 @@
     const rememberedValues = bexPaGetRememberedFormValues("departmentGoal");
     bexPaApplyRememberedValues([
       [bexPaElements.departmentGoalOrganisationGoal, rememberedValues.organisationGoalId],
-      [bexPaElements.departmentGoalDepartment, rememberedValues.department],
+      [bexPaElements.departmentGoalDepartment, rememberedValues.departmentId],
       [bexPaElements.departmentGoalTitle, rememberedValues.title],
       [bexPaElements.departmentGoalDescription, rememberedValues.description],
       [bexPaElements.departmentGoalTarget, rememberedValues.target],
@@ -4133,7 +4473,7 @@
       bexPaUpdateDepartmentGoalCycleDisplay();
 
       bexPaElements.departmentGoalDepartment.value =
-        departmentGoal.department;
+        departmentGoal.departmentId || "";
 
       bexPaApplyDepartmentGoalDepartmentScope();
 
@@ -4279,59 +4619,231 @@
     const employeeField =
       bexPaElements.individualGoalEmployee;
 
-    const availableEmployees =
-      bexPaGetAvailableEmployees();
+    const searchInput =
+      employeeField.querySelector(
+        "#bexPaIndividualGoalEmployeeSearch",
+      );
 
-    employeeField.replaceChildren();
+    const employeeIdField =
+      employeeField.querySelector(
+        "#bexPaIndividualGoalEmployeeId",
+      );
 
-    if (availableEmployees.length === 0) {
-      const emptyState = document.createElement("p");
-      emptyState.className = "mb-0 small text-body-secondary p-2";
-      emptyState.textContent =
-        "No eligible employees are available.";
-      employeeField.appendChild(emptyState);
+    const resultsField =
+      employeeField.querySelector(
+        "#bexPaIndividualGoalEmployeeResults",
+      );
+
+    if (
+      !searchInput ||
+      !employeeIdField ||
+      !resultsField
+    ) {
       return;
     }
 
-    availableEmployees.forEach((employee, index) => {
-      const item = document.createElement("label");
-      item.className =
-        "d-flex align-items-start gap-2 rounded-2 p-2";
-      item.htmlFor =
-        `bexPaIndividualGoalEmployee-${employee.id}`;
+    const availableEmployees =
+      bexPaGetAvailableEmployees();
 
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "form-check-input mt-1";
-      checkbox.id = item.htmlFor;
-      checkbox.value = employee.id;
-      checkbox.dataset.bexPaIndividualGoalEmployee =
+    const renderResults = (
+      searchTerm = "",
+    ) => {
+      const normalizedSearchTerm = String(
+        searchTerm || "",
+      )
+        .trim()
+        .toLowerCase();
+
+      const matchingEmployees =
+        availableEmployees.filter(
+          (employee) => {
+            if (!normalizedSearchTerm) {
+              return true;
+            }
+
+            return [
+              employee.name,
+              employee.department,
+              employee.jobTitle,
+            ].some((value) =>
+              String(value || "")
+                .toLowerCase()
+                .includes(
+                  normalizedSearchTerm,
+                ),
+            );
+          },
+        );
+
+      resultsField.replaceChildren();
+
+      if (matchingEmployees.length === 0) {
+        const emptyState =
+          document.createElement("p");
+
+        emptyState.className =
+          "mb-0 small text-body-secondary p-2";
+
+        emptyState.textContent =
+          availableEmployees.length === 0
+            ? "No eligible employees are available."
+            : "No matching employees found.";
+
+        resultsField.appendChild(
+          emptyState,
+        );
+
+        resultsField.classList.remove(
+          "d-none",
+        );
+
+        searchInput.setAttribute(
+          "aria-expanded",
+          "true",
+        );
+
+        return;
+      }
+
+      matchingEmployees.forEach(
+        (employee) => {
+          const option =
+            document.createElement("button");
+
+          option.type = "button";
+          option.className =
+            "btn w-100 text-start border-0 rounded-2 p-2";
+
+          option.dataset.bexPaIndividualGoalEmployee =
+            employee.id;
+
+          option.setAttribute(
+            "role",
+            "option",
+          );
+
+          option.setAttribute(
+            "aria-selected",
+            employee.id ===
+              employeeIdField.value
+              ? "true"
+              : "false",
+          );
+
+          const employeeDetails =
+            document.createElement("span");
+
+          employeeDetails.className =
+            "d-flex flex-column";
+
+          const employeeName =
+            document.createElement("span");
+
+          employeeName.className =
+            "fw-semibold";
+
+          employeeName.textContent =
+            employee.name;
+
+          const employeeContext =
+            document.createElement("small");
+
+          employeeContext.className =
+            "text-body-secondary";
+
+          employeeContext.textContent = [
+            employee.department,
+            employee.jobTitle,
+          ]
+            .filter(Boolean)
+            .join(" • ") ||
+            "Department and job title not specified";
+
+          employeeDetails.append(
+            employeeName,
+            employeeContext,
+          );
+
+          option.appendChild(
+            employeeDetails,
+          );
+
+          resultsField.appendChild(
+            option,
+          );
+        },
+      );
+
+      resultsField.classList.remove(
+        "d-none",
+      );
+
+      searchInput.setAttribute(
+        "aria-expanded",
+        "true",
+      );
+    };
+
+    searchInput.onfocus = () => {
+      renderResults(searchInput.value);
+    };
+
+    searchInput.oninput = () => {
+      employeeIdField.value = "";
+
+      renderResults(searchInput.value);
+    };
+
+    resultsField.onclick = (event) => {
+      const option =
+        event.target.closest(
+          "[data-bex-pa-individual-goal-employee]",
+        );
+
+      if (!option) {
+        return;
+      }
+
+      const employee =
+        availableEmployees.find(
+          (availableEmployee) =>
+            availableEmployee.id ===
+            option.dataset
+              .bexPaIndividualGoalEmployee,
+        );
+
+      if (!employee) {
+        return;
+      }
+
+      employeeIdField.value =
         employee.id;
 
-      const employeeDetails = document.createElement("span");
-      employeeDetails.className = "d-flex flex-column";
+      searchInput.value =
+        employee.name;
 
-      const employeeName = document.createElement("span");
-      employeeName.className = "fw-semibold";
-      employeeName.textContent = employee.name;
-
-      const employeeDepartment = document.createElement("small");
-      employeeDepartment.className = "text-body-secondary";
-      employeeDepartment.textContent =
-        employee.department || "Department not specified";
-
-      employeeDetails.append(
-        employeeName,
-        employeeDepartment,
+      resultsField.classList.add(
+        "d-none",
       );
 
-      item.append(
-        checkbox,
-        employeeDetails,
+      searchInput.setAttribute(
+        "aria-expanded",
+        "false",
       );
 
-      employeeField.appendChild(item);
-    });
+      employeeField.dispatchEvent(
+        new CustomEvent(
+          "bexpaemployeechange",
+          {
+            bubbles: true,
+            detail: {
+              employeeId:
+                employee.id,
+            },
+          },
+        ),
+      );
+    };
   }
 
   function bexPaPopulateIndividualGoalDepartmentGoals() {
@@ -4342,18 +4854,23 @@
     const currentValue =
       bexPaElements.individualGoalDepartmentGoal.value;
 
+    const selectedDepartment =
+      bexPaGetSelectedIndividualGoalDepartment();
+
     bexPaElements.individualGoalDepartmentGoal.replaceChildren();
 
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "Select department goal";
+    placeholder.textContent = selectedDepartment
+      ? "Select department goal"
+      : "Select employee first";
 
     bexPaElements.individualGoalDepartmentGoal.appendChild(
       placeholder,
     );
 
-    const availableDepartmentGoals =
-      bexPaGetCurrentPersona() === "primary-manager"
+    const scopedDepartmentGoals =
+      bexPaIsPrimaryManagerMode()
         ? bexPaState.departmentGoals.filter(
           (departmentGoal) =>
             bexPaCanManageDepartmentGoal(
@@ -4361,6 +4878,49 @@
             ),
         )
         : bexPaState.departmentGoals;
+
+    const availableDepartmentGoals =
+      selectedDepartment
+        ? scopedDepartmentGoals.filter(
+          (departmentGoal) => {
+            const goalDepartmentId = String(
+              departmentGoal.departmentId || "",
+            ).trim();
+
+            const goalDepartmentName = String(
+              departmentGoal.department || "",
+            ).trim();
+
+            if (
+              bexPaIsIntegratedPersistenceContext()
+            ) {
+              return Boolean(
+                selectedDepartment.id &&
+                goalDepartmentId &&
+                selectedDepartment.id ===
+                goalDepartmentId,
+              );
+            }
+
+            if (
+              selectedDepartment.id &&
+              goalDepartmentId
+            ) {
+              return (
+                selectedDepartment.id ===
+                goalDepartmentId
+              );
+            }
+
+            return (
+              selectedDepartment.name &&
+              goalDepartmentName &&
+              selectedDepartment.name.toLowerCase() ===
+              goalDepartmentName.toLowerCase()
+            );
+          },
+        )
+        : [];
 
     availableDepartmentGoals.forEach(
       (departmentGoal) => {
@@ -4390,6 +4950,9 @@
   }
 
   function bexPaUpdateIndividualGoalDerivedFields() {
+    const selectedDepartment =
+      bexPaGetSelectedIndividualGoalDepartment();
+
     const departmentGoal =
       bexPaState.departmentGoals.find(
         (existingDepartmentGoal) =>
@@ -4407,7 +4970,10 @@
 
     if (bexPaElements.individualGoalDepartment) {
       bexPaElements.individualGoalDepartment.value =
-        departmentGoal?.department || "";
+        selectedDepartment?.name || "";
+
+      bexPaElements.individualGoalDepartment.dataset.bexPaDepartmentId =
+        selectedDepartment?.id || "";
     }
 
     if (bexPaElements.individualGoalCycle) {
@@ -4448,12 +5014,40 @@
 
     bexPaElements.individualGoalForm?.reset();
     if (bexPaElements.individualGoalEmployee) {
-      bexPaElements.individualGoalEmployee
-        .querySelectorAll('input[type="checkbox"]')
-        .forEach((checkbox) => {
-          checkbox.checked = false;
-          checkbox.disabled = false;
-        });
+      const employeeSearch =
+        bexPaElements.individualGoalEmployee.querySelector(
+          "#bexPaIndividualGoalEmployeeSearch",
+        );
+
+      const employeeIdField =
+        bexPaElements.individualGoalEmployee.querySelector(
+          "#bexPaIndividualGoalEmployeeId",
+        );
+
+      const employeeResults =
+        bexPaElements.individualGoalEmployee.querySelector(
+          "#bexPaIndividualGoalEmployeeResults",
+        );
+
+      if (employeeSearch) {
+        employeeSearch.value = "";
+        employeeSearch.disabled = false;
+        employeeSearch.setAttribute(
+          "aria-expanded",
+          "false",
+        );
+      }
+
+      if (employeeIdField) {
+        employeeIdField.value = "";
+      }
+
+      if (employeeResults) {
+        employeeResults.replaceChildren();
+        employeeResults.classList.add(
+          "d-none",
+        );
+      }
     }
     bexPaClearIndividualGoalError();
     bexPaUpdateIndividualGoalDerivedFields();
@@ -4482,9 +5076,6 @@
     bexPaUpdateIndividualGoalDerivedFields();
     const rememberedValues = bexPaGetRememberedFormValues("individualGoal");
     bexPaApplyRememberedValues([
-      [bexPaElements.individualGoalDepartmentGoal, rememberedValues.departmentGoalId],
-      [bexPaElements.individualGoalDepartment, rememberedValues.department],
-      [bexPaElements.individualGoalCycle, rememberedValues.cycle],
       [bexPaElements.individualGoalTitle, rememberedValues.title],
       [bexPaElements.individualGoalDescription, rememberedValues.description],
       [bexPaElements.individualGoalTarget, rememberedValues.target],
@@ -4514,7 +5105,7 @@
       }
 
       if (
-        bexPaGetCurrentPersona() === "primary-manager" &&
+        bexPaIsPrimaryManagerMode() &&
         !bexPaIsIndividualGoalInPrimaryManagerScope(
           individualGoal,
         )
@@ -4534,12 +5125,56 @@
       const employeeId =
         bexPaGetIndividualGoalEmployeeId(individualGoal);
 
-      bexPaElements.individualGoalEmployee
-        .querySelectorAll('input[type="checkbox"]')
-        .forEach((checkbox) => {
-          checkbox.checked = checkbox.value === employeeId;
-          checkbox.disabled = checkbox.value !== employeeId;
-        });
+      const employeeSearch =
+        bexPaElements.individualGoalEmployee
+          ?.querySelector(
+            "#bexPaIndividualGoalEmployeeSearch",
+          );
+
+      const employeeIdField =
+        bexPaElements.individualGoalEmployee
+          ?.querySelector(
+            "#bexPaIndividualGoalEmployeeId",
+          );
+
+      const employeeResults =
+        bexPaElements.individualGoalEmployee
+          ?.querySelector(
+            "#bexPaIndividualGoalEmployeeResults",
+          );
+
+      const selectedEmployee =
+        bexPaGetAvailableEmployees().find(
+          (employee) =>
+            employee.id === employeeId,
+        );
+
+      if (
+        !selectedEmployee ||
+        !employeeSearch ||
+        !employeeIdField
+      ) {
+        return;
+      }
+
+      employeeIdField.value =
+        selectedEmployee.id;
+
+      employeeSearch.value =
+        selectedEmployee.name;
+
+      employeeSearch.disabled = true;
+
+      employeeSearch.setAttribute(
+        "aria-expanded",
+        "false",
+      );
+
+      employeeResults?.classList.add(
+        "d-none",
+      );
+
+      bexPaPopulateIndividualGoalDepartmentGoals();
 
       bexPaElements.individualGoalDepartmentGoal.value =
         individualGoal.departmentGoalId;
@@ -4569,7 +5204,9 @@
 
     window.requestAnimationFrame(() => {
       bexPaElements.individualGoalEmployee
-        ?.querySelector('input[type="checkbox"]')
+        ?.querySelector(
+          "#bexPaIndividualGoalEmployeeSearch",
+        )
         ?.focus();
     });
   }
@@ -4605,7 +5242,7 @@
     }
 
     if (
-      bexPaGetCurrentPersona() === "primary-manager" &&
+      bexPaIsPrimaryManagerMode() &&
       !bexPaGetManagedEmployeeIds().includes(
         individualGoal.employeeId,
       )
@@ -4633,7 +5270,7 @@
     }
 
     if (
-      bexPaGetCurrentPersona() === "primary-manager" &&
+      bexPaIsPrimaryManagerMode() &&
       !bexPaCanManageDepartmentGoal(
         departmentGoal,
       )
@@ -5010,7 +5647,7 @@
       const canUseIndividualGoal =
         individualGoal &&
         (
-          bexPaGetCurrentPersona() !== "employee" ||
+          !bexPaIsEmployeeMode() ||
           bexPaIsIndividualGoalOwnedByCurrentEmployee(
             individualGoal,
           )
@@ -5085,7 +5722,7 @@
     }
 
     if (
-      bexPaGetCurrentPersona() === "employee" &&
+      bexPaIsEmployeeMode() &&
       !bexPaIsIndividualGoalOwnedByCurrentEmployee(
         individualGoal,
       )
@@ -5109,6 +5746,39 @@
       progressUpdate.progressPercentage > 100
     ) {
       return "Progress percentage must be a number between 0 and 100.";
+    }
+
+    const allowedProgressPercentages = [
+      0,
+      10,
+      20,
+      30,
+      40,
+      50,
+      60,
+      70,
+      80,
+      90,
+      100,
+    ];
+
+    if (
+      !allowedProgressPercentages.includes(
+        progressUpdate.progressPercentage,
+      )
+    ) {
+      return "Select a valid progress percentage in 10% increments.";
+    }
+
+    const expectedProgressStatus =
+      progressUpdate.progressPercentage === 0
+        ? "Not Started"
+        : progressUpdate.progressPercentage === 100
+          ? "Completed"
+          : "In Progress";
+
+    if (progressUpdate.status !== expectedProgressStatus) {
+      return `${progressUpdate.progressPercentage}% progress must use the "${expectedProgressStatus}" status.`;
     }
 
     if (progressUpdate.evidence.length > 1000) {
@@ -5309,13 +5979,13 @@
 
       emptyState.id = "bexPaIndividualGoalsEmpty";
 
-      const persona =
-        bexPaGetCurrentPersona();
+      const activeMode =
+        bexPaGetActiveMode();
 
       emptyState.textContent =
-        persona === "employee"
+        activeMode === "employee"
           ? "No individual goals are available for your employee account."
-          : persona === "primary-manager"
+          : activeMode === "primary-manager"
             ? "No individual goals are available within your current reporting scope."
             : "No individual employee goals have been created yet.";
 
@@ -5507,12 +6177,22 @@
       bexPaState.editingIndividualGoalId,
     );
 
-    const selectedEmployees =
-      bexPaGetSelectedIndividualGoalEmployees();
+    const selectedEmployee =
+      bexPaGetSelectedIndividualGoalEmployee();
 
-    if (selectedEmployees.length === 0) {
+    if (!selectedEmployee) {
       bexPaShowIndividualGoalError(
-        "Select at least one valid employee.",
+        "Select one valid employee.",
+      );
+      return;
+    }
+
+    const selectedDepartment =
+      bexPaGetSelectedIndividualGoalDepartment();
+
+    if (!selectedDepartment) {
+      bexPaShowIndividualGoalError(
+        "The selected employee does not have a valid department.",
       );
       return;
     }
@@ -5522,10 +6202,10 @@
         bexPaElements.individualGoalDepartmentGoal.value,
 
       department:
-        departmentGoal?.department || "",
+        selectedDepartment.name,
 
       departmentId:
-        departmentGoal?.departmentId || "",
+        selectedDepartment.id,
 
       cycleId:
         departmentGoal?.cycleId || "",
@@ -5549,31 +6229,25 @@
         bexPaElements.individualGoalDueDate.value,
     };
 
-    const individualGoals = selectedEmployees.map(
-      (selectedEmployee) => ({
-        id:
-          wasEditing
-            ? bexPaState.editingIndividualGoalId
-            : `BEX-PA-INDIVIDUAL-GOAL-${Date.now()}-${selectedEmployee.id}`,
+    const individualGoal = {
+      id:
+        wasEditing
+          ? bexPaState.editingIndividualGoalId
+          : `BEX-PA-INDIVIDUAL-GOAL-${Date.now()}-${selectedEmployee.id}`,
 
-        employee:
-          selectedEmployee.name,
+      employee:
+        selectedEmployee.name,
 
-        employeeId:
-          selectedEmployee.id,
+      employeeId:
+        selectedEmployee.id,
 
-        ...sharedGoalFields,
-      }),
-    );
+      ...sharedGoalFields,
+    };
 
     const validationError =
-      individualGoals
-        .map((individualGoal) =>
-          bexPaValidateIndividualGoal(
-            individualGoal,
-          ),
-        )
-        .find(Boolean);
+      bexPaValidateIndividualGoal(
+        individualGoal,
+      );
 
     if (validationError) {
       bexPaShowIndividualGoalError(
@@ -5581,27 +6255,6 @@
       );
       return;
     }
-
-    const duplicateBatchGoal =
-      individualGoals.some((individualGoal, index) =>
-        individualGoals.some(
-          (otherGoal, otherIndex) =>
-            index !== otherIndex &&
-            otherGoal.employeeId === individualGoal.employeeId &&
-            otherGoal.departmentGoalId ===
-            individualGoal.departmentGoalId &&
-            otherGoal.title.toLowerCase() ===
-            individualGoal.title.toLowerCase(),
-        ),
-      );
-
-    if (duplicateBatchGoal) {
-      bexPaShowIndividualGoalError(
-        "An individual goal with this title is duplicated in the selected employees.",
-      );
-      return;
-    }
-
     if (wasEditing) {
       const individualGoalIndex =
         bexPaState.individualGoals.findIndex(
@@ -5619,9 +6272,11 @@
 
       bexPaState.individualGoals[
         individualGoalIndex
-      ] = individualGoals[0];
+      ] = individualGoal;
     } else {
-      bexPaState.individualGoals.push(...individualGoals);
+      bexPaState.individualGoals.push(
+        individualGoal,
+      );
     }
 
     try {
@@ -5637,9 +6292,7 @@
 
         await bexPaPersistRemoteRecords(
           "individualGoals",
-          wasEditing
-            ? individualGoals[0]
-            : individualGoals,
+          individualGoal,
         );
       } else {
         bexPaSaveIndividualGoals();
@@ -5672,8 +6325,8 @@
     if (bexPaElements.announcement) {
       bexPaElements.announcement.textContent =
         wasEditing
-          ? `${individualGoals[0].title} was updated successfully.`
-          : `${individualGoals.length} individual goal${individualGoals.length === 1 ? "" : "s"} created successfully.`;
+          ? `${individualGoal.title} was updated successfully.`
+          : `${individualGoal.title} was created successfully.`;
     }
   }
 
@@ -5893,7 +6546,7 @@
 
     bexPaRememberFormValues("departmentGoal", {
       organisationGoalId: bexPaElements.departmentGoalOrganisationGoal.value,
-      department: bexPaElements.departmentGoalDepartment.value,
+      departmentId: bexPaElements.departmentGoalDepartment.value,
       title: bexPaElements.departmentGoalTitle.value,
       description: bexPaElements.departmentGoalDescription.value,
       target: bexPaElements.departmentGoalTarget.value,
@@ -5910,37 +6563,19 @@
           bexPaElements.departmentGoalOrganisationGoal.value,
       );
 
+    const selectedDepartmentId =
+      bexPaElements.departmentGoalDepartment.value
+        .trim();
+
     const selectedDepartment =
-      bexPaElements.departmentGoalDepartment.value.trim();
+      bexPaGetAvailableDepartments().find(
+        (department) =>
+          department.id === selectedDepartmentId,
+      );
 
-    const matchingDepartmentIds = [
-      ...new Set(
-        bexPaGetAvailableEmployees()
-          .filter(
-            (employee) =>
-              String(employee.department || "")
-                .trim()
-                .toLowerCase() ===
-              selectedDepartment.toLowerCase(),
-          )
-          .map((employee) =>
-            String(employee.departmentId || "").trim(),
-          )
-          .filter(Boolean),
-      ),
-    ];
-
-    const canonicalDepartmentId =
-      matchingDepartmentIds.length === 1
-        ? matchingDepartmentIds[0]
-        : "";
-
-    if (
-      bexPaIsIntegratedPersistenceContext() &&
-      !canonicalDepartmentId
-    ) {
+    if (!selectedDepartment) {
       bexPaShowDepartmentGoalError(
-        "The selected department does not have one canonical BexHR department ID.",
+        "Select one valid BexHR department.",
       );
       return;
     }
@@ -5957,10 +6592,10 @@
         organisationGoal?.cycleId || "",
 
       department:
-        bexPaElements.departmentGoalDepartment.value.trim(),
+        selectedDepartment.name,
 
       departmentId:
-        canonicalDepartmentId,
+        selectedDepartment.id,
 
       title:
         bexPaElements.departmentGoalTitle.value.trim(),
@@ -7785,10 +8420,6 @@
   }
 
   function bexPaGetEligibleEmployeeAppraisals() {
-    if (bexPaGetCurrentPersona() !== "employee") {
-      return [];
-    }
-
     const currentEmployeeId =
       bexPaGetCurrentEmployeeId();
 
@@ -7817,7 +8448,7 @@
   }
 
   function bexPaGetEligibleManagerAppraisals() {
-    if (bexPaGetCurrentPersona() !== "primary-manager") {
+    if (!bexPaIsPrimaryManagerMode()) {
       return [];
     }
 
@@ -7856,9 +8487,9 @@
   }
 
   function bexPaGetVisibleEmployeeAppraisals() {
-    const persona = bexPaGetCurrentPersona();
+    const activeMode = bexPaGetActiveMode();
 
-    if (persona === "employee") {
+    if (activeMode === "employee") {
       const currentEmployeeId =
         bexPaGetCurrentEmployeeId();
 
@@ -7872,17 +8503,49 @@
       );
     }
 
-    if (persona === "primary-manager") {
-      const managedEmployeeIds =
-        bexPaGetManagedEmployeeIds();
+    if (activeMode === "hr-standard") {
+      const visibleEmployeeIds =
+        bexPaGetAvailableEmployees()
+          .map((employee) =>
+            String(employee?.id || "").trim(),
+          )
+          .filter(Boolean);
+
+      if (visibleEmployeeIds.length === 0) {
+        return [];
+      }
 
       return bexPaState.employeeAppraisals.filter(
         (appraisal) =>
-          managedEmployeeIds.includes(appraisal.employeeId),
+          visibleEmployeeIds.includes(
+            String(
+              appraisal?.employeeId || "",
+            ).trim(),
+          ),
       );
     }
 
-    if (persona === "hr-admin") {
+    if (activeMode === "primary-manager") {
+      const visibleEmployeeIds = [
+        ...new Set([
+          ...bexPaGetManagedEmployeeIds(),
+          ...bexPaGetSecondaryEmployeeIds(),
+        ]),
+      ];
+
+      if (visibleEmployeeIds.length === 0) {
+        return [];
+      }
+
+      return bexPaState.employeeAppraisals.filter(
+        (appraisal) =>
+          visibleEmployeeIds.includes(
+            appraisal.employeeId,
+          ),
+      );
+    }
+
+    if (activeMode === "hr-admin") {
       return bexPaState.employeeAppraisals;
     }
 
@@ -8342,11 +9005,62 @@
       return "Finalised";
     }
 
-    if (bexPaGetCurrentPersona() === "primary-manager") {
-      return bexPaGetDraftDisplayStatus(managerAppraisal);
+    if (bexPaIsHrStandardMode()) {
+      const parentStatus = String(
+        appraisal?.status || "",
+      ).trim();
+
+      if (
+        parentStatus === "Finalised" ||
+        parentStatus === "Acknowledged"
+      ) {
+        return parentStatus;
+      }
+
+      return parentStatus === "Draft"
+        ? "Not Started"
+        : parentStatus || "Not Started";
     }
 
-    if (bexPaGetCurrentPersona() === "hr-admin") {
+    if (bexPaIsManagerReviewMode()) {
+      const isPrimaryManagerAppraisal =
+        bexPaGetManagedEmployeeIds().includes(
+          String(
+            appraisal?.employeeId || "",
+          ).trim(),
+        );
+
+      if (isPrimaryManagerAppraisal) {
+        return bexPaGetDraftDisplayStatus(
+          managerAppraisal,
+        );
+      }
+
+      const parentStatus = String(
+        appraisal?.status || "",
+      ).trim();
+
+      if (
+        parentStatus === "Finalised" ||
+        parentStatus === "Acknowledged"
+      ) {
+        return parentStatus;
+      }
+
+      if (managerAppraisal?.status === "Submitted") {
+        return "Awaiting HR Review";
+      }
+
+      if (selfAppraisal?.status === "Submitted") {
+        return "Manager Review";
+      }
+
+      return bexPaHasSavedDraft(selfAppraisal)
+        ? "Self-Appraisal In Progress"
+        : "Not Started";
+    }
+
+    if (bexPaIsHrAdminMode()) {
       if (managerAppraisal?.status === "Submitted") {
         return "Submitted";
       }
@@ -8944,7 +9658,7 @@
   }
 
   function bexPaRenderFinalAppraisal(appraisal) {
-    if (bexPaGetCurrentPersona() !== "employee") {
+    if (!bexPaIsEmployeeMode()) {
       return;
     }
 
@@ -9493,7 +10207,7 @@
   }
 
   function bexPaOpenFinalAppraisal(appraisalId) {
-    if (bexPaGetCurrentPersona() !== "employee") {
+    if (!bexPaIsEmployeeMode()) {
       return;
     }
 
@@ -9639,7 +10353,7 @@
     return true;
   }
   async function bexPaAcknowledgeFinalAppraisal() {
-    if (bexPaGetCurrentPersona() !== "employee") {
+    if (!bexPaIsEmployeeMode()) {
       return;
     }
 
@@ -9687,6 +10401,15 @@
     const timestamp =
       new Date().toISOString();
 
+    const previousAppraisalStatus =
+      appraisal.status;
+
+    const previousAppraisalUpdatedAt =
+      appraisal.updatedAt;
+
+    appraisal.status = "Acknowledged";
+    appraisal.updatedAt = timestamp;
+
     const acknowledgement = {
       id:
         `BEX-PA-ACKNOWLEDGEMENT-${appraisal.id}`,
@@ -9720,7 +10443,19 @@
         acknowledgement,
         bexPaSaveEmployeeAcknowledgements,
       );
+
+      await bexPaPersistDatasetMutation(
+        "employeeAppraisals",
+        appraisal,
+        bexPaSaveEmployeeAppraisals,
+      );
     } catch (error) {
+      appraisal.status =
+        previousAppraisalStatus;
+
+      appraisal.updatedAt =
+        previousAppraisalUpdatedAt;
+
       console.error(
         "Performance appraisal acknowledgement persistence failed.",
         error,
@@ -9747,7 +10482,7 @@
 
     await bexPaCompleteEligibleCycles();
 
-    bexPaRenderFinalAppraisal(appraisal);
+    bexPaCloseFinalAppraisal();
     bexPaRenderEmployeeAppraisals();
     bexPaRenderCycles();
 
@@ -9809,6 +10544,15 @@
 
     const timestamp = new Date().toISOString();
 
+    const previousAppraisalStatus =
+      appraisal.status;
+
+    const previousAppraisalUpdatedAt =
+      appraisal.updatedAt;
+
+    appraisal.status = "Finalised";
+    appraisal.updatedAt = timestamp;
+
     const hrFinalisation = {
       id:
         `BEX-PA-HR-FINALISATION-${appraisal.id}`,
@@ -9840,7 +10584,18 @@
         hrFinalisation,
         bexPaSaveHrFinalisations,
       );
+
+      await bexPaPersistDatasetMutation(
+        "employeeAppraisals",
+        appraisal,
+        bexPaSaveEmployeeAppraisals,
+      );
     } catch (error) {
+      appraisal.status =
+        previousAppraisalStatus;
+
+      appraisal.updatedAt =
+        previousAppraisalUpdatedAt;
       console.error(
         "Performance appraisal HR finalisation persistence failed.",
         error,
@@ -10783,10 +11538,6 @@
   }
 
   function bexPaOpenSelfAppraisal(appraisalId) {
-    if (bexPaGetCurrentPersona() !== "employee") {
-      return;
-    }
-
     const appraisal =
       bexPaGetEligibleEmployeeAppraisals().find(
         (existingAppraisal) =>
@@ -11240,10 +11991,13 @@
         );
 
         if (
-          bexPaGetCurrentPersona() === "employee" &&
-          bexPaGetEligibleEmployeeAppraisals().some(
-            (eligibleAppraisal) =>
-              eligibleAppraisal.id === appraisal.id,
+          bexPaIsEmployeeMode() &&
+          (
+            hrFinalisation?.status === "Finalised" ||
+            bexPaGetEligibleEmployeeAppraisals().some(
+              (eligibleAppraisal) =>
+                eligibleAppraisal.id === appraisal.id,
+            )
           )
         ) {
           const openButton = document.createElement("button");
@@ -11316,7 +12070,7 @@
         }
 
         if (
-          bexPaGetCurrentPersona() === "primary-manager" &&
+          bexPaIsPrimaryManagerMode() &&
           bexPaGetEligibleManagerAppraisals().some(
             (eligibleAppraisal) =>
               eligibleAppraisal.id === appraisal.id,
@@ -11419,29 +12173,53 @@
 
     if (hasIntegratedContext) {
       const persona = bexPaGetCurrentPersona();
+      const context = bexPaGetIntegratedContext() || {};
+      const sourceDashboard = String(
+        context.sourceDashboard || "",
+      ).trim();
 
       const dashboardByPersona = {
         employee: {
           href: "../../employee-dashboard.html",
           label: "Back to Employee Dashboard",
-          workspace: "Employee workspace",
         },
 
         "primary-manager": {
           href: "../../manager-dashboard.html",
           label: "Back to Manager Dashboard",
-          workspace: "Manager workspace",
+        },
+
+        "hr-standard": {
+          href: "../../hr-dashboard.html",
+          label: "Back to HR Dashboard",
         },
 
         "hr-admin": {
           href: "../../hr-dashboard.html",
           label: "Back to HR Dashboard",
-          workspace: "HR workspace",
         },
       };
 
+      const workspaceByPersona = {
+        employee: "My Appraisal",
+        "primary-manager": "Manager Reviews",
+        "hr-standard": "HR Standard View",
+        "hr-admin": "HR Administration",
+      };
+
+      const dashboardBySource = {
+        "employee-dashboard": dashboardByPersona.employee,
+        "manager-dashboard": dashboardByPersona["primary-manager"],
+        "hr-dashboard": dashboardByPersona["hr-admin"],
+      };
+
       const dashboard =
+        dashboardBySource[sourceDashboard] ||
         dashboardByPersona[persona];
+
+      const workspace =
+        workspaceByPersona[persona] ||
+        "Performance Appraisal";
 
       if (
         dashboard &&
@@ -11454,25 +12232,6 @@
           "click",
           (event) => {
             event.preventDefault();
-
-            const referrer = String(
-              document.referrer || "",
-            );
-
-            const expectedDashboardUrl =
-              new URL(
-                dashboard.href,
-                window.location.href,
-              ).href;
-
-            if (
-              referrer &&
-              referrer.split("#")[0] ===
-              expectedDashboardUrl.split("#")[0]
-            ) {
-              window.history.back();
-              return;
-            }
 
             window.location.assign(
               dashboard.href,
@@ -11491,7 +12250,7 @@
           bexPaElements.integratedWorkspaceLabel
         ) {
           bexPaElements.integratedWorkspaceLabel.textContent =
-            dashboard.workspace;
+            workspace;
         }
       }
     }
@@ -11919,6 +12678,15 @@
     bexPaElements.cancelIndividualGoalButton?.addEventListener(
       "click",
       bexPaCloseIndividualGoalDialog,
+    );
+
+    bexPaElements.individualGoalEmployee?.addEventListener(
+      "bexpaemployeechange",
+      () => {
+        bexPaClearIndividualGoalError();
+        bexPaPopulateIndividualGoalDepartmentGoals();
+        bexPaUpdateIndividualGoalDerivedFields();
+      },
     );
 
     bexPaElements.individualGoalDepartmentGoal?.addEventListener(
