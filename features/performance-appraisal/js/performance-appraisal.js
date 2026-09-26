@@ -3566,6 +3566,113 @@
       return;
     }
 
+    // PA HR STANDARD OVERVIEW COMPLETION - STAGE 7G
+    if (activeMode === "hr-standard") {
+      const visibleCycleIds = new Set(
+        visibleEmployeeAppraisals
+          .map((appraisal) =>
+            String(
+              appraisal.cycleId || "",
+            ).trim(),
+          )
+          .filter(Boolean),
+      );
+
+      const activeEmployeeIds = new Set(
+        activeVisibleEmployeeAppraisals
+          .map((appraisal) =>
+            String(
+              appraisal.employeeId || "",
+            ).trim(),
+          )
+          .filter(Boolean),
+      );
+
+      const awaitingHrCount =
+        visibleEmployeeAppraisals.filter(
+          (appraisal) => {
+            const managerAppraisal =
+              bexPaState.managerAppraisals.find(
+                (record) =>
+                  record.appraisalId ===
+                  appraisal.id,
+              );
+
+            const hrFinalisation =
+              bexPaState.hrFinalisations.find(
+                (record) =>
+                  record.appraisalId ===
+                  appraisal.id,
+              );
+
+            return (
+              managerAppraisal?.status ===
+                "Submitted" &&
+              hrFinalisation?.status !==
+                "Finalised"
+            );
+          },
+        ).length;
+
+      const completedCount =
+        visibleOperationalRecords.filter(
+          (record) =>
+            record.status ===
+            "Acknowledged",
+        ).length;
+
+      bexPaSetOverviewHero({
+        kicker: "HR visibility",
+        title: "HR Standard View",
+        description:
+          "Monitor appraisal progress across your permitted organisation scope with read-only visibility into reviews and completion.",
+        metricsLabel:
+          "HR Standard appraisal summary",
+      });
+
+      bexPaSetOverviewSummaryCard(
+        "active-cycles",
+        {
+          label: "Appraisal cycles in view",
+          value: visibleCycleIds.size,
+          detail:
+            "Appraisal periods in your permitted scope",
+        },
+      );
+
+      bexPaSetOverviewSummaryCard(
+        "employees",
+        {
+          label: "Employees in active cycles",
+          value: activeEmployeeIds.size,
+          detail:
+            "Employees visible in active-cycle appraisal records",
+        },
+      );
+
+      bexPaSetOverviewSummaryCard(
+        "awaiting-hr",
+        {
+          label: "Awaiting HR finalisation",
+          value: awaitingHrCount,
+          detail:
+            "Submitted manager reviews in your view",
+        },
+      );
+
+      bexPaSetOverviewSummaryCard(
+        "completed",
+        {
+          label: "Completed appraisals",
+          value: completedCount,
+          detail:
+            "Acknowledged appraisal records in your view",
+        },
+      );
+
+      return;
+    }
+
     const activeEmployeeIds = new Set(
       activeVisibleEmployeeAppraisals
         .map((appraisal) =>
@@ -9240,11 +9347,14 @@
       bexPaIsEmployeeMode();
     const isManagerOverview =
       bexPaIsManagerReviewMode();
+    const isHrStandardOverview =
+      bexPaIsHrStandardMode();
 
     const canShowReadiness =
       bexPaIsHrAdminMode() ||
       isEmployeeOverview ||
-      isManagerOverview;
+      isManagerOverview ||
+      isHrStandardOverview;
 
     readiness.classList.toggle(
       "d-none",
@@ -9295,6 +9405,22 @@
         ?.setAttribute(
           "aria-label",
           "Manager review queue completion",
+        );
+    } else if (isHrStandardOverview) {
+      if (readinessKicker) {
+        readinessKicker.textContent =
+          "Read-only progress";
+      }
+
+      if (readinessTitle) {
+        readinessTitle.textContent =
+          "Appraisal completion";
+      }
+
+      bexPaElements.overviewCompletionProgress
+        ?.setAttribute(
+          "aria-label",
+          "Visible active-cycle appraisal completion",
         );
     } else {
       if (readinessKicker) {
@@ -9449,7 +9575,8 @@
     }
 
     const readinessAppraisals =
-      isEmployeeOverview
+      isEmployeeOverview ||
+      isHrStandardOverview
         ? bexPaGetVisibleEmployeeAppraisals()
         : bexPaState.employeeAppraisals;
 
@@ -9546,9 +9673,11 @@
         .textContent =
         isEmployeeOverview
           ? "No active-cycle appraisal is currently assigned to you."
-          : activeCycleIds.size === 1
-            ? "The active appraisal cycle has no assigned appraisals yet."
-            : "The active appraisal cycles have no assigned appraisals yet.";
+          : isHrStandardOverview
+            ? "No active-cycle appraisals are currently visible in your permitted HR scope."
+            : activeCycleIds.size === 1
+              ? "The active appraisal cycle has no assigned appraisals yet."
+              : "The active appraisal cycles have no assigned appraisals yet.";
       return;
     }
 
@@ -9757,11 +9886,14 @@
       bexPaIsEmployeeMode();
     const isManagerOverview =
       bexPaIsManagerReviewMode();
+    const isHrStandardOverview =
+      bexPaIsHrStandardMode();
 
     const canShowOperations =
       bexPaIsHrAdminMode() ||
       isEmployeeOverview ||
-      isManagerOverview;
+      isManagerOverview ||
+      isHrStandardOverview;
 
     operations.classList.toggle(
       "d-none",
@@ -10322,6 +10454,78 @@
       return;
     }
 
+    if (isHrStandardOverview) {
+      const priorityTitle =
+        document.getElementById(
+          "bexPaOverviewPriorityTitle",
+        );
+
+      const priorityPanel =
+        priorityTitle?.closest(
+          ".bex-pa-overview-panel",
+        );
+
+      const priorityKicker =
+        priorityPanel?.querySelector(
+          ".bex-pa-overview-section-kicker",
+        );
+
+      const priorityDescription =
+        priorityPanel?.querySelector(
+          ".bex-pa-overview-panel-description",
+        );
+
+      const activeCycleTitle =
+        document.getElementById(
+          "bexPaOverviewActiveCycleTitle",
+        );
+
+      const activeCyclePanel =
+        activeCycleTitle?.closest(
+          ".bex-pa-overview-panel",
+        );
+
+      const activeCycleKicker =
+        activeCyclePanel?.querySelector(
+          ".bex-pa-overview-section-kicker",
+        );
+
+      const activeCycleDescription =
+        activeCyclePanel?.querySelector(
+          ".bex-pa-overview-panel-description",
+        );
+
+      if (priorityKicker) {
+        priorityKicker.textContent =
+          "Read-only status";
+      }
+
+      if (priorityTitle) {
+        priorityTitle.textContent =
+          "Review status watch";
+      }
+
+      if (priorityDescription) {
+        priorityDescription.textContent =
+          "Appraisals at HR finalisation or employee acknowledgement within your permitted view.";
+      }
+
+      if (activeCycleKicker) {
+        activeCycleKicker.textContent =
+          "Cycle visibility";
+      }
+
+      if (activeCycleTitle) {
+        activeCycleTitle.textContent =
+          "Active cycle snapshot";
+      }
+
+      if (activeCycleDescription) {
+        activeCycleDescription.textContent =
+          "Active appraisal cycles linked to employees in your permitted HR view.";
+      }
+    }
+
     const priorityRecords =
       visibleAppraisals
         .map((appraisal) => ({
@@ -10387,9 +10591,22 @@
       priorityRecords.length > 0,
     );
 
+    const visibleCycleIds = new Set(
+      visibleAppraisals
+        .map((appraisal) =>
+          appraisal.cycleId,
+        )
+        .filter(Boolean),
+    );
+
     const activeCycles =
       bexPaState.cycles.filter(
-        (cycle) => cycle.status === "Active",
+        (cycle) =>
+          cycle.status === "Active" &&
+          (
+            !isHrStandardOverview ||
+            visibleCycleIds.has(cycle.id)
+          ),
       );
 
     if (bexPaElements.overviewActiveCycleCount) {
@@ -10401,10 +10618,82 @@
       bexPaElements.overviewActiveCycleList.replaceChildren();
 
       activeCycles.forEach((cycle) => {
-        bexPaElements.overviewActiveCycleList.appendChild(
-          bexPaCreateOverviewCycleItem(cycle),
-        );
+        const item =
+          bexPaCreateOverviewCycleItem(cycle);
+
+        if (isHrStandardOverview) {
+          const meta =
+            item.querySelector(
+              ".bex-pa-overview-operation-item-meta",
+            );
+
+          const scopedAppraisals =
+            visibleAppraisals.filter(
+              (appraisal) =>
+                appraisal.cycleId ===
+                cycle.id,
+            );
+
+          const scopedEmployeeIds =
+            new Set(
+              scopedAppraisals
+                .map((appraisal) =>
+                  String(
+                    appraisal.employeeId || "",
+                  ).trim(),
+                )
+                .filter(Boolean),
+            );
+
+          const acknowledgedCount =
+            scopedAppraisals.filter(
+              (appraisal) =>
+                bexPaGetOperationalAppraisalStatus(
+                  appraisal,
+                ) === "Acknowledged",
+            ).length;
+
+          if (meta) {
+            const dateRange =
+              document.createElement("span");
+
+            dateRange.textContent =
+              `${bexPaFormatDate(cycle.startDate)} - ${bexPaFormatDate(cycle.endDate)}`;
+
+            const scopeSummary =
+              document.createElement("span");
+
+            scopeSummary.textContent =
+              `${scopedEmployeeIds.size} employee${scopedEmployeeIds.size === 1 ? "" : "s"} in view`;
+
+            const completionSummary =
+              document.createElement("span");
+
+            completionSummary.textContent =
+              `${acknowledgedCount} acknowledged`;
+
+            meta.replaceChildren(
+              dateRange,
+              scopeSummary,
+              completionSummary,
+            );
+          }
+        }
+
+        bexPaElements
+          .overviewActiveCycleList
+          .appendChild(item);
       });
+    }
+
+    if (
+      isHrStandardOverview &&
+      bexPaElements.overviewActiveCycleEmpty
+    ) {
+      bexPaElements
+        .overviewActiveCycleEmpty
+        .textContent =
+        "No active appraisal cycle is currently visible in your permitted HR scope.";
     }
 
     bexPaElements.overviewActiveCycleEmpty?.classList.toggle(
