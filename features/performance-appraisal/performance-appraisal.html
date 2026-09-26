@@ -141,6 +141,18 @@
             <div class="row g-0">
                 <aside class="bex-pa-sidebar col-12 border-end bg-white col-lg-3 col-xl-2"
                     aria-label="Performance appraisal navigation">
+                    <div class="bex-pa-sidebar-brand" aria-label="Performance Appraisal workspace brand">
+                        <span class="bex-pa-sidebar-brand-mark" aria-hidden="true">PA</span>
+                        <span class="bex-pa-sidebar-brand-word">BexHR</span>
+
+                        <span class="bex-pa-sidebar-brand-alpatech" aria-hidden="true">
+                            <span class="bex-pa-sidebar-alpatech-mark">
+                                <img src="../../assets/alpatech-flame.png" alt="" />
+                            </span>
+                            <span class="bex-pa-sidebar-alpatech-word">ALPATECH</span>
+                        </span>
+                    </div>
+
                     <nav class="p-3 p-lg-4">
                         <p class="mb-2 small fw-semibold text-uppercase text-body-secondary">
                             Workspace
@@ -206,15 +218,9 @@
                                     <i class="bi bi-clipboard2-check"></i>
                                 </span>
 
-                                <div>
-                                    <p class="bex-pa-integrated-title mb-0">
-                                        Performance Appraisal
-                                    </p>
-
-                                    <p class="bex-pa-integrated-subtitle mb-0" id="bexPaIntegratedWorkspaceLabel">
-                                        BexHR workspace
-                                    </p>
-                                </div>
+                                <p class="bex-pa-integrated-title mb-0" id="bexPaIntegratedWorkspaceLabel">
+                                    BexHR workspace
+                                </p>
                             </div>
 
                             <a class="btn btn-outline-secondary btn-sm bex-pa-integrated-return"
@@ -238,99 +244,264 @@
                         </button>
 
                         <section id="bexPaOverviewSection" aria-labelledby="bexPaOverviewTitle">
-                            <div class="mb-4">
-                                <div>
-                                    <p class="mb-2 small fw-semibold text-uppercase text-primary">
-                                        Appraisal workspace
+                            <div class="bex-pa-overview-hero mb-4">
+                                <div class="bex-pa-overview-hero-copy">
+                                    <p class="bex-pa-overview-hero-kicker mb-2">
+                                        Performance operations
                                     </p>
 
-                                    <h1 class="mb-2 h2 fw-bold" id="bexPaOverviewTitle">
+                                    <h1 class="bex-pa-overview-hero-title mb-2" id="bexPaOverviewTitle">
                                         Performance Appraisal
                                     </h1>
 
-                                    <p class="mb-0 text-body-secondary">
-                                        Set goals, track progress, complete reviews and retain
-                                        appraisal history.
+                                    <p class="bex-pa-overview-hero-description mb-0">
+                                        Monitor appraisal cycles, employee participation, HR review workload
+                                        and completion across the organisation.
                                     </p>
                                 </div>
                             </div>
 
-                            <div class="row g-3" aria-label="Appraisal summary">
-                                <div class="col-12 col-sm-6 col-xl-3">
-                                    <article class="bex-pa-summary-card card h-100 border-0 shadow-sm"
-                                        data-bex-pa-summary="active-cycles">
-                                        <div class="card-body">
-                                            <p class="mb-2 small text-body-secondary">
-                                                Appraisal cycles
-                                            </p>
+                            <div class="bex-pa-overview-metrics" aria-label="Appraisal summary">
+                                <article class="bex-pa-summary-card bex-pa-summary-card--cycles"
+                                    data-bex-pa-summary="active-cycles">
+                                    <div class="bex-pa-summary-icon" aria-hidden="true">
+                                        <i class="bi bi-calendar-check"></i>
+                                    </div>
 
-                                            <p class="mb-0 display-6 fw-bold">0</p>
-                                        </div>
-                                    </article>
-                                </div>
+                                    <div class="bex-pa-summary-content">
+                                        <p class="bex-pa-summary-label mb-1">
+                                            Appraisal cycles
+                                        </p>
 
-                                <div class="col-12 col-sm-6 col-xl-3">
-                                    <article class="bex-pa-summary-card card h-100 border-0 shadow-sm"
-                                        data-bex-pa-summary="employees">
-                                        <div class="card-body">
-                                            <p class="mb-2 small text-body-secondary">
-                                                Employees in active cycles
-                                            </p>
+                                        <p class="display-6 bex-pa-summary-value mb-1 fw-bold">0</p>
 
-                                            <p class="mb-0 display-6 fw-bold">0</p>
-                                        </div>
-                                    </article>
-                                </div>
+                                        <p class="bex-pa-summary-detail mb-0">
+                                            Appraisal periods in this workspace
+                                        </p>
+                                    </div>
+                                </article>
 
-                                <div class="col-12 col-sm-6 col-xl-3">
-                                    <article class="bex-pa-summary-card card h-100 border-0 shadow-sm"
-                                        data-bex-pa-summary="awaiting-hr">
-                                        <div class="card-body">
-                                            <p class="mb-2 small text-body-secondary">
-                                                Awaiting HR review
-                                            </p>
+                                <article class="bex-pa-summary-card bex-pa-summary-card--employees"
+                                    data-bex-pa-summary="employees">
+                                    <div class="bex-pa-summary-icon" aria-hidden="true">
+                                        <i class="bi bi-people"></i>
+                                    </div>
 
-                                            <p class="mb-0 display-6 fw-bold">0</p>
-                                        </div>
-                                    </article>
-                                </div>
+                                    <div class="bex-pa-summary-content">
+                                        <p class="bex-pa-summary-label small mb-1">
+                                            Employees in active cycles
+                                        </p>
 
-                                <div class="col-12 col-sm-6 col-xl-3">
-                                    <article class="bex-pa-summary-card card h-100 border-0 shadow-sm"
-                                        data-bex-pa-summary="completed">
-                                        <div class="card-body">
-                                            <p class="mb-2 small text-body-secondary">
-                                                Completed appraisals
-                                            </p>
+                                        <p class="display-6 bex-pa-summary-value mb-1 fw-bold">0</p>
 
-                                            <p class="mb-0 display-6 fw-bold">0</p>
-                                        </div>
-                                    </article>
-                                </div>
+                                        <p class="bex-pa-summary-detail mb-0">
+                                            Employees linked to active cycles
+                                        </p>
+                                    </div>
+                                </article>
+
+                                <article class="bex-pa-summary-card bex-pa-summary-card--review"
+                                    data-bex-pa-summary="awaiting-hr">
+                                    <div class="bex-pa-summary-icon" aria-hidden="true">
+                                        <i class="bi bi-inbox"></i>
+                                    </div>
+
+                                    <div class="bex-pa-summary-content">
+                                        <p class="bex-pa-summary-label mb-1">
+                                            Awaiting HR review
+                                        </p>
+
+                                        <p class="display-6 bex-pa-summary-value mb-1 fw-bold">0</p>
+
+                                        <p class="bex-pa-summary-detail mb-0">
+                                            Appraisals requiring HR attention
+                                        </p>
+                                    </div>
+                                </article>
+
+                                <article class="bex-pa-summary-card bex-pa-summary-card--completed"
+                                    data-bex-pa-summary="completed">
+                                    <div class="bex-pa-summary-icon" aria-hidden="true">
+                                        <i class="bi bi-check2-circle"></i>
+                                    </div>
+
+                                    <div class="bex-pa-summary-content">
+                                        <p class="bex-pa-summary-label mb-1">
+                                            Completed appraisals
+                                        </p>
+
+                                        <p class="display-6 bex-pa-summary-value mb-1 fw-bold">0</p>
+
+                                        <p class="bex-pa-summary-detail mb-0">
+                                            Completed appraisal records
+                                        </p>
+                                    </div>
+                                </article>
                             </div>
+
+                            <section class="bex-pa-overview-readiness d-none mb-4"
+                                id="bexPaOverviewReadiness"
+                                aria-labelledby="bexPaOverviewReadinessTitle">
+                                <div class="bex-pa-overview-readiness-heading">
+                                    <div class="bex-pa-overview-readiness-heading-main">
+                                        <span class="bex-pa-overview-readiness-icon" aria-hidden="true">
+                                            <i class="bi bi-check2-circle"></i>
+                                        </span>
+
+                                        <div>
+                                            <p class="bex-pa-overview-section-kicker mb-1">
+                                                Appraisal progress
+                                            </p>
+
+                                            <h2 class="bex-pa-overview-readiness-title mb-0"
+                                                id="bexPaOverviewReadinessTitle">
+                                                Overall appraisal completion
+                                            </h2>
+                                        </div>
+                                    </div>
+
+                                    <strong class="bex-pa-overview-readiness-value"
+                                        id="bexPaOverviewCompletionPercentage">
+                                        0%
+                                    </strong>
+                                </div>
+
+                                <div class="progress bex-pa-overview-progress"
+                                    id="bexPaOverviewCompletionProgress"
+                                    role="progressbar"
+                                    aria-label="Active-cycle appraisal completion"
+                                    aria-valuemin="0"
+                                    aria-valuemax="100"
+                                    aria-valuenow="0">
+                                    <div class="progress-bar"
+                                        id="bexPaOverviewCompletionBar"
+                                        style="width: 0%"></div>
+                                </div>
+
+                                <p class="bex-pa-overview-readiness-message mb-0"
+                                    id="bexPaOverviewCompletionMessage">
+                                    Appraisal completion will appear when active-cycle records are available.
+                                </p>
+                            </section>
+
+                            <section class="bex-pa-overview-operations d-none mb-4"
+                                id="bexPaOverviewOperations"
+                                aria-label="Appraisal operations">
+
+                                <article class="bex-pa-overview-panel"
+                                    aria-labelledby="bexPaOverviewPriorityTitle">
+                                    <header class="bex-pa-overview-panel-header">
+                                        <div class="bex-pa-overview-panel-heading">
+                                            <span class="bex-pa-overview-panel-icon bex-pa-overview-panel-icon--priority"
+                                                aria-hidden="true">
+                                                <i class="bi bi-exclamation-circle"></i>
+                                            </span>
+
+                                            <div>
+                                                <p class="bex-pa-overview-section-kicker mb-1">
+                                                    Work queue
+                                                </p>
+
+                                                <h2 class="bex-pa-overview-panel-title mb-0"
+                                                    id="bexPaOverviewPriorityTitle">
+                                                    Priority attention
+                                                </h2>
+                                            </div>
+                                        </div>
+
+                                        <span class="bex-pa-overview-panel-count"
+                                            id="bexPaOverviewPriorityCount">
+                                            0
+                                        </span>
+                                    </header>
+
+                                    <p class="bex-pa-overview-panel-description">
+                                        Appraisals currently waiting on HR or employee completion.
+                                    </p>
+
+                                    <div class="bex-pa-overview-panel-list"
+                                        id="bexPaOverviewPriorityList"
+                                        role="list"></div>
+
+                                    <p class="bex-pa-overview-panel-empty mb-0"
+                                        id="bexPaOverviewPriorityEmpty">
+                                        No appraisal items currently require priority attention.
+                                    </p>
+                                </article>
+
+                                <article class="bex-pa-overview-panel"
+                                    aria-labelledby="bexPaOverviewActiveCycleTitle">
+                                    <header class="bex-pa-overview-panel-header">
+                                        <div class="bex-pa-overview-panel-heading">
+                                            <span class="bex-pa-overview-panel-icon bex-pa-overview-panel-icon--cycle"
+                                                aria-hidden="true">
+                                                <i class="bi bi-calendar-event"></i>
+                                            </span>
+
+                                            <div>
+                                                <p class="bex-pa-overview-section-kicker mb-1">
+                                                    Cycle status
+                                                </p>
+
+                                                <h2 class="bex-pa-overview-panel-title mb-0"
+                                                    id="bexPaOverviewActiveCycleTitle">
+                                                    Active cycle snapshot
+                                                </h2>
+                                            </div>
+                                        </div>
+
+                                        <span class="bex-pa-overview-panel-count"
+                                            id="bexPaOverviewActiveCycleCount">
+                                            0
+                                        </span>
+                                    </header>
+
+                                    <p class="bex-pa-overview-panel-description">
+                                        Current appraisal periods, milestones and participation.
+                                    </p>
+
+                                    <div class="bex-pa-overview-panel-list"
+                                        id="bexPaOverviewActiveCycleList"
+                                        role="list"></div>
+
+                                    <p class="bex-pa-overview-panel-empty mb-0"
+                                        id="bexPaOverviewActiveCycleEmpty">
+                                        No active appraisal cycle is currently running.
+                                    </p>
+                                </article>
+                            </section>
                         </section>
 
                         <section class="d-none" id="bexPaCyclesSection" aria-labelledby="bexPaCyclesTitle">
-                            <div class="mb-4 d-flex flex-wrap align-items-start justify-content-between gap-3">
-                                <div>
-                                    <p class="mb-2 small fw-semibold text-uppercase text-primary">
-                                        Appraisal setup
-                                    </p>
+                            <div class="bex-pa-workspace-heading bex-pa-cycles-heading mb-4">
+                                <div class="bex-pa-workspace-heading-main">
+                                    <span class="bex-pa-workspace-heading-icon" aria-hidden="true">
+                                        <i class="bi bi-calendar2-range"></i>
+                                    </span>
 
-                                    <h1 class="mb-2 h2 fw-bold" id="bexPaCyclesTitle">
-                                        Appraisal Cycles
-                                    </h1>
+                                    <div class="bex-pa-workspace-heading-copy">
+                                        <p class="bex-pa-workspace-heading-kicker mb-1">
+                                            Cycle operations
+                                        </p>
 
-                                    <p class="mb-0 text-body-secondary">
-                                        Create and manage the periods used for employee appraisals.
-                                    </p>
+                                        <h1 class="bex-pa-workspace-heading-title mb-1" id="bexPaCyclesTitle">
+                                            Appraisal Cycles
+                                        </h1>
+
+                                        <p class="bex-pa-workspace-heading-description mb-0">
+                                            Create, activate and monitor appraisal periods, linked templates and review deadlines.
+                                        </p>
+                                    </div>
                                 </div>
 
-                                <button class="btn btn-primary" id="bexPaCyclesCreateButton" type="button">
+                                <button class="btn btn-primary bex-pa-workspace-heading-action"
+                                    id="bexPaCyclesCreateButton" type="button">
                                     <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>
                                     Create Appraisal Cycle
                                 </button>
                             </div>
+
+
 
                             <div class="bex-pa-cycle-form-card card border-0 shadow-sm d-none mb-4"
                                 id="bexPaCycleFormCard">
@@ -504,14 +675,20 @@
                             </div>
 
                             <div class="bex-pa-cycle-list-card card border-0 shadow-sm">
-                                <div class="card-header bg-white py-3">
-                                    <h2 class="mb-1 h5 fw-bold">
-                                        Appraisal cycles
-                                    </h2>
+                                <div class="card-header bg-white py-3 py-lg-4">
+                                    <div class="bex-pa-cycle-card-heading">
+                                        <span class="bex-pa-cycle-card-heading-icon" aria-hidden="true">
+                                            <i class="bi bi-calendar-check"></i>
+                                        </span>
 
-                                    <p class="mb-0 small text-body-secondary">
-                                        Current appraisal periods and review deadlines.
-                                    </p>
+                                        <div>
+                                            <h2 class="bex-pa-cycle-card-kicker mb-1">Cycle register</h2>
+
+                                            <p class="mb-0 small text-body-secondary">
+                                                Current appraisal periods, review deadlines and lifecycle status.
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="table-responsive">
@@ -584,20 +761,26 @@
                         </section>
 
                         <section class="d-none" id="bexPaGoalsSection" aria-labelledby="bexPaGoalsTitle">
-                            <div class="mb-4 d-flex flex-wrap align-items-start justify-content-between gap-3">
-                                <div>
-                                    <p class="mb-2 small fw-semibold text-uppercase text-primary">
-                                        Goal planning
-                                    </p>
+                            <div class="bex-pa-workspace-heading bex-pa-goals-heading mb-4">
+                                <div class="bex-pa-workspace-heading-main">
+                                    <span class="bex-pa-workspace-heading-icon" aria-hidden="true">
+                                        <i class="bi bi-bullseye"></i>
+                                    </span>
 
-                                    <h1 class="mb-2 h2 fw-bold" id="bexPaGoalsTitle">
-                                        Goals &amp; Deliverables
-                                    </h1>
+                                    <div class="bex-pa-workspace-heading-copy">
+                                        <p class="bex-pa-workspace-heading-kicker mb-1">
+                                            Goal planning
+                                        </p>
 
-                                    <p class="mb-0 text-body-secondary">
-                                        Define organisation goals, deliverables and department goals for an appraisal
-                                        cycle.
-                                    </p>
+                                        <h1 class="bex-pa-workspace-heading-title mb-1" id="bexPaGoalsTitle">
+                                            Goals &amp; Deliverables
+                                        </h1>
+
+                                        <p class="bex-pa-workspace-heading-description mb-0">
+                                            Plan organisation priorities, translate them into department and employee goals,
+                                            and track progress through the appraisal cycle.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
 
@@ -605,23 +788,35 @@
                                 <div class="col-12 col-xl-4">
                                     <section class="bex-pa-goal-panel card border-0 shadow-sm h-100"
                                         aria-labelledby="bexPaOrganisationGoalsTitle">
-                                        <div
-                                            class="card-header bg-white d-flex align-items-center justify-content-between gap-3 py-3">
-                                            <div>
-                                                <h2 class="mb-1 h5 fw-bold" id="bexPaOrganisationGoalsTitle">
-                                                    Organisation Goals
-                                                </h2>
+                                        <div class="card-header bg-white py-3 py-lg-4">
+                                            <div class="bex-pa-goal-panel-header">
+                                                <div class="bex-pa-goal-panel-identity">
+                                                    <span class="bex-pa-goal-panel-icon bex-pa-goal-panel-icon--organisation"
+                                                        aria-hidden="true">
+                                                        <i class="bi bi-building"></i>
+                                                    </span>
 
-                                                <p class="mb-0 small text-body-secondary">
-                                                    Set organisation-wide priorities for a selected appraisal cycle.
-                                                </p>
+                                                    <div class="bex-pa-goal-panel-copy">
+                                                        <p class="bex-pa-goal-panel-kicker mb-1">
+                                                            Organisation priorities
+                                                        </p>
+
+                                                        <h2 class="mb-1 h5 fw-bold" id="bexPaOrganisationGoalsTitle">
+                                                            Organisation Goals
+                                                        </h2>
+
+                                                        <p class="mb-0 small text-body-secondary">
+                                                            Set organisation-wide priorities for a selected appraisal cycle.
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <button class="btn btn-sm btn-outline-primary bex-pa-goal-panel-action"
+                                                    id="bexPaCreateOrganisationGoalButton" type="button">
+                                                    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                                    Add Goal
+                                                </button>
                                             </div>
-
-                                            <button class="btn btn-sm btn-primary"
-                                                id="bexPaCreateOrganisationGoalButton" type="button">
-                                                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-                                                Add Goal
-                                            </button>
                                         </div>
 
                                         <div class="card-body" id="bexPaOrganisationGoalsList">
@@ -635,23 +830,35 @@
                                 <div class="col-12 col-xl-4">
                                     <section class="bex-pa-goal-panel card border-0 shadow-sm h-100"
                                         aria-labelledby="bexPaDeliverablesTitle">
-                                        <div
-                                            class="card-header bg-white d-flex align-items-center justify-content-between gap-3 py-3">
-                                            <div>
-                                                <h2 class="mb-1 h5 fw-bold" id="bexPaDeliverablesTitle">
-                                                    Organisational Deliverables
-                                                </h2>
+                                        <div class="card-header bg-white py-3 py-lg-4">
+                                            <div class="bex-pa-goal-panel-header">
+                                                <div class="bex-pa-goal-panel-identity">
+                                                    <span class="bex-pa-goal-panel-icon bex-pa-goal-panel-icon--deliverables"
+                                                        aria-hidden="true">
+                                                        <i class="bi bi-box-seam"></i>
+                                                    </span>
 
-                                                <p class="mb-0 small text-body-secondary">
-                                                    Define measurable outputs attached to organisation goals.
-                                                </p>
+                                                    <div class="bex-pa-goal-panel-copy">
+                                                        <p class="bex-pa-goal-panel-kicker mb-1">
+                                                            Measurable outputs
+                                                        </p>
+
+                                                        <h2 class="mb-1 h5 fw-bold" id="bexPaDeliverablesTitle">
+                                                            Organisational Deliverables
+                                                        </h2>
+
+                                                        <p class="mb-0 small text-body-secondary">
+                                                            Define measurable outputs attached to organisation goals.
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <button class="btn btn-sm btn-outline-primary bex-pa-goal-panel-action"
+                                                    id="bexPaCreateDeliverableButton" type="button">
+                                                    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                                    Add Deliverable
+                                                </button>
                                             </div>
-
-                                            <button class="btn btn-sm btn-primary" id="bexPaCreateDeliverableButton"
-                                                type="button">
-                                                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-                                                Add Deliverable
-                                            </button>
                                         </div>
 
                                         <div class="card-body" id="bexPaDeliverablesList">
@@ -665,23 +872,35 @@
                                 <div class="col-12 col-xl-4">
                                     <section class="bex-pa-goal-panel card border-0 shadow-sm h-100"
                                         aria-labelledby="bexPaDepartmentGoalsTitle">
-                                        <div
-                                            class="card-header bg-white d-flex align-items-center justify-content-between gap-3 py-3">
-                                            <div>
-                                                <h2 class="mb-1 h5 fw-bold" id="bexPaDepartmentGoalsTitle">
-                                                    Department Goals
-                                                </h2>
+                                        <div class="card-header bg-white py-3 py-lg-4">
+                                            <div class="bex-pa-goal-panel-header">
+                                                <div class="bex-pa-goal-panel-identity">
+                                                    <span class="bex-pa-goal-panel-icon bex-pa-goal-panel-icon--department"
+                                                        aria-hidden="true">
+                                                        <i class="bi bi-diagram-3"></i>
+                                                    </span>
 
-                                                <p class="mb-0 small text-body-secondary">
-                                                    Link department priorities to organisation goals.
-                                                </p>
+                                                    <div class="bex-pa-goal-panel-copy">
+                                                        <p class="bex-pa-goal-panel-kicker mb-1">
+                                                            Department alignment
+                                                        </p>
+
+                                                        <h2 class="mb-1 h5 fw-bold" id="bexPaDepartmentGoalsTitle">
+                                                            Department Goals
+                                                        </h2>
+
+                                                        <p class="mb-0 small text-body-secondary">
+                                                            Link department priorities to organisation goals.
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <button class="btn btn-sm btn-outline-primary bex-pa-goal-panel-action"
+                                                    id="bexPaCreateDepartmentGoalButton" type="button">
+                                                    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                                    Add Goal
+                                                </button>
                                             </div>
-
-                                            <button class="btn btn-sm btn-primary" id="bexPaCreateDepartmentGoalButton"
-                                                type="button">
-                                                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-                                                Add Goal
-                                            </button>
                                         </div>
 
                                         <div class="card-body" id="bexPaDepartmentGoalsList">
@@ -697,23 +916,35 @@
                                 <div class="col-12">
                                     <section class="bex-pa-goal-panel card border-0 shadow-sm"
                                         aria-labelledby="bexPaIndividualGoalsTitle">
-                                        <div
-                                            class="card-header bg-white d-flex align-items-center justify-content-between gap-3 py-3">
-                                            <div>
-                                                <h2 class="mb-1 h5 fw-bold" id="bexPaIndividualGoalsTitle">
-                                                    Individual Employee Goals
-                                                </h2>
+                                        <div class="card-header bg-white py-3 py-lg-4">
+                                            <div class="bex-pa-goal-panel-header">
+                                                <div class="bex-pa-goal-panel-identity">
+                                                    <span class="bex-pa-goal-panel-icon bex-pa-goal-panel-icon--individual"
+                                                        aria-hidden="true">
+                                                        <i class="bi bi-person-check"></i>
+                                                    </span>
 
-                                                <p class="mb-0 small text-body-secondary">
-                                                    Assign employee goals linked to department priorities.
-                                                </p>
+                                                    <div class="bex-pa-goal-panel-copy">
+                                                        <p class="bex-pa-goal-panel-kicker mb-1">
+                                                            Employee alignment
+                                                        </p>
+
+                                                        <h2 class="mb-1 h5 fw-bold" id="bexPaIndividualGoalsTitle">
+                                                            Individual Employee Goals
+                                                        </h2>
+
+                                                        <p class="mb-0 small text-body-secondary">
+                                                            Assign employee goals linked to department priorities.
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <button class="btn btn-sm btn-outline-primary bex-pa-goal-panel-action"
+                                                    id="bexPaCreateIndividualGoalButton" type="button">
+                                                    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                                    Add Goal
+                                                </button>
                                             </div>
-
-                                            <button class="btn btn-sm btn-primary" id="bexPaCreateIndividualGoalButton"
-                                                type="button">
-                                                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-                                                Add Goal
-                                            </button>
                                         </div>
 
                                         <div class="card-body" id="bexPaIndividualGoalsList">
@@ -729,14 +960,29 @@
                                 <div class="col-12">
                                     <section class="bex-pa-goal-panel card border-0 shadow-sm"
                                         aria-labelledby="bexPaProgressUpdatesTitle">
-                                        <div class="card-header bg-white py-3">
-                                            <h2 class="mb-1 h5 fw-bold" id="bexPaProgressUpdatesTitle">
-                                                Progress Updates
-                                            </h2>
+                                        <div class="card-header bg-white py-3 py-lg-4">
+                                            <div class="bex-pa-goal-panel-header bex-pa-goal-panel-header--static">
+                                                <div class="bex-pa-goal-panel-identity">
+                                                    <span class="bex-pa-goal-panel-icon bex-pa-goal-panel-icon--progress"
+                                                        aria-hidden="true">
+                                                        <i class="bi bi-activity"></i>
+                                                    </span>
 
-                                            <p class="mb-0 small text-body-secondary">
-                                                Review employee progress updates submitted against individual goals.
-                                            </p>
+                                                    <div class="bex-pa-goal-panel-copy">
+                                                        <p class="bex-pa-goal-panel-kicker mb-1">
+                                                            Progress visibility
+                                                        </p>
+
+                                                        <h2 class="mb-1 h5 fw-bold" id="bexPaProgressUpdatesTitle">
+                                                            Progress Updates
+                                                        </h2>
+
+                                                        <p class="mb-0 small text-body-secondary">
+                                                            Review employee progress updates submitted against individual goals.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
 
                                         <div class="card-body" id="bexPaProgressUpdatesList">
@@ -1430,36 +1676,52 @@
                             </dialog>
                         </section>
                         <section class="d-none" id="bexPaTemplatesSection" aria-labelledby="bexPaTemplatesTitle">
-                            <div class="mb-4 d-flex flex-wrap align-items-start justify-content-between gap-3">
-                                <div>
-                                    <p class="mb-2 small fw-semibold text-uppercase text-primary">
-                                        Appraisal configuration
-                                    </p>
+                            <div class="bex-pa-workspace-heading bex-pa-templates-heading mb-4">
+                                <div class="bex-pa-workspace-heading-main">
+                                    <span class="bex-pa-workspace-heading-icon" aria-hidden="true">
+                                        <i class="bi bi-ui-checks-grid"></i>
+                                    </span>
 
-                                    <h1 class="mb-2 h2 fw-bold" id="bexPaTemplatesTitle">
-                                        Appraisal Templates
-                                    </h1>
+                                    <div class="bex-pa-workspace-heading-copy">
+                                        <p class="bex-pa-workspace-heading-kicker mb-1">
+                                            Appraisal configuration
+                                        </p>
 
-                                    <p class="mb-0 text-body-secondary">
-                                        Create the appraisal format your organisation will use to assess employees.
-                                    </p>
+                                        <h1 class="bex-pa-workspace-heading-title mb-1" id="bexPaTemplatesTitle">
+                                            Appraisal Templates
+                                        </h1>
+
+                                        <p class="bex-pa-workspace-heading-description mb-0">
+                                            Build reusable assessment formats, rating scales and assessment areas for appraisal cycles.
+                                        </p>
+                                    </div>
                                 </div>
 
-                                <button class="btn btn-primary" id="bexPaCreateTemplateButton" type="button">
-                                    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                <button class="btn btn-primary bex-pa-workspace-heading-action"
+                                    id="bexPaCreateTemplateButton" type="button">
+                                    <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>
                                     Add Template
                                 </button>
                             </div>
 
-                            <section class="card border-0 shadow-sm" aria-labelledby="bexPaTemplateListTitle">
-                                <div class="card-header bg-white py-3">
-                                    <h2 class="mb-1 h5 fw-bold" id="bexPaTemplateListTitle">
-                                        Appraisal Templates
-                                    </h2>
+                            <section class="card border-0 shadow-sm bex-pa-template-library-card"
+                                aria-labelledby="bexPaTemplateListTitle">
+                                <div class="card-header bg-white py-3 py-lg-4">
+                                    <div class="bex-pa-template-library-heading">
+                                        <span class="bex-pa-template-library-icon" aria-hidden="true">
+                                            <i class="bi bi-collection"></i>
+                                        </span>
 
-                                    <p class="mb-0 small text-body-secondary">
-                                        Each template defines how employees will be assessed during an appraisal cycle.
-                                    </p>
+                                        <div>
+                                            <h2 class="bex-pa-template-library-kicker mb-1" id="bexPaTemplateListTitle">
+                                                Template library
+                                            </h2>
+
+                                            <p class="mb-0 small text-body-secondary">
+                                                Reusable assessment formats available for future appraisal cycles.
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="card-body" id="bexPaTemplatesList">
@@ -1687,216 +1949,331 @@
                         </section>
 
                         <section class="d-none" id="bexPaReportsSection" aria-labelledby="bexPaReportsTitle">
+                            <div class="bex-pa-workspace-heading bex-pa-reports-heading mb-4">
+                                <div class="bex-pa-workspace-heading-main">
+                                    <span class="bex-pa-workspace-heading-icon" aria-hidden="true">
+                                        <i class="bi bi-bar-chart-line"></i>
+                                    </span>
 
-                            <div class="mb-4">
-                                <p class="mb-2 small fw-semibold text-uppercase text-primary">
-                                    Operational reporting
-                                </p>
+                                    <div class="bex-pa-workspace-heading-copy">
+                                        <p class="bex-pa-workspace-heading-kicker mb-1">
+                                            Reporting and insights
+                                        </p>
 
-                                <h1 class="mb-2 h2 fw-bold" id="bexPaReportsTitle">
-                                    Appraisal Reports
-                                </h1>
+                                        <h1 class="bex-pa-workspace-heading-title mb-1" id="bexPaReportsTitle">
+                                            Appraisal Reports
+                                        </h1>
 
-                                <p class="mb-0 text-body-secondary">
-                                    Track appraisal completion and outstanding review work across appraisal cycles.
-                                </p>
-                            </div>
-
-                            <section class="card border-0 shadow-sm" aria-labelledby="bexPaOperationalReportsTitle">
-                                <div class="card-header bg-white py-3">
-                                    <h2 class="mb-1 h5 fw-bold" id="bexPaOperationalReportsTitle">
-                                        Operational Report
-                                    </h2>
-
-                                    <p class="mb-0 small text-body-secondary">
-                                        Cycle-level appraisal progress and workflow status.
-                                    </p>
+                                        <p class="bex-pa-workspace-heading-description mb-0">
+                                            Review cycle completion, appraisal workflow distribution and the next action for every employee.
+                                        </p>
+                                    </div>
                                 </div>
 
-                                <div class="card-body">
-                                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
-                                        <div>
-                                            <label class="form-label small fw-semibold mb-1"
-                                                for="bexPaReportCycleSelect">
-                                                Appraisal cycle
-                                            </label>
+                                <button class="btn btn-outline-primary bex-pa-workspace-heading-action bex-pa-report-print-button"
+                                    id="bexPaPrintReportButton" type="button" disabled>
+                                    <i class="bi bi-printer me-2" aria-hidden="true"></i>
+                                    Print / Save PDF
+                                </button>
+                            </div>
 
-                                            <select class="form-select" id="bexPaReportCycleSelect">
-                                                <option value="">Select an appraisal cycle</option>
-                                            </select>
-                                        </div>
+                            <header class="bex-pa-report-print-header" aria-hidden="true">
+                                <div class="bex-pa-report-print-brand">BexHR Performance Appraisal</div>
+                                <h1>Performance Appraisal Report</h1>
 
-                                        <p class="mb-0 small text-body-secondary" id="bexPaReportCycleSummary">
-                                            Select a cycle to view its operational status.
-                                        </p>
+                                <div class="bex-pa-report-print-meta">
+                                    <div>
+                                        <span>Appraisal cycle</span>
+                                        <strong id="bexPaReportPrintCycleName">Not selected</strong>
                                     </div>
 
-                                    <div class="d-none" id="bexPaOperationalReportContent">
-                                        <div class="row g-3" aria-label="Appraisal operational status counts">
-                                            <div class="col-12 col-sm-6 col-xl">
-                                                <div class="border rounded-3 p-3 h-100">
-                                                    <p class="small text-body-secondary mb-1">
-                                                        Assigned
-                                                    </p>
-                                                    <p class="h3 fw-bold mb-0" id="bexPaReportAssignedCount">
-                                                        0
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <div class="col-12 col-sm-6 col-xl">
-                                                <div class="border rounded-3 p-3 h-100">
-                                                    <p class="small text-body-secondary mb-1">
-                                                        In Progress
-                                                    </p>
-                                                    <p class="h3 fw-bold mb-0" id="bexPaReportInProgressCount">
-                                                        0
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <div class="col-12 col-sm-6 col-xl">
-                                                <div class="border rounded-3 p-3 h-100">
-                                                    <p class="small text-body-secondary mb-1">
-                                                        Submitted
-                                                    </p>
-                                                    <p class="h3 fw-bold mb-0" id="bexPaReportSubmittedCount">
-                                                        0
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <div class="col-12 col-sm-6 col-xl">
-                                                <div class="border rounded-3 p-3 h-100">
-                                                    <p class="small text-body-secondary mb-1">
-                                                        Finalised
-                                                    </p>
-                                                    <p class="h3 fw-bold mb-0" id="bexPaReportFinalisedCount">
-                                                        0
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <div class="col-12 col-sm-6 col-xl">
-                                                <div class="border rounded-3 p-3 h-100">
-                                                    <p class="small text-body-secondary mb-1">
-                                                        Acknowledged
-                                                    </p>
-                                                    <p class="h3 fw-bold mb-0" id="bexPaReportAcknowledgedCount">
-                                                        0
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="border-top mt-4 pt-3">
-                                            <p class="mb-0 small text-body-secondary">
-                                                Total assigned appraisals:
-                                                <strong class="text-body" id="bexPaReportTotalCount">0</strong>
-                                            </p>
-                                        </div>
-
-                                        <div class="border-top mt-4 pt-4">
-                                            <h3 class="h5 fw-semibold mb-1">Operational Summary</h3>
-                                            <p class="text-body-secondary small mb-3">
-                                                Completion and outstanding review work for the selected cycle.
-                                            </p>
-
-                                            <div class="row g-3">
-                                                <div class="col-12 col-lg-5">
-                                                    <div class="border rounded-3 p-3 h-100">
-                                                        <p class="small fw-semibold text-body-secondary mb-2">
-                                                            Completion
-                                                        </p>
-
-                                                        <p class="h4 fw-bold mb-1" id="bexPaReportCompletionSummary">
-                                                            0 of 0 acknowledged
-                                                        </p>
-
-                                                        <p class="small text-body-secondary mb-0"
-                                                            id="bexPaReportCompletionPercentage">
-                                                            0% complete
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                                <div class="col-12 col-lg-7">
-                                                    <div class="border rounded-3 p-3 h-100">
-                                                        <p class="small fw-semibold text-body-secondary mb-2">
-                                                            Outstanding Work
-                                                        </p>
-
-                                                        <ul class="mb-0 ps-3 small" id="bexPaReportOutstandingSummary">
-                                                        </ul>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="border-top mt-4 pt-4">
-                                            <h3 class="h5 fw-semibold mb-1">Appraisal Status Detail</h3>
-                                            <p class="text-body-secondary small mb-3">
-                                                Current appraisal stage and the next outstanding action for each
-                                                employee.
-                                            </p>
-
-                                            <div class="table-responsive">
-                                                <table class="table align-middle mb-0">
-                                                    <thead>
-                                                        <tr>
-                                                            <th scope="col">Employee</th>
-                                                            <th scope="col">Current stage</th>
-                                                            <th scope="col">Outstanding action</th>
-                                                        </tr>
-                                                    </thead>
-
-                                                    <tbody id="bexPaReportStatusDetail"></tbody>
-                                                </table>
-                                            </div>
-                                        </div>
+                                    <div>
+                                        <span>Reporting period</span>
+                                        <strong id="bexPaReportPrintCyclePeriod">Not available</strong>
                                     </div>
 
-                                    <div class="text-center py-4 d-none" id="bexPaOperationalReportEmpty">
-                                        <p class="mb-1 fw-semibold">
-                                            No assigned appraisals
+                                    <div>
+                                        <span>Generated</span>
+                                        <strong id="bexPaReportPrintGeneratedAt">Not generated</strong>
+                                    </div>
+                                </div>
+                            </header>
+
+                            <section class="bex-pa-report-cycle-card mb-4"
+                                aria-labelledby="bexPaOperationalReportsTitle">
+                                <div class="bex-pa-report-cycle-heading">
+                                    <span class="bex-pa-report-cycle-icon" aria-hidden="true">
+                                        <i class="bi bi-calendar2-range"></i>
+                                    </span>
+
+                                    <div>
+                                        <p class="bex-pa-report-section-kicker mb-1">
+                                            Reporting scope
                                         </p>
-                                        <p class="mb-0 small text-body-secondary">
-                                            This cycle does not currently have any employee appraisals to report.
+
+                                        <h2 class="bex-pa-report-section-title mb-1" id="bexPaOperationalReportsTitle">
+                                            Cycle report
+                                        </h2>
+
+                                        <p class="bex-pa-report-section-description mb-0">
+                                            Select an appraisal cycle to inspect its current workflow position.
                                         </p>
                                     </div>
+                                </div>
+
+                                <div class="bex-pa-report-cycle-controls">
+                                    <div class="bex-pa-report-cycle-select-wrap">
+                                        <label class="bex-pa-report-field-label" for="bexPaReportCycleSelect">
+                                            Appraisal cycle
+                                        </label>
+
+                                        <select class="form-select" id="bexPaReportCycleSelect">
+                                            <option value="">Select an appraisal cycle</option>
+                                        </select>
+                                    </div>
+
+                                    <p class="bex-pa-report-cycle-summary mb-0" id="bexPaReportCycleSummary" aria-live="polite">
+                                        Select a cycle to view its operational status.
+                                    </p>
                                 </div>
                             </section>
-                        </section>
 
-                        <section class="d-none" id="bexPaEmployeeAppraisalsSection"
-                            aria-labelledby="bexPaEmployeeAppraisalsTitle">
+                            <div class="d-none" id="bexPaOperationalReportContent">
+                                <section class="bex-pa-report-lifecycle-panel mb-4"
+                                    aria-labelledby="bexPaReportLifecycleTitle">
+                                    <div class="bex-pa-report-panel-heading">
+                                        <div class="bex-pa-report-panel-heading-main">
+                                            <span class="bex-pa-report-panel-icon bex-pa-report-panel-icon--lifecycle"
+                                                aria-hidden="true">
+                                                <i class="bi bi-signpost-split"></i>
+                                            </span>
 
-                            <div class="mb-4 d-flex flex-wrap align-items-start justify-content-between gap-3">
+                                            <div>
+                                                <p class="bex-pa-report-section-kicker mb-1">
+                                                    Lifecycle distribution
+                                                </p>
+
+                                                <h2 class="bex-pa-report-section-title mb-0" id="bexPaReportLifecycleTitle">
+                                                    Appraisal workflow
+                                                </h2>
+                                            </div>
+                                        </div>
+
+                                        <div class="bex-pa-report-total">
+                                            <span>Total appraisals</span>
+                                            <strong id="bexPaReportTotalCount">0</strong>
+                                        </div>
+                                    </div>
+
+                                    <div class="bex-pa-report-status-grid" aria-label="Appraisal operational status counts">
+                                        <article class="bex-pa-report-status-card" data-report-status="assigned">
+                                            <span class="bex-pa-report-status-icon" aria-hidden="true">
+                                                <i class="bi bi-circle"></i>
+                                            </span>
+                                            <div>
+                                                <p class="bex-pa-report-status-label mb-1">Assigned</p>
+                                                <strong class="bex-pa-report-status-value" id="bexPaReportAssignedCount">0</strong>
+                                                <p class="bex-pa-report-status-detail mb-0">Not started</p>
+                                            </div>
+                                        </article>
+
+                                        <article class="bex-pa-report-status-card" data-report-status="in-progress">
+                                            <span class="bex-pa-report-status-icon" aria-hidden="true">
+                                                <i class="bi bi-arrow-repeat"></i>
+                                            </span>
+                                            <div>
+                                                <p class="bex-pa-report-status-label mb-1">In Progress</p>
+                                                <strong class="bex-pa-report-status-value" id="bexPaReportInProgressCount">0</strong>
+                                                <p class="bex-pa-report-status-detail mb-0">Review underway</p>
+                                            </div>
+                                        </article>
+
+                                        <article class="bex-pa-report-status-card" data-report-status="submitted">
+                                            <span class="bex-pa-report-status-icon" aria-hidden="true">
+                                                <i class="bi bi-send-check"></i>
+                                            </span>
+                                            <div>
+                                                <p class="bex-pa-report-status-label mb-1">Submitted</p>
+                                                <strong class="bex-pa-report-status-value" id="bexPaReportSubmittedCount">0</strong>
+                                                <p class="bex-pa-report-status-detail mb-0">Awaiting HR</p>
+                                            </div>
+                                        </article>
+
+                                        <article class="bex-pa-report-status-card" data-report-status="finalised">
+                                            <span class="bex-pa-report-status-icon" aria-hidden="true">
+                                                <i class="bi bi-shield-check"></i>
+                                            </span>
+                                            <div>
+                                                <p class="bex-pa-report-status-label mb-1">Finalised</p>
+                                                <strong class="bex-pa-report-status-value" id="bexPaReportFinalisedCount">0</strong>
+                                                <p class="bex-pa-report-status-detail mb-0">Awaiting employee</p>
+                                            </div>
+                                        </article>
+
+                                        <article class="bex-pa-report-status-card" data-report-status="acknowledged">
+                                            <span class="bex-pa-report-status-icon" aria-hidden="true">
+                                                <i class="bi bi-check2-circle"></i>
+                                            </span>
+                                            <div>
+                                                <p class="bex-pa-report-status-label mb-1">Acknowledged</p>
+                                                <strong class="bex-pa-report-status-value" id="bexPaReportAcknowledgedCount">0</strong>
+                                                <p class="bex-pa-report-status-detail mb-0">Complete</p>
+                                            </div>
+                                        </article>
+                                    </div>
+                                </section>
+
+                                <div class="bex-pa-report-insight-grid mb-4">
+                                    <article class="bex-pa-report-completion-card">
+                                        <div class="bex-pa-report-insight-heading">
+                                            <span class="bex-pa-report-panel-icon bex-pa-report-panel-icon--completion"
+                                                aria-hidden="true">
+                                                <i class="bi bi-graph-up-arrow"></i>
+                                            </span>
+
+                                            <div>
+                                                <p class="bex-pa-report-section-kicker mb-1">Completion</p>
+                                                <h2 class="bex-pa-report-section-title mb-0">Cycle completion</h2>
+                                            </div>
+                                        </div>
+
+                                        <div class="bex-pa-report-completion-row">
+                                            <div>
+                                                <p class="bex-pa-report-completion-summary mb-1"
+                                                    id="bexPaReportCompletionSummary">
+                                                    0 of 0 acknowledged
+                                                </p>
+                                                <p class="bex-pa-report-completion-copy mb-0">
+                                                    Employee acknowledgement is the completed appraisal state.
+                                                </p>
+                                            </div>
+
+                                            <strong class="bex-pa-report-completion-percentage"
+                                                id="bexPaReportCompletionPercentage">
+                                                0% complete
+                                            </strong>
+                                        </div>
+
+                                        <div class="progress bex-pa-report-progress" id="bexPaReportCompletionProgress"
+                                            role="progressbar" aria-label="Selected-cycle appraisal completion"
+                                            aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                            <div class="progress-bar" id="bexPaReportCompletionBar" style="width: 0%"></div>
+                                        </div>
+                                    </article>
+
+                                    <article class="bex-pa-report-outstanding-card">
+                                        <div class="bex-pa-report-insight-heading">
+                                            <span class="bex-pa-report-panel-icon bex-pa-report-panel-icon--outstanding"
+                                                aria-hidden="true">
+                                                <i class="bi bi-list-check"></i>
+                                            </span>
+
+                                            <div>
+                                                <p class="bex-pa-report-section-kicker mb-1">Outstanding workflow</p>
+                                                <h2 class="bex-pa-report-section-title mb-0">Next actions</h2>
+                                            </div>
+                                        </div>
+
+                                        <ul class="bex-pa-report-outstanding-list mb-0" id="bexPaReportOutstandingSummary"></ul>
+                                    </article>
+                                </div>
+
+                                <section class="bex-pa-report-detail-card" aria-labelledby="bexPaReportDetailTitle">
+                                    <div class="bex-pa-report-detail-heading">
+                                        <div class="bex-pa-report-panel-heading-main">
+                                            <span class="bex-pa-report-panel-icon bex-pa-report-panel-icon--detail"
+                                                aria-hidden="true">
+                                                <i class="bi bi-people"></i>
+                                            </span>
+
+                                            <div>
+                                                <p class="bex-pa-report-section-kicker mb-1">Employee visibility</p>
+                                                <h2 class="bex-pa-report-section-title mb-1" id="bexPaReportDetailTitle">
+                                                    Appraisal status detail
+                                                </h2>
+                                                <p class="bex-pa-report-section-description mb-0">
+                                                    Current stage and next outstanding action for each employee in the selected cycle.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="table-responsive bex-pa-report-table-wrap">
+                                        <table class="table align-middle mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col">Employee</th>
+                                                    <th scope="col">Current stage</th>
+                                                    <th scope="col">Outstanding action</th>
+                                                </tr>
+                                            </thead>
+
+                                            <tbody id="bexPaReportStatusDetail"></tbody>
+                                        </table>
+                                    </div>
+                                </section>
+                            </div>
+
+                            <div class="bex-pa-report-empty-state d-none" id="bexPaOperationalReportEmpty">
+                                <span class="bex-pa-report-empty-icon" aria-hidden="true">
+                                    <i class="bi bi-bar-chart"></i>
+                                </span>
                                 <div>
-                                    <p class="mb-2 small fw-semibold text-uppercase text-primary">
-                                        Performance reviews
-                                    </p>
-
-                                    <h1 class="mb-2 h2 fw-bold" id="bexPaEmployeeAppraisalsTitle">
-                                        Employee Appraisals
-                                    </h1>
-
-                                    <p class="mb-0 text-body-secondary">
-                                        Complete and review employee performance appraisals.
+                                    <p class="bex-pa-report-empty-title mb-1">No assigned appraisals</p>
+                                    <p class="bex-pa-report-empty-copy mb-0">
+                                        This cycle does not currently have any employee appraisals to report.
                                     </p>
                                 </div>
                             </div>
 
-                            <section class="card border-0 shadow-sm" aria-labelledby="bexPaEmployeeAppraisalsListTitle">
+                            <footer class="bex-pa-report-print-footer" aria-hidden="true">
+                                Generated from BexHR Performance Appraisal operational report data.
+                            </footer>
+                        </section>                        <section class="d-none" id="bexPaEmployeeAppraisalsSection"
+                            aria-labelledby="bexPaEmployeeAppraisalsTitle">
 
-                                <div class="card-header bg-white py-3">
-                                    <h2 class="mb-1 h5 fw-bold" id="bexPaEmployeeAppraisalsListTitle">
-                                        Appraisals
-                                    </h2>
+                            <div class="bex-pa-workspace-heading bex-pa-employee-appraisals-heading mb-4">
+                                <div class="bex-pa-workspace-heading-main">
+                                    <span class="bex-pa-workspace-heading-icon" aria-hidden="true">
+                                        <i class="bi bi-clipboard2-check"></i>
+                                    </span>
 
-                                    <p class="mb-0 small text-body-secondary">
-                                        Employee performance reviews for appraisal cycles.
-                                    </p>
+                                    <div class="bex-pa-workspace-heading-copy">
+                                        <p class="bex-pa-workspace-heading-kicker mb-1">
+                                            Employee reviews
+                                        </p>
+
+                                        <h1 class="bex-pa-workspace-heading-title mb-1" id="bexPaEmployeeAppraisalsTitle">
+                                            Employee Appraisals
+                                        </h1>
+
+                                        <p class="bex-pa-workspace-heading-description mb-0">
+                                            Monitor appraisal progress and complete HR review work.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <section class="card border-0 shadow-sm bex-pa-appraisal-register-card"
+                                aria-labelledby="bexPaEmployeeAppraisalsListTitle">
+
+                                <div class="card-header bg-white py-3 py-lg-4">
+                                    <div class="bex-pa-appraisal-register-heading">
+                                        <span class="bex-pa-appraisal-register-icon" aria-hidden="true">
+                                            <i class="bi bi-person-vcard"></i>
+                                        </span>
+
+                                        <div>
+                                            <h2 class="bex-pa-appraisal-register-kicker mb-1"
+                                                id="bexPaEmployeeAppraisalsListTitle">
+                                                Appraisal register
+                                            </h2>
+
+                                            <p class="mb-0 small text-body-secondary">
+                                                Employee appraisal cycles, templates, lifecycle status and available review actions.
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="card-body" id="bexPaEmployeeAppraisalsList">

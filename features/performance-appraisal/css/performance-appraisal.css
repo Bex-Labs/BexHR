@@ -232,30 +232,590 @@ body.bex-pa-page {
 }
 
 /* =========================================================
-   Summary cards
+   PA ADMIN OVERVIEW - STAGE 1A
+   Operational hero derived from the established BexHR
+   dashboard language. Performance Appraisal workspace only.
    ========================================================= */
 
-.bex-pa-summary-card {
-  min-height: 132px;
-  overflow: hidden;
-  border-radius: var(--bex-pa-radius);
-  background: var(--bex-pa-surface);
-  box-shadow: var(--bex-pa-shadow) !important;
-}
-
-.bex-pa-summary-card .card-body {
+.bex-pa-page .bex-pa-overview-hero {
+  position: relative;
   display: flex;
+  min-height: 180px;
+  align-items: flex-end;
+  overflow: hidden;
+  padding: clamp(1.5rem, 3vw, 2.2rem);
+  border-radius: 22px;
+  color: #ffffff;
+  background:
+    radial-gradient(
+      circle at 88% 18%,
+      rgba(45, 212, 191, 0.28),
+      transparent 25%
+    ),
+    radial-gradient(
+      circle at 72% 110%,
+      rgba(255, 255, 255, 0.09),
+      transparent 32%
+    ),
+    linear-gradient(
+      135deg,
+      #071426 0%,
+      #0b2542 62%,
+      #0f5963 100%
+    );
+  box-shadow: 0 20px 44px rgba(7, 20, 38, 0.16);
+}
+
+.bex-pa-page .bex-pa-overview-hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+}
+
+.bex-pa-page .bex-pa-overview-hero-kicker {
+  color: #99f6e4;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+}
+
+.bex-pa-page .bex-pa-overview-hero-title {
+  color: #ffffff !important;
+  font-size: clamp(1.75rem, 3.5vw, 2.55rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1.1;
+}
+
+.bex-pa-page .bex-pa-overview-hero-description {
+  max-width: 650px;
+  color: rgba(255, 255, 255, 0.76);
+  line-height: 1.6;
+}
+
+/* Existing Alpatech presentation hook only.
+   No tenant detection or tenant data behaviour is added here. */
+body.bex-pa-page.alpatech-workspace .bex-pa-overview-hero {
+  background:
+    radial-gradient(
+      circle at 88% 18%,
+      rgba(54, 185, 207, 0.34),
+      transparent 25%
+    ),
+    radial-gradient(
+      circle at 72% 110%,
+      rgba(255, 255, 255, 0.1),
+      transparent 32%
+    ),
+    linear-gradient(
+      135deg,
+      #073b63 0%,
+      #0b5f95 64%,
+      #168fae 100%
+    );
+  box-shadow: 0 20px 44px rgba(7, 59, 99, 0.18);
+}
+
+body.bex-pa-page.alpatech-workspace .bex-pa-overview-hero-kicker {
+  color: #c8f6ff;
+}
+
+@media (max-width: 767.98px) {
+  .bex-pa-page .bex-pa-overview-hero {
+    min-height: 0;
+    padding: 1.35rem;
+    border-radius: 18px;
+  }
+
+  .bex-pa-page .bex-pa-overview-hero-title {
+    font-size: 1.65rem;
+  }
+}
+/* =========================================================
+   PA ADMIN OVERVIEW - STAGE 1A.4
+   Operational KPI cards.
+   Performance Appraisal workspace only.
+   ========================================================= */
+
+.bex-pa-overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.bex-pa-summary-card {
+  display: flex;
+  min-width: 0;
   min-height: 132px;
-  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.9rem;
+  padding: 1.15rem;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.bex-pa-summary-icon {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  align-items: center;
   justify-content: center;
-  padding: 1.35rem;
+  border-radius: 12px;
+  font-size: 1.1rem;
 }
 
-.bex-pa-summary-card .display-6 {
+.bex-pa-summary-card--cycles .bex-pa-summary-icon {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.bex-pa-summary-card--employees .bex-pa-summary-icon {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.bex-pa-summary-card--review .bex-pa-summary-icon {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+
+.bex-pa-summary-card--completed .bex-pa-summary-icon {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.bex-pa-summary-content {
+  min-width: 0;
+}
+
+.bex-pa-summary-label {
+  margin-bottom: 0.28rem !important;
+  color: #64748b;
+  font-size: 0.72rem !important;
+  font-weight: 760;
+  letter-spacing: 0.035em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.bex-pa-summary-card .bex-pa-summary-value {
+  color: #0f172a;
+  font-size: clamp(1.55rem, 2.5vw, 2rem);
+  font-weight: 840 !important;
+  line-height: 1.1;
   letter-spacing: -0.04em;
-  color: var(--bex-pa-text);
 }
 
+.bex-pa-summary-detail {
+  margin-top: 0.4rem;
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 1199.98px) {
+  .bex-pa-overview-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767.98px) {
+  .bex-pa-overview-metrics {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .bex-pa-summary-card {
+    min-height: 108px;
+  }
+}
+
+/* =========================================================
+   PA ADMIN OVERVIEW - STAGE 1B.2
+   Operational appraisal completion band.
+   Performance Appraisal workspace only.
+   ========================================================= */
+
+.bex-pa-page .bex-pa-overview-readiness {
+  padding: 1.25rem 1.35rem;
+  border: 1px solid var(--bex-pa-border);
+  border-radius: 18px;
+  background: var(--bex-pa-surface);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.bex-pa-page .bex-pa-overview-readiness-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.bex-pa-page .bex-pa-overview-readiness-heading-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.bex-pa-page .bex-pa-overview-readiness-icon {
+  display: inline-flex;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(14, 116, 144, 0.14);
+  border-radius: 14px;
+  background: rgba(14, 116, 144, 0.09);
+  color: var(--bex-pa-primary);
+  font-size: 1.15rem;
+}
+
+.bex-pa-page .bex-pa-overview-section-kicker {
+  color: var(--bex-pa-primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.bex-pa-page .bex-pa-overview-readiness-title {
+  color: var(--bex-pa-text);
+  font-size: 1rem;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+.bex-pa-page .bex-pa-overview-readiness-value {
+  flex: 0 0 auto;
+  color: var(--bex-pa-text);
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.bex-pa-page .bex-pa-overview-progress {
+  height: 8px;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8edf3;
+}
+
+.bex-pa-page .bex-pa-overview-progress .progress-bar {
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      90deg,
+      var(--bex-pa-primary) 0%,
+      #14b8a6 100%
+    );
+  transition: width 0.25s ease;
+}
+
+.bex-pa-page .bex-pa-overview-readiness-message {
+  color: var(--bex-pa-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+body.bex-pa-page.alpatech-workspace .bex-pa-overview-readiness-icon {
+  border-color: rgba(11, 95, 149, 0.16);
+  background: rgba(11, 95, 149, 0.09);
+  color: #0b5f95;
+}
+
+body.bex-pa-page.alpatech-workspace .bex-pa-overview-progress .progress-bar {
+  background:
+    linear-gradient(
+      90deg,
+      #0b5f95 0%,
+      #168fae 100%
+    );
+}
+
+@media (max-width: 575.98px) {
+  .bex-pa-page .bex-pa-overview-readiness {
+    padding: 1.1rem;
+    border-radius: 16px;
+  }
+
+  .bex-pa-page .bex-pa-overview-readiness-heading {
+    align-items: flex-start;
+  }
+
+  .bex-pa-page .bex-pa-overview-readiness-icon {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+  }
+
+  .bex-pa-page .bex-pa-overview-readiness-value {
+    font-size: 1.2rem;
+  }
+}
+/* =========================================================
+   PA ADMIN OVERVIEW - STAGE 1C.2
+   Priority attention + active cycle operational panels.
+   Performance Appraisal workspace only.
+   ========================================================= */
+
+.bex-pa-page .bex-pa-overview-operations {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.bex-pa-page .bex-pa-overview-panel {
+  min-width: 0;
+  padding: 1.2rem;
+  border: 1px solid var(--bex-pa-border);
+  border-radius: 18px;
+  background: var(--bex-pa-surface);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.bex-pa-page .bex-pa-overview-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.bex-pa-page .bex-pa-overview-panel-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.bex-pa-page .bex-pa-overview-panel-icon {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 1.05rem;
+}
+
+.bex-pa-page .bex-pa-overview-panel-icon--priority {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.bex-pa-page .bex-pa-overview-panel-icon--cycle {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.bex-pa-page .bex-pa-overview-panel-title {
+  color: var(--bex-pa-text);
+  font-size: 1rem;
+  font-weight: 760;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+.bex-pa-page .bex-pa-overview-panel-count {
+  display: inline-flex;
+  min-width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.bex-pa-page .bex-pa-overview-panel-description {
+  margin: 0.85rem 0 1rem;
+  color: var(--bex-pa-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.bex-pa-page .bex-pa-overview-panel-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.bex-pa-page .bex-pa-overview-panel-list:empty {
+  display: none;
+}
+
+.bex-pa-page .bex-pa-overview-panel-empty {
+  padding: 0.95rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: var(--bex-pa-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.bex-pa-page .bex-pa-overview-operation-item {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid #e8edf3;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.bex-pa-page .bex-pa-overview-operation-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.bex-pa-page .bex-pa-overview-operation-item-main {
+  min-width: 0;
+}
+
+.bex-pa-page .bex-pa-overview-operation-item-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.88rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.bex-pa-page .bex-pa-overview-operation-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem 0.7rem;
+  margin-top: 0.35rem;
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.bex-pa-page .bex-pa-overview-operation-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.bex-pa-page .bex-pa-overview-operation-badge[data-kind="hr"] {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+
+.bex-pa-page .bex-pa-overview-operation-badge[data-kind="acknowledgement"] {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.bex-pa-page .bex-pa-overview-operation-badge[data-kind="active"] {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.bex-pa-page .bex-pa-overview-cycle-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.85rem;
+  margin-top: 0.7rem;
+  color: #475569;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.bex-pa-page .bex-pa-overview-cycle-milestones {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.bex-pa-page .bex-pa-overview-cycle-milestone {
+  min-width: 0;
+  padding: 0.65rem 0.7rem;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.bex-pa-page .bex-pa-overview-cycle-milestone-label {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: #64748b;
+  font-size: 0.66rem;
+  font-weight: 760;
+  letter-spacing: 0.035em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.bex-pa-page .bex-pa-overview-cycle-milestone-value {
+  display: block;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.bex-pa-page.alpatech-workspace .bex-pa-overview-panel-icon--cycle {
+  color: #0b5f95;
+  background: rgba(54, 185, 207, 0.16);
+}
+
+@media (max-width: 991.98px) {
+  .bex-pa-page .bex-pa-overview-operations {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .bex-pa-page .bex-pa-overview-panel {
+    padding: 1.05rem;
+    border-radius: 16px;
+  }
+
+  .bex-pa-page .bex-pa-overview-panel-header {
+    gap: 0.7rem;
+  }
+
+  .bex-pa-page .bex-pa-overview-panel-icon {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+  }
+
+  .bex-pa-page .bex-pa-overview-operation-item-header {
+    gap: 0.6rem;
+  }
+
+  .bex-pa-page .bex-pa-overview-cycle-milestones {
+    grid-template-columns: 1fr;
+  }
+}
 /* =========================================================
    Workflow and module user cards
    ========================================================= */
@@ -789,4 +1349,2936 @@ body.bex-pa-page {
 
 #bexPaEmployeeAppraisalsList .bex-pa-goal-item:last-child {
   padding-bottom: 1rem;
+}
+
+/* =========================================================
+   PA ADMIN APPRAISAL CYCLES - STAGE 2A
+   Operational management presentation for cycle setup.
+   PA-scoped only. Existing cycle lifecycle/actions remain authoritative.
+   ========================================================= */
+
+.bex-pa-page .bex-pa-section-hero {
+  position: relative;
+  display: flex;
+  min-height: 168px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  overflow: hidden;
+  padding: clamp(1.5rem, 3vw, 2.2rem);
+  border-radius: 22px;
+  color: #ffffff;
+  background:
+    radial-gradient(
+      circle at 88% 18%,
+      rgba(45, 212, 191, 0.28),
+      transparent 25%
+    ),
+    radial-gradient(
+      circle at 72% 110%,
+      rgba(255, 255, 255, 0.09),
+      transparent 32%
+    ),
+    linear-gradient(
+      135deg,
+      #071426 0%,
+      #0b2542 62%,
+      #0f5963 100%
+    );
+  box-shadow: 0 20px 44px rgba(7, 20, 38, 0.16);
+}
+
+.bex-pa-page .bex-pa-section-hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+}
+
+.bex-pa-page .bex-pa-section-hero-kicker {
+  color: #99f6e4;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+}
+
+.bex-pa-page .bex-pa-section-hero-title {
+  color: #ffffff;
+  font-size: clamp(1.75rem, 3.5vw, 2.45rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1.1;
+}
+
+.bex-pa-page .bex-pa-section-hero-description {
+  max-width: 650px;
+  color: rgba(255, 255, 255, 0.76);
+  line-height: 1.6;
+}
+
+.bex-pa-page .bex-pa-section-hero-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.bex-pa-page .bex-pa-section-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 32px;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bex-pa-page .bex-pa-section-hero-primary {
+  min-height: 42px;
+  border: 0;
+  border-radius: 12px;
+  color: #0b2542;
+  font-weight: 750;
+  box-shadow: 0 10px 24px rgba(7, 20, 38, 0.16);
+}
+
+.bex-pa-page .bex-pa-section-hero-primary:hover,
+.bex-pa-page .bex-pa-section-hero-primary:focus {
+  color: #071426;
+  background: #f8fafc;
+}
+
+body.bex-pa-page.alpatech-workspace .bex-pa-section-hero {
+  background:
+    radial-gradient(
+      circle at 88% 18%,
+      rgba(54, 185, 207, 0.34),
+      transparent 25%
+    ),
+    radial-gradient(
+      circle at 72% 110%,
+      rgba(255, 255, 255, 0.1),
+      transparent 32%
+    ),
+    linear-gradient(
+      135deg,
+      #073b63 0%,
+      #0b5f95 64%,
+      #168fae 100%
+    );
+  box-shadow: 0 20px 44px rgba(7, 59, 99, 0.18);
+}
+
+body.bex-pa-page.alpatech-workspace .bex-pa-section-hero-kicker {
+  color: #c8f6ff;
+}
+
+
+
+.bex-pa-page .bex-pa-cycle-form-card,
+.bex-pa-page .bex-pa-cycle-list-card {
+  border: 1px solid var(--bex-pa-border) !important;
+  border-radius: 18px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05) !important;
+}
+
+.bex-pa-page .bex-pa-cycle-form-card .card-header,
+.bex-pa-page .bex-pa-cycle-list-card .card-header {
+  background: #ffffff !important;
+}
+
+.bex-pa-page .bex-pa-cycle-form-card .card-header {
+  padding: 1.15rem 1.25rem !important;
+}
+
+.bex-pa-page .bex-pa-cycle-form-card .card-body {
+  padding: 1.25rem;
+}
+
+.bex-pa-page .bex-pa-cycle-form-card .vstack > section {
+  padding: 1rem;
+  border: 1px solid #e8edf3;
+  border-radius: 14px;
+  background: #fbfcfe;
+}
+
+.bex-pa-page .bex-pa-cycle-form-card .vstack > section.border-top {
+  padding-top: 1rem !important;
+  border-top: 1px solid #e8edf3 !important;
+}
+
+.bex-pa-page .bex-pa-cycle-form-card .form-control,
+.bex-pa-page .bex-pa-cycle-form-card .form-select {
+  min-height: 46px;
+  border-color: #dbe3ec;
+  border-radius: 11px;
+  background-color: #ffffff;
+}
+
+.bex-pa-page .bex-pa-cycle-form-card .form-control:disabled,
+.bex-pa-page .bex-pa-cycle-form-card .form-select:disabled {
+  background: #f8fafc;
+  color: #475569;
+  opacity: 1;
+}
+
+.bex-pa-page .bex-pa-cycle-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.bex-pa-page .bex-pa-cycle-card-heading-icon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 1.05rem;
+}
+
+.bex-pa-page .bex-pa-cycle-card-kicker {
+  color: var(--bex-pa-primary);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.bex-pa-page .bex-pa-cycle-list-card .table-responsive {
+  scrollbar-width: thin;
+}
+
+.bex-pa-page .bex-pa-cycle-list-card th {
+  padding-top: 0.82rem;
+  padding-bottom: 0.82rem;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.72rem;
+  letter-spacing: 0.045em;
+}
+
+.bex-pa-page .bex-pa-cycle-list-card td {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  font-size: 0.84rem;
+}
+
+.bex-pa-page .bex-pa-cycle-list-card tbody tr {
+  transition: background-color 0.16s ease;
+}
+
+.bex-pa-page .bex-pa-cycle-list-card tbody tr:hover td {
+  background: #fbfdff;
+}
+
+.bex-pa-page .bex-pa-cycle-name {
+  color: #0f172a;
+  font-weight: 760;
+}
+
+.bex-pa-page .bex-pa-cycle-status {
+  gap: 0.35rem;
+  min-height: 28px;
+  padding-inline: 0.65rem;
+  border: 1px solid transparent;
+}
+
+.bex-pa-page .bex-pa-cycle-status::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.bex-pa-page .bex-pa-cycle-status[data-status="draft"] {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.bex-pa-page .bex-pa-cycle-status[data-status="active"] {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.bex-pa-page .bex-pa-cycle-action-button {
+  min-width: 38px;
+  min-height: 38px;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.bex-pa-page .bex-pa-cycle-action-button:hover,
+.bex-pa-page .bex-pa-cycle-action-button:focus-visible {
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
+body.bex-pa-page.alpatech-workspace .bex-pa-cycle-card-heading-icon {
+  color: #0b5f95;
+  background: rgba(54, 185, 207, 0.16);
+}
+
+
+
+@media (max-width: 767.98px) {
+  .bex-pa-page .bex-pa-section-hero {
+    min-height: 0;
+    align-items: stretch;
+    flex-direction: column;
+    padding: 1.35rem;
+    border-radius: 18px;
+  }
+
+  .bex-pa-page .bex-pa-section-hero-title {
+    font-size: 1.65rem;
+  }
+
+  .bex-pa-page .bex-pa-section-hero-actions {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .bex-pa-page .bex-pa-section-hero-badge {
+    align-self: flex-start;
+  }
+
+  .bex-pa-page .bex-pa-section-hero-primary {
+    width: 100%;
+  }
+
+
+
+  .bex-pa-page .bex-pa-cycle-form-card .card-header {
+    align-items: flex-start !important;
+  }
+}
+
+/* =========================================================
+   PA NON-OVERVIEW WORKSPACE HEADING - STAGE 2B
+   Compact page heading for PA workspaces other than Overview.
+   Overview remains the only PA screen with the large operational hero.
+   ========================================================= */
+
+.bex-pa-page .bex-pa-workspace-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 0.2rem 0 0.95rem;
+  border-bottom: 1px solid var(--bex-pa-border);
+}
+
+.bex-pa-page .bex-pa-workspace-heading-main {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.bex-pa-page .bex-pa-workspace-heading-icon {
+  display: inline-grid;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  place-items: center;
+  border: 1px solid #cce8ee;
+  border-radius: 15px;
+  background: linear-gradient(145deg, #eefbfc 0%, #f8fcfd 100%);
+  color: #0f766e;
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.08);
+  font-size: 1.05rem;
+}
+
+.bex-pa-page .bex-pa-workspace-heading-copy {
+  min-width: 0;
+  max-width: 720px;
+}
+
+.bex-pa-page .bex-pa-workspace-heading-kicker {
+  color: var(--bex-pa-primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.bex-pa-page .bex-pa-workspace-heading-title {
+  color: #0f172a;
+  font-size: clamp(1.65rem, 2.8vw, 2.05rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.bex-pa-page .bex-pa-workspace-heading-description {
+  max-width: 680px;
+  color: #64748b;
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+
+.bex-pa-page .bex-pa-workspace-heading-action {
+  flex: 0 0 auto;
+  min-height: 42px;
+  border-radius: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.12);
+}
+
+body.bex-pa-page.alpatech-workspace .bex-pa-workspace-heading-icon {
+  border-color: rgba(54, 185, 207, 0.3);
+  background: linear-gradient(145deg, #eef9fc 0%, #f8fcfd 100%);
+  color: #0b5f95;
+  box-shadow: 0 8px 18px rgba(11, 95, 149, 0.08);
+}
+
+@media (max-width: 767.98px) {
+  .bex-pa-page .bex-pa-workspace-heading {
+    flex-direction: column;
+    gap: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .bex-pa-page .bex-pa-workspace-heading-main {
+    gap: 0.75rem;
+  }
+
+  .bex-pa-page .bex-pa-workspace-heading-icon {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+    border-radius: 14px;
+  }
+
+  .bex-pa-page .bex-pa-workspace-heading-title {
+    font-size: 1.55rem;
+  }
+
+  .bex-pa-page .bex-pa-workspace-heading-action {
+    width: 100%;
+  }
+}
+
+/* =========================================================
+   PA ADMIN GOALS AND DELIVERABLES - STAGE 3A
+   Compact BexHR operational presentation for goal planning.
+   Presentation only. Existing goal data, actions and dialogs remain authoritative.
+   ========================================================= */
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel {
+  border: 1px solid var(--bex-pa-border) !important;
+  border-radius: 18px;
+  background: var(--bex-pa-surface);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05) !important;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel .card-header {
+  padding: 1.05rem 1.1rem !important;
+  border-bottom: 1px solid var(--bex-pa-border);
+  background: #ffffff !important;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel .card-body {
+  min-height: 190px;
+  padding: 1rem 1.1rem;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-identity {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-copy {
+  min-width: 0;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-copy h2 {
+  color: #0f172a;
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-copy p:last-child {
+  line-height: 1.45;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-kicker {
+  color: var(--bex-pa-primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-icon {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 1rem;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-icon--organisation {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-icon--deliverables {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-icon--department {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-icon--individual {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-icon--progress {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-action {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0.38rem 0.7rem;
+  border-radius: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel .bex-pa-goal-item,
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel .bex-pa-goal-item:first-child,
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel .bex-pa-goal-item:last-child {
+  padding: 0.9rem;
+  border: 1px solid #e8edf3;
+  border-radius: 14px;
+  background: #fbfcfe;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel .bex-pa-goal-item + .bex-pa-goal-item {
+  margin-top: 0.75rem;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-item-title {
+  margin-bottom: 0.35rem;
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-meta {
+  gap: 0.3rem 0.65rem;
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-status {
+  gap: 0.32rem;
+  min-height: 26px;
+  flex: 0 0 auto;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid transparent;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-status::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-status[data-status="draft"],
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-status[data-status="historical"] {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-status[data-status="active"] {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-status[data-status="not-started"] {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-status[data-status="in-progress"] {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+  color: #0369a1;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-status[data-status="completed"] {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-item-actions {
+  margin-top: 0.8rem;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-item-actions .btn {
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 9px;
+}
+
+.bex-pa-page #bexPaGoalsSection .card-body > p.text-body-secondary:only-child {
+  min-height: 112px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  border: 1px dashed #d7e0ea;
+  border-radius: 12px;
+  background: #fbfcfe;
+  color: #64748b !important;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+body.bex-pa-page.alpatech-workspace #bexPaGoalsSection .bex-pa-goal-panel-kicker {
+  color: #0b5f95;
+}
+
+body.bex-pa-page.alpatech-workspace #bexPaGoalsSection .bex-pa-goal-panel-icon--organisation,
+body.bex-pa-page.alpatech-workspace #bexPaGoalsSection .bex-pa-goal-panel-icon--deliverables {
+  color: #0b5f95;
+  background: rgba(54, 185, 207, 0.16);
+}
+
+@media (max-width: 1399.98px) and (min-width: 1200px) {
+  .bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-header {
+    flex-direction: column;
+  }
+
+  .bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-action {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel .card-header {
+    padding: 1rem !important;
+  }
+
+  .bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel .card-body {
+    min-height: 0;
+    padding: 1rem;
+  }
+
+  .bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-header {
+    flex-direction: column;
+  }
+
+  .bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-action {
+    width: 100%;
+  }
+
+  .bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel-header--static {
+    flex-direction: row;
+  }
+
+  .bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel .bex-pa-goal-item,
+  .bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel .bex-pa-goal-item:first-child,
+  .bex-pa-page #bexPaGoalsSection .bex-pa-goal-panel .bex-pa-goal-item:last-child {
+    padding: 0.8rem;
+  }
+}
+
+/* =========================================================
+   PA ADMIN GOAL IDENTITY HIERARCHY - STAGE 3B
+   Promotes employee and owner identity above secondary goal metadata.
+   Presentation only. Goal data and lifecycle logic remain authoritative.
+   ========================================================= */
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-meta-identity {
+  display: flex;
+  flex: 0 0 100%;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.45rem;
+  margin-bottom: 0.08rem;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-meta-identity-label {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.bex-pa-page #bexPaGoalsSection .bex-pa-goal-meta-identity-value {
+  min-width: 0;
+  color: #1e293b;
+  font-size: 0.86rem;
+  font-weight: 780;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 575.98px) {
+  .bex-pa-page #bexPaGoalsSection .bex-pa-goal-meta-identity {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.12rem;
+  }
+}
+
+/* =========================================================
+   PA ADMIN APPRAISAL TEMPLATES - STAGE 4A
+   Quiet operational library treatment for reusable appraisal templates.
+   Presentation only. Template data, validation and persistence remain authoritative.
+   ========================================================= */
+
+.bex-pa-page #bexPaTemplatesSection .bex-pa-template-library-card {
+  overflow: hidden;
+  border: 1px solid var(--bex-pa-border) !important;
+  border-radius: 18px;
+  background: var(--bex-pa-surface);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05) !important;
+}
+
+.bex-pa-page #bexPaTemplatesSection .bex-pa-template-library-card .card-header {
+  border-bottom: 1px solid var(--bex-pa-border);
+}
+
+.bex-pa-page #bexPaTemplatesSection .bex-pa-template-library-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.bex-pa-page #bexPaTemplatesSection .bex-pa-template-library-icon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 1.05rem;
+}
+
+.bex-pa-page #bexPaTemplatesSection .bex-pa-template-library-kicker {
+  color: var(--bex-pa-primary);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.bex-pa-page #bexPaTemplatesList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-item {
+  display: flex;
+  min-width: 0;
+  min-height: 100%;
+  flex-direction: column;
+  padding: 1.1rem;
+  border: 1px solid #e8edf3;
+  border-radius: 16px;
+  background: #fbfcfe;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-item-heading {
+  min-width: 0;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-item-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-status {
+  display: inline-flex;
+  min-height: 27px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.2rem 0.58rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-status::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-status[data-status="active"] {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-status[data-status="draft"] {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-status[data-status="inactive"] {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #a16207;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-description {
+  margin: 0.85rem 0 0;
+  color: #526176;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(155px, 0.65fr);
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-detail-block {
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid #e8edf3;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-detail-label {
+  margin: 0 0 0.55rem;
+  color: #64748b;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-rating-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-rating-item {
+  display: inline-flex;
+  min-height: 27px;
+  align-items: center;
+  padding: 0.22rem 0.55rem;
+  border: 1px solid #dbe3ec;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-competency-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #1e293b;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-competency-icon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: #ede9fe;
+  color: #7c3aed;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-item-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 1rem;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-edit-button {
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-edit-button:hover,
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-edit-button:focus-visible {
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
+.bex-pa-page #bexPaTemplatesList .bex-pa-template-empty {
+  grid-column: 1 / -1;
+  min-height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  border: 1px dashed #d7e0ea;
+  border-radius: 14px;
+  background: #fbfcfe;
+  color: #64748b !important;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+body.bex-pa-page.alpatech-workspace #bexPaTemplatesSection .bex-pa-template-library-icon {
+  color: #0b5f95;
+  background: rgba(54, 185, 207, 0.16);
+}
+
+body.bex-pa-page.alpatech-workspace #bexPaTemplatesSection .bex-pa-template-library-kicker {
+  color: #0b5f95;
+}
+
+/* =========================================================
+   PA ADMIN APPRAISAL TEMPLATES - STAGE 4B
+   Adaptive library row balance.
+   If desktop has an odd number of templates, the final card spans the row
+   instead of leaving a visually unfinished empty half-column.
+   Presentation only. Template behaviour remains unchanged.
+   ========================================================= */
+
+@media (min-width: 1200px) {
+  .bex-pa-page #bexPaTemplatesList > .bex-pa-template-item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .bex-pa-page #bexPaTemplatesList > .bex-pa-template-item:last-child:nth-child(odd) .bex-pa-template-description {
+    max-width: 760px;
+  }
+
+  .bex-pa-page #bexPaTemplatesList > .bex-pa-template-item:last-child:nth-child(odd) .bex-pa-template-detail-grid {
+    grid-template-columns: minmax(0, 1.7fr) minmax(220px, 0.6fr);
+  }
+}
+
+@media (max-width: 1199.98px) {
+  .bex-pa-page #bexPaTemplatesList {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .bex-pa-page #bexPaTemplatesList {
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .bex-pa-page #bexPaTemplatesList .bex-pa-template-item {
+    padding: 0.9rem;
+  }
+
+  .bex-pa-page #bexPaTemplatesList .bex-pa-template-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .bex-pa-page #bexPaTemplatesList .bex-pa-template-item-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+}
+
+/* =========================================================
+   PA EMPLOYEE APPRAISALS AND INTEGRATED UTILITY - STAGE 5A
+   Quiet employee appraisal register plus a compact integrated exit bar.
+   Presentation only. Existing appraisal lifecycle, permissions and routing remain authoritative.
+   ========================================================= */
+
+.bex-pa-page .bex-pa-integrated-toolbar {
+  gap: 0.8rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.07);
+}
+
+.bex-pa-page .bex-pa-integrated-context {
+  gap: 0.65rem;
+}
+
+.bex-pa-page .bex-pa-integrated-icon {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  border-radius: 9px;
+  font-size: 0.92rem;
+}
+
+.bex-pa-page .bex-pa-integrated-title {
+  color: #1e293b;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.bex-pa-page .bex-pa-integrated-return {
+  min-height: 36px;
+  padding: 0.4rem 0.7rem;
+  border-radius: 9px;
+  font-weight: 650;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsSection .bex-pa-appraisal-register-card {
+  overflow: hidden;
+  border: 1px solid var(--bex-pa-border) !important;
+  border-radius: 18px;
+  background: var(--bex-pa-surface);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05) !important;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsSection .bex-pa-appraisal-register-card > .card-header {
+  border-bottom: 1px solid var(--bex-pa-border);
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsSection .bex-pa-appraisal-register-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsSection .bex-pa-appraisal-register-icon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 1.05rem;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsSection .bex-pa-appraisal-register-kicker {
+  color: var(--bex-pa-primary);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList {
+  padding: 1.25rem;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-employee-group {
+  overflow: hidden;
+  border: 1px solid #e3e9f0;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-employee-group + .bex-pa-appraisal-employee-group {
+  margin-top: 1rem;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-employee-header {
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid #e8edf3;
+  background: #f8fafc;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-employee-label {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: #64748b;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-employee-name {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-employee-body {
+  padding: 0 1rem;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-item,
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-item:first-child,
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-item:last-child {
+  padding: 1rem 0;
+  border-bottom: 1px solid #e8edf3;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-item:last-child {
+  border-bottom: 0;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-item-copy {
+  min-width: 0;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-cycle-label {
+  display: block;
+  margin-bottom: 0.22rem;
+  color: #64748b;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-goal-item-title {
+  margin-bottom: 0.3rem;
+  color: #0f172a;
+  font-size: 0.94rem;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-goal-meta {
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-template {
+  overflow-wrap: anywhere;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-goal-status {
+  gap: 0.32rem;
+  min-height: 27px;
+  flex: 0 0 auto;
+  padding: 0.2rem 0.58rem;
+  border: 1px solid transparent;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-goal-status::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-goal-status[data-status="assigned"] {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-goal-status[data-status="in-progress"] {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+  color: #0369a1;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-goal-status[data-status="submitted"] {
+  border-color: #ddd6fe;
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-goal-status[data-status="finalised"] {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-goal-status[data-status="acknowledged"] {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-actions .btn {
+  min-height: 34px;
+  border-radius: 9px;
+  font-weight: 650;
+}
+
+.bex-pa-page #bexPaEmployeeAppraisalsList > #bexPaEmployeeAppraisalsEmpty {
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 1.25rem;
+  border: 1px dashed #d7e0ea;
+  border-radius: 14px;
+  background: #fbfcfe;
+  color: #64748b !important;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+body.bex-pa-page.alpatech-workspace #bexPaEmployeeAppraisalsSection .bex-pa-appraisal-register-icon {
+  color: #0b5f95;
+  background: rgba(54, 185, 207, 0.16);
+}
+
+@media (max-width: 575.98px) {
+  .bex-pa-page .bex-pa-integrated-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .bex-pa-page .bex-pa-integrated-return {
+    width: 100%;
+  }
+
+  .bex-pa-page #bexPaEmployeeAppraisalsList {
+    padding: 1rem;
+  }
+
+  .bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-employee-body {
+    padding: 0 0.85rem;
+  }
+
+  .bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-item-header {
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-actions {
+    justify-content: stretch;
+  }
+
+  .bex-pa-page #bexPaEmployeeAppraisalsList .bex-pa-appraisal-actions .btn {
+    width: 100%;
+  }
+}
+
+/* =========================================================
+   PA EMPLOYEE APPRAISAL REVIEW IDENTITY - STAGE 5B
+   Promote the reviewed employee without increasing surrounding metadata noise.
+   ========================================================= */
+
+.bex-pa-page #bexPaHrAppraisalReviewMeta {
+  margin-top: 0.55rem !important;
+  color: inherit !important;
+}
+
+.bex-pa-page #bexPaHrAppraisalReviewMeta .bex-pa-review-identity-label {
+  display: block;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.bex-pa-page #bexPaHrAppraisalReviewMeta .bex-pa-review-identity-name {
+  display: block;
+  margin-top: 0.12rem;
+  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+.bex-pa-page #bexPaHrAppraisalReviewMeta .bex-pa-review-identity-meta {
+  display: block;
+  margin-top: 0.28rem;
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+body.bex-pa-page.alpatech-workspace #bexPaHrAppraisalReviewMeta .bex-pa-review-identity-name {
+  color: #0b3558;
+}
+
+/* =========================================================
+   PA REPORTS - STAGE 6A
+   Operational reporting workspace using existing PA report state only.
+   ========================================================= */
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-card,
+.bex-pa-page #bexPaReportsSection .bex-pa-report-lifecycle-panel,
+.bex-pa-page #bexPaReportsSection .bex-pa-report-completion-card,
+.bex-pa-page #bexPaReportsSection .bex-pa-report-outstanding-card,
+.bex-pa-page #bexPaReportsSection .bex-pa-report-detail-card {
+  border: 1px solid var(--bex-pa-border);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-card {
+  padding: 1.1rem 1.2rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-heading,
+.bex-pa-page #bexPaReportsSection .bex-pa-report-panel-heading-main,
+.bex-pa-page #bexPaReportsSection .bex-pa-report-insight-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-heading {
+  margin-bottom: 1rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-icon,
+.bex-pa-page #bexPaReportsSection .bex-pa-report-panel-icon {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 1rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-icon,
+.bex-pa-page #bexPaReportsSection .bex-pa-report-panel-icon--lifecycle {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-panel-icon--completion {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-panel-icon--outstanding {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-panel-icon--detail {
+  color: #6d28d9;
+  background: #ede9fe;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-section-kicker,
+.bex-pa-page #bexPaReportsSection .bex-pa-report-field-label {
+  color: var(--bex-pa-primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-field-label {
+  display: block;
+  margin-bottom: 0.4rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-section-title {
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-section-description {
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-controls {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+  gap: 1rem;
+  align-items: end;
+  padding-top: 1rem;
+  border-top: 1px solid #edf1f5;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-select-wrap .form-select {
+  min-height: 44px;
+  border-color: #dbe3ec;
+  border-radius: 11px;
+  background-color: #ffffff;
+  font-weight: 600;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0.68rem 0.85rem;
+  border: 1px solid #e4e9f0;
+  border-radius: 11px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-lifecycle-panel {
+  padding: 1.15rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-total {
+  display: inline-flex;
+  min-height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #dbe5ed;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-total strong {
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status-card {
+  display: flex;
+  min-width: 0;
+  min-height: 112px;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border: 1px solid #e4e9f0;
+  border-radius: 14px;
+  background: #fbfcfe;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status-icon {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status-card[data-report-status="assigned"] .bex-pa-report-status-icon {
+  color: #64748b;
+  background: #eef2f7;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status-card[data-report-status="in-progress"] .bex-pa-report-status-icon {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status-card[data-report-status="submitted"] .bex-pa-report-status-icon {
+  color: #6d28d9;
+  background: #ede9fe;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status-card[data-report-status="finalised"] .bex-pa-report-status-icon {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status-card[data-report-status="acknowledged"] .bex-pa-report-status-icon {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status-label {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status-value {
+  display: block;
+  color: #0f172a;
+  font-size: 1.65rem;
+  font-weight: 820;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status-detail {
+  margin-top: 0.35rem;
+  color: #64748b;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-insight-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 1rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-completion-card,
+.bex-pa-page #bexPaReportsSection .bex-pa-report-outstanding-card {
+  padding: 1.15rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-insight-heading {
+  margin-bottom: 1rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-completion-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-completion-summary {
+  color: #0f172a;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-completion-copy {
+  max-width: 420px;
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-completion-percentage {
+  flex: 0 0 auto;
+  color: #047857;
+  font-size: 0.92rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-progress {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8edf3;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-progress .progress-bar {
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f766e 0%, #14b8a6 100%);
+  transition: width 0.2s ease;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-outstanding-list {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0;
+  list-style: none;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-outstanding-list li {
+  position: relative;
+  padding: 0.65rem 0.75rem 0.65rem 1.65rem;
+  border: 1px solid #e8edf3;
+  border-radius: 11px;
+  background: #fbfcfe;
+  color: #475569;
+  font-size: 0.77rem;
+  line-height: 1.45;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-outstanding-list li::before {
+  position: absolute;
+  top: 0.95rem;
+  left: 0.72rem;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #f59e0b;
+  content: "";
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-detail-card {
+  overflow: hidden;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-detail-heading {
+  padding: 1.1rem 1.2rem;
+  border-bottom: 1px solid #e8edf3;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-table-wrap {
+  scrollbar-width: thin;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-table-wrap table {
+  min-width: 720px;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-table-wrap thead th {
+  padding: 0.78rem 1rem;
+  border-bottom: 1px solid #e8edf3;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-table-wrap tbody td {
+  padding: 0.9rem 1rem;
+  border-color: #edf1f5;
+  color: #475569;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-detail-row:last-child td {
+  border-bottom: 0;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-employee-cell {
+  color: #0f172a !important;
+  font-weight: 750;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status {
+  display: inline-flex;
+  min-height: 27px;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.58rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status[data-status="assigned"] {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status[data-status="in-progress"] {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+  color: #0369a1;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status[data-status="submitted"] {
+  border-color: #ddd6fe;
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status[data-status="finalised"] {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-status[data-status="acknowledged"] {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-action-cell {
+  color: #64748b !important;
+  font-weight: 600;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-empty-state {
+  min-height: 150px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  padding: 1.4rem;
+  border: 1px dashed #d7e0ea;
+  border-radius: 16px;
+  background: #fbfcfe;
+  text-align: left;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-empty-state:not(.d-none) {
+  display: flex;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-empty-icon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: #eef2f7;
+  color: #64748b;
+  font-size: 1.05rem;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-empty-title {
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-empty-copy {
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+body.bex-pa-page.alpatech-workspace #bexPaReportsSection .bex-pa-report-cycle-icon,
+body.bex-pa-page.alpatech-workspace #bexPaReportsSection .bex-pa-report-panel-icon--lifecycle {
+  color: #0b5f95;
+  background: rgba(54, 185, 207, 0.16);
+}
+
+@media (max-width: 1199.98px) {
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-status-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 991.98px) {
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-controls,
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-insight-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-panel-heading,
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-completion-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-total {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-card,
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-lifecycle-panel,
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-completion-card,
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-outstanding-card {
+    padding: 1rem;
+  }
+
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-status-card {
+    min-height: 0;
+  }
+
+  .bex-pa-page #bexPaReportsSection .bex-pa-report-cycle-controls {
+    gap: 0.75rem;
+  }
+}
+
+/* =========================================================
+   PA REPORT EXPORT - STAGE 6B
+   Browser print/PDF output for the selected operational cycle report.
+   Uses only the already-rendered PA report data and existing cycle state.
+   ========================================================= */
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-print-header,
+.bex-pa-page #bexPaReportsSection .bex-pa-report-print-footer {
+  display: none;
+}
+
+.bex-pa-page #bexPaReportsSection .bex-pa-report-print-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm 12mm 16mm;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report {
+    min-width: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 10pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report .bexhr-workspace-loader,
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-header,
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-sidebar,
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-integrated-toolbar,
+  body.bex-pa-page.bex-pa-printing-report .bexhr-back-to-top-btn,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection > .bex-pa-workspace-heading,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection > .bex-pa-report-cycle-card {
+    display: none !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-app,
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-shell,
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-shell > .row,
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-main,
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-main > div {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-main > div > section:not(#bexPaReportsSection) {
+    display: none !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection {
+    display: block !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-header {
+    display: block;
+    margin-bottom: 8mm;
+    padding-bottom: 5mm;
+    border-bottom: 1px solid #cbd5e1;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-brand {
+    margin-bottom: 2mm;
+    color: #0f766e;
+    font-size: 8.5pt;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-header h1 {
+    margin: 0 0 4mm;
+    color: #0f172a;
+    font-size: 20pt;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-meta {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr;
+    gap: 4mm;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-meta div {
+    min-width: 0;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-meta span,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-meta strong {
+    display: block;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-meta span {
+    margin-bottom: 1mm;
+    color: #64748b;
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-meta strong {
+    color: #0f172a;
+    font-size: 9.5pt;
+    font-weight: 750;
+    overflow-wrap: anywhere;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-lifecycle-panel,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-completion-card,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-outstanding-card,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-detail-card,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-empty-state {
+    border: 1px solid #d7dee8 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-lifecycle-panel,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-completion-card,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-outstanding-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-lifecycle-panel {
+    margin-bottom: 5mm !important;
+    padding: 5mm;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 2.5mm;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-card {
+    min-height: 0;
+    padding: 3mm;
+    border: 1px solid #dce3eb;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-icon {
+    width: 8mm;
+    height: 8mm;
+    flex-basis: 8mm;
+    border: 1px solid #dce3eb;
+    background: #ffffff !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-label {
+    font-size: 7pt;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-value {
+    font-size: 14pt;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-detail {
+    font-size: 7pt;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-insight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 4mm;
+    margin-bottom: 5mm !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-completion-card,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-outstanding-card {
+    padding: 5mm;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-outstanding-list li {
+    padding: 2mm 2.5mm 2mm 5mm;
+    border-color: #e2e8f0;
+    background: #ffffff;
+    font-size: 8pt;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-outstanding-list li::before {
+    top: 3.2mm;
+    left: 2.2mm;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-detail-card {
+    overflow: visible;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-detail-heading {
+    break-after: avoid;
+    page-break-after: avoid;
+    padding: 4mm 5mm;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap {
+    overflow: visible !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap thead {
+    display: table-header-group;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap th,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap td {
+    padding: 2.6mm 3mm;
+    overflow-wrap: anywhere;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap thead th {
+    background: #f8fafc !important;
+    font-size: 7pt;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap tbody td {
+    font-size: 8pt;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status {
+    min-height: 0;
+    padding: 1mm 2mm;
+    background: #ffffff !important;
+    font-size: 7.5pt;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-empty-state:not(.d-none) {
+    display: flex !important;
+    min-height: 0;
+    margin-top: 4mm;
+    padding: 5mm;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-footer {
+    display: block;
+    margin-top: 7mm;
+    padding-top: 3mm;
+    border-top: 1px solid #cbd5e1;
+    color: #64748b;
+    font-size: 7.5pt;
+    text-align: center;
+  }
+}
+
+/* =========================================================
+   PA REPORT EXPORT VISIBILITY FIX - STAGE 6C
+   The shared BexHR stylesheet contains a legacy payslip-only print rule
+   that hides page content before revealing the payslip preview. Restore
+   visibility only for the PA report print tree while the Stage 6B print
+   class is active. PA-scoped only; shared HR print CSS is untouched.
+   ========================================================= */
+
+@media print {
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-app,
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-shell,
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-shell > .row,
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-main,
+  body.bex-pa-page.bex-pa-printing-report .bex-pa-main > div,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection * {
+    visibility: visible !important;
+  }
+}
+
+/* =========================================================
+   PA REPORT PRINT DOCUMENT REFINEMENT - STAGE 6D
+   Converts the selected-cycle print surface from dashboard cards into
+   a compact management/audit document. Screen Reports UI is unchanged.
+   ========================================================= */
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 10mm 13mm;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report {
+    font-size: 9pt;
+    line-height: 1.3;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-header {
+    margin-bottom: 5mm;
+    padding-bottom: 3.5mm;
+    border-bottom: 1px solid #cbd5e1;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-brand {
+    margin-bottom: 1.2mm;
+    font-size: 7.2pt;
+    letter-spacing: 0.07em;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-header h1 {
+    margin-bottom: 3mm;
+    font-size: 17pt;
+    line-height: 1.05;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-meta {
+    grid-template-columns: 1.5fr 1fr 1fr;
+    gap: 3mm;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-meta span {
+    margin-bottom: 0.6mm;
+    font-size: 6.6pt;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-meta strong {
+    font-size: 8.2pt;
+    line-height: 1.2;
+  }
+
+  /* Executive summary: keep the authoritative lifecycle counts while removing
+     the dashboard-card treatment from the printed document. */
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-lifecycle-panel {
+    margin: 0 0 4mm !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-lifecycle-panel .bex-pa-report-panel-heading {
+    margin-bottom: 1.8mm;
+    padding: 0 0 1.6mm;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-lifecycle-panel .bex-pa-report-panel-icon,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-icon {
+    display: none !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-lifecycle-panel .bex-pa-report-section-kicker {
+    display: none !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-lifecycle-panel .bex-pa-report-section-title {
+    font-size: 0 !important;
+    line-height: 1;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-lifecycle-panel .bex-pa-report-section-title::before {
+    content: "Executive summary";
+    color: #0f172a;
+    font-size: 10pt;
+    font-weight: 800;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-total {
+    min-height: 0;
+    gap: 1.5mm;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 7.2pt;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-total strong {
+    font-size: 9pt;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 0 !important;
+    overflow: hidden;
+    border: 1px solid #d7dee8;
+    border-radius: 2.5mm;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-card {
+    display: block;
+    min-height: 0;
+    padding: 2mm 2.3mm;
+    border: 0 !important;
+    border-right: 1px solid #e2e8f0 !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-card:last-child {
+    border-right: 0 !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-label {
+    margin-bottom: 0.6mm !important;
+    color: #64748b;
+    font-size: 6.5pt;
+    line-height: 1.15;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-value {
+    font-size: 11.5pt;
+    line-height: 1;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status-detail {
+    display: none !important;
+  }
+
+  /* Completion and outstanding work become compact report sections instead
+     of large dashboard cards. */
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-insight-grid {
+    display: grid !important;
+    grid-template-columns: 0.9fr 1.4fr !important;
+    gap: 4mm;
+    margin: 0 0 4mm !important;
+    padding: 0;
+    border-top: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-completion-card,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-outstanding-card {
+    margin: 0;
+    padding: 2.5mm 0;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-insight-heading {
+    margin-bottom: 1.3mm;
+    gap: 0;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-insight-heading .bex-pa-report-panel-icon,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-insight-heading .bex-pa-report-section-kicker {
+    display: none !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-insight-heading .bex-pa-report-section-title {
+    font-size: 8.3pt;
+    line-height: 1.2;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-completion-row {
+    display: block;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-completion-summary,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-completion-percentage {
+    display: inline;
+    font-size: 8pt;
+    line-height: 1.2;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-completion-summary::after {
+    content: " - ";
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-completion-copy,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-progress {
+    display: none !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-outstanding-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1mm 3mm;
+    padding: 0;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-outstanding-list li {
+    min-height: 0;
+    padding: 0 0 0 3mm;
+    border: 0 !important;
+    border-radius: 0;
+    background: transparent !important;
+    font-size: 7.2pt;
+    line-height: 1.25;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-outstanding-list li::before {
+    top: 0.75em;
+    left: 0.7mm;
+    width: 1.2mm;
+    height: 1.2mm;
+  }
+
+  /* Employee status is the primary report body. */
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-detail-card {
+    overflow: visible;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-detail-heading {
+    padding: 0 0 2mm;
+    border-bottom: 1px solid #cbd5e1;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-detail-heading .bex-pa-report-panel-icon,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-detail-heading .bex-pa-report-section-kicker,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-detail-heading .bex-pa-report-section-description {
+    display: none !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-detail-heading .bex-pa-report-section-title {
+    font-size: 10pt;
+    line-height: 1.2;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap table {
+    border-collapse: collapse;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap th,
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap td {
+    padding: 1.8mm 2mm;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap thead th {
+    background: #f8fafc !important;
+    color: #64748b;
+    font-size: 6.5pt;
+    line-height: 1.15;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap tbody td {
+    color: #334155;
+    font-size: 7.4pt;
+    line-height: 1.2;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-table-wrap tbody td:first-child {
+    color: #0f172a;
+    font-weight: 700;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-status {
+    min-height: 0;
+    padding: 0;
+    border: 0 !important;
+    background: transparent !important;
+    font-size: 7.2pt;
+    font-weight: 700;
+  }
+
+  /* Keep the footer out of normal flow so a short report never creates a
+     footer-only page. It repeats cleanly on longer reports. */
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-footer {
+    position: fixed;
+    right: 0;
+    bottom: -6mm;
+    left: 0;
+    display: block;
+    margin: 0;
+    padding-top: 2mm;
+    border-top: 1px solid #cbd5e1;
+    color: #64748b;
+    font-size: 6.3pt;
+    line-height: 1.2;
+    text-align: center;
+  }
+}
+
+/* =========================================================
+   PA REPORT PRINT FOOTER PAGINATION FIX - STAGE 6E
+   The print header already carries BexHR identity and generated metadata.
+   Remove the redundant footer from paged output so a short report cannot
+   create a footer-only second page. Screen Reports UI is unchanged.
+   ========================================================= */
+
+@media print {
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-footer {
+    display: none !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+}
+
+/* =========================================================
+   PA REPORT INLINE IDENTITY FOOTER - STAGE 6F
+   Keep the BexHR report identity footer on the same printed page when space
+   is available. The footer stays in normal document flow so it follows the
+   appraisal detail table and never forces its own page.
+   ========================================================= */
+
+@media print {
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-footer {
+    display: block !important;
+    position: static !important;
+    visibility: visible !important;
+    clear: none !important;
+    break-before: auto !important;
+    page-break-before: auto !important;
+    break-after: auto !important;
+    page-break-after: auto !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    margin: 4mm 0 0 !important;
+    padding: 2mm 0 0 !important;
+    border: 0 !important;
+    border-top: 1px solid #cbd5e1 !important;
+    color: #64748b !important;
+    font-size: 6.5pt !important;
+    line-height: 1.25 !important;
+    text-align: center !important;
+  }
+}
+
+/* =========================================================
+   PA REPORT BOTTOM-ANCHORED IDENTITY FOOTER - STAGE 6G
+   Keep the existing BexHR report identity footer on the same page while
+   visually anchoring it near the bottom edge of a short A4 report.
+   The footer remains scoped to PA print mode only. Larger reports may grow
+   beyond the minimum page height and continue naturally.
+   ========================================================= */
+
+@media print {
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection {
+    position: relative !important;
+    min-height: 262mm !important;
+    padding-bottom: 10mm !important;
+    box-sizing: border-box !important;
+  }
+
+  body.bex-pa-page.bex-pa-printing-report #bexPaReportsSection .bex-pa-report-print-footer {
+    display: block !important;
+    position: absolute !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 2mm 0 0 !important;
+    border: 0 !important;
+    border-top: 1px solid #cbd5e1 !important;
+    color: #64748b !important;
+    font-size: 6.5pt !important;
+    line-height: 1.25 !important;
+    text-align: center !important;
+  }
+}
+
+/* =========================================================
+   PA PRODUCT SHELL AND TENANT PARITY - STAGE 7A
+   Align the Performance Appraisal workspace shell with the
+   current BexHR dashboard family while keeping all PA content,
+   routing, permissions, lifecycle state and persistence unchanged.
+
+   Tenant rule:
+   - Standard BexHR workspaces use the navy/teal product shell.
+   - Alpatech colours apply only when .alpatech-workspace is present.
+   ========================================================= */
+
+body.bex-pa-page {
+  --bex-pa-shell-navy-950: #071426;
+  --bex-pa-shell-navy-900: #0b1f38;
+  --bex-pa-shell-navy-800: #123253;
+  --bex-pa-shell-teal-600: #0f9f9a;
+  --bex-pa-shell-teal-500: #16b8ae;
+  --bex-pa-shell-teal-100: #dff8f5;
+  --bex-pa-shell-page: #f4f7fb;
+  --bex-pa-sidebar-width: 220px;
+  background: var(--bex-pa-shell-page);
+}
+
+body.bex-pa-page:not(.alpatech-workspace) {
+  --bex-pa-primary: var(--bex-pa-shell-teal-600);
+  --bex-pa-primary-dark: #0a7b78;
+  --bex-pa-primary-soft: var(--bex-pa-shell-teal-100);
+  --bex-pa-background: var(--bex-pa-shell-page);
+  --hr-primary: var(--bex-pa-shell-teal-600);
+  --hr-primary-soft: var(--bex-pa-shell-teal-500);
+  --hr-primary-dark: #0a7b78;
+  --hr-background: var(--bex-pa-shell-page);
+  --hr-surface: #ffffff;
+  --hr-text: #172033;
+  --hr-muted: #667085;
+  --hr-border: #e4eaf1;
+  --hr-soft-surface: #effbf9;
+}
+
+body.bex-pa-page.alpatech-workspace {
+  --bex-pa-primary: #0b5f95;
+  --bex-pa-primary-dark: #08446d;
+  --bex-pa-primary-soft: #eaf8fb;
+  --bex-pa-background: #f4f8fb;
+  --hr-primary: #0b5f95;
+  --hr-primary-soft: #36b9cf;
+  --hr-primary-dark: #08446d;
+  --hr-background: #f4f8fb;
+  --hr-surface: #ffffff;
+  --hr-text: #101828;
+  --hr-muted: #667085;
+  --hr-border: #d8e5ee;
+  --hr-soft-surface: #eef9fc;
+  background: linear-gradient(180deg, #f4f8fb 0%, #eef4f8 100%);
+}
+
+.bex-pa-page .bex-pa-sidebar-brand {
+  display: none;
+}
+
+body.bex-pa-page.alpatech-workspace #bexPaBackToTopButton {
+  background-color: #0b5f95 !important;
+  border-color: #0b5f95 !important;
+}
+
+@media (min-width: 992px) {
+  .bex-pa-page .bex-pa-header {
+    display: none !important;
+  }
+
+  .bex-pa-page .bex-pa-shell,
+  .bex-pa-page .bex-pa-shell > .row {
+    min-height: 100vh;
+  }
+
+  .bex-pa-page .bex-pa-shell {
+    padding-left: var(--bex-pa-sidebar-width);
+  }
+
+  .bex-pa-page .bex-pa-shell > .row {
+    display: block;
+  }
+
+  .bex-pa-page .bex-pa-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 1035;
+    display: flex;
+    width: var(--bex-pa-sidebar-width);
+    max-width: var(--bex-pa-sidebar-width);
+    height: 100vh;
+    max-height: 100vh;
+    flex-direction: column;
+    padding: 1.1rem 0.9rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-right: 0 !important;
+  }
+
+  .bex-pa-page:not(.alpatech-workspace) .bex-pa-sidebar {
+    background:
+      linear-gradient(
+        180deg,
+        var(--bex-pa-shell-navy-950) 0%,
+        var(--bex-pa-shell-navy-900) 100%
+      ) !important;
+    box-shadow: 12px 0 38px rgba(7, 20, 38, 0.16);
+  }
+
+  .bex-pa-page.alpatech-workspace .bex-pa-sidebar {
+    background:
+      radial-gradient(
+        circle at top left,
+        rgba(54, 185, 207, 0.16),
+        transparent 34%
+      ),
+      linear-gradient(180deg, #ffffff 0%, #f3f9fc 100%) !important;
+    border-right: 1px solid rgba(216, 229, 238, 0.95) !important;
+    box-shadow: 8px 0 28px rgba(7, 59, 99, 0.07);
+  }
+
+  .bex-pa-page .bex-pa-sidebar-brand {
+    display: flex;
+    min-height: 64px;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.35rem 0.55rem 1rem;
+    margin-bottom: 0.65rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .bex-pa-page .bex-pa-sidebar-brand-mark {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background:
+      linear-gradient(
+        135deg,
+        var(--bex-pa-shell-teal-500),
+        #55d7cd
+      );
+    color: var(--bex-pa-shell-navy-950);
+    font-size: 0.67rem;
+    font-weight: 850;
+    letter-spacing: -0.025em;
+    box-shadow: 0 10px 26px rgba(22, 184, 174, 0.28);
+  }
+
+  .bex-pa-page .bex-pa-sidebar-brand-word {
+    color: #ffffff;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+
+  .bex-pa-page.alpatech-workspace .bex-pa-sidebar-brand {
+    border-bottom-color: rgba(216, 229, 238, 0.95);
+  }
+
+  .bex-pa-page.alpatech-workspace .bex-pa-sidebar-brand-mark {
+    background: linear-gradient(135deg, #0b5f95 0%, #36b9cf 100%);
+    color: #ffffff;
+    box-shadow: 0 10px 24px rgba(11, 95, 149, 0.2);
+  }
+
+  .bex-pa-page.alpatech-workspace .bex-pa-sidebar-brand-word {
+    color: #0b5f95;
+  }
+
+  .bex-pa-page .bex-pa-sidebar nav {
+    position: static;
+    top: auto;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    padding: 0 !important;
+  }
+
+  .bex-pa-page .bex-pa-sidebar nav > p {
+    margin: 0 0 0.6rem !important;
+    padding: 0 0.8rem;
+    color: #6f8298 !important;
+    font-size: 0.66rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.09em;
+  }
+
+  .bex-pa-page.alpatech-workspace .bex-pa-sidebar nav > p {
+    color: #7890a0 !important;
+  }
+
+  .bex-pa-page #bexPaPrimaryNavigation {
+    gap: 0.35rem !important;
+  }
+
+  .bex-pa-page #bexPaPrimaryNavigation .nav-link {
+    position: relative;
+    min-height: 46px;
+    padding: 0.68rem 0.8rem;
+    border-radius: 12px;
+    background: transparent;
+    color: #aebbc9;
+    font-size: 0.875rem;
+    font-weight: 650;
+    line-height: 1.3;
+  }
+
+  .bex-pa-page #bexPaPrimaryNavigation .nav-link i {
+    width: 24px;
+    color: #7890a8;
+    font-size: 1.05rem;
+  }
+
+  .bex-pa-page #bexPaPrimaryNavigation .nav-link:not(.active):not(:disabled):hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    transform: none;
+  }
+
+  .bex-pa-page #bexPaPrimaryNavigation .nav-link:not(.active):not(:disabled):hover i {
+    color: #9ce8e2;
+  }
+
+  .bex-pa-page #bexPaPrimaryNavigation .nav-link.active {
+    background: rgba(22, 184, 174, 0.15);
+    color: #ffffff;
+    box-shadow: inset 0 0 0 1px rgba(98, 221, 211, 0.16);
+  }
+
+  .bex-pa-page #bexPaPrimaryNavigation .nav-link.active::before {
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    left: -0.9rem;
+    width: 4px;
+    border-radius: 999px;
+    background:
+      linear-gradient(
+        180deg,
+        #62ddd3,
+        var(--bex-pa-shell-teal-500)
+      );
+    content: "";
+  }
+
+  .bex-pa-page #bexPaPrimaryNavigation .nav-link.active i {
+    color: #62ddd3;
+  }
+
+  .bex-pa-page.alpatech-workspace #bexPaPrimaryNavigation .nav-link {
+    color: #667085;
+  }
+
+  .bex-pa-page.alpatech-workspace #bexPaPrimaryNavigation .nav-link i {
+    color: #7890a0;
+  }
+
+  .bex-pa-page.alpatech-workspace #bexPaPrimaryNavigation .nav-link:not(.active):not(:disabled):hover {
+    background: #eaf8fb;
+    color: #08446d;
+  }
+
+  .bex-pa-page.alpatech-workspace #bexPaPrimaryNavigation .nav-link:not(.active):not(:disabled):hover i {
+    color: #0b5f95;
+  }
+
+  .bex-pa-page.alpatech-workspace #bexPaPrimaryNavigation .nav-link.active {
+    background: linear-gradient(135deg, #eaf8fb 0%, #f5fbfd 100%);
+    color: #08446d;
+    box-shadow: inset 0 0 0 1px rgba(11, 95, 149, 0.1);
+  }
+
+  .bex-pa-page.alpatech-workspace #bexPaPrimaryNavigation .nav-link.active::before {
+    background: linear-gradient(180deg, #0b5f95 0%, #36b9cf 100%);
+  }
+
+  .bex-pa-page.alpatech-workspace #bexPaPrimaryNavigation .nav-link.active i {
+    color: #0b5f95;
+  }
+
+  .bex-pa-page .bex-pa-main {
+    width: 100% !important;
+    max-width: none !important;
+    flex: 0 0 auto !important;
+    background: var(--bex-pa-background);
+  }
+
+  .bex-pa-page .bex-pa-main > div {
+    width: min(100%, 1500px);
+    max-width: 1500px;
+    margin-inline: auto;
+    padding: 1.1rem clamp(1rem, 2vw, 2rem) 2rem !important;
+  }
+
+  .bex-pa-page .bex-pa-integrated-toolbar {
+    border-color: #e4eaf1;
+    box-shadow: 0 12px 34px rgba(15, 23, 42, 0.07);
+  }
+
+  .bex-pa-page.alpatech-workspace .bex-pa-integrated-toolbar {
+    border-color: #d8e5ee;
+    box-shadow: 0 12px 30px rgba(7, 59, 99, 0.08);
+  }
+}
+
+@media (max-width: 991.98px) {
+  .bex-pa-page .bex-pa-sidebar-brand {
+    display: none;
+  }
+
+  .bex-pa-page .bex-pa-main {
+    background: var(--bex-pa-background);
+  }
+}
+
+/* =========================================================
+   PA STICKY WORKSPACE BAR POSITION - STAGE 7B
+   The desktop PA header was removed in Stage 7A, so the old 88px
+   sticky offset is no longer valid. Pin the context/exit bar near
+   the viewport top and protect the Overview hash target from being
+   hidden beneath it. Presentation only.
+   ========================================================= */
+
+.bex-pa-page .bex-pa-integrated-toolbar {
+  top: 12px;
+}
+
+.bex-pa-page #bexPaOverviewSection {
+  scroll-margin-top: 84px;
+}
+
+@media (max-width: 991.98px) {
+  .bex-pa-page .bex-pa-integrated-toolbar {
+    top: 8px;
+  }
+
+  .bex-pa-page #bexPaOverviewSection {
+    scroll-margin-top: 76px;
+  }
+}
+
+/* =========================================================
+   PA ALPATECH SIDEBAR BRAND PARITY - STAGE 7C
+   Visual brand swap only for the validated Alpatech PA workspace.
+   Non-Alpatech tenants keep the normal BexHR PA sidebar brand.
+   ========================================================= */
+
+.bex-pa-page .bex-pa-sidebar-brand-alpatech {
+  display: none;
+}
+
+@media (min-width: 992px) {
+  .bex-pa-page.alpatech-workspace .bex-pa-sidebar-brand-mark,
+  .bex-pa-page.alpatech-workspace .bex-pa-sidebar-brand-word {
+    display: none;
+  }
+
+  .bex-pa-page.alpatech-workspace .bex-pa-sidebar-brand-alpatech {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .bex-pa-page.alpatech-workspace .bex-pa-sidebar-alpatech-mark {
+    display: inline-flex;
+    height: 34px;
+    flex: 0 0 auto;
+    align-items: center;
+    padding-right: 0.55rem;
+    border-right: 1px solid rgba(148, 163, 184, 0.65);
+  }
+
+  .bex-pa-page.alpatech-workspace .bex-pa-sidebar-alpatech-mark img {
+    display: block;
+    width: 24px;
+    height: 34px;
+    object-fit: contain;
+  }
+
+  .bex-pa-page.alpatech-workspace .bex-pa-sidebar-alpatech-word {
+    color: #0b5f95;
+    font-size: 0.98rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    line-height: 1;
+  }
 }

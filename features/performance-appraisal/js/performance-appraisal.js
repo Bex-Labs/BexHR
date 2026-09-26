@@ -13,6 +13,9 @@
   const BEX_PA_CONTEXT_STORAGE_KEY =
     "bexhr:performance-appraisal:context:v1";
 
+  const BEX_PA_TENANT_CONTEXT_STORAGE_KEY =
+    "hrPayrollTenantContext";
+
   const BEX_PA_CYCLE_STORAGE_KEY =
     "bexhr:performance-appraisal:standalone-cycles:v1";
 
@@ -2040,6 +2043,18 @@
     reportCycleSelect: document.getElementById(
       "bexPaReportCycleSelect",
     ),
+    reportPrintButton: document.getElementById(
+      "bexPaPrintReportButton",
+    ),
+    reportPrintCycleName: document.getElementById(
+      "bexPaReportPrintCycleName",
+    ),
+    reportPrintCyclePeriod: document.getElementById(
+      "bexPaReportPrintCyclePeriod",
+    ),
+    reportPrintGeneratedAt: document.getElementById(
+      "bexPaReportPrintGeneratedAt",
+    ),
     reportCycleSummary: document.getElementById(
       "bexPaReportCycleSummary",
     ),
@@ -2072,6 +2087,12 @@
     ),
     reportCompletionPercentage: document.getElementById(
       "bexPaReportCompletionPercentage",
+    ),
+    reportCompletionProgress: document.getElementById(
+      "bexPaReportCompletionProgress",
+    ),
+    reportCompletionBar: document.getElementById(
+      "bexPaReportCompletionBar",
     ),
     reportOutstandingSummary: document.getElementById(
       "bexPaReportOutstandingSummary",
@@ -2579,6 +2600,7 @@
       "bexPaCyclesCreateButton",
     ),
 
+
     backToTopButton: document.getElementById(
       "bexPaBackToTopButton",
     ),
@@ -2647,6 +2669,54 @@
 
     completedSummary: document.querySelector(
       '[data-bex-pa-summary="completed"] .display-6',
+    ),
+
+    overviewReadiness: document.getElementById(
+      "bexPaOverviewReadiness",
+    ),
+
+    overviewCompletionPercentage: document.getElementById(
+      "bexPaOverviewCompletionPercentage",
+    ),
+
+    overviewCompletionProgress: document.getElementById(
+      "bexPaOverviewCompletionProgress",
+    ),
+
+    overviewCompletionBar: document.getElementById(
+      "bexPaOverviewCompletionBar",
+    ),
+
+    overviewCompletionMessage: document.getElementById(
+      "bexPaOverviewCompletionMessage",
+    ),
+
+    overviewOperations: document.getElementById(
+      "bexPaOverviewOperations",
+    ),
+
+    overviewPriorityCount: document.getElementById(
+      "bexPaOverviewPriorityCount",
+    ),
+
+    overviewPriorityList: document.getElementById(
+      "bexPaOverviewPriorityList",
+    ),
+
+    overviewPriorityEmpty: document.getElementById(
+      "bexPaOverviewPriorityEmpty",
+    ),
+
+    overviewActiveCycleCount: document.getElementById(
+      "bexPaOverviewActiveCycleCount",
+    ),
+
+    overviewActiveCycleList: document.getElementById(
+      "bexPaOverviewActiveCycleList",
+    ),
+
+    overviewActiveCycleEmpty: document.getElementById(
+      "bexPaOverviewActiveCycleEmpty",
     ),
   };
 
@@ -3174,6 +3244,424 @@
     return button;
   }
 
+  // =========================================================
+  // PA PERSONA-AWARE OVERVIEW - STAGE 7D
+  // Shared Overview behavior for My Appraisal, Manager Reviews,
+  // HR Standard View and HR Administration. Tenant branding stays
+  // separate and continues to be controlled by the tenant workspace class.
+  // =========================================================
+  function bexPaSetOverviewHero({
+    kicker,
+    title,
+    description,
+    metricsLabel,
+  }) {
+    const overviewSection =
+      bexPaElements.overviewSection;
+
+    if (!overviewSection) {
+      return;
+    }
+
+    const kickerElement =
+      overviewSection.querySelector(
+        ".bex-pa-overview-hero-kicker",
+      );
+    const titleElement =
+      overviewSection.querySelector(
+        ".bex-pa-overview-hero-title",
+      );
+    const descriptionElement =
+      overviewSection.querySelector(
+        ".bex-pa-overview-hero-description",
+      );
+    const metricsElement =
+      overviewSection.querySelector(
+        ".bex-pa-overview-metrics",
+      );
+
+    if (kickerElement) {
+      kickerElement.textContent = kicker;
+    }
+
+    if (titleElement) {
+      titleElement.textContent = title;
+    }
+
+    if (descriptionElement) {
+      descriptionElement.textContent = description;
+    }
+
+    if (metricsElement) {
+      metricsElement.setAttribute(
+        "aria-label",
+        metricsLabel,
+      );
+    }
+  }
+
+  function bexPaSetOverviewSummaryCard(
+    summaryKey,
+    {
+      label,
+      value,
+      detail,
+    },
+  ) {
+    const card =
+      bexPaElements.overviewSection
+        ?.querySelector(
+          `[data-bex-pa-summary="${summaryKey}"]`,
+        );
+
+    if (!card) {
+      return;
+    }
+
+    const labelElement =
+      card.querySelector(
+        ".bex-pa-summary-label",
+      );
+    const valueElement =
+      card.querySelector(
+        ".bex-pa-summary-value",
+      );
+    const detailElement =
+      card.querySelector(
+        ".bex-pa-summary-detail",
+      );
+
+    if (labelElement) {
+      labelElement.textContent = label;
+    }
+
+    if (valueElement) {
+      valueElement.textContent =
+        String(value);
+    }
+
+    if (detailElement) {
+      detailElement.textContent = detail;
+    }
+  }
+
+  function bexPaRenderPersonaOverviewSummary() {
+    const activeMode = bexPaGetActiveMode();
+    const activeCycleIds = new Set(
+      bexPaState.cycles
+        .filter(
+          (cycle) => cycle.status === "Active",
+        )
+        .map((cycle) => cycle.id),
+    );
+
+    const visibleEmployeeAppraisals =
+      bexPaGetVisibleEmployeeAppraisals();
+
+    const activeVisibleEmployeeAppraisals =
+      visibleEmployeeAppraisals.filter(
+        (appraisal) =>
+          activeCycleIds.has(appraisal.cycleId),
+      );
+
+    const visibleOperationalRecords =
+      visibleEmployeeAppraisals.map(
+        (appraisal) => ({
+          appraisal,
+          status:
+            bexPaGetOperationalAppraisalStatus(
+              appraisal,
+            ),
+        }),
+      );
+
+    const activeOperationalRecords =
+      activeVisibleEmployeeAppraisals.map(
+        (appraisal) => ({
+          appraisal,
+          status:
+            bexPaGetOperationalAppraisalStatus(
+              appraisal,
+            ),
+        }),
+      );
+
+    if (activeMode === "employee") {
+      const personalCycleIds = new Set(
+        visibleEmployeeAppraisals
+          .map((appraisal) =>
+            String(
+              appraisal.cycleId || "",
+            ).trim(),
+          )
+          .filter(Boolean),
+      );
+
+      const inProgressCount =
+        activeOperationalRecords.filter(
+          (record) =>
+            record.status === "In Progress",
+        ).length;
+
+      const completedCount =
+        visibleOperationalRecords.filter(
+          (record) =>
+            record.status === "Acknowledged",
+        ).length;
+
+      bexPaSetOverviewHero({
+        kicker: "My performance",
+        title: "My Appraisal",
+        description:
+          "Track your appraisal cycles, active reviews, progress and completed appraisal records.",
+        metricsLabel: "My appraisal summary",
+      });
+
+      bexPaSetOverviewSummaryCard(
+        "active-cycles",
+        {
+          label: "My appraisal cycles",
+          value: personalCycleIds.size,
+          detail:
+            "Appraisal periods linked to you",
+        },
+      );
+
+      bexPaSetOverviewSummaryCard(
+        "employees",
+        {
+          label: "My active appraisals",
+          value:
+            activeVisibleEmployeeAppraisals.length,
+          detail:
+            "Active-cycle appraisal records",
+        },
+      );
+
+      bexPaSetOverviewSummaryCard(
+        "awaiting-hr",
+        {
+          label: "In progress",
+          value: inProgressCount,
+          detail:
+            "Appraisals currently underway",
+        },
+      );
+
+      bexPaSetOverviewSummaryCard(
+        "completed",
+        {
+          label: "Completed appraisals",
+          value: completedCount,
+          detail:
+            "Acknowledged appraisal records",
+        },
+      );
+
+      return;
+    }
+
+    if (activeMode === "primary-manager") {
+      const activeReviewCycleIds = new Set(
+        activeVisibleEmployeeAppraisals
+          .map((appraisal) =>
+            String(
+              appraisal.cycleId || "",
+            ).trim(),
+          )
+          .filter(Boolean),
+      );
+
+      const reviewScopeEmployeeIds = new Set(
+        [
+          ...bexPaGetManagedEmployeeIds(),
+          ...bexPaGetSecondaryEmployeeIds(),
+        ]
+          .map((employeeId) =>
+            String(employeeId || "").trim(),
+          )
+          .filter(Boolean),
+      );
+
+      const eligibleManagerAppraisals =
+        bexPaGetEligibleManagerAppraisals();
+
+      const awaitingManagerReviewCount =
+        eligibleManagerAppraisals.filter(
+          (appraisal) => {
+            const managerAppraisal =
+              bexPaState.managerAppraisals.find(
+                (existingManagerAppraisal) =>
+                  existingManagerAppraisal.appraisalId ===
+                  appraisal.id,
+              );
+
+            return (
+              managerAppraisal?.status !==
+              "Submitted"
+            );
+          },
+        ).length;
+
+      const submittedManagerReviewCount =
+        eligibleManagerAppraisals.filter(
+          (appraisal) =>
+            bexPaState.managerAppraisals.some(
+              (managerAppraisal) =>
+                managerAppraisal.appraisalId ===
+                  appraisal.id &&
+                managerAppraisal.status ===
+                  "Submitted",
+            ),
+        ).length;
+
+      bexPaSetOverviewHero({
+        kicker: "Team performance",
+        title: "Manager Reviews",
+        description:
+          "Review appraisal progress for employees in your reporting scope and focus on submissions ready for manager action.",
+        metricsLabel: "Manager review summary",
+      });
+
+      bexPaSetOverviewSummaryCard(
+        "active-cycles",
+        {
+          label: "Active review cycles",
+          value: activeReviewCycleIds.size,
+          detail:
+            "Active appraisal cycles in your scope",
+        },
+      );
+
+      bexPaSetOverviewSummaryCard(
+        "employees",
+        {
+          label: "Employees in review scope",
+          value: reviewScopeEmployeeIds.size,
+          detail:
+            "Employees visible for manager review",
+        },
+      );
+
+      bexPaSetOverviewSummaryCard(
+        "awaiting-hr",
+        {
+          label: "Awaiting manager review",
+          value: awaitingManagerReviewCount,
+          detail:
+            "Submitted self-appraisals ready for you",
+        },
+      );
+
+      bexPaSetOverviewSummaryCard(
+        "completed",
+        {
+          label: "Manager reviews submitted",
+          value: submittedManagerReviewCount,
+          detail:
+            "Submitted manager appraisal records",
+        },
+      );
+
+      return;
+    }
+
+    const activeEmployeeIds = new Set(
+      activeVisibleEmployeeAppraisals
+        .map((appraisal) =>
+          String(
+            appraisal.employeeId || "",
+          ).trim(),
+        )
+        .filter(Boolean),
+    );
+
+    const awaitingHrCount =
+      visibleEmployeeAppraisals.filter(
+        (appraisal) => {
+          const managerAppraisal =
+            bexPaState.managerAppraisals.find(
+              (existingManagerAppraisal) =>
+                existingManagerAppraisal.appraisalId ===
+                appraisal.id,
+            );
+
+          const hrFinalisation =
+            bexPaState.hrFinalisations.find(
+              (existingFinalisation) =>
+                existingFinalisation.appraisalId ===
+                appraisal.id,
+            );
+
+          return (
+            managerAppraisal?.status ===
+              "Submitted" &&
+            hrFinalisation?.status !==
+              "Finalised"
+          );
+        },
+      ).length;
+
+    const completedCount =
+      visibleEmployeeAppraisals.filter(
+        (appraisal) =>
+          appraisal.status ===
+          "Acknowledged",
+      ).length;
+
+    bexPaSetOverviewHero({
+      kicker: "Performance operations",
+      title: "Performance Appraisal",
+      description:
+        "Monitor appraisal cycles, employee participation, HR review workload and completion across the organisation.",
+      metricsLabel: "Appraisal summary",
+    });
+
+    bexPaSetOverviewSummaryCard(
+      "active-cycles",
+      {
+        label: "Appraisal cycles",
+        value: bexPaState.cycles.length,
+        detail:
+          "Appraisal periods in this workspace",
+      },
+    );
+
+    bexPaSetOverviewSummaryCard(
+      "employees",
+      {
+        label:
+          activeCycleIds.size === 1
+            ? "Employees in active cycle"
+            : "Employees in active cycles",
+        value: activeEmployeeIds.size,
+        detail:
+          activeCycleIds.size === 1
+            ? "Employees linked to the active cycle"
+            : "Employees linked to active cycles",
+      },
+    );
+
+    bexPaSetOverviewSummaryCard(
+      "awaiting-hr",
+      {
+        label: "Awaiting HR review",
+        value: awaitingHrCount,
+        detail:
+          "Appraisals requiring HR attention",
+      },
+    );
+
+    bexPaSetOverviewSummaryCard(
+      "completed",
+      {
+        label: "Completed appraisals",
+        value: completedCount,
+        detail:
+          "Completed appraisal records",
+      },
+    );
+  }
   function bexPaRenderCycles() {
     if (!bexPaElements.cycleTableBody) {
       return;
@@ -3297,88 +3785,9 @@
       });
     }
 
-    if (bexPaElements.activeCycleSummary) {
-      bexPaElements.activeCycleSummary.textContent = String(
-        bexPaState.cycles.length,
-      );
-    }
-
-    const activeCycleIds = new Set(
-      bexPaState.cycles
-        .filter((cycle) => cycle.status === "Active")
-        .map((cycle) => cycle.id),
-    );
-
-    const visibleEmployeeAppraisals =
-      bexPaGetVisibleEmployeeAppraisals();
-
-    const activeVisibleEmployeeAppraisals =
-      visibleEmployeeAppraisals.filter(
-        (appraisal) =>
-          activeCycleIds.has(appraisal.cycleId),
-      );
-
-    if (bexPaElements.employeesInCycleLabel) {
-      bexPaElements.employeesInCycleLabel.textContent =
-        bexPaIsEmployeeMode()
-          ? "My active appraisals"
-          : activeCycleIds.size === 1
-            ? "Employees in active cycle"
-            : "Employees in active cycles";
-    }
-
-    const activeEmployeeIds = new Set(
-      activeVisibleEmployeeAppraisals
-        .map((appraisal) =>
-          String(appraisal.employeeId || "").trim(),
-        )
-        .filter(Boolean),
-    );
-
-    if (bexPaElements.employeesInCycleSummary) {
-      bexPaElements.employeesInCycleSummary.textContent =
-        String(activeEmployeeIds.size);
-    }
-
-    const awaitingHrCount =
-      visibleEmployeeAppraisals.filter(
-        (appraisal) => {
-          const managerAppraisal =
-            bexPaState.managerAppraisals.find(
-              (existingManagerAppraisal) =>
-                existingManagerAppraisal.appraisalId ===
-                appraisal.id,
-            );
-
-          const hrFinalisation =
-            bexPaState.hrFinalisations.find(
-              (existingFinalisation) =>
-                existingFinalisation.appraisalId ===
-                appraisal.id,
-            );
-
-          return (
-            managerAppraisal?.status === "Submitted" &&
-            hrFinalisation?.status !== "Finalised"
-          );
-        },
-      ).length;
-
-    if (bexPaElements.awaitingHrSummary) {
-      bexPaElements.awaitingHrSummary.textContent =
-        String(awaitingHrCount);
-    }
-
-    const completedCount =
-      visibleEmployeeAppraisals.filter(
-        (appraisal) =>
-          appraisal.status === "Acknowledged",
-      ).length;
-
-    if (bexPaElements.completedSummary) {
-      bexPaElements.completedSummary.textContent =
-        String(completedCount);
-    }
+    bexPaRenderPersonaOverviewSummary();
+    bexPaRenderOverviewReadiness();
+    bexPaRenderOverviewOperations();
   }
 
   async function bexPaHandleCycleSubmit(event) {
@@ -5342,6 +5751,22 @@
     return "";
   }
 
+  function bexPaCreateGoalIdentityMeta(labelText, valueText) {
+    const identity = document.createElement("span");
+    identity.className = "bex-pa-goal-meta-identity";
+
+    const label = document.createElement("span");
+    label.className = "bex-pa-goal-meta-identity-label";
+    label.textContent = String(labelText ?? "");
+
+    const value = document.createElement("strong");
+    value.className = "bex-pa-goal-meta-identity-value";
+    value.textContent = String(valueText ?? "");
+
+    identity.append(label, value);
+    return identity;
+  }
+
   function bexPaRenderProgressUpdates() {
     if (!bexPaElements.progressUpdatesList) {
       return;
@@ -5432,10 +5857,10 @@
         meta.className = "bex-pa-goal-meta";
 
         const employeeLabel =
-          document.createElement("span");
-        employeeLabel.textContent =
-          "Employee: " +
-          (individualGoal?.employee || "Unknown employee");
+          bexPaCreateGoalIdentityMeta(
+            "Employee",
+            individualGoal?.employee || "Unknown employee",
+          );
 
         const cycleLabel =
           document.createElement("span");
@@ -6032,9 +6457,10 @@
         meta.className = "bex-pa-goal-meta";
 
         const employeeLabel =
-          document.createElement("span");
-        employeeLabel.textContent =
-          individualGoal.employee;
+          bexPaCreateGoalIdentityMeta(
+            "Employee",
+            individualGoal.employee,
+          );
 
         const departmentLabel =
           document.createElement("span");
@@ -6468,15 +6894,16 @@
           cycle?.name || "Unknown cycle";
 
         const ownerLabel =
-          document.createElement("span");
-        ownerLabel.textContent =
-          `Owner: ${departmentGoal.owner}`;
+          bexPaCreateGoalIdentityMeta(
+            "Owner",
+            departmentGoal.owner,
+          );
 
         meta.append(
+          ownerLabel,
           departmentLabel,
           organisationGoalLabel,
           cycleLabel,
-          ownerLabel,
         );
 
         titleArea.append(
@@ -6819,14 +7246,15 @@
       cycleLabel.textContent =
         cycle?.name || "Unknown cycle";
 
-      const ownerLabel = document.createElement("span");
-      ownerLabel.textContent =
-        `Owner: ${deliverable.owner}`;
+      const ownerLabel = bexPaCreateGoalIdentityMeta(
+        "Owner",
+        deliverable.owner,
+      );
 
       meta.append(
+        ownerLabel,
         goalLabel,
         cycleLabel,
-        ownerLabel,
       );
 
       titleArea.append(
@@ -7118,12 +7546,14 @@
       cycleLabel.textContent =
         cycle?.name || "Unknown cycle";
 
-      const ownerLabel = document.createElement("span");
-      ownerLabel.textContent = `Owner: ${goal.owner}`;
+      const ownerLabel = bexPaCreateGoalIdentityMeta(
+        "Owner",
+        goal.owner,
+      );
 
       meta.append(
-        cycleLabel,
         ownerLabel,
+        cycleLabel,
       );
 
       titleArea.append(
@@ -8073,7 +8503,7 @@
 
     button.type = "button";
     button.className =
-      "btn btn-sm btn-outline-secondary";
+      "btn btn-sm btn-outline-secondary bex-pa-template-edit-button";
 
     button.dataset.bexPaTemplateAction = "edit";
     button.dataset.bexPaTemplateId =
@@ -8103,7 +8533,7 @@
         document.createElement("p");
 
       emptyState.className =
-        "mb-0 text-body-secondary";
+        "bex-pa-template-empty mb-0 text-body-secondary";
 
       emptyState.id = "bexPaTemplatesEmpty";
 
@@ -8121,22 +8551,25 @@
       const item =
         document.createElement("article");
 
-      item.className = "bex-pa-goal-item";
+      item.className = "bex-pa-template-item";
 
       const header =
         document.createElement("div");
 
       header.className =
-        "d-flex align-items-start justify-content-between gap-3";
+        "bex-pa-template-item-header";
 
       const titleArea =
         document.createElement("div");
+
+      titleArea.className =
+        "bex-pa-template-item-heading";
 
       const title =
         document.createElement("h3");
 
       title.className =
-        "bex-pa-goal-item-title h6";
+        "bex-pa-template-item-title";
 
       title.textContent =
         template.name;
@@ -8145,7 +8578,7 @@
         document.createElement("span");
 
       status.className =
-        "bex-pa-goal-status";
+        "bex-pa-template-status";
 
       status.dataset.status =
         template.status.toLowerCase();
@@ -8157,25 +8590,37 @@
         document.createElement("p");
 
       description.className =
-        "mt-3 mb-0 text-body-secondary";
+        "bex-pa-template-description";
 
       description.textContent =
         template.description;
+
+      const detailGrid =
+        document.createElement("div");
+
+      detailGrid.className =
+        "bex-pa-template-detail-grid";
+
+      const ratingDetail =
+        document.createElement("section");
+
+      ratingDetail.className =
+        "bex-pa-template-detail-block";
 
       const ratingHeading =
         document.createElement("p");
 
       ratingHeading.className =
-        "mt-3 mb-1 small fw-semibold";
+        "bex-pa-template-detail-label";
 
       ratingHeading.textContent =
-        "Rating options";
+        "Rating scale";
 
       const ratingScale =
         document.createElement("ol");
 
       ratingScale.className =
-        "mb-0 small text-body-secondary";
+        "bex-pa-template-rating-list";
 
       const templateRatings =
         Array.isArray(template.ratingScale)
@@ -8186,6 +8631,9 @@
         const ratingItem =
           document.createElement("li");
 
+        ratingItem.className =
+          "bex-pa-template-rating-item";
+
         ratingItem.textContent = rating;
 
         ratingScale.appendChild(
@@ -8193,28 +8641,80 @@
         );
       });
 
-      const competencySummary =
+      ratingDetail.append(
+        ratingHeading,
+        ratingScale,
+      );
+
+      const competencyDetail =
+        document.createElement("section");
+
+      competencyDetail.className =
+        "bex-pa-template-detail-block bex-pa-template-competency-detail";
+
+      const competencyHeading =
         document.createElement("p");
 
-      competencySummary.className =
-        "mt-3 mb-0 small text-body-secondary";
+      competencyHeading.className =
+        "bex-pa-template-detail-label";
+
+      competencyHeading.textContent =
+        "Assessment areas";
 
       const templateCompetencies =
         Array.isArray(template.competencies)
           ? template.competencies
           : [];
 
-      competencySummary.textContent =
-        `${templateCompetencies.length} assessment ${templateCompetencies.length === 1
+      const competencySummary =
+        document.createElement("div");
+
+      competencySummary.className =
+        "bex-pa-template-competency-summary";
+
+      const competencyIcon =
+        document.createElement("span");
+
+      competencyIcon.className =
+        "bex-pa-template-competency-icon";
+
+      competencyIcon.setAttribute(
+        "aria-hidden",
+        "true",
+      );
+
+      competencyIcon.innerHTML =
+        '<i class="bi bi-ui-checks-grid"></i>';
+
+      const competencyValue =
+        document.createElement("strong");
+
+      competencyValue.textContent =
+        `${templateCompetencies.length} ${templateCompetencies.length === 1
           ? "area"
           : "areas"
         } configured`;
+
+      competencySummary.append(
+        competencyIcon,
+        competencyValue,
+      );
+
+      competencyDetail.append(
+        competencyHeading,
+        competencySummary,
+      );
+
+      detailGrid.append(
+        ratingDetail,
+        competencyDetail,
+      );
 
       const actions =
         document.createElement("div");
 
       actions.className =
-        "bex-pa-goal-item-actions";
+        "bex-pa-template-item-actions";
 
       if (bexPaCanManageTemplates()) {
         actions.appendChild(
@@ -8234,9 +8734,7 @@
       item.append(
         header,
         description,
-        ratingHeading,
-        ratingScale,
-        competencySummary,
+        detailGrid,
         actions,
       );
 
@@ -8719,6 +9217,1202 @@
     return counts;
   }
 
+  // =========================================================
+  // PA EMPLOYEE OVERVIEW COMPLETION - STAGE 7E
+  // Extend the approved Overview structure for My Appraisal only.
+  // Uses existing employee-scoped appraisal state and cycle milestones.
+  // HR Administration behavior remains unchanged.
+  // =========================================================
+  // PA MANAGER OVERVIEW COMPLETION - STAGE 7F
+  // Extend the same approved Overview structure for Manager Reviews.
+  // Manager action metrics use primary-manager eligibility while
+  // team visibility continues to include the existing secondary scope.
+  // =========================================================
+  function bexPaRenderOverviewReadiness() {
+    const readiness =
+      bexPaElements.overviewReadiness;
+
+    if (!readiness) {
+      return;
+    }
+
+    const isEmployeeOverview =
+      bexPaIsEmployeeMode();
+    const isManagerOverview =
+      bexPaIsManagerReviewMode();
+
+    const canShowReadiness =
+      bexPaIsHrAdminMode() ||
+      isEmployeeOverview ||
+      isManagerOverview;
+
+    readiness.classList.toggle(
+      "d-none",
+      !canShowReadiness,
+    );
+
+    if (!canShowReadiness) {
+      return;
+    }
+
+    const readinessKicker =
+      readiness.querySelector(
+        ".bex-pa-overview-section-kicker",
+      );
+    const readinessTitle =
+      document.getElementById(
+        "bexPaOverviewReadinessTitle",
+      );
+
+    if (isEmployeeOverview) {
+      if (readinessKicker) {
+        readinessKicker.textContent =
+          "My appraisal progress";
+      }
+
+      if (readinessTitle) {
+        readinessTitle.textContent =
+          "Active-cycle completion";
+      }
+
+      bexPaElements.overviewCompletionProgress
+        ?.setAttribute(
+          "aria-label",
+          "My active-cycle appraisal completion",
+        );
+    } else if (isManagerOverview) {
+      if (readinessKicker) {
+        readinessKicker.textContent =
+          "Manager review progress";
+      }
+
+      if (readinessTitle) {
+        readinessTitle.textContent =
+          "Review queue completion";
+      }
+
+      bexPaElements.overviewCompletionProgress
+        ?.setAttribute(
+          "aria-label",
+          "Manager review queue completion",
+        );
+    } else {
+      if (readinessKicker) {
+        readinessKicker.textContent =
+          "Appraisal progress";
+      }
+
+      if (readinessTitle) {
+        readinessTitle.textContent =
+          "Overall appraisal completion";
+      }
+
+      bexPaElements.overviewCompletionProgress
+        ?.setAttribute(
+          "aria-label",
+          "Active-cycle appraisal completion",
+        );
+    }
+
+    const activeCycleIds = new Set(
+      bexPaState.cycles
+        .filter(
+          (cycle) => cycle.status === "Active",
+        )
+        .map((cycle) => cycle.id),
+    );
+
+    if (isManagerOverview) {
+      const visibleActiveAppraisals =
+        bexPaGetVisibleEmployeeAppraisals().filter(
+          (appraisal) =>
+            activeCycleIds.has(
+              appraisal.cycleId,
+            ),
+        );
+
+      const activeManagerReviewAppraisals =
+        bexPaGetEligibleManagerAppraisals().filter(
+          (appraisal) =>
+            activeCycleIds.has(
+              appraisal.cycleId,
+            ),
+        );
+
+      const submittedManagerReviewCount =
+        activeManagerReviewAppraisals.filter(
+          (appraisal) =>
+            bexPaState.managerAppraisals.some(
+              (managerAppraisal) =>
+                managerAppraisal.appraisalId ===
+                  appraisal.id &&
+                managerAppraisal.status ===
+                  "Submitted",
+            ),
+        ).length;
+
+      const managerReviewTotal =
+        activeManagerReviewAppraisals.length;
+
+      const managerReviewPercentage =
+        managerReviewTotal > 0
+          ? Math.round(
+            (
+              submittedManagerReviewCount /
+              managerReviewTotal
+            ) * 100,
+          )
+          : 0;
+
+      if (
+        bexPaElements
+          .overviewCompletionPercentage
+      ) {
+        bexPaElements
+          .overviewCompletionPercentage
+          .textContent =
+          `${managerReviewPercentage}%`;
+      }
+
+      if (
+        bexPaElements
+          .overviewCompletionProgress
+      ) {
+        bexPaElements
+          .overviewCompletionProgress
+          .setAttribute(
+            "aria-valuenow",
+            String(managerReviewPercentage),
+          );
+
+        bexPaElements
+          .overviewCompletionProgress
+          .setAttribute(
+            "aria-valuetext",
+            managerReviewTotal > 0
+              ? `${submittedManagerReviewCount} of ${managerReviewTotal} manager reviews submitted`
+              : "No manager reviews currently ready",
+          );
+      }
+
+      if (
+        bexPaElements.overviewCompletionBar
+      ) {
+        bexPaElements
+          .overviewCompletionBar
+          .style.width =
+          `${managerReviewPercentage}%`;
+      }
+
+      if (
+        !bexPaElements.overviewCompletionMessage
+      ) {
+        return;
+      }
+
+      if (visibleActiveAppraisals.length === 0) {
+        bexPaElements
+          .overviewCompletionMessage
+          .textContent =
+          "No active appraisals are currently in your manager review scope.";
+        return;
+      }
+
+      if (bexPaGetManagedEmployeeIds().length === 0) {
+        bexPaElements
+          .overviewCompletionMessage
+          .textContent =
+          "Your current manager scope is read-only for secondary-report appraisals.";
+        return;
+      }
+
+      if (managerReviewTotal === 0) {
+        bexPaElements
+          .overviewCompletionMessage
+          .textContent =
+          "No submitted self-appraisals are currently ready for manager review.";
+        return;
+      }
+
+      const managerReviewPending =
+        managerReviewTotal -
+        submittedManagerReviewCount;
+
+      bexPaElements
+        .overviewCompletionMessage
+        .textContent =
+        managerReviewPending === 0
+          ? "All manager-ready appraisals in your active queue have been reviewed."
+          : `${submittedManagerReviewCount} of ${managerReviewTotal} manager reviews submitted. ${managerReviewPending} ready for action.`;
+
+      return;
+    }
+
+    const readinessAppraisals =
+      isEmployeeOverview
+        ? bexPaGetVisibleEmployeeAppraisals()
+        : bexPaState.employeeAppraisals;
+
+    const activeCycleRecords =
+      readinessAppraisals
+        .filter(
+          (appraisal) =>
+            activeCycleIds.has(
+              appraisal.cycleId,
+            ),
+        )
+        .map((appraisal) => ({
+          appraisal,
+          status:
+            bexPaGetOperationalAppraisalStatus(
+              appraisal,
+            ),
+        }));
+
+    const counts =
+      bexPaGetOperationalReportCounts(
+        activeCycleRecords,
+      );
+
+    const completionPercentage =
+      counts.total > 0
+        ? Math.round(
+          (
+            counts.acknowledged /
+            counts.total
+          ) * 100,
+        )
+        : 0;
+
+    if (
+      bexPaElements
+        .overviewCompletionPercentage
+    ) {
+      bexPaElements
+        .overviewCompletionPercentage
+        .textContent =
+        `${completionPercentage}%`;
+    }
+
+    if (
+      bexPaElements
+        .overviewCompletionProgress
+    ) {
+      bexPaElements
+        .overviewCompletionProgress
+        .setAttribute(
+          "aria-valuenow",
+          String(completionPercentage),
+        );
+
+      bexPaElements
+        .overviewCompletionProgress
+        .setAttribute(
+          "aria-valuetext",
+          counts.total > 0
+            ? `${counts.acknowledged} of ${counts.total} appraisals acknowledged`
+            : "No active-cycle appraisals",
+        );
+    }
+
+    if (
+      bexPaElements.overviewCompletionBar
+    ) {
+      bexPaElements
+        .overviewCompletionBar
+        .style.width =
+        `${completionPercentage}%`;
+    }
+
+    if (
+      !bexPaElements.overviewCompletionMessage
+    ) {
+      return;
+    }
+
+    if (activeCycleIds.size === 0) {
+      bexPaElements
+        .overviewCompletionMessage
+        .textContent =
+        isEmployeeOverview
+          ? "You do not have an active appraisal cycle right now."
+          : "No active appraisal cycle is currently running.";
+      return;
+    }
+
+    if (counts.total === 0) {
+      bexPaElements
+        .overviewCompletionMessage
+        .textContent =
+        isEmployeeOverview
+          ? "No active-cycle appraisal is currently assigned to you."
+          : activeCycleIds.size === 1
+            ? "The active appraisal cycle has no assigned appraisals yet."
+            : "The active appraisal cycles have no assigned appraisals yet.";
+      return;
+    }
+
+    if (isEmployeeOverview) {
+      const personalStatusSummary = [
+        [counts.assigned, "not started"],
+        [counts.inProgress, "in progress"],
+        [counts.submitted, "awaiting HR finalisation"],
+        [counts.finalised, "awaiting your acknowledgement"],
+      ]
+        .filter(([count]) => count > 0)
+        .map(([count, label]) =>
+          `${count} ${label}`,
+        )
+        .join("; ");
+
+      bexPaElements
+        .overviewCompletionMessage
+        .textContent =
+        counts.acknowledged === counts.total
+          ? "Your active-cycle appraisal is complete and acknowledged."
+          : `${counts.acknowledged} of ${counts.total} active-cycle appraisal${counts.total === 1 ? "" : "s"} acknowledged${personalStatusSummary ? `. ${personalStatusSummary}.` : "."}`;
+      return;
+    }
+
+    const appraisalLabel =
+      counts.total === 1
+        ? "appraisal"
+        : "appraisals";
+
+    bexPaElements
+      .overviewCompletionMessage
+      .textContent =
+      `${counts.acknowledged} of ${counts.total} active-cycle ${appraisalLabel} acknowledged. ` +
+      `${counts.submitted} awaiting HR finalisation; ` +
+      `${counts.finalised} awaiting employee acknowledgement.`;
+  }
+
+  function bexPaCreateOverviewOperationItem({
+    title,
+    metaItems = [],
+    badgeText = "",
+    badgeKind = "",
+  }) {
+    const item = document.createElement("article");
+    item.className = "bex-pa-overview-operation-item";
+    item.setAttribute("role", "listitem");
+
+    const header = document.createElement("div");
+    header.className =
+      "bex-pa-overview-operation-item-header";
+
+    const main = document.createElement("div");
+    main.className =
+      "bex-pa-overview-operation-item-main";
+
+    const titleElement = document.createElement("h3");
+    titleElement.className =
+      "bex-pa-overview-operation-item-title";
+    titleElement.textContent = title;
+
+    const meta = document.createElement("div");
+    meta.className =
+      "bex-pa-overview-operation-item-meta";
+
+    metaItems
+      .filter(Boolean)
+      .forEach((text) => {
+        const metaItem = document.createElement("span");
+        metaItem.textContent = text;
+        meta.appendChild(metaItem);
+      });
+
+    main.append(titleElement, meta);
+    header.appendChild(main);
+
+    if (badgeText) {
+      const badge = document.createElement("span");
+      badge.className =
+        "bex-pa-overview-operation-badge";
+      badge.textContent = badgeText;
+
+      if (badgeKind) {
+        badge.dataset.kind = badgeKind;
+      }
+
+      header.appendChild(badge);
+    }
+
+    item.appendChild(header);
+    return item;
+  }
+
+  function bexPaCreateOverviewCycleItem(cycle) {
+    const report =
+      bexPaGetCycleOperationalReport(cycle);
+
+    const participantIds = new Set(
+      report.records
+        .map((record) =>
+          String(
+            record.appraisal.employeeId || "",
+          ).trim(),
+        )
+        .filter(Boolean),
+    );
+
+    const item = document.createElement("article");
+    item.className = "bex-pa-overview-operation-item";
+    item.setAttribute("role", "listitem");
+
+    const header = document.createElement("div");
+    header.className =
+      "bex-pa-overview-operation-item-header";
+
+    const main = document.createElement("div");
+    main.className =
+      "bex-pa-overview-operation-item-main";
+
+    const title = document.createElement("h3");
+    title.className =
+      "bex-pa-overview-operation-item-title";
+    title.textContent =
+      cycle.name || "Unnamed appraisal cycle";
+
+    const dateMeta = document.createElement("div");
+    dateMeta.className =
+      "bex-pa-overview-operation-item-meta";
+
+    const dateRange = document.createElement("span");
+    dateRange.textContent =
+      `${bexPaFormatDate(cycle.startDate)} - ${bexPaFormatDate(cycle.endDate)}`;
+
+    const participantSummary = document.createElement("span");
+    participantSummary.textContent =
+      `${participantIds.size} participant${participantIds.size === 1 ? "" : "s"}`;
+
+    const completionSummary = document.createElement("span");
+    completionSummary.textContent =
+      `${report.counts.acknowledged} acknowledged`;
+
+    dateMeta.append(
+      dateRange,
+      participantSummary,
+      completionSummary,
+    );
+
+    main.append(title, dateMeta);
+
+    const badge = document.createElement("span");
+    badge.className =
+      "bex-pa-overview-operation-badge";
+    badge.dataset.kind = "active";
+    badge.textContent = "Active";
+
+    header.append(main, badge);
+
+    const milestones = document.createElement("div");
+    milestones.className =
+      "bex-pa-overview-cycle-milestones";
+
+    const milestoneData = [
+      ["Goal setting", cycle.goalDeadline],
+      ["Self appraisal", cycle.employeeReviewDeadline],
+      ["Manager review", cycle.managerReviewDeadline],
+      ["HR review", cycle.hrReviewDeadline],
+    ];
+
+    milestoneData.forEach(([label, value]) => {
+      const milestone = document.createElement("div");
+      milestone.className =
+        "bex-pa-overview-cycle-milestone";
+
+      const milestoneLabel = document.createElement("span");
+      milestoneLabel.className =
+        "bex-pa-overview-cycle-milestone-label";
+      milestoneLabel.textContent = label;
+
+      const milestoneValue = document.createElement("span");
+      milestoneValue.className =
+        "bex-pa-overview-cycle-milestone-value";
+      milestoneValue.textContent =
+        bexPaFormatDate(value);
+
+      milestone.append(
+        milestoneLabel,
+        milestoneValue,
+      );
+
+      milestones.appendChild(milestone);
+    });
+
+    item.append(header, milestones);
+    return item;
+  }
+
+  function bexPaRenderOverviewOperations() {
+    const operations =
+      bexPaElements.overviewOperations;
+
+    if (!operations) {
+      return;
+    }
+
+    const isEmployeeOverview =
+      bexPaIsEmployeeMode();
+    const isManagerOverview =
+      bexPaIsManagerReviewMode();
+
+    const canShowOperations =
+      bexPaIsHrAdminMode() ||
+      isEmployeeOverview ||
+      isManagerOverview;
+
+    operations.classList.toggle(
+      "d-none",
+      !canShowOperations,
+    );
+
+    if (!canShowOperations) {
+      return;
+    }
+
+    const visibleAppraisals =
+      bexPaGetVisibleEmployeeAppraisals();
+
+    if (isEmployeeOverview) {
+      const activeCycleIds = new Set(
+        bexPaState.cycles
+          .filter(
+            (cycle) => cycle.status === "Active",
+          )
+          .map((cycle) => cycle.id),
+      );
+
+      const activePersonalAppraisals =
+        visibleAppraisals.filter(
+          (appraisal) =>
+            activeCycleIds.has(
+              appraisal.cycleId,
+            ),
+        );
+
+      const priorityTitle =
+        document.getElementById(
+          "bexPaOverviewPriorityTitle",
+        );
+      const priorityPanel =
+        priorityTitle?.closest(
+          ".bex-pa-overview-panel",
+        );
+      const priorityKicker =
+        priorityPanel?.querySelector(
+          ".bex-pa-overview-section-kicker",
+        );
+      const priorityDescription =
+        priorityPanel?.querySelector(
+          ".bex-pa-overview-panel-description",
+        );
+
+      if (priorityKicker) {
+        priorityKicker.textContent =
+          "Current review";
+      }
+
+      if (priorityTitle) {
+        priorityTitle.textContent =
+          "My current appraisal";
+      }
+
+      if (priorityDescription) {
+        priorityDescription.textContent =
+          "Your active appraisal status and the next step in your review.";
+      }
+
+      if (bexPaElements.overviewPriorityCount) {
+        bexPaElements.overviewPriorityCount.textContent =
+          String(activePersonalAppraisals.length);
+      }
+
+      if (bexPaElements.overviewPriorityList) {
+        bexPaElements.overviewPriorityList.replaceChildren();
+
+        activePersonalAppraisals.forEach(
+          (appraisal) => {
+            const cycle =
+              bexPaState.cycles.find(
+                (existingCycle) =>
+                  existingCycle.id ===
+                  appraisal.cycleId,
+              );
+            const template =
+              bexPaGetAppraisalTemplate(appraisal);
+            const selfAppraisal =
+              bexPaState.selfAppraisals.find(
+                (existingSelfAppraisal) =>
+                  existingSelfAppraisal.appraisalId ===
+                  appraisal.id,
+              );
+            const managerAppraisal =
+              bexPaState.managerAppraisals.find(
+                (existingManagerAppraisal) =>
+                  existingManagerAppraisal.appraisalId ===
+                  appraisal.id,
+              );
+            const hrFinalisation =
+              bexPaState.hrFinalisations.find(
+                (existingFinalisation) =>
+                  existingFinalisation.appraisalId ===
+                  appraisal.id,
+              );
+            const acknowledgement =
+              bexPaState.employeeAcknowledgements.find(
+                (existingAcknowledgement) =>
+                  existingAcknowledgement.appraisalId ===
+                  appraisal.id,
+              );
+            const status =
+              bexPaGetOperationalAppraisalStatus(
+                appraisal,
+              );
+
+            let nextStep =
+              "Review your appraisal record";
+
+            if (
+              acknowledgement?.status ===
+              "Acknowledged"
+            ) {
+              nextStep =
+                "Appraisal complete";
+            } else if (
+              hrFinalisation?.status ===
+              "Finalised"
+            ) {
+              nextStep =
+                "Review and acknowledge final appraisal";
+            } else if (
+              selfAppraisal?.status !==
+              "Submitted"
+            ) {
+              nextStep =
+                bexPaHasSavedDraft(
+                  selfAppraisal,
+                )
+                  ? "Continue self-appraisal"
+                  : "Start self-appraisal";
+            } else if (
+              managerAppraisal?.status !==
+              "Submitted"
+            ) {
+              nextStep =
+                "Awaiting manager review";
+            } else {
+              nextStep =
+                "Awaiting HR finalisation";
+            }
+
+            const badgeKind =
+              status === "Finalised"
+                ? "acknowledgement"
+                : status === "Submitted"
+                  ? "hr"
+                  : "active";
+
+            bexPaElements.overviewPriorityList.appendChild(
+              bexPaCreateOverviewOperationItem({
+                title:
+                  cycle?.name ||
+                  "Current appraisal",
+                metaItems: [
+                  template?.name
+                    ? `Template: ${template.name}`
+                    : "",
+                  `Next: ${nextStep}`,
+                  cycle?.employeeReviewDeadline
+                    ? `Self appraisal due ${bexPaFormatDate(cycle.employeeReviewDeadline)}`
+                    : "",
+                ],
+                badgeText: status,
+                badgeKind,
+              }),
+            );
+          },
+        );
+      }
+
+      if (bexPaElements.overviewPriorityEmpty) {
+        bexPaElements.overviewPriorityEmpty.textContent =
+          "No active appraisal is currently assigned to you.";
+        bexPaElements.overviewPriorityEmpty.classList.toggle(
+          "d-none",
+          activePersonalAppraisals.length > 0,
+        );
+      }
+
+      const linkedActiveCycleIds = new Set(
+        activePersonalAppraisals
+          .map((appraisal) =>
+            appraisal.cycleId,
+          )
+          .filter(Boolean),
+      );
+
+      const linkedActiveCycles =
+        bexPaState.cycles.filter(
+          (cycle) =>
+            linkedActiveCycleIds.has(
+              cycle.id,
+            ),
+        );
+
+      const activeCycleTitle =
+        document.getElementById(
+          "bexPaOverviewActiveCycleTitle",
+        );
+      const activeCyclePanel =
+        activeCycleTitle?.closest(
+          ".bex-pa-overview-panel",
+        );
+      const activeCycleKicker =
+        activeCyclePanel?.querySelector(
+          ".bex-pa-overview-section-kicker",
+        );
+      const activeCycleDescription =
+        activeCyclePanel?.querySelector(
+          ".bex-pa-overview-panel-description",
+        );
+
+      if (activeCycleKicker) {
+        activeCycleKicker.textContent =
+          "My timeline";
+      }
+
+      if (activeCycleTitle) {
+        activeCycleTitle.textContent =
+          "Active cycle milestones";
+      }
+
+      if (activeCycleDescription) {
+        activeCycleDescription.textContent =
+          "Key dates for appraisal cycles currently assigned to you.";
+      }
+
+      if (bexPaElements.overviewActiveCycleCount) {
+        bexPaElements.overviewActiveCycleCount.textContent =
+          String(linkedActiveCycles.length);
+      }
+
+      if (bexPaElements.overviewActiveCycleList) {
+        bexPaElements.overviewActiveCycleList.replaceChildren();
+
+        linkedActiveCycles.forEach((cycle) => {
+          const item =
+            bexPaCreateOverviewCycleItem(cycle);
+          const meta =
+            item.querySelector(
+              ".bex-pa-overview-operation-item-meta",
+            );
+
+          if (meta) {
+            const dateRange =
+              document.createElement("span");
+            dateRange.textContent =
+              `${bexPaFormatDate(cycle.startDate)} - ${bexPaFormatDate(cycle.endDate)}`;
+
+            const selfDeadline =
+              document.createElement("span");
+            selfDeadline.textContent =
+              `Self appraisal due ${bexPaFormatDate(cycle.employeeReviewDeadline)}`;
+
+            meta.replaceChildren(
+              dateRange,
+              selfDeadline,
+            );
+          }
+
+          bexPaElements.overviewActiveCycleList.appendChild(
+            item,
+          );
+        });
+      }
+
+      if (bexPaElements.overviewActiveCycleEmpty) {
+        bexPaElements.overviewActiveCycleEmpty.textContent =
+          "You do not have an active appraisal cycle right now.";
+        bexPaElements.overviewActiveCycleEmpty.classList.toggle(
+          "d-none",
+          linkedActiveCycles.length > 0,
+        );
+      }
+
+      return;
+    }
+
+    if (isManagerOverview) {
+      const activeCycleIds = new Set(
+        bexPaState.cycles
+          .filter(
+            (cycle) => cycle.status === "Active",
+          )
+          .map((cycle) => cycle.id),
+      );
+
+      const activeVisibleAppraisals =
+        visibleAppraisals.filter(
+          (appraisal) =>
+            activeCycleIds.has(
+              appraisal.cycleId,
+            ),
+        );
+
+      const activeEligibleManagerAppraisals =
+        bexPaGetEligibleManagerAppraisals().filter(
+          (appraisal) =>
+            activeCycleIds.has(
+              appraisal.cycleId,
+            ),
+        );
+
+      const actionableManagerAppraisals =
+        activeEligibleManagerAppraisals.filter(
+          (appraisal) =>
+            !bexPaState.managerAppraisals.some(
+              (managerAppraisal) =>
+                managerAppraisal.appraisalId ===
+                  appraisal.id &&
+                managerAppraisal.status ===
+                  "Submitted",
+            ),
+        );
+
+      const priorityTitle =
+        document.getElementById(
+          "bexPaOverviewPriorityTitle",
+        );
+      const priorityPanel =
+        priorityTitle?.closest(
+          ".bex-pa-overview-panel",
+        );
+      const priorityKicker =
+        priorityPanel?.querySelector(
+          ".bex-pa-overview-section-kicker",
+        );
+      const priorityDescription =
+        priorityPanel?.querySelector(
+          ".bex-pa-overview-panel-description",
+        );
+
+      if (priorityKicker) {
+        priorityKicker.textContent =
+          "Review queue";
+      }
+
+      if (priorityTitle) {
+        priorityTitle.textContent =
+          "Ready for review";
+      }
+
+      if (priorityDescription) {
+        priorityDescription.textContent =
+          "Submitted self-appraisals currently waiting for your manager action.";
+      }
+
+      if (bexPaElements.overviewPriorityCount) {
+        bexPaElements.overviewPriorityCount.textContent =
+          String(actionableManagerAppraisals.length);
+      }
+
+      if (bexPaElements.overviewPriorityList) {
+        bexPaElements.overviewPriorityList.replaceChildren();
+
+        actionableManagerAppraisals.forEach(
+          (appraisal) => {
+            const cycle =
+              bexPaState.cycles.find(
+                (existingCycle) =>
+                  existingCycle.id ===
+                  appraisal.cycleId,
+              );
+            const managerAppraisal =
+              bexPaState.managerAppraisals.find(
+                (existingManagerAppraisal) =>
+                  existingManagerAppraisal.appraisalId ===
+                  appraisal.id,
+              );
+            const hasManagerDraft =
+              bexPaHasSavedDraft(
+                managerAppraisal,
+              );
+
+            bexPaElements.overviewPriorityList.appendChild(
+              bexPaCreateOverviewOperationItem({
+                title:
+                  appraisal.employeeName ||
+                  "Employee",
+                metaItems: [
+                  cycle?.name
+                    ? `Cycle: ${cycle.name}`
+                    : "",
+                  hasManagerDraft
+                    ? "Next: Continue manager appraisal"
+                    : "Next: Start manager appraisal",
+                  cycle?.managerReviewDeadline
+                    ? `Manager review due ${bexPaFormatDate(cycle.managerReviewDeadline)}`
+                    : "",
+                ],
+                badgeText:
+                  hasManagerDraft
+                    ? "In progress"
+                    : "Ready",
+                badgeKind:
+                  hasManagerDraft
+                    ? "active"
+                    : "hr",
+              }),
+            );
+          },
+        );
+      }
+
+      if (bexPaElements.overviewPriorityEmpty) {
+        const hasPrimaryScope =
+          bexPaGetManagedEmployeeIds().length > 0;
+
+        bexPaElements.overviewPriorityEmpty.textContent =
+          hasPrimaryScope
+            ? "No submitted self-appraisals are currently waiting for your review."
+            : "Your visible manager scope is read-only; no primary manager reviews are assigned to you.";
+        bexPaElements.overviewPriorityEmpty.classList.toggle(
+          "d-none",
+          actionableManagerAppraisals.length > 0,
+        );
+      }
+
+      const linkedActiveCycleIds = new Set(
+        activeVisibleAppraisals
+          .map((appraisal) =>
+            appraisal.cycleId,
+          )
+          .filter(Boolean),
+      );
+
+      const linkedActiveCycles =
+        bexPaState.cycles.filter(
+          (cycle) =>
+            linkedActiveCycleIds.has(
+              cycle.id,
+            ),
+        );
+
+      const activeCycleTitle =
+        document.getElementById(
+          "bexPaOverviewActiveCycleTitle",
+        );
+      const activeCyclePanel =
+        activeCycleTitle?.closest(
+          ".bex-pa-overview-panel",
+        );
+      const activeCycleKicker =
+        activeCyclePanel?.querySelector(
+          ".bex-pa-overview-section-kicker",
+        );
+      const activeCycleDescription =
+        activeCyclePanel?.querySelector(
+          ".bex-pa-overview-panel-description",
+        );
+
+      if (activeCycleKicker) {
+        activeCycleKicker.textContent =
+          "Team timeline";
+      }
+
+      if (activeCycleTitle) {
+        activeCycleTitle.textContent =
+          "Active review cycles";
+      }
+
+      if (activeCycleDescription) {
+        activeCycleDescription.textContent =
+          "Active cycle dates and manager-review progress across your reporting scope.";
+      }
+
+      if (bexPaElements.overviewActiveCycleCount) {
+        bexPaElements.overviewActiveCycleCount.textContent =
+          String(linkedActiveCycles.length);
+      }
+
+      if (bexPaElements.overviewActiveCycleList) {
+        bexPaElements.overviewActiveCycleList.replaceChildren();
+
+        const managedEmployeeIds = new Set(
+          bexPaGetManagedEmployeeIds(),
+        );
+
+        linkedActiveCycles.forEach((cycle) => {
+          const item =
+            bexPaCreateOverviewCycleItem(cycle);
+          const meta =
+            item.querySelector(
+              ".bex-pa-overview-operation-item-meta",
+            );
+          const cycleScopeAppraisals =
+            activeVisibleAppraisals.filter(
+              (appraisal) =>
+                appraisal.cycleId ===
+                cycle.id,
+            );
+          const cycleScopeEmployeeIds = new Set(
+            cycleScopeAppraisals
+              .map((appraisal) =>
+                String(
+                  appraisal.employeeId || "",
+                ).trim(),
+              )
+              .filter(Boolean),
+          );
+          const submittedManagerReviews =
+            cycleScopeAppraisals.filter(
+              (appraisal) =>
+                managedEmployeeIds.has(
+                  appraisal.employeeId,
+                ) &&
+                bexPaState.managerAppraisals.some(
+                  (managerAppraisal) =>
+                    managerAppraisal.appraisalId ===
+                      appraisal.id &&
+                    managerAppraisal.status ===
+                      "Submitted",
+                ),
+            ).length;
+
+          if (meta) {
+            const dateRange =
+              document.createElement("span");
+            dateRange.textContent =
+              `${bexPaFormatDate(cycle.startDate)} - ${bexPaFormatDate(cycle.endDate)}`;
+
+            const scopeSummary =
+              document.createElement("span");
+            scopeSummary.textContent =
+              `${cycleScopeEmployeeIds.size} employee${cycleScopeEmployeeIds.size === 1 ? "" : "s"} in scope`;
+
+            const reviewSummary =
+              document.createElement("span");
+            reviewSummary.textContent =
+              `${submittedManagerReviews} manager review${submittedManagerReviews === 1 ? "" : "s"} submitted`;
+
+            meta.replaceChildren(
+              dateRange,
+              scopeSummary,
+              reviewSummary,
+            );
+          }
+
+          bexPaElements.overviewActiveCycleList.appendChild(
+            item,
+          );
+        });
+      }
+
+      if (bexPaElements.overviewActiveCycleEmpty) {
+        bexPaElements.overviewActiveCycleEmpty.textContent =
+          "No active appraisal cycle is currently linked to your manager review scope.";
+        bexPaElements.overviewActiveCycleEmpty.classList.toggle(
+          "d-none",
+          linkedActiveCycles.length > 0,
+        );
+      }
+
+      return;
+    }
+
+    const priorityRecords =
+      visibleAppraisals
+        .map((appraisal) => ({
+          appraisal,
+          status:
+            bexPaGetOperationalAppraisalStatus(
+              appraisal,
+            ),
+        }))
+        .filter((record) =>
+          record.status === "Submitted" ||
+          record.status === "Finalised",
+        );
+
+    const awaitingHrCount =
+      priorityRecords.filter(
+        (record) => record.status === "Submitted",
+      ).length;
+
+    const awaitingAcknowledgementCount =
+      priorityRecords.filter(
+        (record) => record.status === "Finalised",
+      ).length;
+
+    if (bexPaElements.overviewPriorityCount) {
+      bexPaElements.overviewPriorityCount.textContent =
+        String(priorityRecords.length);
+    }
+
+    if (bexPaElements.overviewPriorityList) {
+      bexPaElements.overviewPriorityList.replaceChildren();
+
+      if (awaitingHrCount > 0) {
+        bexPaElements.overviewPriorityList.appendChild(
+          bexPaCreateOverviewOperationItem({
+            title: "HR finalisation",
+            metaItems: [
+              `${awaitingHrCount} appraisal${awaitingHrCount === 1 ? "" : "s"} ready for HR finalisation`,
+            ],
+            badgeText: String(awaitingHrCount),
+            badgeKind: "hr",
+          }),
+        );
+      }
+
+      if (awaitingAcknowledgementCount > 0) {
+        bexPaElements.overviewPriorityList.appendChild(
+          bexPaCreateOverviewOperationItem({
+            title: "Employee acknowledgement",
+            metaItems: [
+              `${awaitingAcknowledgementCount} finalised appraisal${awaitingAcknowledgementCount === 1 ? "" : "s"} awaiting acknowledgement`,
+            ],
+            badgeText:
+              String(awaitingAcknowledgementCount),
+            badgeKind: "acknowledgement",
+          }),
+        );
+      }
+    }
+
+    bexPaElements.overviewPriorityEmpty?.classList.toggle(
+      "d-none",
+      priorityRecords.length > 0,
+    );
+
+    const activeCycles =
+      bexPaState.cycles.filter(
+        (cycle) => cycle.status === "Active",
+      );
+
+    if (bexPaElements.overviewActiveCycleCount) {
+      bexPaElements.overviewActiveCycleCount.textContent =
+        String(activeCycles.length);
+    }
+
+    if (bexPaElements.overviewActiveCycleList) {
+      bexPaElements.overviewActiveCycleList.replaceChildren();
+
+      activeCycles.forEach((cycle) => {
+        bexPaElements.overviewActiveCycleList.appendChild(
+          bexPaCreateOverviewCycleItem(cycle),
+        );
+      });
+    }
+
+    bexPaElements.overviewActiveCycleEmpty?.classList.toggle(
+      "d-none",
+      activeCycles.length > 0,
+    );
+  }
+
   function bexPaGetCycleOperationalReport(
     cycle,
   ) {
@@ -8740,6 +10434,73 @@
     return bexPaState.cycles.map((cycle) =>
       bexPaGetCycleOperationalReport(cycle),
     );
+  }
+
+  function bexPaPrepareOperationalReportPrintMetadata(cycle) {
+    if (!cycle) {
+      return;
+    }
+
+    if (bexPaElements.reportPrintCycleName) {
+      bexPaElements.reportPrintCycleName.textContent =
+        cycle.name || "Unnamed appraisal cycle";
+    }
+
+    if (bexPaElements.reportPrintCyclePeriod) {
+      bexPaElements.reportPrintCyclePeriod.textContent =
+        `${bexPaFormatDate(cycle.startDate)} - ${bexPaFormatDate(cycle.endDate)}`;
+    }
+
+    if (bexPaElements.reportPrintGeneratedAt) {
+      bexPaElements.reportPrintGeneratedAt.textContent =
+        bexPaFormatTimestamp(new Date().toISOString());
+    }
+  }
+
+  function bexPaHandleOperationalReportPrint() {
+    if (
+      !bexPaCanViewReports() ||
+      !bexPaElements.reportCycleSelect
+    ) {
+      return;
+    }
+
+    const cycleId =
+      bexPaElements.reportCycleSelect.value;
+
+    const cycle =
+      bexPaState.cycles.find(
+        (existingCycle) =>
+          existingCycle.id === cycleId,
+      );
+
+    if (!cycle) {
+      return;
+    }
+
+    bexPaPrepareOperationalReportPrintMetadata(cycle);
+
+    const originalTitle = document.title;
+    const printableCycleName = String(
+      cycle.name || "Appraisal Cycle",
+    )
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .trim();
+
+    document.title =
+      `Performance Appraisal Report - ${printableCycleName} | BexHR`;
+    document.body.classList.add(
+      "bex-pa-printing-report",
+    );
+
+    try {
+      window.print();
+    } finally {
+      document.title = originalTitle;
+      document.body.classList.remove(
+        "bex-pa-printing-report",
+      );
+    }
   }
 
   function bexPaRenderOperationalReport() {
@@ -8799,6 +10560,9 @@
       selectedCycleId;
 
     if (!selectedCycleId) {
+      if (bexPaElements.reportPrintButton) {
+        bexPaElements.reportPrintButton.disabled = true;
+      }
       bexPaElements.operationalReportContent?.classList.add(
         "d-none",
       );
@@ -8837,6 +10601,10 @@
       );
 
     if (!cycle) {
+      if (bexPaElements.reportPrintButton) {
+        bexPaElements.reportPrintButton.disabled = true;
+      }
+
       bexPaElements.operationalReportContent?.classList.add(
         "d-none",
       );
@@ -8850,6 +10618,10 @@
       }
 
       return;
+    }
+
+    if (bexPaElements.reportPrintButton) {
+      bexPaElements.reportPrintButton.disabled = false;
     }
 
     const report =
@@ -8910,6 +10682,24 @@
         `${completionPercentage}% complete`;
     }
 
+    if (bexPaElements.reportCompletionProgress) {
+      bexPaElements.reportCompletionProgress.setAttribute(
+        "aria-valuenow",
+        String(completionPercentage),
+      );
+      bexPaElements.reportCompletionProgress.setAttribute(
+        "aria-valuetext",
+        counts.total > 0
+          ? `${counts.acknowledged} of ${counts.total} appraisals acknowledged`
+          : "No assigned appraisals",
+      );
+    }
+
+    if (bexPaElements.reportCompletionBar) {
+      bexPaElements.reportCompletionBar.style.width =
+        `${completionPercentage}%`;
+    }
+
     if (bexPaElements.reportOutstandingSummary) {
       bexPaElements.reportOutstandingSummary.replaceChildren();
 
@@ -8938,19 +10728,37 @@
 
       records.forEach((record) => {
         const row = document.createElement("tr");
+        row.className = "bex-pa-report-detail-row";
 
         const employeeCell =
           document.createElement("td");
+        employeeCell.className =
+          "bex-pa-report-employee-cell";
         employeeCell.textContent =
           record.appraisal.employeeName ||
           "Unnamed employee";
 
         const statusCell =
           document.createElement("td");
-        statusCell.textContent = record.status;
+        statusCell.className =
+          "bex-pa-report-status-cell";
+
+        const statusBadge =
+          document.createElement("span");
+        statusBadge.className =
+          "bex-pa-report-status";
+        statusBadge.dataset.status =
+          String(record.status || "")
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, "-");
+        statusBadge.textContent = record.status;
+        statusCell.appendChild(statusBadge);
 
         const actionCell =
           document.createElement("td");
+        actionCell.className =
+          "bex-pa-report-action-cell";
 
         const outstandingAction = {
           Assigned: "Employee self-appraisal",
@@ -9123,8 +10931,52 @@
       !canFinalise,
     );
 
-    bexPaElements.hrAppraisalReviewMeta.textContent =
-      `${appraisal.employeeName || "Employee"} | ${cycle?.name || "Unknown cycle"} | ${template?.name || "Unknown template"}${isFinalised ? ` | Status: Finalised${hrFinalisation?.finalisedAt ? ` | Finalised: ${bexPaFormatTimestamp(hrFinalisation.finalisedAt)}` : ""}` : ""}`;
+    bexPaElements.hrAppraisalReviewMeta.replaceChildren();
+
+    const reviewIdentityLabel =
+      document.createElement("span");
+
+    reviewIdentityLabel.className =
+      "bex-pa-review-identity-label";
+    reviewIdentityLabel.textContent = "Employee";
+
+    const reviewIdentityName =
+      document.createElement("span");
+
+    reviewIdentityName.className =
+      "bex-pa-review-identity-name";
+    reviewIdentityName.textContent =
+      appraisal.employeeName || "Employee";
+
+    const reviewIdentityMeta =
+      document.createElement("span");
+
+    reviewIdentityMeta.className =
+      "bex-pa-review-identity-meta";
+
+    const reviewIdentityMetaParts = [
+      cycle?.name || "Unknown cycle",
+      template?.name || "Unknown template",
+    ];
+
+    if (isFinalised) {
+      reviewIdentityMetaParts.push("Finalised");
+
+      if (hrFinalisation?.finalisedAt) {
+        reviewIdentityMetaParts.push(
+          `Finalised: ${bexPaFormatTimestamp(hrFinalisation.finalisedAt)}`,
+        );
+      }
+    }
+
+    reviewIdentityMeta.textContent =
+      reviewIdentityMetaParts.join(" | ");
+
+    bexPaElements.hrAppraisalReviewMeta.append(
+      reviewIdentityLabel,
+      reviewIdentityName,
+      reviewIdentityMeta,
+    );
 
     const missingPrerequisites = [];
 
@@ -11836,19 +13688,28 @@
             document.createElement("section");
 
           employeeGroup.className =
-            "border rounded-3 mb-3 overflow-hidden";
+            "bex-pa-appraisal-employee-group";
 
           const employeeHeader =
             document.createElement("div");
 
           employeeHeader.className =
-            "bg-body-tertiary border-bottom px-3 py-3";
+            "bex-pa-appraisal-employee-header";
+
+          const employeeLabel =
+            document.createElement("span");
+
+          employeeLabel.className =
+            "bex-pa-appraisal-employee-label";
+
+          employeeLabel.textContent =
+            "Employee";
 
           const employeeName =
             document.createElement("h3");
 
           employeeName.className =
-            "mb-0 h6 fw-bold";
+            "bex-pa-appraisal-employee-name";
 
           employeeName.textContent =
             appraisal.employeeName ||
@@ -11858,9 +13719,10 @@
             document.createElement("div");
 
           employeeGroupBody.className =
-            "px-3";
+            "bex-pa-appraisal-employee-body";
 
-          employeeHeader.appendChild(
+          employeeHeader.append(
+            employeeLabel,
             employeeName,
           );
 
@@ -11925,16 +13787,28 @@
           document.createElement("article");
 
         item.className =
-          "bex-pa-goal-item";
+          "bex-pa-goal-item bex-pa-appraisal-item";
 
         const header =
           document.createElement("div");
 
         header.className =
-          "d-flex align-items-start justify-content-between gap-3";
+          "bex-pa-appraisal-item-header";
 
         const titleArea =
           document.createElement("div");
+
+        titleArea.className =
+          "bex-pa-appraisal-item-copy";
+
+        const cycleLabel =
+          document.createElement("span");
+
+        cycleLabel.className =
+          "bex-pa-appraisal-cycle-label";
+
+        cycleLabel.textContent =
+          "Appraisal cycle";
 
         const title =
           document.createElement("h3");
@@ -11955,6 +13829,9 @@
         const templateLabel =
           document.createElement("span");
 
+        templateLabel.className =
+          "bex-pa-appraisal-template";
+
         templateLabel.textContent =
           `Template: ${template?.name || "Unknown template"}`;
 
@@ -11963,6 +13840,7 @@
         );
 
         titleArea.append(
+          cycleLabel,
           title,
           meta,
         );
@@ -11989,6 +13867,12 @@
         item.appendChild(
           header,
         );
+
+        const actions =
+          document.createElement("div");
+
+        actions.className =
+          "bex-pa-appraisal-actions";
 
         if (
           bexPaIsEmployeeMode() &&
@@ -12042,7 +13926,7 @@
             );
           }
 
-          item.appendChild(openButton);
+          actions.appendChild(openButton);
         }
 
         if (bexPaGetCurrentPersona() === "hr-admin") {
@@ -12066,7 +13950,7 @@
             `Review appraisal for ${appraisal.employeeName}`,
           );
 
-          item.appendChild(reviewButton);
+          actions.appendChild(reviewButton);
         }
 
         if (
@@ -12103,7 +13987,11 @@
                 ? `Continue manager appraisal for ${appraisal.employeeName}`
                 : `Start manager appraisal for ${appraisal.employeeName}`,
           );
-          item.appendChild(openButton);
+          actions.appendChild(openButton);
+        }
+
+        if (actions.childElementCount > 0) {
+          item.appendChild(actions);
         }
 
         employeeGroupBody.appendChild(
@@ -12150,6 +14038,60 @@
       bexPaLoadEmployeeAcknowledgements();
   }
 
+  function bexPaApplyTenantWorkspaceBranding(
+    hasIntegratedContext,
+  ) {
+    document.body.classList.remove(
+      "alpatech-workspace",
+    );
+
+    if (!hasIntegratedContext) {
+      return;
+    }
+
+    try {
+      const rawTenantContext =
+        window.localStorage.getItem(
+          BEX_PA_TENANT_CONTEXT_STORAGE_KEY,
+        ) || "";
+
+      const tenantContext = rawTenantContext
+        ? JSON.parse(rawTenantContext)
+        : null;
+
+      const tenantSignals = [
+        tenantContext?.tenantCode,
+        tenantContext?.tenantName,
+        tenantContext?.companyName,
+      ]
+        .map((value) =>
+          String(value || "")
+            .trim()
+            .toLowerCase(),
+        )
+        .filter(Boolean);
+
+      const isAlpatechTenant =
+        tenantSignals.some((value) =>
+          value.includes("alpatech"),
+        );
+
+      document.body.classList.toggle(
+        "alpatech-workspace",
+        isAlpatechTenant,
+      );
+    } catch (error) {
+      document.body.classList.remove(
+        "alpatech-workspace",
+      );
+
+      console.warn(
+        "Performance Appraisal tenant branding could not be resolved.",
+        error,
+      );
+    }
+  }
+
   async function bexPaInitialiseAppraisalCycles() {
     const hasIntegratedContext =
       Boolean(bexPaGetIntegratedContext());
@@ -12163,6 +14105,10 @@
 
     document.body.classList.toggle(
       "bex-pa-integrated",
+      hasIntegratedContext,
+    );
+
+    bexPaApplyTenantWorkspaceBranding(
       hasIntegratedContext,
     );
 
@@ -12402,6 +14348,11 @@
 
         bexPaRenderSelectedOperationalReport();
       },
+    );
+
+    bexPaElements.reportPrintButton?.addEventListener(
+      "click",
+      bexPaHandleOperationalReportPrint,
     );
 
     bexPaElements.employeeAppraisalsList?.addEventListener(
