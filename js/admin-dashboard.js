@@ -98,6 +98,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       openResetWorkspaceModal(tenantId);
     };
 
+    // ADMIN CLEAR PA CYCLES - v1.0.0
+    // Independent from Reset Workspace.
+    // PostgreSQL remains the destructive boundary.
+    window.adminClearTenantPaCycles = (tenantId) => {
+      openClearPaCyclesModal(tenantId);
+    };
+
     // ADMIN EMAIL SETUP - STEP 1D
     // Expose approved validation recipient edit action for the records table.
     window.adminEditEmailRecipientRecord = (recipientId) => {
@@ -252,6 +259,12 @@ const state = {
   // Holds only the company currently selected for workspace reset.
   // The tenant/company and employee records themselves are preserved.
   currentResetWorkspaceTarget: null,
+
+  // ADMIN CLEAR PA CYCLES - v1.0.0
+  // Holds only the company currently selected for the independent
+  // Performance Appraisal cycle clear workflow.
+  currentClearPaCyclesTarget: null,
+
   // ADMIN EMAIL SETUP - STEP 1D
   // Admin-owned approved validation recipients and company-scoped email history.
   // HR Setup > Email Integration reads these tenant-scoped recipient records.
@@ -667,6 +680,21 @@ function cacheDomElements() {
     resetWorkspaceBackBtn: document.getElementById("resetWorkspaceBackBtn"),
     resetWorkspaceContinueBtn: document.getElementById("resetWorkspaceContinueBtn"),
     resetWorkspaceConfirmBtn: document.getElementById("resetWorkspaceConfirmBtn"),
+
+    // ADMIN CLEAR PA CYCLES MODAL - v1.0.0
+    clearPaCyclesModal: document.getElementById("clearPaCyclesModal"),
+    clearPaCyclesStageOne: document.getElementById("clearPaCyclesStageOne"),
+    clearPaCyclesStageTwo: document.getElementById("clearPaCyclesStageTwo"),
+    clearPaCyclesTargetName: document.getElementById("clearPaCyclesTargetName"),
+    clearPaCyclesTargetCode: document.getElementById("clearPaCyclesTargetCode"),
+    clearPaCyclesFinalName: document.getElementById("clearPaCyclesFinalName"),
+    clearPaCyclesFinalCode: document.getElementById("clearPaCyclesFinalCode"),
+    clearPaCyclesConfirmationInput: document.getElementById("clearPaCyclesConfirmationInput"),
+    clearPaCyclesAlert: document.getElementById("clearPaCyclesAlert"),
+    clearPaCyclesBackBtn: document.getElementById("clearPaCyclesBackBtn"),
+    clearPaCyclesContinueBtn: document.getElementById("clearPaCyclesContinueBtn"),
+    clearPaCyclesConfirmBtn: document.getElementById("clearPaCyclesConfirmBtn"),
+
     // ADMIN EMAIL SETUP - STEP 1D
     // Admin controls company-scoped validation recipients used by HR Email Integration.
     toggleAdminEmailSetupCardBtn: document.getElementById("toggleAdminEmailSetupCardBtn"),
@@ -1498,6 +1526,70 @@ function bindEvents() {
     "hidden.bs.modal",
     () => {
       clearResetWorkspaceModal();
+    },
+  );
+
+
+  // =========================================================
+  // ADMIN CLEAR PA CYCLES MODAL - v1.0.0
+  //
+  // Independent two-stage destructive confirmation.
+  // The secure admin_clear_tenant_pa_cycle_records RPC remains
+  // the authoritative destructive boundary.
+  // =========================================================
+
+  ["input", "keyup", "change"].forEach((eventName) => {
+    state.dom.clearPaCyclesConfirmationInput?.addEventListener(
+      eventName,
+      () => {
+        updateClearPaCyclesContinueButtonState();
+        clearClearPaCyclesAlert();
+      },
+    );
+  });
+
+  state.dom.clearPaCyclesContinueBtn?.addEventListener(
+    "click",
+    () => {
+      advanceClearPaCyclesModal();
+    },
+  );
+
+  state.dom.clearPaCyclesBackBtn?.addEventListener(
+    "click",
+    () => {
+      const isOnFinalStage =
+        !state.dom.clearPaCyclesStageTwo?.classList.contains(
+          "d-none",
+        );
+
+      if (isOnFinalStage) {
+        showClearPaCyclesStageOne();
+        return;
+      }
+
+      const modalEl =
+        state.dom.clearPaCyclesModal;
+
+      if (modalEl) {
+        bootstrap.Modal
+          .getOrCreateInstance(modalEl)
+          .hide();
+      }
+    },
+  );
+
+  state.dom.clearPaCyclesConfirmBtn?.addEventListener(
+    "click",
+    async () => {
+      await submitClearPaCycles();
+    },
+  );
+
+  state.dom.clearPaCyclesModal?.addEventListener(
+    "hidden.bs.modal",
+    () => {
+      resetClearPaCyclesModalState();
     },
   );
 
@@ -2410,6 +2502,16 @@ function renderTenantRecords(records = []) {
 <button
   type="button"
   class="btn btn-sm btn-outline-danger"
+  title="Clear PA cycles"
+  aria-label="Clear Performance Appraisal cycles"
+  onclick="window.adminClearTenantPaCycles('${escapeHtml(record.id)}')"
+>
+  <i class="bi bi-clipboard2-x"></i>
+</button>
+
+<button
+  type="button"
+  class="btn btn-sm btn-outline-danger"
   title="Delete company"
   onclick="window.adminDeleteTenantRecord('${escapeHtml(record.id)}')"
 >
@@ -3122,6 +3224,521 @@ async function submitResetWorkspace() {
     showDashboardToast(
       "danger",
       "Workspace reset failed",
+      message,
+    );
+  } finally {
+    if (
+      confirmButton?.dataset.originalHtml
+    ) {
+      confirmButton.innerHTML =
+        confirmButton.dataset.originalHtml;
+
+      delete confirmButton
+        .dataset.originalHtml;
+    }
+
+    if (confirmButton) {
+      confirmButton.disabled = false;
+    }
+  }
+}
+
+// =========================================================
+// ADMIN CLEAR PA CYCLES - v1.0.0
+//
+// Independent from Reset Workspace.
+//
+// IMPORTANT:
+// - browser JavaScript performs no PA table deletes;
+// - PA templates remain;
+// - non-PA company data remains;
+// - admin_clear_tenant_pa_cycle_records(uuid) is the
+//   authoritative transactional destructive boundary.
+// =========================================================
+
+function normaliseClearPaCyclesConfirmation(value = "") {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+
+function clearClearPaCyclesAlert() {
+  const alert =
+    state.dom.clearPaCyclesAlert;
+
+  if (!alert) return;
+
+  alert.className =
+    "alert d-none mt-3 mb-0";
+
+  alert.textContent = "";
+}
+
+
+function showClearPaCyclesAlert(
+  type,
+  message,
+) {
+  const alert =
+    state.dom.clearPaCyclesAlert;
+
+  if (!alert) {
+    showPageAlert(type, message);
+    return;
+  }
+
+  alert.className =
+    `alert alert-${type} mt-3 mb-0`;
+
+  alert.textContent =
+    message;
+}
+
+
+function updateClearPaCyclesContinueButtonState() {
+  const button =
+    state.dom.clearPaCyclesContinueBtn;
+
+  if (!button) return;
+
+  const expectedName =
+    normaliseClearPaCyclesConfirmation(
+      state.currentClearPaCyclesTarget
+        ?.company_name,
+    );
+
+  const enteredName =
+    normaliseClearPaCyclesConfirmation(
+      state.dom.clearPaCyclesConfirmationInput
+        ?.value,
+    );
+
+  const isMatch =
+    Boolean(expectedName) &&
+    Boolean(enteredName) &&
+    enteredName === expectedName;
+
+  button.disabled =
+    !isMatch;
+
+  button.className =
+    isMatch
+      ? "btn btn-danger dashboard-action-btn"
+      : "btn btn-secondary dashboard-action-btn";
+}
+
+
+function showClearPaCyclesStageOne() {
+  state.dom.clearPaCyclesStageOne
+    ?.classList.remove("d-none");
+
+  state.dom.clearPaCyclesStageTwo
+    ?.classList.add("d-none");
+
+  state.dom.clearPaCyclesContinueBtn
+    ?.classList.remove("d-none");
+
+  state.dom.clearPaCyclesConfirmBtn
+    ?.classList.add("d-none");
+
+  if (state.dom.clearPaCyclesBackBtn) {
+    state.dom.clearPaCyclesBackBtn.textContent =
+      "Cancel";
+  }
+
+  clearClearPaCyclesAlert();
+  updateClearPaCyclesContinueButtonState();
+
+  window.requestAnimationFrame(() => {
+    state.dom.clearPaCyclesConfirmationInput
+      ?.focus();
+
+    updateClearPaCyclesContinueButtonState();
+  });
+}
+
+
+function showClearPaCyclesStageTwo() {
+  const tenant =
+    state.currentClearPaCyclesTarget;
+
+  if (!tenant) return;
+
+  state.dom.clearPaCyclesStageOne
+    ?.classList.add("d-none");
+
+  state.dom.clearPaCyclesStageTwo
+    ?.classList.remove("d-none");
+
+  state.dom.clearPaCyclesContinueBtn
+    ?.classList.add("d-none");
+
+  state.dom.clearPaCyclesConfirmBtn
+    ?.classList.remove("d-none");
+
+  if (state.dom.clearPaCyclesBackBtn) {
+    state.dom.clearPaCyclesBackBtn.textContent =
+      "Go Back";
+  }
+
+  if (state.dom.clearPaCyclesFinalName) {
+    state.dom.clearPaCyclesFinalName.textContent =
+      String(
+        tenant.company_name || "",
+      ).trim();
+  }
+
+  if (state.dom.clearPaCyclesFinalCode) {
+    state.dom.clearPaCyclesFinalCode.textContent =
+      String(
+        tenant.tenant_code || "--",
+      ).trim();
+  }
+
+  clearClearPaCyclesAlert();
+}
+
+
+function resetClearPaCyclesModalState() {
+  state.currentClearPaCyclesTarget =
+    null;
+
+  if (
+    state.dom
+      .clearPaCyclesConfirmationInput
+  ) {
+    state.dom
+      .clearPaCyclesConfirmationInput
+      .value = "";
+  }
+
+  state.dom.clearPaCyclesStageOne
+    ?.classList.remove("d-none");
+
+  state.dom.clearPaCyclesStageTwo
+    ?.classList.add("d-none");
+
+  state.dom.clearPaCyclesContinueBtn
+    ?.classList.remove("d-none");
+
+  state.dom.clearPaCyclesConfirmBtn
+    ?.classList.add("d-none");
+
+  if (state.dom.clearPaCyclesBackBtn) {
+    state.dom.clearPaCyclesBackBtn.textContent =
+      "Cancel";
+  }
+
+  if (
+    state.dom.clearPaCyclesContinueBtn
+  ) {
+    state.dom.clearPaCyclesContinueBtn.disabled =
+      true;
+
+    state.dom.clearPaCyclesContinueBtn.className =
+      "btn btn-secondary dashboard-action-btn";
+  }
+
+  if (
+    state.dom.clearPaCyclesConfirmBtn
+  ) {
+    state.dom.clearPaCyclesConfirmBtn.disabled =
+      false;
+  }
+
+  clearClearPaCyclesAlert();
+}
+
+
+function openClearPaCyclesModal(
+  tenantId = "",
+) {
+  const tenant =
+    getTenantById(tenantId);
+
+  if (!tenant) {
+    showPageAlert(
+      "warning",
+      "The selected company record could not be found. Refresh Companies and try again.",
+    );
+
+    return;
+  }
+
+  resetClearPaCyclesModalState();
+
+  state.currentClearPaCyclesTarget =
+    tenant;
+
+  const companyName =
+    String(
+      tenant.company_name ||
+      "Unnamed company",
+    ).trim();
+
+  const companyCode =
+    String(
+      tenant.tenant_code ||
+      "--",
+    ).trim();
+
+  if (
+    state.dom.clearPaCyclesTargetName
+  ) {
+    state.dom.clearPaCyclesTargetName.textContent =
+      companyName;
+  }
+
+  if (
+    state.dom.clearPaCyclesTargetCode
+  ) {
+    state.dom.clearPaCyclesTargetCode.textContent =
+      companyCode;
+  }
+
+  if (
+    state.dom.clearPaCyclesFinalName
+  ) {
+    state.dom.clearPaCyclesFinalName.textContent =
+      companyName;
+  }
+
+  if (
+    state.dom.clearPaCyclesFinalCode
+  ) {
+    state.dom.clearPaCyclesFinalCode.textContent =
+      companyCode;
+  }
+
+  showClearPaCyclesStageOne();
+
+  const modalEl =
+    state.dom.clearPaCyclesModal;
+
+  if (!modalEl) {
+    showPageAlert(
+      "danger",
+      "Clear PA Cycles confirmation could not be opened.",
+    );
+
+    return;
+  }
+
+  bootstrap.Modal
+    .getOrCreateInstance(modalEl)
+    .show();
+}
+
+
+function advanceClearPaCyclesModal() {
+  const tenant =
+    state.currentClearPaCyclesTarget;
+
+  if (!tenant) {
+    showClearPaCyclesAlert(
+      "warning",
+      "The selected company could not be confirmed. Close this window and try again.",
+    );
+
+    return;
+  }
+
+  const expectedName =
+    normaliseClearPaCyclesConfirmation(
+      tenant.company_name,
+    );
+
+  const enteredName =
+    normaliseClearPaCyclesConfirmation(
+      state.dom
+        .clearPaCyclesConfirmationInput
+        ?.value,
+    );
+
+  if (
+    !expectedName ||
+    enteredName !== expectedName
+  ) {
+    showClearPaCyclesAlert(
+      "warning",
+      "Type the full company name exactly before continuing.",
+    );
+
+    updateClearPaCyclesContinueButtonState();
+
+    return;
+  }
+
+  showClearPaCyclesStageTwo();
+}
+
+
+async function submitClearPaCycles() {
+  const tenant =
+    state.currentClearPaCyclesTarget;
+
+  if (!tenant?.id) {
+    showClearPaCyclesAlert(
+      "warning",
+      "The selected company could not be confirmed. Close this window and try again.",
+    );
+
+    return;
+  }
+
+  const expectedName =
+    normaliseClearPaCyclesConfirmation(
+      tenant.company_name,
+    );
+
+  const enteredName =
+    normaliseClearPaCyclesConfirmation(
+      state.dom
+        .clearPaCyclesConfirmationInput
+        ?.value,
+    );
+
+  // Re-check the typed company name immediately before
+  // calling the privileged transactional RPC.
+  if (
+    !expectedName ||
+    enteredName !== expectedName
+  ) {
+    showClearPaCyclesStageOne();
+
+    showClearPaCyclesAlert(
+      "warning",
+      "The company-name confirmation no longer matches the selected company.",
+    );
+
+    return;
+  }
+
+  const confirmButton =
+    state.dom.clearPaCyclesConfirmBtn;
+
+  const companyName =
+    String(
+      tenant.company_name ||
+      "the selected company",
+    ).trim();
+
+  try {
+    clearClearPaCyclesAlert();
+
+    if (confirmButton) {
+      if (
+        !confirmButton.dataset.originalHtml
+      ) {
+        confirmButton.dataset.originalHtml =
+          confirmButton.innerHTML;
+      }
+
+      confirmButton.disabled = true;
+
+      confirmButton.innerHTML = `
+        <span
+          class="spinner-border spinner-border-sm me-2"
+          aria-hidden="true"
+        ></span>
+        Clearing PA Cycles...
+      `;
+    }
+
+    const supabase =
+      getSupabaseClient();
+
+    // Browser performs no individual PA deletes.
+    // PostgreSQL performs the PA clear transactionally.
+    const {
+      data,
+      error,
+    } = await supabase.rpc(
+      "admin_clear_tenant_pa_cycle_records",
+      {
+        target_tenant_id:
+          String(
+            tenant.id || "",
+          ).trim(),
+      },
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    const result =
+      Array.isArray(data)
+        ? data[0]
+        : data;
+
+    if (
+      result &&
+      result.success === false
+    ) {
+      throw new Error(
+        result.message ||
+        "Performance Appraisal cycle records could not be cleared.",
+      );
+    }
+
+    const modalEl =
+      state.dom.clearPaCyclesModal;
+
+    if (modalEl) {
+      bootstrap.Modal
+        .getOrCreateInstance(modalEl)
+        .hide();
+    }
+
+    const deletedTotal =
+      Number(
+        result?.deleted_total || 0,
+      );
+
+    const templatesPreserved =
+      Number(
+        result?.pa_templates_preserved || 0,
+      );
+
+    const successMessage =
+      result?.message ||
+      `Performance Appraisal cycle records cleared for ${companyName}. ${deletedTotal} PA cycle record(s) were removed and ${templatesPreserved} PA template(s) were preserved.`;
+
+    showPageAlert(
+      "success",
+      successMessage,
+    );
+
+    showDashboardToast(
+      "success",
+      "PA cycles cleared",
+      successMessage,
+    );
+  } catch (error) {
+    console.error(
+      "Error clearing company PA cycles:",
+      error,
+    );
+
+    const message =
+      String(
+        error?.message || "",
+      ).trim() ||
+      "Performance Appraisal cycle records could not be cleared.";
+
+    // Keep the modal open so Admin retains the company context.
+    showClearPaCyclesAlert(
+      "danger",
+      message,
+    );
+
+    showDashboardToast(
+      "danger",
+      "PA cycle clear failed",
       message,
     );
   } finally {
