@@ -31985,3 +31985,277 @@ body.bexhr-admin-visual-refresh
 #permanentDeleteUserModal .modal-header {
   align-items: flex-start;
 }
+
+/* =========================================================
+   BEXHR UNIVERSAL WORKSPACE LOADER - US-01
+
+   One quiet loader presentation for BexHR workspaces.
+
+   Presentation only:
+   - keeps existing loader IDs and boot-state visibility logic;
+   - does not change authentication, session, tenant, payroll, leave,
+     Performance Appraisal, Supabase, RLS, or workspace routing;
+   - supports both the current favicon loader markup and the older
+     shared loader mark used by existing personas.
+   ========================================================= */
+
+.bexhr-workspace-loader {
+  background: #fbfaf8 !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo) {
+  width: min(100%, 280px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.72rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+  backdrop-filter: none;
+  overflow: visible;
+  position: relative;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel::before,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo)::before {
+  content: "";
+  order: 2;
+  display: block;
+  width: min(190px, 72vw);
+  height: 3px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      #dfe7e6 0%,
+      #dfe7e6 38%,
+      #087f7a 48%,
+      #16b8ae 52%,
+      #dfe7e6 62%,
+      #dfe7e6 100%
+    );
+  background-size: 220% 100%;
+  animation: bexhrUniversalWorkspaceLoaderLine 1.15s linear infinite;
+  pointer-events: none;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel::after,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo)::after {
+  content: "Loading your workspace...";
+  order: 3;
+  position: static;
+  display: block;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: #667085;
+  opacity: 1;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel > * {
+  position: static;
+  z-index: auto;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-brand {
+  order: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  width: auto;
+  color: #172033;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  text-align: center;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-logo-shell {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-logo {
+  display: block;
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-mark {
+  width: 46px;
+  height: 46px;
+  display: block;
+  flex: 0 0 46px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background:
+    url("../assets/favicon/favicon.svg?v=20260801")
+    center / contain no-repeat !important;
+  box-shadow: none;
+  color: transparent !important;
+  font-size: 0 !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-brand-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-brand-copy strong {
+  color: #172033;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-brand-copy small,
+.bexhr-workspace-loader .bexhr-workspace-loader-progress,
+.bexhr-workspace-loader .bexhr-workspace-loader-spinner,
+.bexhr-workspace-loader .bexhr-workspace-loader-message,
+.bexhr-workspace-loader .bexhr-workspace-loader-status,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel > strong,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel > span:last-child {
+  display: none !important;
+}
+
+@keyframes bexhrUniversalWorkspaceLoaderLine {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .bexhr-workspace-loader {
+    padding: 1rem;
+  }
+
+  .bexhr-workspace-loader .bexhr-workspace-loader-panel,
+  .bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo) {
+    width: min(100%, 250px);
+    padding: 0;
+    border-radius: 0;
+    gap: 0.68rem;
+  }
+
+  .bexhr-workspace-loader .bexhr-workspace-loader-logo-shell {
+    width: 48px;
+    height: 48px;
+    flex-basis: 48px;
+  }
+
+  .bexhr-workspace-loader .bexhr-workspace-loader-logo,
+  .bexhr-workspace-loader .bexhr-workspace-loader-mark {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bexhr-workspace-loader .bexhr-workspace-loader-panel::before,
+  .bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo)::before {
+    animation: none !important;
+    background-position: 50% 0;
+  }
+}
+
+
+/* =========================================================
+   BEXHR UNIVERSAL WORKSPACE LOADER - US-01 FLOW CORRECTION
+
+   Use the existing loader progress element in normal document flow.
+   This prevents the loading line from inheriting older absolute
+   positioning above the centered BexHR identity.
+   ========================================================= */
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel::before,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo)::before {
+  content: none !important;
+  display: none !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-progress {
+  order: 2 !important;
+  display: block !important;
+  position: static !important;
+  inset: auto !important;
+  align-self: center !important;
+  width: min(132px, 40vw) !important;
+  height: 2px !important;
+  margin: 0.12rem auto 0 !important;
+  padding: 0 !important;
+  transform: none !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-spinner {
+  display: none !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-progress-line {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  height: 2px !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  border-radius: 999px !important;
+  background: #dfe7e6 !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-progress-line > span {
+  position: absolute !important;
+  inset: 0 auto 0 0 !important;
+  display: block !important;
+  width: 42% !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+  background: linear-gradient(
+    90deg,
+    #087f7a 0%,
+    #16b8ae 100%
+  ) !important;
+  animation:
+    bexhrWorkspaceLoaderProgress
+    1.35s
+    ease-in-out
+    infinite !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel::after,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo)::after {
+  order: 3 !important;
+}

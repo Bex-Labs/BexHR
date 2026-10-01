@@ -15001,45 +15001,45 @@
         : "overview",
     );
 
-    if (isPageRefresh) {
-      const workspaceLoader =
-        document.getElementById(
-          "bexPaWorkspaceLoader",
-        );
+    // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
+    // First entry and refresh both use the same deliberate minimum duration.
+    const workspaceLoader =
+      document.getElementById(
+        "bexPaWorkspaceLoader",
+      );
 
-      const loaderStartedAt =
-        Number(
-          window.BexPaRefreshLoaderStartedAt,
-        ) || window.performance.now();
+    const loaderStartedAt =
+      Number(
+        window.BexPaRefreshLoaderStartedAt,
+      ) || window.performance.now();
 
-      const loaderElapsed =
-        window.performance.now() -
-        loaderStartedAt;
+    const loaderElapsed =
+      window.performance.now() -
+      loaderStartedAt;
 
-      const minimumLoaderTime = 450;
+    const minimumLoaderTime = 650;
 
-      const remainingLoaderTime =
-        Math.max(
-          0,
-          minimumLoaderTime - loaderElapsed,
-        );
+    const remainingLoaderTime =
+      Math.max(
+        0,
+        minimumLoaderTime - loaderElapsed,
+      );
 
-      window.setTimeout(() => {
-        document.documentElement.classList.remove(
-          "bex-pa-refreshing",
-        );
+    window.setTimeout(() => {
+      document.documentElement.classList.remove(
+        "bex-pa-refreshing",
+      );
 
-        workspaceLoader?.setAttribute(
-          "aria-hidden",
-          "true",
-        );
+      workspaceLoader?.setAttribute(
+        "aria-hidden",
+        "true",
+      );
 
-        workspaceLoader?.setAttribute(
-          "aria-busy",
-          "false",
-        );
-      }, remainingLoaderTime);
-    }
+      workspaceLoader?.setAttribute(
+        "aria-busy",
+        "false",
+      );
+    }, remainingLoaderTime);
   }
 
   document.addEventListener(

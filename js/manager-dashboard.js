@@ -538,16 +538,30 @@ function forceManagerDashboardToTopAfterRefresh() {
 // tenant branding, profile, navigation, title, and subtitle are restored.
 // Longer team, leave, schedule, and self-service data loads continue progressively.
 function revealRestoredManagerWorkspace() {
-  document.body?.classList.remove("manager-workspace-booting");
-  document.body?.setAttribute("aria-busy", "false");
+  // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
+  // Give fast Manager restores the same deliberate loader timing as HR.
+  const releaseWorkspace = () => {
+    document.body?.classList.remove("manager-workspace-booting");
+    document.body?.setAttribute("aria-busy", "false");
 
-  window.scrollTo({
-    top: 0,
-    left: 0,
-    behavior: "auto",
-  });
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "auto",
+    });
 
-  updateManagerBackToTopButtonVisibility();
+    updateManagerBackToTopButtonVisibility();
+  };
+
+  const loaderElapsed = Number(window.performance?.now?.()) || 0;
+  const remainingLoaderTime = Math.max(0, 650 - loaderElapsed);
+
+  if (remainingLoaderTime > 0) {
+    window.setTimeout(releaseWorkspace, remainingLoaderTime);
+    return;
+  }
+
+  releaseWorkspace();
 }
 function restoreManagerWorkspaceAfterRefresh() {
   const workspace = getRememberedManagerWorkspace();

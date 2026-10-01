@@ -45,24 +45,38 @@ const EMPLOYEE_DASHBOARD_WORKSPACE_BOOT_KEY = "hrPayroll:lastEmployeeWorkspace:l
 // Slower profile, request, image, leave, and payroll reads continue
 // progressively after the shell becomes visible.
 function releaseEmployeeWorkspaceLoader() {
-  const body = document.body;
-  const loader = document.getElementById("bexhrWorkspaceLoader");
-  const firstPaintGate = document.getElementById(
-    "employeeWorkspaceFirstPaintGate",
-  );
+  // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
+  // Keep fast Employee restores visible long enough to read as intentional.
+  const releaseWorkspace = () => {
+    const body = document.body;
+    const loader = document.getElementById("bexhrWorkspaceLoader");
+    const firstPaintGate = document.getElementById(
+      "employeeWorkspaceFirstPaintGate",
+    );
 
-  body?.classList.remove("employee-workspace-booting");
-  body?.removeAttribute("aria-busy");
-  firstPaintGate?.remove();
+    body?.classList.remove("employee-workspace-booting");
+    body?.removeAttribute("aria-busy");
+    firstPaintGate?.remove();
 
-  if (!loader) return;
+    if (!loader) return;
 
-  loader.setAttribute("aria-hidden", "true");
-  loader.style.pointerEvents = "none";
+    loader.setAttribute("aria-hidden", "true");
+    loader.style.pointerEvents = "none";
 
-  window.setTimeout(() => {
-    loader.remove();
-  }, 220);
+    window.setTimeout(() => {
+      loader.remove();
+    }, 220);
+  };
+
+  const loaderElapsed = Number(window.performance?.now?.()) || 0;
+  const remainingLoaderTime = Math.max(0, 650 - loaderElapsed);
+
+  if (remainingLoaderTime > 0) {
+    window.setTimeout(releaseWorkspace, remainingLoaderTime);
+    return;
+  }
+
+  releaseWorkspace();
 }
 
 /* =========================================================

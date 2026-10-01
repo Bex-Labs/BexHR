@@ -27,14 +27,8 @@
 
     <script>
         (() => {
-            const navigationEntry =
-                window.performance
-                    .getEntriesByType("navigation")[0];
-
-            if (navigationEntry?.type !== "reload") {
-                return;
-            }
-
+            // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
+            // Show the same quiet loader on first entry and browser refresh.
             window.BexPaRefreshLoaderStartedAt =
                 window.performance.now();
 

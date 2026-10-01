@@ -3935,18 +3935,30 @@ function prepareRestoredHrWorkspaceDuringStartup() {
 // Reveal the dashboard only after startup work has had a chance to complete.
 // HR sees one controlled restore state instead of tab/content flicker.
 function revealRestoredHrWorkspace() {
-  // BEXHR WORKSPACE LOADER - PEOPLE UI REFRESH STEP 1
-  // Release the first-paint gate immediately after the exact remembered
-  // workspace has been selected. Long data loads continue progressively.
-  document.body?.classList.remove("hr-workspace-booting");
-  document.body?.setAttribute("aria-busy", "false");
+  // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
+  // Fast authentication/profile restores can otherwise make the loader flash.
+  // Use a 650 ms minimum from navigation start; slower loads are never delayed.
+  const releaseWorkspace = () => {
+    document.body?.classList.remove("hr-workspace-booting");
+    document.body?.setAttribute("aria-busy", "false");
 
-  window.scrollTo({
-    top: 0,
-    behavior: "auto",
-  });
+    window.scrollTo({
+      top: 0,
+      behavior: "auto",
+    });
 
-  updateBackToTopButtonVisibility();
+    updateBackToTopButtonVisibility();
+  };
+
+  const loaderElapsed = Number(window.performance?.now?.()) || 0;
+  const remainingLoaderTime = Math.max(0, 650 - loaderElapsed);
+
+  if (remainingLoaderTime > 0) {
+    window.setTimeout(releaseWorkspace, remainingLoaderTime);
+    return;
+  }
+
+  releaseWorkspace();
 }
 
 // DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
