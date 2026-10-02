@@ -1560,15 +1560,27 @@ const HR_NAVIGATION_TASKS = Object.freeze({
 
 let _hrSidebarTaskRoutingInProgress = false;
 
-// BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
-// People and Setup keep their existing forms/cards, but every entry route now
-// resolves to one focused task instead of exposing the legacy long workspace.
+// BEXHR FOCUSED WORKSPACES - US-03 / US-04
+// People, Payroll, and Setup reuse their existing cards/forms while every entry
+// route resolves to one focused task instead of exposing a long workspace page.
 const HR_FOCUSED_WORKSPACE_TASK_SWITCHERS = Object.freeze({
   employees: {
     id: "hrPeopleTaskSwitcher",
     label: "People sections",
     className: "hr-focused-workspace-switcher--people",
     taskKeys: ["people.directory", "people.add", "people.import"],
+  },
+  payroll: {
+    id: "hrPayrollTaskSwitcher",
+    label: "Payroll sections",
+    className: "hr-focused-workspace-switcher--payroll",
+    taskKeys: [
+      "payroll.overview",
+      "payroll.salary",
+      "payroll.run",
+      "payroll.records",
+      "payroll.delivery",
+    ],
   },
   setup: {
     id: "hrSetupTaskSwitcher",
@@ -1586,6 +1598,7 @@ const HR_FOCUSED_WORKSPACE_TASK_SWITCHERS = Object.freeze({
 function getDefaultHrNavigationTaskForWorkspace(workspace = "") {
   const defaults = {
     employees: "people.directory",
+    payroll: "payroll.overview",
     setup: "setup.organization",
   };
 
@@ -1638,6 +1651,7 @@ function createHrFocusedWorkspaceTaskSwitcher(workspace = "") {
 
 function ensureHrFocusedWorkspaceTaskSwitchers() {
   createHrFocusedWorkspaceTaskSwitcher("employees");
+  createHrFocusedWorkspaceTaskSwitcher("payroll");
   createHrFocusedWorkspaceTaskSwitcher("setup");
 }
 
@@ -4601,6 +4615,72 @@ function focusHrNavigationTaskView(taskKey = "", target = null) {
   return true;
 }
 
+// BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+// Payroll Records and Payslips / Delivery share one existing card. Present them
+// as distinct tasks without duplicating the records table, delivery status,
+// send/export controls, IDs, listeners, or payroll/email business logic.
+function setHrPayrollRecordsTaskMode(mode = "records") {
+  const normalizedMode = mode === "delivery" ? "delivery" : "records";
+  const card = state.dom.payrollRecordsCard;
+  const collapse = state.dom.payrollRecordsCardCollapse;
+  const statusSection = document.getElementById("payslipEmailStatusSection");
+  const header = state.dom.payrollRecordsHeader;
+
+  if (!card || !collapse || !statusSection || !header) return false;
+
+  let separator = collapse.querySelector(
+    '[data-hr-payroll-delivery-separator="true"]',
+  );
+
+  if (!separator) {
+    const candidate = statusSection.previousElementSibling;
+    if (candidate?.tagName === "HR") {
+      separator = candidate;
+      separator.dataset.hrPayrollDeliverySeparator = "true";
+    }
+  }
+
+  const title = header.querySelector(".section-heading");
+  const subtitle = header.querySelector(".section-subtext");
+
+  if (normalizedMode === "delivery") {
+    statusSection.hidden = false;
+    if (separator) separator.hidden = true;
+
+    // Put delivery monitoring first so HR lands directly on payslip work.
+    collapse.insertBefore(statusSection, collapse.firstElementChild);
+
+    if (title) title.textContent = "Payslips / Delivery";
+    if (subtitle) {
+      subtitle.textContent =
+        "Review payslip delivery status, select authorised payroll records, and manage delivery evidence.";
+    }
+
+    if (state.dom.payslipEmailLogsCollapse?.classList.contains("d-none")) {
+      state.dom.togglePayslipEmailLogsBtn?.click();
+    }
+  } else {
+    // Payroll Records stays records-focused. Keep delivery available through
+    // its dedicated Payroll option instead of extending this task vertically.
+    if (separator) {
+      separator.hidden = true;
+      collapse.appendChild(separator);
+    }
+
+    collapse.appendChild(statusSection);
+    statusSection.hidden = true;
+
+    if (title) title.textContent = "Payroll Records";
+    if (subtitle) {
+      subtitle.textContent =
+        "Search payroll records by employee, pay cycle, department, group, or status.";
+    }
+  }
+
+  card.dataset.hrPayrollRecordsMode = normalizedMode;
+  return true;
+}
+
 function getHrNavigationTaskTarget(taskKey = "") {
   switch (String(taskKey || "").trim()) {
     case "people.directory":
@@ -4653,17 +4733,14 @@ function getHrNavigationTaskTarget(taskKey = "") {
 
     case "payroll.records":
       openPayrollRecordsCard();
+      setHrPayrollRecordsTaskMode("records");
       return state.dom.payrollRecordsCard || state.dom.payrollRecordsCardCollapse;
 
     case "payroll.delivery":
       openPayrollRecordsCard();
-
-      if (state.dom.payslipEmailLogsCollapse?.classList.contains("d-none")) {
-        state.dom.togglePayslipEmailLogsBtn?.click();
-      }
-
+      setHrPayrollRecordsTaskMode("delivery");
       return (
-        state.dom.togglePayslipEmailLogsBtn ||
+        document.getElementById("payslipEmailStatusSection") ||
         state.dom.payrollRecordsCard ||
         state.dom.payrollRecordsCardCollapse
       );
@@ -10927,6 +11004,13 @@ function bindEvents() {
     // Remember Payroll for refresh, but do not store payroll form or salary data.
     rememberHrWorkspace("payroll");
     switchHrWorkspace("payroll");
+
+    // BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+    // Generic/mobile Payroll entry lands on Overview instead of exposing the
+    // complete legacy Payroll page. Explicit sidebar tasks reapply themselves.
+    if (!_hrSidebarTaskRoutingInProgress) {
+      applyHrNavigationTask("payroll.overview", { scroll: false });
+    }
   });
 
   state.dom.hrTabSelfServiceBtn?.addEventListener("click", () => {
@@ -10940,6 +11024,13 @@ function bindEvents() {
   // Do not route HR to People for payroll operations.
   state.dom.runPayrollActionBtn?.addEventListener("click", () => {
     startRunPayrollSelectionFlow();
+
+    // BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+    // The Overview quick action and sidebar route both land on the same focused
+    // Run Payroll card instead of reopening the complete Payroll page.
+    if (canCurrentUserMaintainPayrollOperationsData()) {
+      applyHrNavigationTask("payroll.run", { scroll: false });
+    }
   });
 
   // RUN PAYROLL - STEP 4
@@ -12235,7 +12326,15 @@ function bindEvents() {
   });
 
   state.dom.cancelPayrollEditBtn?.addEventListener("click", () => {
+    const shouldReturnToPayrollRecords = Boolean(state.currentEditingPayroll);
     exitPayrollEditMode();
+
+    // BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+    // Edit launched from Payroll Records. Cancel returns to that focused task
+    // instead of leaving HR on a reset Create Payroll Record screen.
+    if (shouldReturnToPayrollRecords) {
+      applyHrNavigationTask("payroll.records", { scroll: false });
+    }
   });
 
   // DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 5
@@ -23652,6 +23751,11 @@ function continueRunPayrollToPayrollWorkspace() {
   // BATCH PAYROLL DEFAULT - STEP 2
   // Open the payroll card and land directly on the batch review table.
   openPayrollRecordCard();
+
+  // BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+  // continueRunPayrollToPayrollWorkspace() calls switchHrWorkspace() directly,
+  // so reapply Run Payroll focus after that authoritative workspace transition.
+  applyHrNavigationTask("payroll.run", { scroll: false });
 
   // BATCH PAYROLL DEFAULT - STEP 2B
   // Wait for the Payroll workspace to become visible before scrolling.
@@ -42005,6 +42109,11 @@ async function startPayrollEdit(payrollId) {
   // Editing must reopen Create Payroll Record even if HR collapsed it
   // after a previous submit/update.
   openPayrollRecordCard();
+
+  // BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+  // Payroll record editing is a transient Run Payroll work screen. Do not
+  // persist this transient state; Save already returns to Payroll Records.
+  applyHrNavigationTask("payroll.run", { remember: false, scroll: false });
 
   // BATCH PAYROLL DEFAULT - STEP 2A
   // Scroll to the full Create Payroll Batch card instead of the inner
