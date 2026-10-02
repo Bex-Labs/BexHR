@@ -1245,6 +1245,40 @@ const TENANT_CONTEXT_STORAGE_KEY = "hrPayrollTenantContext";
 // Remembers only the active HR workspace tab during browser refresh.
 // This must stay sessionStorage-based so logout/new sessions return to Profile.
 const HR_DASHBOARD_WORKSPACE_MEMORY_PREFIX = "hrPayroll:lastHrWorkspace:v2";
+// BEXHR HR NAVIGATION ARCHITECTURE - US-02
+// Remembers only the selected sidebar task during this browser session.
+// No employee, payroll, salary, bank, leave, or form data is stored.
+const HR_DASHBOARD_TASK_MEMORY_PREFIX = "hrPayroll:lastHrTask:v1";
+
+const HR_SIDEBAR_GROUPS = Object.freeze({
+  people: { parentId: "sidebarPeopleBtn", subnavId: "sidebarPeopleSubnav" },
+  reviews: { parentId: "sidebarReviewBtn", subnavId: "sidebarReviewsSubnav" },
+  payroll: { parentId: "sidebarPayrollBtn", subnavId: "sidebarPayrollSubnav" },
+  setup: { parentId: "sidebarSetupBtn", subnavId: "sidebarSetupSubnav" },
+  selfservice: { parentId: "sidebarSelfServiceBtn", subnavId: "sidebarSelfServiceSubnav" },
+});
+
+const HR_NAVIGATION_TASKS = Object.freeze({
+  "people.directory": { workspace: "employees", group: "people", title: "Employee Directory", subtitle: "Search, review, and maintain employee records.", module: "People" },
+  "people.add": { workspace: "employees", group: "people", title: "Add Employee", subtitle: "Create or maintain one employee profile using the existing employee form.", module: "People" },
+  "people.import": { workspace: "employees", group: "people", title: "Import Employees", subtitle: "Upload and review employee records using the existing batch import workflow.", module: "People" },
+  "review.corrections": { workspace: "review", group: "reviews", title: "Profile Corrections", subtitle: "Review employee-submitted profile correction requests.", module: "Reviews" },
+  "review.leave": { workspace: "review", group: "reviews", title: "Leave Decision Oversight", subtitle: "Review recorded manager leave decisions and audit history.", module: "Reviews" },
+  "payroll.overview": { workspace: "payroll", group: "payroll", title: "Payroll Overview", subtitle: "Review payroll totals, status, and current processing readiness.", module: "Payroll" },
+  "payroll.salary": { workspace: "payroll", group: "payroll", title: "Salary Setup", subtitle: "Maintain employee salary setup records before payroll processing.", module: "Payroll" },
+  "payroll.run": { workspace: "payroll", group: "payroll", title: "Run Payroll", subtitle: "Prepare and finalise payroll using the existing payroll workflow.", module: "Payroll" },
+  "payroll.records": { workspace: "payroll", group: "payroll", title: "Payroll Records", subtitle: "Review submitted and finalised payroll records.", module: "Payroll" },
+  "payroll.delivery": { workspace: "payroll", group: "payroll", title: "Payslips / Delivery", subtitle: "Review payslip delivery status and authorised payroll records.", module: "Payroll" },
+  "setup.organization": { workspace: "setup", group: "setup", title: "Organization", subtitle: "Maintain organization details, departments, job titles, and audit context.", module: "Setup" },
+  "setup.rules": { workspace: "setup", group: "setup", title: "Payroll Rules", subtitle: "Maintain payroll allowances, deductions, and employee payroll exceptions.", module: "Setup" },
+  "setup.payment": { workspace: "setup", group: "setup", title: "Payment Setup", subtitle: "Maintain bank directory and employee payment account details.", module: "Setup" },
+  "setup.communication": { workspace: "setup", group: "setup", title: "Communication", subtitle: "Manage approved email validation and delivery configuration.", module: "Setup" },
+  "selfservice.leave": { workspace: "selfservice", group: "selfservice", title: "My Leave", subtitle: "Manage your own leave requests, balances, and decision history.", module: "My Self-Service" },
+  "selfservice.payroll": { workspace: "selfservice", group: "selfservice", title: "My Payroll", subtitle: "Review your own authorised payroll records and payslips.", module: "My Self-Service" },
+});
+
+let _hrSidebarTaskRoutingInProgress = false;
+
 
 // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
 // Controlled Nigerian state list used by State of Origin and issuing-state fields.
@@ -3903,6 +3937,471 @@ function clearRememberedHrWorkspace() {
   } catch (error) {
     console.warn("HR workspace memory could not be cleared.", error);
   }
+
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Logout clears the remembered task together with the top-level workspace.
+  clearRememberedHrNavigationTask();
+}
+
+// BEXHR HR NAVIGATION ARCHITECTURE - US-02
+function isValidHrNavigationTask(taskKey = "") {
+  return Object.prototype.hasOwnProperty.call(
+    HR_NAVIGATION_TASKS,
+    String(taskKey || "").trim(),
+  );
+}
+
+function getHrNavigationTaskMemoryKey() {
+  const tenantContext = getCurrentTenantContext();
+  const userId = String(state.currentUser?.id || "anonymous").trim();
+  const tenantId = String(
+    tenantContext?.tenantId ||
+    state.currentProfile?.tenant_id ||
+    "no-tenant",
+  ).trim();
+
+  return `${HR_DASHBOARD_TASK_MEMORY_PREFIX}:${userId}:${tenantId}`;
+}
+
+function rememberHrNavigationTask(taskKey = "") {
+  const normalizedTaskKey = String(taskKey || "").trim();
+  if (!isValidHrNavigationTask(normalizedTaskKey)) return;
+
+  try {
+    sessionStorage.setItem(getHrNavigationTaskMemoryKey(), normalizedTaskKey);
+  } catch (error) {
+    console.warn("HR navigation task memory could not be saved.", error);
+  }
+}
+
+function getRememberedHrNavigationTask() {
+  try {
+    const taskKey = sessionStorage.getItem(getHrNavigationTaskMemoryKey()) || "";
+    return isValidHrNavigationTask(taskKey) ? taskKey : "";
+  } catch (error) {
+    console.warn("HR navigation task memory could not be read.", error);
+    return "";
+  }
+}
+
+function clearRememberedHrNavigationTask() {
+  try {
+    sessionStorage.removeItem(getHrNavigationTaskMemoryKey());
+  } catch (error) {
+    console.warn("HR navigation task memory could not be cleared.", error);
+  }
+}
+
+function setHrSidebarGroupExpanded(groupKey = "", shouldExpand = true) {
+  const requestedGroup = String(groupKey || "").trim();
+
+  Object.entries(HR_SIDEBAR_GROUPS).forEach(([key, config]) => {
+    const parent = document.getElementById(config.parentId);
+    const subnav = document.getElementById(config.subnavId);
+    const isExpanded = shouldExpand && key === requestedGroup;
+
+    parent?.classList.toggle("is-expanded", isExpanded);
+    parent?.setAttribute("aria-expanded", String(isExpanded));
+
+    if (subnav) {
+      subnav.hidden = !isExpanded;
+    }
+  });
+}
+
+function syncHrSidebarGroupForWorkspace(workspace = "") {
+  const groupByWorkspace = {
+    employees: "people",
+    review: "reviews",
+    payroll: "payroll",
+    setup: "setup",
+    selfservice: "selfservice",
+  };
+
+  const groupKey = groupByWorkspace[String(workspace || "").trim()] || "";
+  setHrSidebarGroupExpanded(groupKey, Boolean(groupKey));
+}
+
+function clearHrSidebarTaskActiveState() {
+  document
+    .querySelectorAll("[data-hr-navigation-task]")
+    .forEach((button) => {
+      button.classList.remove("active");
+      button.removeAttribute("aria-current");
+    });
+}
+
+function setHrSidebarTaskActive(taskKey = "") {
+  const normalizedTaskKey = String(taskKey || "").trim();
+
+  document
+    .querySelectorAll("[data-hr-navigation-task]")
+    .forEach((button) => {
+      const isActive = button.dataset.hrNavigationTask === normalizedTaskKey;
+      button.classList.toggle("active", isActive);
+
+      if (isActive) {
+        button.setAttribute("aria-current", "page");
+      } else {
+        button.removeAttribute("aria-current");
+      }
+    });
+}
+
+function updateHrNavigationTaskHeader(taskKey = "") {
+  const task = HR_NAVIGATION_TASKS[String(taskKey || "").trim()];
+  if (!task) return;
+
+  if (state.dom.hrModernPageTitle) {
+    state.dom.hrModernPageTitle.textContent = task.title;
+  }
+
+  if (state.dom.hrModernPageSubtitle) {
+    state.dom.hrModernPageSubtitle.textContent = task.subtitle;
+  }
+
+  if (state.dom.hrModuleValue) {
+    state.dom.hrModuleValue.textContent = task.module;
+  }
+}
+
+function resetHrNavigationTaskFocus() {
+  document
+    .querySelectorAll(".bexhr-hr-task-hidden")
+    .forEach((element) => element.classList.remove("bexhr-hr-task-hidden"));
+
+  delete document.body.dataset.hrNavigationTask;
+}
+
+function getHrWorkspaceSectionForNavigationTask(taskKey = "") {
+  const task = HR_NAVIGATION_TASKS[String(taskKey || "").trim()];
+  if (!task) return null;
+
+  const sectionsByWorkspace = {
+    employees: state.dom.hrEmployeesSection,
+    review: state.dom.hrReviewSection,
+    payroll: state.dom.hrPayrollSection,
+    setup: state.dom.hrSetupSection,
+    selfservice: state.dom.hrSelfServiceSection,
+  };
+
+  return sectionsByWorkspace[task.workspace] || null;
+}
+
+function getHrTaskDirectChild(section, node) {
+  if (!section || !node) return null;
+
+  let current = node;
+
+  while (current && current.parentElement && current.parentElement !== section) {
+    current = current.parentElement;
+  }
+
+  return current?.parentElement === section ? current : null;
+}
+
+function getHrNavigationTaskCompanionNodes(taskKey = "") {
+  switch (String(taskKey || "").trim()) {
+    case "setup.organization":
+      return [document.getElementById("setupOrganizationGroupHeader")];
+
+    case "setup.rules":
+      return [
+        document.getElementById("setupPayrollGroupHeader"),
+        state.dom.payrollStatutoryCardCollapse?.closest(".dashboard-section-card"),
+        state.dom.payrollEmployeeOverrideCardCollapse?.closest(".dashboard-section-card"),
+      ];
+
+    case "setup.payment":
+      return [
+        document.getElementById("setupPaymentGroupHeader"),
+        state.dom.employeeBankDetailsCardCollapse?.closest(".dashboard-section-card"),
+      ];
+
+    case "setup.communication":
+      return [document.getElementById("setupCommunicationGroupHeader")];
+
+    case "selfservice.leave":
+    case "selfservice.payroll":
+      return [document.getElementById("ssSelfServiceAlert")];
+
+    default:
+      return [];
+  }
+}
+
+function focusHrNavigationTaskView(taskKey = "", target = null) {
+  const normalizedTaskKey = String(taskKey || "").trim();
+  const section = getHrWorkspaceSectionForNavigationTask(normalizedTaskKey);
+  if (!section || !target) return false;
+
+  const visibleNodes = [
+    target,
+    ...getHrNavigationTaskCompanionNodes(normalizedTaskKey),
+  ].filter(Boolean);
+
+  const visibleDirectChildren = new Set(
+    visibleNodes
+      .map((node) => getHrTaskDirectChild(section, node))
+      .filter(Boolean),
+  );
+
+  if (!visibleDirectChildren.size) return false;
+
+  resetHrNavigationTaskFocus();
+
+  Array.from(section.children).forEach((child) => {
+    if (!(child instanceof HTMLElement)) return;
+    child.classList.toggle(
+      "bexhr-hr-task-hidden",
+      !visibleDirectChildren.has(child),
+    );
+  });
+
+  document.body.dataset.hrNavigationTask = normalizedTaskKey;
+  return true;
+}
+
+function getHrNavigationTaskTarget(taskKey = "") {
+  switch (String(taskKey || "").trim()) {
+    case "people.directory":
+      openEmployeeListCard();
+      return (
+        state.dom.employeeListCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.employeeListCardHeader ||
+        state.dom.employeeListCardCollapse
+      );
+
+    case "people.add":
+      openEmployeeFormCard();
+      return (
+        state.dom.employeeFormCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.employeeFormCardCollapse
+      );
+
+    case "people.import":
+      return document.getElementById("batchEmployeeImportCard");
+
+    case "review.corrections":
+      openProfileCorrectionRequestsCard();
+      return state.dom.profileCorrectionRequestsCard;
+
+    case "review.leave":
+      setDashboardCardExpanded(
+        state.dom.toggleManagerLeaveDecisionsBtn,
+        state.dom.managerLeaveDecisionsCollapse,
+        true,
+      );
+      return state.dom.recentManagerLeaveDecisionsCard;
+
+    case "payroll.overview":
+      return state.dom.payrollRecordCountValue?.closest(".dashboard-section-card");
+
+    case "payroll.salary":
+      openPayrollMasterCard();
+      return (
+        state.dom.payrollMasterCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.payrollMasterCardCollapse
+      );
+
+    case "payroll.run":
+      if (!canCurrentUserMaintainPayrollOperationsData()) return null;
+      openPayrollRecordCard();
+      return (
+        state.dom.payrollRecordCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.payrollRecordCardCollapse
+      );
+
+    case "payroll.records":
+      openPayrollRecordsCard();
+      return state.dom.payrollRecordsCard || state.dom.payrollRecordsCardCollapse;
+
+    case "payroll.delivery":
+      openPayrollRecordsCard();
+
+      if (state.dom.payslipEmailLogsCollapse?.classList.contains("d-none")) {
+        state.dom.togglePayslipEmailLogsBtn?.click();
+      }
+
+      return (
+        state.dom.togglePayslipEmailLogsBtn ||
+        state.dom.payrollRecordsCard ||
+        state.dom.payrollRecordsCardCollapse
+      );
+
+    case "setup.organization":
+      setDashboardCardExpanded(
+        state.dom.toggleOrganizationSettingsCardBtn,
+        state.dom.organizationSettingsCardCollapse,
+        true,
+      );
+      window.hrOpenOrganizationSetupPanel?.("organization");
+      return (
+        state.dom.organizationSettingsCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.organizationSettingsCardCollapse
+      );
+
+    case "setup.rules":
+      openPayrollAllowanceCard();
+      return (
+        state.dom.payrollAllowanceCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.payrollAllowanceCardCollapse
+      );
+
+    case "setup.payment":
+      openBankDirectoryCard();
+      return (
+        state.dom.bankDirectoryCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.bankDirectoryCardCollapse
+      );
+
+    case "setup.communication":
+      setDashboardCardExpanded(
+        state.dom.toggleHrp85EmailIntegrationCardBtn,
+        state.dom.hrp85EmailIntegrationCardCollapse,
+        true,
+      );
+      window.hrOpenCommunicationSetupPanel?.("validation");
+      return state.dom.hrp85EmailIntegrationCard;
+
+    case "selfservice.leave":
+      document.getElementById("ssNavLeaveBtn")?.click();
+      return document.getElementById("ssLeaveSection");
+
+    case "selfservice.payroll":
+      document.getElementById("ssNavPayrollBtn")?.click();
+      return document.getElementById("ssPayrollSection");
+
+    default:
+      return null;
+  }
+}
+
+function applyHrNavigationTask(taskKey = "", options = {}) {
+  const normalizedTaskKey = String(taskKey || "").trim();
+  const task = HR_NAVIGATION_TASKS[normalizedTaskKey];
+  if (!task) return false;
+
+  setHrSidebarGroupExpanded(task.group, true);
+  setHrSidebarTaskActive(normalizedTaskKey);
+  updateHrNavigationTaskHeader(normalizedTaskKey);
+
+  const target = getHrNavigationTaskTarget(normalizedTaskKey);
+  if (!target) return false;
+
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Explicit sidebar tasks are focused views: show only the selected job's
+  // existing card/group and automatically open its working content.
+  if (!focusHrNavigationTaskView(normalizedTaskKey, target)) return false;
+
+  if (options.remember !== false) {
+    rememberHrNavigationTask(normalizedTaskKey);
+  }
+
+  if (options.scroll !== false) {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        scrollToDashboardTarget(target, getHrReviewNavigationOffset());
+      });
+    });
+  }
+
+  return true;
+}
+
+function getHrWorkspaceButtonForNavigationTask(taskKey = "") {
+  const task = HR_NAVIGATION_TASKS[String(taskKey || "").trim()];
+  if (!task) return null;
+
+  const buttonsByWorkspace = {
+    employees: state.dom.hrTabEmployeesBtn,
+    review: state.dom.hrTabReviewBtn,
+    payroll: state.dom.hrTabPayrollBtn,
+    setup: state.dom.hrTabSetupBtn,
+    selfservice: state.dom.hrTabSelfServiceBtn,
+  };
+
+  return buttonsByWorkspace[task.workspace] || null;
+}
+
+function openHrNavigationTask(taskKey = "") {
+  const normalizedTaskKey = String(taskKey || "").trim();
+  const task = HR_NAVIGATION_TASKS[normalizedTaskKey];
+  if (!task) return false;
+
+  if (normalizedTaskKey === "payroll.run") {
+    if (!canCurrentUserMaintainPayrollOperationsData()) {
+      state.dom.runPayrollActionBtn?.click();
+      return false;
+    }
+
+    state.dom.runPayrollActionBtn?.click();
+    return applyHrNavigationTask(normalizedTaskKey);
+  }
+
+  const workspaceButton = getHrWorkspaceButtonForNavigationTask(normalizedTaskKey);
+  if (!workspaceButton) return false;
+
+  _hrSidebarTaskRoutingInProgress = true;
+
+  try {
+    workspaceButton.click();
+  } finally {
+    _hrSidebarTaskRoutingInProgress = false;
+  }
+
+  return applyHrNavigationTask(normalizedTaskKey);
+}
+
+function restoreRememberedHrNavigationTask(workspace = "") {
+  const taskKey = getRememberedHrNavigationTask();
+  const task = HR_NAVIGATION_TASKS[taskKey];
+
+  if (!task || task.workspace !== String(workspace || "").trim()) {
+    clearHrSidebarTaskActiveState();
+    return false;
+  }
+
+  return applyHrNavigationTask(taskKey, {
+    remember: false,
+    scroll: false,
+  });
+}
+
+function bindHrRedesignSidebarNavigation() {
+  Object.entries(HR_SIDEBAR_GROUPS).forEach(([groupKey, config]) => {
+    const parent = document.getElementById(config.parentId);
+    if (!parent) return;
+
+    parent.addEventListener("click", () => {
+      const isExpanded = parent.getAttribute("aria-expanded") === "true";
+      setHrSidebarGroupExpanded(groupKey, !isExpanded);
+    });
+  });
+
+  document
+    .querySelectorAll("[data-hr-navigation-task]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        openHrNavigationTask(button.dataset.hrNavigationTask || "");
+      });
+    });
+
+  [
+    state.dom.hrTabDashboardBtn,
+    state.dom.hrTabProfileBtn,
+    state.dom.hrTabEmployeesBtn,
+    state.dom.hrTabReviewBtn,
+    state.dom.hrTabSetupBtn,
+    state.dom.hrTabPayrollBtn,
+    state.dom.hrTabSelfServiceBtn,
+  ].forEach((button) => {
+    button?.addEventListener("click", () => {
+      if (_hrSidebarTaskRoutingInProgress) return;
+      clearRememberedHrNavigationTask();
+      clearHrSidebarTaskActiveState();
+    });
+  });
 }
 
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1B
@@ -3984,6 +4483,11 @@ function restoreHrWorkspaceAfterRefresh() {
   const workspace = getRememberedHrWorkspace();
 
   switchHrWorkspace(workspace);
+
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Restore only the remembered UI task that belongs to this workspace.
+  // Existing refresh-top behaviour remains authoritative.
+  restoreRememberedHrNavigationTask(workspace);
 
   // DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
   // Run immediately and across the next paints because browsers can restore
@@ -5657,8 +6161,19 @@ function getHrReviewNavigationOffset() {
 // Review Overview navigation only. Existing card IDs, collapse state, refresh,
 // filters, tenant queries, role checks, decision saves, and leave RPC stay unchanged.
 function openHrReviewArea(targetId = "") {
-  const target = document.getElementById(String(targetId || "").trim());
+  const normalizedTargetId = String(targetId || "").trim();
+  const taskByTargetId = {
+    profileCorrectionRequestsCard: "review.corrections",
+    recentManagerLeaveDecisionsCard: "review.leave",
+  };
+  const taskKey = taskByTargetId[normalizedTargetId];
 
+  if (taskKey) {
+    applyHrNavigationTask(taskKey);
+    return;
+  }
+
+  const target = document.getElementById(normalizedTargetId);
   if (!target) return;
 
   window.requestAnimationFrame(() => {
@@ -6694,6 +7209,10 @@ function redirectToFullEmployeeListAfterEmployeeSave() {
   switchHrWorkspace("employees");
   closeEmployeeFormCard();
   openEmployeeListCard();
+
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // A successful employee save deliberately lands on the focused Employee Directory.
+  applyHrNavigationTask("people.directory", { scroll: false });
 
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
@@ -9554,6 +10073,10 @@ function clearPayrollRecordsFiltersBeforeRedirect() {
 function redirectToPayrollRecordsAfterSave() {
   closePayrollRecordCard();
 
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Payroll save/update deliberately lands on the focused Payroll Records view.
+  applyHrNavigationTask("payroll.records", { scroll: false });
+
   // DESCRIPTION ITEM 4 - STEP 2C
   // Because Payroll Records now collapses by default, reopen it after
   // submit/update so the newly saved payroll record remains visible.
@@ -9747,6 +10270,9 @@ function alignHrReviewWorkspaceCardOrder() {
 }
 
 function bindEvents() {
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  bindHrRedesignSidebarNavigation();
+
   state.dom.logoutBtn?.addEventListener("click", async () => {
     // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
     // Logout must reset the next session to Profile.
@@ -24896,144 +25422,154 @@ async function showHrPerformanceAppraisalChooser() {
 
   const overlay = document.createElement("div");
   overlay.id = "hrPerformanceAppraisalChooser";
+  overlay.className =
+    "position-fixed top-0 start-0 w-100 h-100 hr-operating-guide-modal hr-performance-appraisal-chooser-modal";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute(
     "aria-labelledby",
     "hrPerformanceAppraisalChooserTitle",
   );
+  overlay.setAttribute(
+    "aria-describedby",
+    "hrPerformanceAppraisalChooserDescription",
+  );
 
-  Object.assign(overlay.style, {
-    position: "fixed",
-    inset: "0",
-    zIndex: "10000",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "24px",
-    background: "rgba(15, 23, 42, 0.48)",
-  });
+  const stage = document.createElement("div");
+  stage.className = "hr-operating-guide-stage";
 
   const dialog = document.createElement("div");
+  dialog.className =
+    "hr-operating-guide-shell hr-performance-appraisal-chooser-shell";
+  dialog.setAttribute("tabindex", "-1");
 
-  Object.assign(dialog.style, {
-    width: "min(680px, 100%)",
-    background: "#ffffff",
-    borderRadius: "16px",
-    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.24)",
-    padding: "24px",
-    position: "relative",
-  });
+  const header = document.createElement("header");
+  header.className = "hr-operating-guide-header";
 
-  const title = document.createElement("h2");
-  title.id = "hrPerformanceAppraisalChooserTitle";
-  title.textContent = "Open Performance Appraisal";
-
-  Object.assign(title.style, {
-    margin: "0 0 8px",
-    fontSize: "20px",
-  });
-
-  const description = document.createElement("p");
-  description.textContent =
-    "Choose the Performance Appraisal workspace you want to open.";
-
-  Object.assign(description.style, {
-    margin: "0 0 24px",
-    color: "#475569",
-  });
-
-  const actions = document.createElement("div");
-
-  Object.assign(actions.style, {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(160px, 1fr))",
-    gap: "12px",
-    width: "100%",
-  });
+  const heading = document.createElement("div");
+  heading.className = "hr-operating-guide-heading";
+  heading.innerHTML = `
+    <span class="hr-operating-guide-heading-icon" aria-hidden="true">
+      <i class="bi bi-clipboard2-check"></i>
+    </span>
+    <div>
+      <span class="hr-operating-guide-kicker">Performance Appraisal</span>
+      <h2 id="hrPerformanceAppraisalChooserTitle">Choose your appraisal workspace</h2>
+      <p id="hrPerformanceAppraisalChooserDescription">
+        Continue to the appraisal area that matches the work you need to do.
+      </p>
+    </div>
+  `;
 
   const closeButton = document.createElement("button");
   closeButton.type = "button";
-  closeButton.textContent = "Cancel";
+  closeButton.className = "hr-operating-guide-close";
+  closeButton.setAttribute("aria-label", "Close Performance Appraisal chooser");
+  closeButton.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
 
-  const employeeButton = document.createElement("button");
-  employeeButton.type = "button";
-  employeeButton.textContent = "My Appraisal";
+  header.append(heading, closeButton);
+
+  const body = document.createElement("div");
+  body.className = "hr-operating-guide-body";
+
+  const actions = document.createElement("div");
+  actions.className =
+    "hr-guide-workspace-grid hr-performance-appraisal-option-grid";
+  actions.setAttribute("aria-label", "Performance Appraisal workspaces");
+
+  const createOptionCard = ({
+    variantClass,
+    iconClass,
+    title,
+    description,
+  }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className =
+      `hr-guide-workspace-card ${variantClass} hr-performance-appraisal-option-card`;
+    button.innerHTML = `
+      <span class="hr-guide-workspace-icon" aria-hidden="true">
+        <i class="${iconClass}"></i>
+      </span>
+      <span class="hr-guide-workspace-copy">
+        <strong>${title}</strong>
+        <small>${description}</small>
+      </span>
+      <span class="hr-guide-workspace-link">
+        Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+      </span>
+    `;
+    return button;
+  };
+
+  const employeeButton = createOptionCard({
+    variantClass: "hr-guide-workspace-card--self-service",
+    iconClass: "bi bi-person-check",
+    title: "My Appraisal",
+    description:
+      "Open your own Performance Appraisal workspace and review your current appraisal progress.",
+  });
+
+  const managerButton = createOptionCard({
+    variantClass: "hr-guide-workspace-card--review",
+    iconClass: "bi bi-people",
+    title: "Manager Reviews",
+    description:
+      "Review appraisal work for employees assigned to your primary or secondary reporting scope.",
+  });
 
   const isHrAdmin =
     canCurrentUserMaintainOrganizationSetupData();
-
-  const managerButton =
-    document.createElement("button");
-
-  managerButton.type = "button";
-  managerButton.textContent = "Manager Reviews";
-
-  const hrWorkspaceButton = document.createElement("button");
-  hrWorkspaceButton.type = "button";
-  hrWorkspaceButton.textContent =
-    isHrAdmin
-      ? "HR Administration"
-      : "HR Standard View";
-
-  [employeeButton, managerButton, hrWorkspaceButton].forEach(
-    (button) => {
-      Object.assign(button.style, {
-        width: "100%",
-        minHeight: "44px",
-        padding: "9px 14px",
-        borderRadius: "10px",
-        fontWeight: "700",
-        cursor: "pointer",
-      });
-    },
-  );
-
-  Object.assign(closeButton.style, {
-    position: "absolute",
-    top: "1rem",
-    right: "1rem",
-    border: "0",
-    background: "transparent",
-    color: "#64748b",
-    fontSize: "0.875rem",
-    fontWeight: "600",
-    padding: "0.35rem 0.5rem",
-    cursor: "pointer",
+  const hrWorkspaceTitle = isHrAdmin
+    ? "HR Administration"
+    : "HR Standard View";
+  const hrWorkspaceButton = createOptionCard({
+    variantClass: "hr-guide-workspace-card--performance",
+    iconClass: "bi bi-clipboard-data",
+    title: hrWorkspaceTitle,
+    description: isHrAdmin
+      ? "Open the HR appraisal administration and oversight workspace available to your role."
+      : "Open the HR appraisal workspace available to your assigned HR responsibilities.",
   });
 
-  Object.assign(employeeButton.style, {
-    border: "1px solid #0f6f8f",
-    background: "#ffffff",
-    color: "#0f6f8f",
-  });
+  actions.append(employeeButton);
 
-  Object.assign(managerButton.style, {
-    border: "1px solid #0f6f8f",
-    background: "#ffffff",
-    color: "#0f6f8f",
-  });
+  if (hasManagerReviewCapability) {
+    actions.append(managerButton);
+  }
 
-  Object.assign(hrWorkspaceButton.style, {
-    border: "1px solid #0f6f8f",
-    background: "#0f6f8f",
-    color: "#ffffff",
-  });
+  actions.append(hrWorkspaceButton);
+  body.append(actions);
+
+  const footer = document.createElement("footer");
+  footer.className = "hr-operating-guide-footer";
+
+  const accessNote = document.createElement("span");
+  accessNote.innerHTML =
+    '<i class="bi bi-shield-check" aria-hidden="true"></i>' +
+    '<span>Available appraisal workspaces follow your assigned responsibilities.</span>';
+
+  const footerCloseButton = document.createElement("button");
+  footerCloseButton.type = "button";
+  footerCloseButton.className = "btn btn-outline-secondary";
+  footerCloseButton.textContent = "Close";
+
+  footer.append(accessNote, footerCloseButton);
+  dialog.append(header, body, footer);
+  stage.append(dialog);
+  overlay.append(stage);
 
   const closeChooser = () => {
     document.removeEventListener(
       "keydown",
       handleKeydown,
     );
-
+    document.body?.classList.remove("hr-operating-guide-open");
     overlay.remove();
   };
 
-  closeButton.addEventListener(
-    "click",
-    closeChooser,
-  );
+  closeButton.addEventListener("click", closeChooser);
+  footerCloseButton.addEventListener("click", closeChooser);
 
   employeeButton.addEventListener(
     "click",
@@ -25073,83 +25609,65 @@ async function showHrPerformanceAppraisalChooser() {
     },
   );
 
-hrWorkspaceButton.addEventListener(
-  "click",
-  async () => {
-    closeChooser();
+  hrWorkspaceButton.addEventListener(
+    "click",
+    async () => {
+      closeChooser();
 
-    const departmentsLoaded =
-      await ensureHrPerformanceAppraisalDepartmentsLoaded();
+      const departmentsLoaded =
+        await ensureHrPerformanceAppraisalDepartmentsLoaded();
 
-    if (!departmentsLoaded) {
-      showPageAlert(
-        "warning",
-        "Performance Appraisal could not load the canonical BexHR departments. Please try again.",
+      if (!departmentsLoaded) {
+        showPageAlert(
+          "warning",
+          "Performance Appraisal could not load the canonical BexHR departments. Please try again.",
+        );
+        return;
+      }
+
+      if (
+        !publishHrPerformanceAppraisalContext({
+          mode: isHrAdmin
+            ? "hr-admin"
+            : "hr-standard",
+        })
+      ) {
+        return;
+      }
+
+      window.location.assign(
+        "features/performance-appraisal/performance-appraisal.html",
       );
+    },
+  );
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay || event.target === stage) {
+      closeChooser();
+    }
+  });
+
+  const handleKeydown = (event) => {
+    if (event.key !== "Escape") {
       return;
     }
 
-    if (
-      !publishHrPerformanceAppraisalContext({
-        mode: isHrAdmin
-          ? "hr-admin"
-          : "hr-standard",
-      })
-    ) {
-      return;
-    }
-
-    window.location.assign(
-      "features/performance-appraisal/performance-appraisal.html",
-    );
-  },
-);
-
-overlay.addEventListener("click", (event) => {
-  if (event.target === overlay) {
+    event.preventDefault();
     closeChooser();
-  }
-});
+  };
 
-const handleKeydown = (event) => {
-  if (event.key !== "Escape") {
-    return;
-  }
-
-  document.removeEventListener(
+  document.addEventListener(
     "keydown",
     handleKeydown,
   );
 
-  closeChooser();
-};
+  document.body.append(overlay);
+  document.body?.classList.add("hr-operating-guide-open");
 
-document.addEventListener(
-  "keydown",
-  handleKeydown,
-);
-
-actions.append(employeeButton);
-
-if (hasManagerReviewCapability) {
-  actions.append(managerButton);
+  window.requestAnimationFrame(() => {
+    employeeButton.focus({ preventScroll: true });
+  });
 }
-
-actions.append(hrWorkspaceButton);
-
-dialog.append(
-  closeButton,
-  title,
-  description,
-  actions,
-);
-
-overlay.append(dialog);
-document.body.append(overlay);
-
-employeeButton.focus();
-}
-
 async function ensureHrPerformanceAppraisalDepartmentsLoaded() {
   if (
     Array.isArray(state.organizationDepartments) &&
@@ -25927,6 +26445,14 @@ function renderHrModernOverview() {
 }
 
 function switchHrWorkspace(workspace) {
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Generic/mobile/programmatic workspace navigation restores the existing
+  // full workspace. A sidebar task reapplies its focused view immediately
+  // after the authoritative hrTab* route completes.
+  if (!_hrSidebarTaskRoutingInProgress) {
+    resetHrNavigationTaskFocus();
+  }
+
   const isDashboard = workspace === "dashboard";
   const isProfile = workspace === "profile";
   const isEmployees = workspace === "employees";
@@ -25974,6 +26500,11 @@ function switchHrWorkspace(workspace) {
     const element = document.getElementById(id);
     if (element) element.classList.toggle("active", active);
   });
+
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // switchHrWorkspace() remains the top-level source of truth. The sidebar
+  // only mirrors the current workspace and expands its single matching group.
+  syncHrSidebarGroupForWorkspace(workspace);
 
   updateHrModernApplicationHeader(workspace);
 
@@ -32486,6 +33017,12 @@ function enterEmployeeEditMode(employee) {
 
   renderPendingFiles();
   switchHrWorkspace("employees");
+
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Programmatic edit is not the Add Employee task; keep the parent workspace
+  // active without showing a misleading child-task label.
+  clearRememberedHrNavigationTask();
+  clearHrSidebarTaskActiveState();
 
   // REMOVE GRADE LEVEL FIELD FROM EMPLOYEE DATA - STEP 3
   // Editing an employee should always reopen the Create/Edit Employee card,

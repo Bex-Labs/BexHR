@@ -357,82 +357,188 @@
   </script>
 
   <!-- =========================================================
-       BEXHR SIDEBAR NAV
-       Sticky left sidebar for desktop. Proxies clicks to the
-       existing workspace tab buttons so all JS stays unchanged.
-       Hidden on mobile - the workspace-switcher card handles mobile.
+       BEXHR HR NAVIGATION ARCHITECTURE - US-02
+       Desktop navigation groups existing HR workspaces by job.
+       Parent items only disclose their sub-menu; task items route through
+       the existing hrTab* controls and current business logic.
+       Mobile/tablet continue using the existing HR Workspace switcher.
        ========================================================= -->
-  <nav class="bexhr-sidebar" id="bexhrSidebar" aria-label="Workspace navigation">
+  <nav class="bexhr-sidebar" id="bexhrSidebar" aria-label="HR workspace navigation">
     <div class="bexhr-sidebar-brand" id="tenantSidebarBrand">
       <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">HR</span>
     </div>
-    <!-- BEXHR HR MODERN OVERVIEW - STEP 6
-         Dashboard becomes the operational HR landing workspace.
-         Existing tab buttons remain the routing source of truth. -->
+
     <ul class="bexhr-sidebar-nav">
       <li>
-        <button class="bexhr-sidebar-item active" id="sidebarDashboardBtn"
-          onclick="document.getElementById('hrTabDashboardBtn').click()" title="Dashboard">
+        <button type="button" class="bexhr-sidebar-item active" id="sidebarDashboardBtn"
+          onclick="document.getElementById('hrTabDashboardBtn')?.click()" title="Dashboard">
           <i class="bi bi-grid-1x2"></i>
           <span>Dashboard</span>
         </button>
       </li>
-      <li>
-        <button class="bexhr-sidebar-item" id="sidebarPeopleBtn"
-          onclick="document.getElementById('hrTabEmployeesBtn').click()" title="People">
+
+      <li class="bexhr-hr-sidebar-group" data-hr-sidebar-group="people">
+        <button type="button" class="bexhr-sidebar-item bexhr-hr-sidebar-group-toggle" id="sidebarPeopleBtn"
+          aria-expanded="false" aria-controls="sidebarPeopleSubnav" title="People">
           <i class="bi bi-people"></i>
           <span>People</span>
+          <i class="bi bi-chevron-right bexhr-hr-sidebar-chevron" aria-hidden="true"></i>
         </button>
+        <div class="bexhr-hr-sidebar-subnav" id="sidebarPeopleSubnav" hidden>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarPeopleDirectoryBtn"
+            data-hr-navigation-task="people.directory">
+            <i class="bi bi-person-lines-fill"></i>
+            <span>Employee Directory</span>
+          </button>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarPeopleAddBtn"
+            data-hr-navigation-task="people.add">
+            <i class="bi bi-person-plus"></i>
+            <span>Add Employee</span>
+          </button>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarPeopleImportBtn"
+            data-hr-navigation-task="people.import">
+            <i class="bi bi-file-earmark-arrow-up"></i>
+            <span>Import Employees</span>
+          </button>
+        </div>
       </li>
-      <li>
-        <button class="bexhr-sidebar-item" id="sidebarReviewBtn"
-          onclick="document.getElementById('hrTabReviewBtn').click()" title="HR Review">
+
+      <li class="bexhr-hr-sidebar-group" data-hr-sidebar-group="reviews">
+        <button type="button" class="bexhr-sidebar-item bexhr-hr-sidebar-group-toggle" id="sidebarReviewBtn"
+          aria-expanded="false" aria-controls="sidebarReviewsSubnav" title="Reviews">
           <i class="bi bi-clipboard-check"></i>
-          <span>HR Review</span>
+          <span>Reviews</span>
+          <i class="bi bi-chevron-right bexhr-hr-sidebar-chevron" aria-hidden="true"></i>
         </button>
+        <div class="bexhr-hr-sidebar-subnav" id="sidebarReviewsSubnav" hidden>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarReviewCorrectionsBtn"
+            data-hr-navigation-task="review.corrections">
+            <i class="bi bi-person-exclamation"></i>
+            <span>Profile Corrections</span>
+          </button>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarReviewLeaveBtn"
+            data-hr-navigation-task="review.leave">
+            <i class="bi bi-calendar2-check"></i>
+            <span>Leave Decision Oversight</span>
+          </button>
+        </div>
       </li>
-      <li>
-        <button class="bexhr-sidebar-item" id="sidebarPayrollBtn"
-          onclick="document.getElementById('hrTabPayrollBtn').click()" title="Payroll">
+
+      <li class="bexhr-hr-sidebar-group" data-hr-sidebar-group="payroll">
+        <button type="button" class="bexhr-sidebar-item bexhr-hr-sidebar-group-toggle" id="sidebarPayrollBtn"
+          aria-expanded="false" aria-controls="sidebarPayrollSubnav" title="Payroll">
           <i class="bi bi-cash-coin"></i>
           <span>Payroll</span>
+          <i class="bi bi-chevron-right bexhr-hr-sidebar-chevron" aria-hidden="true"></i>
+        </button>
+        <div class="bexhr-hr-sidebar-subnav" id="sidebarPayrollSubnav" hidden>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarPayrollOverviewBtn"
+            data-hr-navigation-task="payroll.overview">
+            <i class="bi bi-speedometer2"></i>
+            <span>Overview</span>
+          </button>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarPayrollSalaryBtn"
+            data-hr-navigation-task="payroll.salary">
+            <i class="bi bi-wallet2"></i>
+            <span>Salary Setup</span>
+          </button>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarPayrollRunBtn"
+            data-hr-navigation-task="payroll.run">
+            <i class="bi bi-play-circle"></i>
+            <span>Run Payroll</span>
+          </button>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarPayrollRecordsBtn"
+            data-hr-navigation-task="payroll.records">
+            <i class="bi bi-table"></i>
+            <span>Payroll Records</span>
+          </button>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarPayrollDeliveryBtn"
+            data-hr-navigation-task="payroll.delivery">
+            <i class="bi bi-envelope-paper"></i>
+            <span>Payslips / Delivery</span>
+          </button>
+        </div>
+      </li>
+
+      <li>
+        <button type="button" class="bexhr-sidebar-item" id="sidebarPerformanceAppraisalBtn"
+          title="Performance Appraisal">
+          <i class="bi bi-clipboard2-check"></i>
+          <span>Performance</span>
         </button>
       </li>
-      <li>
-        <button class="bexhr-sidebar-item" id="sidebarSetupBtn"
-          onclick="document.getElementById('hrTabSetupBtn').click()" title="Setup">
+
+      <li class="bexhr-hr-sidebar-group" data-hr-sidebar-group="setup">
+        <button type="button" class="bexhr-sidebar-item bexhr-hr-sidebar-group-toggle" id="sidebarSetupBtn"
+          aria-expanded="false" aria-controls="sidebarSetupSubnav" title="Setup">
           <i class="bi bi-sliders"></i>
           <span>Setup</span>
+          <i class="bi bi-chevron-right bexhr-hr-sidebar-chevron" aria-hidden="true"></i>
         </button>
+        <div class="bexhr-hr-sidebar-subnav" id="sidebarSetupSubnav" hidden>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarSetupOrganizationBtn"
+            data-hr-navigation-task="setup.organization">
+            <i class="bi bi-building-gear"></i>
+            <span>Organization</span>
+          </button>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarSetupPayrollRulesBtn"
+            data-hr-navigation-task="setup.rules">
+            <i class="bi bi-sliders2"></i>
+            <span>Payroll Rules</span>
+          </button>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarSetupPaymentBtn"
+            data-hr-navigation-task="setup.payment">
+            <i class="bi bi-bank"></i>
+            <span>Payment Setup</span>
+          </button>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarSetupCommunicationBtn"
+            data-hr-navigation-task="setup.communication">
+            <i class="bi bi-envelope-check"></i>
+            <span>Communication</span>
+          </button>
+        </div>
       </li>
-      <li>
-        <button class="bexhr-sidebar-item" id="sidebarPerformanceAppraisalBtn" title="Performance Appraisal">
-          <i class="bi bi-clipboard2-check"></i>
-          <span>Performance Appraisal</span>
-        </button>
-      </li>
-      <li>
-        <button class="bexhr-sidebar-item" id="sidebarSelfServiceBtn"
-          onclick="document.getElementById('hrTabSelfServiceBtn').click()" title="My Self-Service">
+
+      <li class="bexhr-hr-sidebar-group" data-hr-sidebar-group="selfservice">
+        <button type="button" class="bexhr-sidebar-item bexhr-hr-sidebar-group-toggle" id="sidebarSelfServiceBtn"
+          aria-expanded="false" aria-controls="sidebarSelfServiceSubnav" title="My Self-Service">
           <i class="bi bi-person-badge"></i>
-          <span>Self-Service</span>
+          <span>My Self-Service</span>
+          <i class="bi bi-chevron-right bexhr-hr-sidebar-chevron" aria-hidden="true"></i>
         </button>
+        <div class="bexhr-hr-sidebar-subnav" id="sidebarSelfServiceSubnav" hidden>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarSelfServiceLeaveBtn"
+            data-hr-navigation-task="selfservice.leave">
+            <i class="bi bi-calendar2-check"></i>
+            <span>Leave</span>
+          </button>
+          <button type="button" class="bexhr-hr-sidebar-subitem" id="sidebarSelfServicePayrollBtn"
+            data-hr-navigation-task="selfservice.payroll">
+            <i class="bi bi-wallet2"></i>
+            <span>My Payroll</span>
+          </button>
+        </div>
       </li>
     </ul>
 
     <div class="bexhr-sidebar-footer">
       <button type="button" class="bexhr-sidebar-item" id="sidebarProfileBtn"
-        onclick="document.getElementById('hrTabProfileBtn').click()" title="My Profile">
+        onclick="document.getElementById('hrTabProfileBtn')?.click()" title="My Profile">
         <i class="bi bi-person-circle"></i>
         <span>My Profile</span>
       </button>
 
       <button type="button" class="bexhr-sidebar-item"
-        onclick="document.getElementById('openHrOperatingGuideBtn')?.click()" title="Help Guide">
+        onclick="document.getElementById('openHrOperatingGuideBtn')?.click()" title="Help">
         <i class="bi bi-question-circle"></i>
-        <span>Help Guide</span>
+        <span>Help</span>
       </button>
 
+      <button type="button" class="bexhr-sidebar-item" id="sidebarHrSignOutBtn"
+        onclick="document.getElementById('logoutBtn')?.click()" title="Sign Out">
+        <i class="bi bi-box-arrow-right"></i>
+        <span>Sign Out</span>
+      </button>
     </div>
   </nav>
 
@@ -7086,6 +7192,19 @@ Disable browser address autofill popup on HR employee address fields. -->
                 <small>Review your HR account and update the personal profile fields available to you.</small>
               </span>
               <span class="hr-guide-workspace-link">Open workspace <i class="bi bi-arrow-up-right"></i></span>
+            </button>
+            <!-- BEXHR HR NAVIGATION ARCHITECTURE - US-02 PERFORMANCE / HELP CONSISTENCY -->
+            <button type="button" class="hr-guide-workspace-card hr-guide-workspace-card--performance"
+              data-hr-guide-target="sidebarPerformanceAppraisalBtn">
+              <span class="hr-guide-workspace-icon" aria-hidden="true">
+                <i class="bi bi-clipboard2-check"></i>
+              </span>
+              <span class="hr-guide-workspace-copy">
+                <strong>Performance Appraisal</strong>
+                <small>Open your appraisal, manager reviews, or HR appraisal administration based on your assigned
+                  responsibilities.</small>
+              </span>
+              <span class="hr-guide-workspace-link">Choose workspace <i class="bi bi-arrow-up-right"></i></span>
             </button>
           </div>
 

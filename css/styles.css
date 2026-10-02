@@ -32259,3 +32259,303 @@ body.bexhr-admin-visual-refresh
 .bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo)::after {
   order: 3 !important;
 }
+
+/* =========================================================
+   BEXHR HR NAVIGATION ARCHITECTURE - US-02
+
+   Desktop-only grouped HR navigation.
+   - one expanded parent group at a time;
+   - child tasks remain visually subordinate to their parent;
+   - existing mobile/tablet workspace switcher remains authoritative below 992px;
+   - no business logic, permissions, data access, or tenant behaviour changes.
+   ========================================================= */
+
+body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-subnav[hidden] {
+  display: none !important;
+}
+
+/* Explicit desktop task navigation presents one job at a time without moving,
+   cloning, or rebuilding the existing source cards. */
+body.bexhr-hr-visual-refresh .bexhr-hr-task-hidden {
+  display: none !important;
+}
+
+@media (min-width: 992px) {
+  body.bexhr-hr-visual-refresh .bexhr-sidebar-nav {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.15rem;
+    scrollbar-width: thin;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-group {
+    min-width: 0;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-group-toggle {
+    min-width: 0;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-group-toggle > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-chevron {
+    width: 14px !important;
+    height: 14px !important;
+    margin-left: auto;
+    flex: 0 0 14px;
+    font-size: 0.7rem !important;
+    transition: transform 160ms ease, color 160ms ease;
+  }
+
+  body.bexhr-hr-visual-refresh
+    .bexhr-hr-sidebar-group-toggle.is-expanded
+    .bexhr-hr-sidebar-chevron {
+    transform: rotate(90deg);
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-subnav {
+    display: grid;
+    gap: 0.18rem;
+    margin: 0.2rem 0 0.45rem 2.35rem;
+    padding-left: 0.65rem;
+    border-left: 1px solid rgba(148, 163, 184, 0.22);
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-subitem {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 32px;
+    padding: 0.38rem 0.5rem;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 620;
+    line-height: 1.25;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-subitem i {
+    width: 15px;
+    flex: 0 0 15px;
+    text-align: center;
+    font-size: 0.78rem;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subnav {
+    border-left-color: rgba(148, 163, 184, 0.2);
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem {
+    color: #91a4b7;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem i {
+    color: #6f879f;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem:hover,
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem:focus-visible {
+    outline: none;
+    background: rgba(255, 255, 255, 0.075);
+    color: #ffffff;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem:hover i,
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem:focus-visible i {
+    color: #9ce8e2;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem.active {
+    background: rgba(22, 184, 174, 0.14);
+    color: #ffffff;
+    font-weight: 720;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem.active i {
+    color: #62ddd3;
+  }
+
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem {
+    color: #64748b;
+  }
+
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem i {
+    color: #7890a8;
+  }
+
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem:hover,
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem:focus-visible {
+    outline: none;
+    background: #eaf8fb;
+    color: #08446d;
+  }
+
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem.active {
+    background: rgba(11, 95, 149, 0.1);
+    color: #08446d;
+    font-weight: 720;
+  }
+
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem.active i {
+    color: #0b5f95;
+  }
+
+  /* Sidebar footer now owns Sign Out on desktop. Keep the existing header
+     button in the DOM so mobile/tablet retain their current logout control. */
+  body.bexhr-hr-visual-refresh .hr-modern-logout-button {
+    display: none !important;
+  }
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-subnav {
+    display: none !important;
+  }
+}
+
+/* =========================================================
+   BEXHR HR NAVIGATION ARCHITECTURE - US-02
+   PERFORMANCE APPRAISAL / HELP CONSISTENCY CORRECTION
+
+   Presentation only:
+   - Performance Appraisal chooser now uses the same HR product modal language
+     as the workspace guide;
+   - Help includes Performance Appraisal as a first-class destination;
+   - existing appraisal capability checks, routing, context publication,
+     tenant behaviour, role rules, Supabase calls, and persistence stay intact.
+   ========================================================= */
+
+.hr-performance-appraisal-chooser-modal {
+  z-index: 10000;
+}
+
+.hr-performance-appraisal-chooser-shell {
+  width: min(100%, 900px);
+  max-height: min(92vh, 720px);
+}
+
+.hr-performance-appraisal-option-grid {
+  margin-top: 0;
+}
+
+.hr-performance-appraisal-option-card {
+  min-height: 176px;
+}
+
+.hr-performance-appraisal-option-card .hr-guide-workspace-link {
+  margin-top: auto;
+}
+
+.hr-guide-workspace-card--performance {
+  grid-column: 1 / -1;
+  min-height: 112px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.9rem;
+}
+
+.hr-guide-workspace-card--performance .hr-guide-workspace-icon {
+  color: var(--hr-primary-dark);
+  background: rgba(var(--bexhr-accent-rgb), 0.1);
+}
+
+.hr-guide-workspace-card--performance .hr-guide-workspace-copy {
+  margin-top: 0;
+}
+
+.hr-guide-workspace-card--performance .hr-guide-workspace-link {
+  justify-self: end;
+  margin-top: 0;
+}
+
+.hr-performance-appraisal-option-grid .hr-guide-workspace-card--performance {
+  grid-column: auto;
+  min-height: 176px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.hr-performance-appraisal-option-grid
+  .hr-guide-workspace-card--performance
+  .hr-guide-workspace-copy {
+  margin-top: 0.7rem;
+}
+
+.hr-performance-appraisal-option-grid
+  .hr-guide-workspace-card--performance
+  .hr-guide-workspace-link {
+  align-self: flex-start;
+  justify-self: auto;
+  margin-top: auto;
+}
+
+@media (max-width: 767.98px) {
+  .hr-guide-workspace-card--performance {
+    min-height: 136px;
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .hr-guide-workspace-card--performance .hr-guide-workspace-copy {
+    margin-top: 0;
+  }
+
+  .hr-guide-workspace-card--performance .hr-guide-workspace-link {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: 0.25rem;
+  }
+
+  .hr-performance-appraisal-option-grid
+    .hr-guide-workspace-card--performance {
+    min-height: 136px;
+    display: flex;
+  }
+
+  .hr-performance-appraisal-option-grid
+    .hr-guide-workspace-card--performance
+    .hr-guide-workspace-copy {
+    margin-top: 0.7rem;
+  }
+
+  .hr-performance-appraisal-option-grid
+    .hr-guide-workspace-card--performance
+    .hr-guide-workspace-link {
+    margin-top: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hr-performance-appraisal-option-card {
+    transition: none;
+  }
+}
