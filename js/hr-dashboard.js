@@ -285,6 +285,36 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       shell.dataset.activePanel = requestedKey;
 
+      // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+      // When an internal Setup tab owns an existing collapsible working card,
+      // open that card immediately. Selecting a task must never require a
+      // second Expand click.
+      const focusedCard = requestedPanel.querySelector(
+        ":scope > .dashboard-section-card",
+      );
+
+      if (focusedCard) {
+        const collapseToggle = Array.from(
+          focusedCard.querySelectorAll("button[aria-controls]"),
+        ).find((button) => {
+          const controlId = String(button.getAttribute("aria-controls") || "").trim();
+          const collapsePanel = controlId ? document.getElementById(controlId) : null;
+          return Boolean(
+            collapsePanel &&
+            focusedCard.contains(collapsePanel) &&
+            controlId.endsWith("CardCollapse"),
+          );
+        });
+        const collapseId = String(
+          collapseToggle?.getAttribute("aria-controls") || "",
+        ).trim();
+        const collapsePanel = collapseId ? document.getElementById(collapseId) : null;
+
+        if (collapseToggle && collapsePanel) {
+          setDashboardCardExpanded(collapseToggle, collapsePanel, true);
+        }
+      }
+
       if (options.focus === true) {
         requestedButton.focus({ preventScroll: true });
       }
@@ -531,6 +561,247 @@ document.addEventListener("DOMContentLoaded", async () => {
       window.hrOpenCommunicationSetupPanel = (panelKey, options = {}) =>
         setHrSetupInternalWorkspacePanel(
           communicationShell || document.getElementById("hrCommunicationInternalWorkspace"),
+          panelKey,
+          options,
+        );
+    }
+
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03 QA CORRECTION
+    // Payroll Rules and Payment Setup keep their existing cards in place.
+    // A lightweight internal switcher hides non-selected cards instead of
+    // moving them, so existing IDs, listeners, forms, and save logic stay intact.
+    function setHrSetupFocusedCardTask(shell, taskKey, options = {}) {
+      if (!shell) return false;
+
+      const requestedKey = String(taskKey || "").trim();
+      const buttons = Array.from(
+        shell.querySelectorAll("[data-hr-setup-card-task-button]"),
+      );
+      const cards = Array.from(
+        document.querySelectorAll(`[data-hr-setup-card-task-group="${shell.id}"]`),
+      );
+      const requestedButton = buttons.find(
+        (button) => button.dataset.hrSetupCardTaskButton === requestedKey,
+      );
+      const requestedCard = cards.find(
+        (card) => card.dataset.hrSetupCardTaskPanel === requestedKey,
+      );
+
+      if (!requestedButton || !requestedCard) return false;
+
+      buttons.forEach((button) => {
+        const isActive = button === requestedButton;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", String(isActive));
+        button.setAttribute("tabindex", isActive ? "0" : "-1");
+      });
+
+      cards.forEach((card) => {
+        const isActive = card === requestedCard;
+        card.hidden = !isActive;
+        card.classList.toggle("d-none", !isActive);
+      });
+
+      shell.dataset.activePanel = requestedKey;
+
+      const collapseToggle = Array.from(
+        requestedCard.querySelectorAll("button[aria-controls]"),
+      ).find((button) => {
+        const controlId = String(button.getAttribute("aria-controls") || "").trim();
+        const collapsePanel = controlId ? document.getElementById(controlId) : null;
+        return Boolean(
+          collapsePanel &&
+          requestedCard.contains(collapsePanel) &&
+          controlId.endsWith("CardCollapse")
+        );
+      });
+      const collapseId = String(
+        collapseToggle?.getAttribute("aria-controls") || "",
+      ).trim();
+      const collapsePanel = collapseId ? document.getElementById(collapseId) : null;
+
+      if (collapseToggle && collapsePanel) {
+        setDashboardCardExpanded(collapseToggle, collapsePanel, true);
+      }
+
+      if (options.focus === true) {
+        requestedButton.focus({ preventScroll: true });
+      }
+
+      return true;
+    }
+
+    function createHrSetupFocusedCardTaskSwitcher({
+      shellId,
+      accessibleLabel,
+      items,
+      defaultKey,
+    }) {
+      const existingShell = document.getElementById(shellId);
+      if (existingShell) return existingShell;
+
+      const validItems = Array.isArray(items)
+        ? items.filter((item) => item?.key && item?.label && item?.card)
+        : [];
+
+      if (validItems.length !== items.length || validItems.length < 2) {
+        console.warn(`HR Setup focused card switcher sources are incomplete: ${shellId}`);
+        return null;
+      }
+
+      const uniqueCards = new Set(validItems.map((item) => item.card));
+      if (uniqueCards.size !== validItems.length) {
+        console.warn(`HR Setup focused card switcher sources overlap: ${shellId}`);
+        return null;
+      }
+
+      const firstCard = validItems[0].card;
+      const insertionParent = firstCard.parentElement;
+      if (!insertionParent) {
+        console.warn(`HR Setup focused card switcher has no insertion parent: ${shellId}`);
+        return null;
+      }
+
+      const shell = document.createElement("div");
+      shell.id = shellId;
+      shell.className = "hr-setup-internal-workspace hr-setup-focused-card-switcher";
+
+      const switcher = document.createElement("div");
+      switcher.className = "hr-setup-internal-switcher";
+      switcher.setAttribute("role", "tablist");
+      switcher.setAttribute("aria-label", accessibleLabel);
+      switcher.style.gridTemplateColumns =
+        `repeat(${validItems.length}, minmax(0, 1fr))`;
+
+      shell.appendChild(switcher);
+      insertionParent.insertBefore(shell, firstCard);
+
+      validItems.forEach((item) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "hr-setup-internal-tab";
+        button.dataset.hrSetupCardTaskButton = item.key;
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", "false");
+        button.setAttribute("tabindex", "-1");
+        button.innerHTML = `
+          <i class="${item.iconClass}" aria-hidden="true"></i>
+          <span>${item.label}</span>
+        `;
+
+        item.card.dataset.hrSetupCardTaskGroup = shellId;
+        item.card.dataset.hrSetupCardTaskPanel = item.key;
+
+        button.addEventListener("click", () => {
+          setHrSetupFocusedCardTask(shell, item.key, { focus: true });
+        });
+
+        button.addEventListener("keydown", (event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+            return;
+          }
+
+          event.preventDefault();
+          const buttons = Array.from(
+            shell.querySelectorAll("[data-hr-setup-card-task-button]"),
+          );
+          const currentIndex = buttons.indexOf(button);
+          let nextIndex = currentIndex;
+
+          if (event.key === "ArrowLeft") {
+            nextIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+          } else if (event.key === "ArrowRight") {
+            nextIndex = (currentIndex + 1) % buttons.length;
+          } else if (event.key === "Home") {
+            nextIndex = 0;
+          } else if (event.key === "End") {
+            nextIndex = buttons.length - 1;
+          }
+
+          const nextButton = buttons[nextIndex];
+          setHrSetupFocusedCardTask(
+            shell,
+            nextButton?.dataset.hrSetupCardTaskButton,
+            { focus: true },
+          );
+        });
+
+        switcher.appendChild(button);
+      });
+
+      setHrSetupFocusedCardTask(shell, defaultKey);
+      return shell;
+    }
+
+    function enhanceHrFocusedSetupRuleAndPaymentWorkspaces() {
+      const allowanceCard =
+        state.dom.payrollAllowanceCardCollapse?.closest(".dashboard-section-card");
+      const deductionsCard =
+        state.dom.payrollStatutoryCardCollapse?.closest(".dashboard-section-card");
+      const overrideCard =
+        state.dom.payrollEmployeeOverrideCardCollapse?.closest(".dashboard-section-card");
+
+      const payrollRulesShell = createHrSetupFocusedCardTaskSwitcher({
+        shellId: "hrPayrollRulesInternalWorkspace",
+        accessibleLabel: "Payroll Rules workspace",
+        defaultKey: "allowances",
+        items: [
+          {
+            key: "allowances",
+            label: "Allowances",
+            iconClass: "bi bi-plus-circle",
+            card: allowanceCard,
+          },
+          {
+            key: "deductions",
+            label: "Deductions",
+            iconClass: "bi bi-dash-circle",
+            card: deductionsCard,
+          },
+          {
+            key: "overrides",
+            label: "Employee Overrides",
+            iconClass: "bi bi-person-gear",
+            card: overrideCard,
+          },
+        ],
+      });
+
+      window.hrOpenPayrollRulesSetupPanel = (panelKey, options = {}) =>
+        setHrSetupFocusedCardTask(
+          payrollRulesShell || document.getElementById("hrPayrollRulesInternalWorkspace"),
+          panelKey,
+          options,
+        );
+
+      const bankDirectoryCard =
+        state.dom.bankDirectoryCardCollapse?.closest(".dashboard-section-card");
+      const employeeBankDetailsCard =
+        state.dom.employeeBankDetailsCardCollapse?.closest(".dashboard-section-card");
+
+      const paymentSetupShell = createHrSetupFocusedCardTaskSwitcher({
+        shellId: "hrPaymentSetupInternalWorkspace",
+        accessibleLabel: "Payment Setup workspace",
+        defaultKey: "banks",
+        items: [
+          {
+            key: "banks",
+            label: "Bank Directory",
+            iconClass: "bi bi-bank",
+            card: bankDirectoryCard,
+          },
+          {
+            key: "accounts",
+            label: "Employee Bank Accounts",
+            iconClass: "bi bi-credit-card-2-front",
+            card: employeeBankDetailsCard,
+          },
+        ],
+      });
+
+      window.hrOpenPaymentSetupPanel = (panelKey, options = {}) =>
+        setHrSetupFocusedCardTask(
+          paymentSetupShell || document.getElementById("hrPaymentSetupInternalWorkspace"),
           panelKey,
           options,
         );
@@ -815,8 +1086,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Move existing source nodes only after Setup cards are in their final group order.
     enhanceHrPrimarySetupInternalWorkspaces();
 
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+    // Payroll Rules and Payment Setup now use the same one-panel-at-a-time
+    // model already established for Organization and Communication.
+    enhanceHrFocusedSetupRuleAndPaymentWorkspaces();
+
     // HR ORGANIZATION INTERNAL WORKSPACE COMPLETION INITIALISATION - v1.0.0
     completeHrOrganizationInternalWorkspace();
+
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+    // Desktop uses the US-02 grouped sidebar; mobile/tablet get a compact
+    // in-workspace task switcher that routes through the same task keys.
+    ensureHrFocusedWorkspaceTaskSwitchers();
 
     // DESCRIPTION ITEM 4 - STEP 2B
     // Start long HR/payroll working cards collapsed by default.
@@ -1278,6 +1559,146 @@ const HR_NAVIGATION_TASKS = Object.freeze({
 });
 
 let _hrSidebarTaskRoutingInProgress = false;
+
+// BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+// People and Setup keep their existing forms/cards, but every entry route now
+// resolves to one focused task instead of exposing the legacy long workspace.
+const HR_FOCUSED_WORKSPACE_TASK_SWITCHERS = Object.freeze({
+  employees: {
+    id: "hrPeopleTaskSwitcher",
+    label: "People sections",
+    className: "hr-focused-workspace-switcher--people",
+    taskKeys: ["people.directory", "people.add", "people.import"],
+  },
+  setup: {
+    id: "hrSetupTaskSwitcher",
+    label: "Setup sections",
+    className: "hr-focused-workspace-switcher--setup",
+    taskKeys: [
+      "setup.organization",
+      "setup.rules",
+      "setup.payment",
+      "setup.communication",
+    ],
+  },
+});
+
+function getDefaultHrNavigationTaskForWorkspace(workspace = "") {
+  const defaults = {
+    employees: "people.directory",
+    setup: "setup.organization",
+  };
+
+  return defaults[String(workspace || "").trim()] || "";
+}
+
+function getHrFocusedWorkspaceSwitcherForTask(taskKey = "") {
+  const task = HR_NAVIGATION_TASKS[String(taskKey || "").trim()];
+  if (!task) return null;
+
+  const config = HR_FOCUSED_WORKSPACE_TASK_SWITCHERS[task.workspace];
+  return config ? document.getElementById(config.id) : null;
+}
+
+function createHrFocusedWorkspaceTaskSwitcher(workspace = "") {
+  const normalizedWorkspace = String(workspace || "").trim();
+  const config = HR_FOCUSED_WORKSPACE_TASK_SWITCHERS[normalizedWorkspace];
+  const section = getHrWorkspaceSectionForNavigationTask(
+    config?.taskKeys?.[0] || "",
+  );
+
+  if (!config || !section) return null;
+
+  const existing = document.getElementById(config.id);
+  if (existing) return existing;
+
+  const nav = document.createElement("nav");
+  nav.id = config.id;
+  nav.className = `hr-focused-workspace-switcher ${config.className}`;
+  nav.setAttribute("aria-label", config.label);
+
+  config.taskKeys.forEach((taskKey) => {
+    const task = HR_NAVIGATION_TASKS[taskKey];
+    if (!task) return;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "hr-focused-workspace-task-btn";
+    button.dataset.hrFocusedNavigationTask = taskKey;
+    button.innerHTML = `<span>${task.title}</span>`;
+    button.addEventListener("click", () => {
+      openHrNavigationTask(taskKey);
+    });
+    nav.appendChild(button);
+  });
+
+  section.insertBefore(nav, section.firstElementChild);
+  return nav;
+}
+
+function ensureHrFocusedWorkspaceTaskSwitchers() {
+  createHrFocusedWorkspaceTaskSwitcher("employees");
+  createHrFocusedWorkspaceTaskSwitcher("setup");
+}
+
+function applyHrPeopleFocusedTaskCardVisibility(taskKey = "") {
+  const normalizedTaskKey = String(taskKey || "").trim();
+  const summaryCard =
+    state.dom.totalEmployeesValue?.closest(".dashboard-section-card");
+  const directoryCard =
+    state.dom.employeeListCardCollapse?.closest(".dashboard-section-card");
+  const employeeFormCard =
+    state.dom.employeeFormCardCollapse?.closest(".dashboard-section-card");
+  const importCard =
+    state.dom.batchEmployeeCsvImportPanel?.closest(".dashboard-section-card");
+
+  const activeCardByTask = {
+    "people.directory": directoryCard,
+    "people.add": employeeFormCard,
+    "people.import": importCard,
+  };
+  const activeCard = activeCardByTask[normalizedTaskKey];
+
+  if (!activeCard) return false;
+
+  [summaryCard, directoryCard, employeeFormCard, importCard]
+    .filter(Boolean)
+    .forEach((card) => {
+      card.classList.toggle("bexhr-hr-task-hidden", card !== activeCard);
+    });
+
+  return true;
+}
+
+function focusHrTransientPeopleEditWorkspace() {
+  const target =
+    state.dom.employeeFormCardCollapse?.closest(".dashboard-section-card") ||
+    state.dom.employeeCreateForm?.closest(".dashboard-section-card") ||
+    state.dom.employeeCreateForm;
+
+  if (!target) return false;
+
+  setHrSidebarGroupExpanded("people", true);
+  clearHrSidebarTaskActiveState();
+
+  if (state.dom.hrModernPageTitle) {
+    state.dom.hrModernPageTitle.textContent = "Edit Employee";
+  }
+
+  if (state.dom.hrModernPageSubtitle) {
+    state.dom.hrModernPageSubtitle.textContent =
+      "Update the selected employee using the existing employee profile form.";
+  }
+
+  if (state.dom.hrModuleValue) {
+    state.dom.hrModuleValue.textContent = "People";
+  }
+
+  if (!focusHrNavigationTaskView("people.add", target)) return false;
+
+  document.body.dataset.hrNavigationTask = "people.edit";
+  return true;
+}
 
 
 // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
@@ -4024,7 +4445,9 @@ function syncHrSidebarGroupForWorkspace(workspace = "") {
 
 function clearHrSidebarTaskActiveState() {
   document
-    .querySelectorAll("[data-hr-navigation-task]")
+    .querySelectorAll(
+      "[data-hr-navigation-task], [data-hr-focused-navigation-task]",
+    )
     .forEach((button) => {
       button.classList.remove("active");
       button.removeAttribute("aria-current");
@@ -4035,9 +4458,15 @@ function setHrSidebarTaskActive(taskKey = "") {
   const normalizedTaskKey = String(taskKey || "").trim();
 
   document
-    .querySelectorAll("[data-hr-navigation-task]")
+    .querySelectorAll(
+      "[data-hr-navigation-task], [data-hr-focused-navigation-task]",
+    )
     .forEach((button) => {
-      const isActive = button.dataset.hrNavigationTask === normalizedTaskKey;
+      const buttonTaskKey =
+        button.dataset.hrNavigationTask ||
+        button.dataset.hrFocusedNavigationTask ||
+        "";
+      const isActive = buttonTaskKey === normalizedTaskKey;
       button.classList.toggle("active", isActive);
 
       if (isActive) {
@@ -4108,6 +4537,7 @@ function getHrNavigationTaskCompanionNodes(taskKey = "") {
     case "setup.rules":
       return [
         document.getElementById("setupPayrollGroupHeader"),
+        document.getElementById("hrPayrollRulesInternalWorkspace"),
         state.dom.payrollStatutoryCardCollapse?.closest(".dashboard-section-card"),
         state.dom.payrollEmployeeOverrideCardCollapse?.closest(".dashboard-section-card"),
       ];
@@ -4115,6 +4545,7 @@ function getHrNavigationTaskCompanionNodes(taskKey = "") {
     case "setup.payment":
       return [
         document.getElementById("setupPaymentGroupHeader"),
+        document.getElementById("hrPaymentSetupInternalWorkspace"),
         state.dom.employeeBankDetailsCardCollapse?.closest(".dashboard-section-card"),
       ];
 
@@ -4137,6 +4568,7 @@ function focusHrNavigationTaskView(taskKey = "", target = null) {
 
   const visibleNodes = [
     target,
+    getHrFocusedWorkspaceSwitcherForTask(normalizedTaskKey),
     ...getHrNavigationTaskCompanionNodes(normalizedTaskKey),
   ].filter(Boolean);
 
@@ -4157,6 +4589,13 @@ function focusHrNavigationTaskView(taskKey = "", target = null) {
       !visibleDirectChildren.has(child),
     );
   });
+
+  // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03 QA CORRECTION
+  // People cards can share one legacy layout container. Direct-child focus is
+  // therefore not enough: hide the sibling People cards themselves as well.
+  if (HR_NAVIGATION_TASKS[normalizedTaskKey]?.workspace === "employees") {
+    applyHrPeopleFocusedTaskCardVisibility(normalizedTaskKey);
+  }
 
   document.body.dataset.hrNavigationTask = normalizedTaskKey;
   return true;
@@ -4242,6 +4681,7 @@ function getHrNavigationTaskTarget(taskKey = "") {
       );
 
     case "setup.rules":
+      window.hrOpenPayrollRulesSetupPanel?.("allowances");
       openPayrollAllowanceCard();
       return (
         state.dom.payrollAllowanceCardCollapse?.closest(".dashboard-section-card") ||
@@ -4249,6 +4689,7 @@ function getHrNavigationTaskTarget(taskKey = "") {
       );
 
     case "setup.payment":
+      window.hrOpenPaymentSetupPanel?.("banks");
       openBankDirectoryCard();
       return (
         state.dom.bankDirectoryCardCollapse?.closest(".dashboard-section-card") ||
@@ -4354,10 +4795,17 @@ function openHrNavigationTask(taskKey = "") {
 }
 
 function restoreRememberedHrNavigationTask(workspace = "") {
-  const taskKey = getRememberedHrNavigationTask();
+  const normalizedWorkspace = String(workspace || "").trim();
+  const rememberedTaskKey = getRememberedHrNavigationTask();
+  const rememberedTask = HR_NAVIGATION_TASKS[rememberedTaskKey];
+  const fallbackTaskKey = getDefaultHrNavigationTaskForWorkspace(normalizedWorkspace);
+  const taskKey =
+    rememberedTask?.workspace === normalizedWorkspace
+      ? rememberedTaskKey
+      : fallbackTaskKey;
   const task = HR_NAVIGATION_TASKS[taskKey];
 
-  if (!task || task.workspace !== String(workspace || "").trim()) {
+  if (!task || task.workspace !== normalizedWorkspace) {
     clearHrSidebarTaskActiveState();
     return false;
   }
@@ -10389,6 +10837,13 @@ function bindEvents() {
     switchHrWorkspace("employees");
     applyEmployeeSearch();
     syncSelectAllEmployeesForPayrollCheckbox();
+
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+    // Generic People entry points (mobile switcher, Help, Dashboard links)
+    // resolve to Employee Directory instead of reopening the legacy long page.
+    if (!_hrSidebarTaskRoutingInProgress) {
+      applyHrNavigationTask("people.directory", { scroll: false });
+    }
   });
 
   // HR REVIEW WORKSPACE SEPARATION - STEP 1P
@@ -10439,6 +10894,13 @@ function bindEvents() {
     applyHrPaymentSetupAccessControls();
 
     applyHrCommunicationSetupAccessControls();
+
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+    // Generic Setup entry points open Organization as the predictable first
+    // task instead of exposing every setup form in one long workspace.
+    if (!_hrSidebarTaskRoutingInProgress) {
+      applyHrNavigationTask("setup.organization", { scroll: false });
+    }
   });
 
   state.dom.hrTabPayrollBtn?.addEventListener("click", () => {
@@ -10530,7 +10992,34 @@ function bindEvents() {
   });
 
   state.dom.cancelEditBtn?.addEventListener("click", () => {
+    const shouldReturnToEmployeeDirectory = Boolean(
+      state.currentEditingEmployee &&
+      !state.profileCorrectionRequestEditReturnContext
+    );
+
     exitEmployeeEditMode();
+
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03 QA CORRECTION
+    // Cancel from a normal Employee Directory edit returns to the directory.
+    // The separate Clear Form action still only resets the current form.
+    if (shouldReturnToEmployeeDirectory) {
+      rememberHrWorkspace("employees");
+      switchHrWorkspace("employees");
+      applyHrNavigationTask("people.directory", { scroll: false });
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const employeeListCard =
+            state.dom.employeeListCardCollapse?.closest(".dashboard-section-card") ||
+            state.dom.employeeListCardHeader ||
+            state.dom.employeeListCardCollapse;
+
+          if (employeeListCard) {
+            scrollToDashboardTarget(employeeListCard, 16);
+          }
+        });
+      });
+    }
   });
 
   state.dom.refreshEmployeesBtn?.addEventListener("click", async () => {
@@ -33028,6 +33517,11 @@ function enterEmployeeEditMode(employee) {
   // Editing an employee should always reopen the Create/Edit Employee card,
   // even if HR previously collapsed it after saving.
   openEmployeeFormCard();
+
+  // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+  // Editing remains a focused People task without pretending that the user
+  // selected Add Employee. Only the existing employee form stays visible.
+  focusHrTransientPeopleEditWorkspace();
 
   void loadEmployeeDocuments(employee.id);
 

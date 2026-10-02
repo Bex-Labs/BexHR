@@ -32559,3 +32559,103 @@ body.bexhr-hr-visual-refresh .bexhr-hr-task-hidden {
     transition: none;
   }
 }
+
+/* =========================================================
+   BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+
+   - desktop continues to use the grouped US-02 sidebar;
+   - mobile/tablet get compact in-workspace People/Setup task navigation;
+   - Setup Payroll Rules and Payment Setup reuse the established internal
+     workspace tabs so only one existing working card is shown at a time;
+   - no existing form IDs, handlers, permissions, queries, or save logic change.
+   ========================================================= */
+
+body.bexhr-hr-visual-refresh .hr-focused-workspace-switcher {
+  display: none;
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-hr-visual-refresh .hr-focused-workspace-switcher {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+    border: 1px solid var(--bexhr-line, #e4eaf1);
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+  }
+
+  body.bexhr-hr-visual-refresh .hr-focused-workspace-task-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 0.48rem 0.72rem;
+    border: 1px solid #dbe4ed;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #526173;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 720;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-focused-workspace-task-btn.active,
+  body.bexhr-hr-visual-refresh .hr-focused-workspace-task-btn[aria-current="page"] {
+    border-color: rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.34);
+    background: rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.08);
+    color: var(--hr-primary-dark);
+  }
+
+  body.bexhr-hr-visual-refresh .hr-focused-workspace-task-btn:focus-visible {
+    outline: none;
+    border-color: var(--hr-primary-soft);
+    box-shadow: 0 0 0 0.2rem rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.14);
+  }
+}
+
+#hrSetupSection #hrPaymentSetupInternalWorkspace .hr-setup-internal-switcher {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#hrSetupSection :is(
+  #hrPayrollRulesInternalWorkspace,
+  #hrPaymentSetupInternalWorkspace
+) {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+#hrSetupSection :is(
+  #hrPayrollRulesInternalWorkspace,
+  #hrPaymentSetupInternalWorkspace
+) > .hr-setup-internal-panel-host > .hr-setup-internal-panel[hidden],
+#hrSetupSection :is(
+  #hrPayrollRulesInternalWorkspace,
+  #hrPaymentSetupInternalWorkspace
+) > .hr-setup-internal-panel-host > .hr-setup-internal-panel.d-none {
+  display: none !important;
+}
+
+#hrSetupSection :is(
+  #hrPayrollRulesInternalWorkspace,
+  #hrPaymentSetupInternalWorkspace
+) > .hr-setup-internal-panel-host > .hr-setup-internal-panel:not([hidden]):not(.d-none) {
+  display: block;
+  width: 100%;
+}
+
+@media (max-width: 767.98px) {
+  #hrSetupSection #hrPaymentSetupInternalWorkspace .hr-setup-internal-switcher {
+    grid-template-columns: 1fr;
+  }
+}
