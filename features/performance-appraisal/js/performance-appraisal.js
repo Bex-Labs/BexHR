@@ -1837,6 +1837,7 @@
     bexPaApplyGoalAccess();
     bexPaApplyTemplateAccess();
     bexPaApplyReportAccess();
+    bexPaApplyRoleWorkspaceClarity();
 
     bexPaRenderCycles();
 
@@ -2027,6 +2028,669 @@
     ) {
       bexPaShowSection("overview");
     }
+  }
+
+  // BEXHR PERFORMANCE APPRAISAL ROLE CLARITY - US-05
+  // Existing role permissions and next-step calculations stay authoritative.
+  // This presentation layer makes each role's navigation and review workspace
+  // read like the job that user is actually expected to do.
+  function bexPaSetRoleNavigationLabel(button, label) {
+    if (!button || !label) return;
+
+    let labelElement = button.querySelector(
+      "[data-bex-pa-role-nav-label]",
+    );
+
+    if (!labelElement) {
+      Array.from(button.childNodes).forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          node.remove();
+        }
+      });
+
+      labelElement = document.createElement("span");
+      labelElement.dataset.bexPaRoleNavLabel = "true";
+      button.appendChild(labelElement);
+    }
+
+    labelElement.textContent = label;
+  }
+
+  function bexPaGetRoleWorkspaceCopy() {
+    const roleCopy = {
+      employee: {
+        navigationLabel: "My workspace",
+        cyclesLabel: "Cycle & Deadlines",
+        goalsLabel: "Goals & Progress",
+        appraisalsLabel: "My Appraisal",
+        headingKicker: "My review",
+        headingTitle: "My Appraisal",
+        headingDescription:
+          "Review your appraisal status and complete only the actions currently assigned to you.",
+        registerTitle: "My appraisal records",
+        registerDescription:
+          "Your appraisal cycles, current stage and the action currently available to you.",
+      },
+
+      "primary-manager": {
+        navigationLabel: "Manager workspace",
+        cyclesLabel: "Cycle & Deadlines",
+        goalsLabel: "Team Goals",
+        appraisalsLabel: "Manager Reviews",
+        headingKicker: "Manager review",
+        headingTitle: "Manager Reviews",
+        headingDescription:
+          "Focus on employee self-appraisals ready for manager review. Secondary-report visibility remains read-only where current permissions require it.",
+        registerTitle: "Team review queue",
+        registerDescription:
+          "Employee appraisal status and the manager action currently available in your reporting scope.",
+      },
+
+      "hr-standard": {
+        navigationLabel: "HR workspace",
+        cyclesLabel: "Appraisal Cycles",
+        goalsLabel: "Goals",
+        appraisalsLabel: "Appraisal Review",
+        headingKicker: "HR visibility",
+        headingTitle: "Appraisal Review",
+        headingDescription:
+          "Review appraisal progress using only the permissions already assigned to your HR role.",
+        registerTitle: "Appraisal review register",
+        registerDescription:
+          "Appraisal lifecycle status and the review actions currently available to your HR role.",
+      },
+
+      "hr-admin": {
+        navigationLabel: "HR administration",
+        cyclesLabel: "Appraisal Cycles",
+        goalsLabel: "Goals & Deliverables",
+        appraisalsLabel: "HR Appraisal Review",
+        headingKicker: "HR review",
+        headingTitle: "HR Appraisal Review",
+        headingDescription:
+          "Review appraisal progress and complete existing HR review actions without taking ownership of employee or manager work.",
+        registerTitle: "HR appraisal register",
+        registerDescription:
+          "Employee appraisal status, review readiness and the HR action currently available.",
+      },
+    };
+
+    return roleCopy[bexPaGetActiveMode()] || {
+      navigationLabel: "Workspace",
+      cyclesLabel: "Appraisal Cycles",
+      goalsLabel: "Goals & Deliverables",
+      appraisalsLabel: "Employee Appraisals",
+      headingKicker: "Employee reviews",
+      headingTitle: "Employee Appraisals",
+      headingDescription:
+        "Monitor appraisal progress and complete the actions available to your role.",
+      registerTitle: "Appraisal register",
+      registerDescription:
+        "Employee appraisal cycles, lifecycle status and available review actions.",
+    };
+  }
+
+  function bexPaApplyRoleWorkspaceClarity() {
+    const copy = bexPaGetRoleWorkspaceCopy();
+    const navigationHeading =
+      document.getElementById(
+        "bexPaPrimaryNavigation",
+      )?.previousElementSibling;
+
+    if (navigationHeading) {
+      navigationHeading.textContent =
+        copy.navigationLabel;
+    }
+
+    bexPaSetRoleNavigationLabel(
+      bexPaElements.cyclesNavButton,
+      copy.cyclesLabel,
+    );
+    bexPaSetRoleNavigationLabel(
+      bexPaElements.goalsNavButton,
+      copy.goalsLabel,
+    );
+    bexPaSetRoleNavigationLabel(
+      bexPaElements.employeeAppraisalsNavButton,
+      copy.appraisalsLabel,
+    );
+
+    const employeeAppraisalsTitle =
+      document.getElementById(
+        "bexPaEmployeeAppraisalsTitle",
+      );
+    const heading =
+      employeeAppraisalsTitle?.closest(
+        ".bex-pa-workspace-heading",
+      );
+    const headingKicker = heading?.querySelector(
+      ".bex-pa-workspace-heading-kicker",
+    );
+    const headingDescription = heading?.querySelector(
+      ".bex-pa-workspace-heading-description",
+    );
+    const registerTitle = document.getElementById(
+      "bexPaEmployeeAppraisalsListTitle",
+    );
+    const registerDescription =
+      registerTitle
+        ?.closest(
+          ".bex-pa-appraisal-register-heading",
+        )
+        ?.querySelector(".text-body-secondary");
+
+    if (headingKicker) {
+      headingKicker.textContent = copy.headingKicker;
+    }
+    if (employeeAppraisalsTitle) {
+      employeeAppraisalsTitle.textContent = copy.headingTitle;
+    }
+    if (headingDescription) {
+      headingDescription.textContent =
+        copy.headingDescription;
+    }
+    if (registerTitle) {
+      registerTitle.textContent = copy.registerTitle;
+    }
+    if (registerDescription) {
+      registerDescription.textContent =
+        copy.registerDescription;
+    }
+
+    document.body.dataset.bexPaRoleWorkspace =
+      bexPaGetActiveMode() || "unknown";
+
+    bexPaApplyFocusedGoalWorkspace();
+  }
+
+
+  // BEXHR PERFORMANCE APPRAISAL ROLE CLARITY - US-05 COMPLETION
+  // Goals remain backed by the existing cards, dialogs, IDs, event handlers,
+  // persistence and permissions. This layer only presents one role-relevant
+  // goal task at a time so Employee and Manager workspaces no longer behave
+  // like one long scrolling page.
+  const BEX_PA_GOAL_TASK_MEMORY_KEY =
+    "bexhr:performance-appraisal:goal-task:v1";
+
+  function bexPaEnsureRoleClarityStyles() {
+    if (document.getElementById("bexPaUs05RoleClarityStyles")) {
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.id = "bexPaUs05RoleClarityStyles";
+    style.textContent = `
+      #bexPaGoalsSection .bex-pa-focused-goal-workspace {
+        margin-bottom: 1rem;
+      }
+
+      #bexPaGoalsSection .bex-pa-focused-goal-switcher {
+        display: grid;
+        grid-template-columns: repeat(var(--bex-pa-goal-tab-count, 3), minmax(0, 1fr));
+        gap: 8px;
+        padding: 8px;
+        margin-bottom: 16px;
+        border: 1px solid #cfe0e8;
+        border-radius: 16px;
+        background: #f8fbfc;
+      }
+
+      #bexPaGoalsSection .bex-pa-focused-goal-tab {
+        min-height: 48px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        background: transparent;
+        color: #475569;
+        font-weight: 700;
+        text-align: center;
+        cursor: pointer;
+      }
+
+      #bexPaGoalsSection .bex-pa-focused-goal-tab:hover,
+      #bexPaGoalsSection .bex-pa-focused-goal-tab:focus-visible {
+        border-color: #a8d8dc;
+        background: #ffffff;
+        color: #0f6f75;
+        outline: none;
+      }
+
+      #bexPaGoalsSection .bex-pa-focused-goal-tab.active {
+        border-color: #7bd3d1;
+        background: #ffffff;
+        color: #087a80;
+        box-shadow: 0 5px 14px rgba(15, 23, 42, 0.06);
+      }
+
+      #bexPaGoalsSection .bex-pa-focused-goal-panel[hidden] {
+        display: none !important;
+      }
+
+      #bexPaGoalsSection .bex-pa-focused-goal-panel > .bex-pa-goal-panel {
+        width: 100%;
+        min-height: 0;
+      }
+
+      @media (max-width: 760px) {
+        #bexPaGoalsSection .bex-pa-focused-goal-switcher {
+          grid-template-columns: 1fr;
+        }
+
+        #bexPaGoalsSection .bex-pa-focused-goal-tab {
+          justify-content: flex-start;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function bexPaGetFocusedGoalTaskConfiguration() {
+    const activeMode = bexPaGetActiveMode();
+
+    if (activeMode === "employee") {
+      return {
+        headingKicker: "My goals",
+        headingTitle: "Goals & Progress",
+        headingDescription:
+          "Review your assigned goals and submit progress updates without scrolling through organisation or manager setup work.",
+        defaultKey: "individual",
+        visibleKeys: ["individual", "progress"],
+        labels: {
+          individual: "My Goals",
+          progress: "Progress Updates",
+        },
+      };
+    }
+
+    if (activeMode === "primary-manager") {
+      return {
+        headingKicker: "Team goals",
+        headingTitle: "Team Goals",
+        headingDescription:
+          "Manage goals in your reporting scope and review employee progress one focused task at a time.",
+        defaultKey: "department",
+        visibleKeys: ["department", "individual", "progress"],
+        labels: {
+          department: "Department Goals",
+          individual: "Employee Goals",
+          progress: "Progress Updates",
+        },
+      };
+    }
+
+    if (activeMode === "hr-standard") {
+      return {
+        headingKicker: "Goal visibility",
+        headingTitle: "Goals",
+        headingDescription:
+          "Review organisation, department, employee and progress information using the permissions already assigned to your HR role.",
+        defaultKey: "organisation",
+        visibleKeys: [
+          "organisation",
+          "deliverables",
+          "department",
+          "individual",
+          "progress",
+        ],
+        labels: {},
+      };
+    }
+
+    return {
+      headingKicker: "Goal planning",
+      headingTitle: "Goals & Deliverables",
+      headingDescription:
+        "Plan organisation priorities, translate them into department and employee goals, and track progress through the appraisal cycle.",
+      defaultKey: "organisation",
+      visibleKeys: [
+        "organisation",
+        "deliverables",
+        "department",
+        "individual",
+        "progress",
+      ],
+      labels: {},
+    };
+  }
+
+  function bexPaGetFocusedGoalTaskMemoryKey() {
+    return `${BEX_PA_GOAL_TASK_MEMORY_KEY}:${bexPaGetActiveMode() || "unknown"}`;
+  }
+
+  function bexPaRememberFocusedGoalTask(taskKey = "") {
+    const cleanTaskKey = String(taskKey || "").trim();
+    if (!cleanTaskKey) return;
+
+    try {
+      window.sessionStorage.setItem(
+        bexPaGetFocusedGoalTaskMemoryKey(),
+        cleanTaskKey,
+      );
+    } catch (error) {
+      console.warn(
+        "Performance appraisal goal task could not be remembered.",
+        error,
+      );
+    }
+  }
+
+  function bexPaGetRememberedFocusedGoalTask() {
+    try {
+      return String(
+        window.sessionStorage.getItem(
+          bexPaGetFocusedGoalTaskMemoryKey(),
+        ) || "",
+      ).trim();
+    } catch (error) {
+      console.warn(
+        "Performance appraisal goal task could not be read.",
+        error,
+      );
+      return "";
+    }
+  }
+
+  function bexPaSetFocusedGoalTask(taskKey = "", options = {}) {
+    const shell = document.getElementById("bexPaFocusedGoalWorkspace");
+    if (!shell) return false;
+
+    const config = bexPaGetFocusedGoalTaskConfiguration();
+    const cleanTaskKey = String(taskKey || "").trim();
+
+    if (!config.visibleKeys.includes(cleanTaskKey)) {
+      return false;
+    }
+
+    const buttons = Array.from(
+      shell.querySelectorAll("[data-bex-pa-goal-task-button]"),
+    );
+    const panels = Array.from(
+      shell.querySelectorAll("[data-bex-pa-goal-task-panel]"),
+    );
+
+    let activeButton = null;
+
+    buttons.forEach((button) => {
+      const buttonKey = button.dataset.bexPaGoalTaskButton || "";
+      const isVisible = config.visibleKeys.includes(buttonKey);
+      const isActive = isVisible && buttonKey === cleanTaskKey;
+
+      button.hidden = !isVisible;
+      button.classList.toggle("d-none", !isVisible);
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-selected", String(isActive));
+      button.setAttribute("tabindex", isActive ? "0" : "-1");
+
+      if (isActive) {
+        activeButton = button;
+      }
+    });
+
+    panels.forEach((panel) => {
+      const panelKey = panel.dataset.bexPaGoalTaskPanel || "";
+      const isActive = panelKey === cleanTaskKey;
+
+      panel.hidden = !isActive;
+      panel.classList.toggle("d-none", !isActive);
+    });
+
+    shell.dataset.activeGoalTask = cleanTaskKey;
+
+    if (options.remember !== false) {
+      bexPaRememberFocusedGoalTask(cleanTaskKey);
+    }
+
+    if (options.focus === true) {
+      activeButton?.focus({ preventScroll: true });
+    }
+
+    return true;
+  }
+
+  function bexPaEnsureFocusedGoalWorkspace() {
+    const goalsSection = bexPaElements.goalsSection;
+    if (!goalsSection) return null;
+
+    const existingShell = document.getElementById(
+      "bexPaFocusedGoalWorkspace",
+    );
+
+    if (existingShell) {
+      return existingShell;
+    }
+
+    const taskDefinitions = [
+      {
+        key: "organisation",
+        label: "Organisation Goals",
+        iconClass: "bi bi-building",
+        list: bexPaElements.organisationGoalsList,
+      },
+      {
+        key: "deliverables",
+        label: "Deliverables",
+        iconClass: "bi bi-box-seam",
+        list: bexPaElements.deliverablesList,
+      },
+      {
+        key: "department",
+        label: "Department Goals",
+        iconClass: "bi bi-diagram-3",
+        list: bexPaElements.departmentGoalsList,
+      },
+      {
+        key: "individual",
+        label: "Individual Goals",
+        iconClass: "bi bi-person-check",
+        list: bexPaElements.individualGoalsList,
+      },
+      {
+        key: "progress",
+        label: "Progress Updates",
+        iconClass: "bi bi-activity",
+        list: bexPaElements.progressUpdatesList,
+      },
+    ];
+
+    const resolvedDefinitions = taskDefinitions.map((definition) => ({
+      ...definition,
+      panel: definition.list?.closest(".bex-pa-goal-panel") || null,
+    }));
+
+    if (
+      resolvedDefinitions.some((definition) => !definition.panel) ||
+      new Set(
+        resolvedDefinitions.map((definition) => definition.panel),
+      ).size !== resolvedDefinitions.length
+    ) {
+      console.warn(
+        "Performance appraisal focused goal workspace sources are incomplete.",
+      );
+      return null;
+    }
+
+    bexPaEnsureRoleClarityStyles();
+
+    const heading = goalsSection.querySelector(
+      ":scope > .bex-pa-goals-heading",
+    );
+    const shell = document.createElement("div");
+    shell.id = "bexPaFocusedGoalWorkspace";
+    shell.className = "bex-pa-focused-goal-workspace";
+
+    const switcher = document.createElement("div");
+    switcher.className = "bex-pa-focused-goal-switcher";
+    switcher.setAttribute("role", "tablist");
+    switcher.setAttribute("aria-label", "Goal workspace sections");
+
+    const panelHost = document.createElement("div");
+    panelHost.className = "bex-pa-focused-goal-panel-host";
+
+    shell.append(switcher, panelHost);
+
+    if (heading?.nextSibling) {
+      goalsSection.insertBefore(shell, heading.nextSibling);
+    } else {
+      goalsSection.appendChild(shell);
+    }
+
+    const legacyRows = new Set();
+
+    resolvedDefinitions.forEach((definition) => {
+      const formerColumn = definition.panel.closest(".col-12");
+      const formerRow = formerColumn?.parentElement?.classList.contains("row")
+        ? formerColumn.parentElement
+        : null;
+
+      if (formerRow) {
+        legacyRows.add(formerRow);
+      }
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "bex-pa-focused-goal-tab";
+      button.dataset.bexPaGoalTaskButton = definition.key;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-selected", "false");
+      button.setAttribute("tabindex", "-1");
+      button.innerHTML = `
+        <i class="${definition.iconClass}" aria-hidden="true"></i>
+        <span data-bex-pa-goal-task-label>${definition.label}</span>
+      `;
+
+      const panel = document.createElement("section");
+      panel.className = "bex-pa-focused-goal-panel d-none";
+      panel.dataset.bexPaGoalTaskPanel = definition.key;
+      panel.setAttribute("role", "tabpanel");
+      panel.hidden = true;
+
+      definition.panel.classList.remove("h-100");
+      panel.appendChild(definition.panel);
+      switcher.appendChild(button);
+      panelHost.appendChild(panel);
+
+      button.addEventListener("click", () => {
+        bexPaSetFocusedGoalTask(definition.key, {
+          focus: true,
+        });
+      });
+
+      button.addEventListener("keydown", (event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+          return;
+        }
+
+        event.preventDefault();
+
+        const visibleButtons = Array.from(
+          switcher.querySelectorAll("[data-bex-pa-goal-task-button]"),
+        ).filter((candidate) => !candidate.hidden);
+        const currentIndex = visibleButtons.indexOf(button);
+        let nextIndex = currentIndex;
+
+        if (event.key === "ArrowLeft") {
+          nextIndex =
+            (currentIndex - 1 + visibleButtons.length) % visibleButtons.length;
+        } else if (event.key === "ArrowRight") {
+          nextIndex = (currentIndex + 1) % visibleButtons.length;
+        } else if (event.key === "Home") {
+          nextIndex = 0;
+        } else if (event.key === "End") {
+          nextIndex = visibleButtons.length - 1;
+        }
+
+        const nextButton = visibleButtons[nextIndex];
+        bexPaSetFocusedGoalTask(
+          nextButton?.dataset.bexPaGoalTaskButton || "",
+          { focus: true },
+        );
+      });
+    });
+
+    legacyRows.forEach((row) => {
+      if (!row.querySelector(".bex-pa-goal-panel")) {
+        row.remove();
+      }
+    });
+
+    return shell;
+  }
+
+  function bexPaApplyFocusedGoalWorkspace() {
+    const shell = bexPaEnsureFocusedGoalWorkspace();
+    if (!shell) return;
+
+    const config = bexPaGetFocusedGoalTaskConfiguration();
+    const heading = bexPaElements.goalsSection?.querySelector(
+      ":scope > .bex-pa-goals-heading",
+    );
+    const headingKicker = heading?.querySelector(
+      ".bex-pa-workspace-heading-kicker",
+    );
+    const headingTitle = heading?.querySelector(
+      ".bex-pa-workspace-heading-title",
+    );
+    const headingDescription = heading?.querySelector(
+      ".bex-pa-workspace-heading-description",
+    );
+
+    if (headingKicker) {
+      headingKicker.textContent = config.headingKicker;
+    }
+    if (headingTitle) {
+      headingTitle.textContent = config.headingTitle;
+    }
+    if (headingDescription) {
+      headingDescription.textContent = config.headingDescription;
+    }
+
+    const buttons = Array.from(
+      shell.querySelectorAll("[data-bex-pa-goal-task-button]"),
+    );
+
+    buttons.forEach((button) => {
+      const taskKey = button.dataset.bexPaGoalTaskButton || "";
+      const labelElement = button.querySelector(
+        "[data-bex-pa-goal-task-label]",
+      );
+      const fallbackLabel = {
+        organisation: "Organisation Goals",
+        deliverables: "Deliverables",
+        department: "Department Goals",
+        individual: "Individual Goals",
+        progress: "Progress Updates",
+      }[taskKey];
+
+      if (labelElement) {
+        labelElement.textContent =
+          config.labels?.[taskKey] || fallbackLabel || taskKey;
+      }
+    });
+
+    const visibleButtonCount = buttons.filter((button) =>
+      config.visibleKeys.includes(
+        button.dataset.bexPaGoalTaskButton || "",
+      ),
+    ).length;
+
+    shell.style.setProperty(
+      "--bex-pa-goal-tab-count",
+      String(Math.max(1, visibleButtonCount)),
+    );
+
+    const rememberedTask = bexPaGetRememberedFocusedGoalTask();
+    const nextTask = config.visibleKeys.includes(rememberedTask)
+      ? rememberedTask
+      : config.defaultKey;
+
+    bexPaSetFocusedGoalTask(nextTask, {
+      remember: false,
+    });
   }
 
   const bexPaElements = {
@@ -3716,12 +4380,21 @@
           "Acknowledged",
       ).length;
 
+    const isHrAdminOverview = activeMode === "hr-admin";
+
     bexPaSetOverviewHero({
-      kicker: "Performance operations",
-      title: "Performance Appraisal",
-      description:
-        "Monitor appraisal cycles, employee participation, HR review workload and completion across the organisation.",
-      metricsLabel: "Appraisal summary",
+      kicker: isHrAdminOverview
+        ? "HR administration"
+        : "Performance operations",
+      title: isHrAdminOverview
+        ? "HR Administration"
+        : "Performance Appraisal",
+      description: isHrAdminOverview
+        ? "Monitor appraisal cycles, employee participation, HR review workload and completion across the organisation."
+        : "Monitor appraisal cycles, employee participation, review workload and completion across the organisation.",
+      metricsLabel: isHrAdminOverview
+        ? "HR administration appraisal summary"
+        : "Appraisal summary",
     });
 
     bexPaSetOverviewSummaryCard(
@@ -14963,6 +15636,7 @@
     bexPaApplyGoalAccess();
     bexPaApplyTemplateAccess();
     bexPaApplyReportAccess();
+    bexPaApplyRoleWorkspaceClarity();
 
     bexPaRenderCycles();
 

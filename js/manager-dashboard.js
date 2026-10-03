@@ -1591,6 +1591,223 @@ function bindEvents() {
   );
 }
 
+function ensureManagerPerformanceAppraisalChooserStyles() {
+  if (document.getElementById("managerPerformanceAppraisalChooserStyles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "managerPerformanceAppraisalChooserStyles";
+  style.textContent = `
+    #managerPerformanceAppraisalChooser {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(15, 23, 42, 0.56);
+      backdrop-filter: blur(2px);
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-dialog {
+      width: min(880px, 100%);
+      max-height: min(720px, calc(100vh - 48px));
+      overflow: auto;
+      background: #ffffff;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 24px;
+      box-shadow: 0 28px 72px rgba(15, 23, 42, 0.28);
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-header {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 16px;
+      padding: 22px 24px;
+      background: linear-gradient(110deg, #ffffff 0%, #f8fbfc 56%, #d9f4f2 100%);
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-icon {
+      width: 46px;
+      height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 14px;
+      background: #e8f8f8;
+      border: 1px solid #b9e7e7;
+      color: #0f7f85;
+      font-size: 1.15rem;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-kicker {
+      margin: 0 0 4px;
+      color: #0f7f85;
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-title {
+      margin: 0;
+      color: #0f172a;
+      font-size: clamp(1.45rem, 3vw, 1.9rem);
+      line-height: 1.15;
+      font-weight: 800;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-description {
+      margin: 7px 0 0;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-close {
+      width: 38px;
+      height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #d9e2ec;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #64748b;
+      font-size: 1.25rem;
+      cursor: pointer;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      padding: 20px 24px 22px;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card {
+      min-width: 0;
+      min-height: 178px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      text-align: left;
+      padding: 18px;
+      border: 1px solid #dbe4ee;
+      border-radius: 18px;
+      background: #ffffff;
+      color: #0f172a;
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card:hover,
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card:focus-visible {
+      transform: translateY(-1px);
+      border-color: #8ed8d5;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.1);
+      outline: none;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card-icon {
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      margin-bottom: 14px;
+      background: #e4f8fb;
+      color: #0f7f85;
+      font-size: 1rem;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card--manager .manager-pa-chooser-card-icon {
+      background: #efeafe;
+      color: #6d4bd2;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card-title {
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card-copy {
+      color: #64748b;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      flex: 1;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card-action {
+      margin-top: 16px;
+      color: #0f7f85;
+      font-size: 0.83rem;
+      font-weight: 800;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 24px;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-note {
+      margin: 0;
+      color: #64748b;
+      font-size: 0.82rem;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-footer-close {
+      min-height: 38px;
+      padding: 7px 14px;
+      border: 1px solid #94a3b8;
+      border-radius: 10px;
+      background: #ffffff;
+      color: #475569;
+      cursor: pointer;
+    }
+
+    @media (max-width: 640px) {
+      #managerPerformanceAppraisalChooser {
+        align-items: flex-end;
+        padding: 12px;
+      }
+
+      #managerPerformanceAppraisalChooser .manager-pa-chooser-dialog {
+        border-radius: 20px;
+      }
+
+      #managerPerformanceAppraisalChooser .manager-pa-chooser-header {
+        padding: 18px;
+      }
+
+      #managerPerformanceAppraisalChooser .manager-pa-chooser-grid {
+        grid-template-columns: 1fr;
+        padding: 16px 18px 18px;
+      }
+
+      #managerPerformanceAppraisalChooser .manager-pa-chooser-card {
+        min-height: 154px;
+      }
+
+      #managerPerformanceAppraisalChooser .manager-pa-chooser-footer {
+        align-items: flex-start;
+        padding: 14px 18px;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
 function showManagerPerformanceAppraisalChooser() {
   const existingChooser = document.getElementById(
     "managerPerformanceAppraisalChooser",
@@ -1599,6 +1816,8 @@ function showManagerPerformanceAppraisalChooser() {
   if (existingChooser) {
     existingChooser.remove();
   }
+
+  ensureManagerPerformanceAppraisalChooserStyles();
 
   const overlay = document.createElement("div");
   overlay.id = "managerPerformanceAppraisalChooser";
@@ -1609,123 +1828,110 @@ function showManagerPerformanceAppraisalChooser() {
     "managerPerformanceAppraisalChooserTitle",
   );
 
-  Object.assign(overlay.style, {
-    position: "fixed",
-    inset: "0",
-    zIndex: "10000",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "24px",
-    background: "rgba(15, 23, 42, 0.48)",
-  });
+  const dialog = document.createElement("section");
+  dialog.className = "manager-pa-chooser-dialog";
 
-  const dialog = document.createElement("div");
+  const header = document.createElement("div");
+  header.className = "manager-pa-chooser-header";
 
-  Object.assign(dialog.style, {
-    width: "min(520px, 100%)",
-    background: "#ffffff",
-    borderRadius: "16px",
-    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.24)",
-    padding: "24px",
-  });
+  const icon = document.createElement("span");
+  icon.className = "manager-pa-chooser-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = '<i class="bi bi-clipboard2-check"></i>';
 
-  const title = document.createElement("h2");
-  title.id = "managerPerformanceAppraisalChooserTitle";
-  title.textContent = "Open Performance Appraisal";
-
-  Object.assign(title.style, {
-    margin: "0 0 8px",
-    fontSize: "20px",
-  });
-
-  const description = document.createElement("p");
-  description.textContent =
-    "Choose the Performance Appraisal workspace you want to open.";
-
-  Object.assign(description.style, {
-    margin: "0 0 24px",
-    color: "#475569",
-  });
-
-  const actions = document.createElement("div");
-
-  Object.assign(actions.style, {
-    display: "flex",
-    flexWrap: "wrap",
-    justifyContent: "flex-end",
-    gap: "12px",
-  });
+  const headingCopy = document.createElement("div");
+  headingCopy.innerHTML = `
+    <p class="manager-pa-chooser-kicker">Performance Appraisal</p>
+    <h2 class="manager-pa-chooser-title" id="managerPerformanceAppraisalChooserTitle">
+      Choose your appraisal workspace
+    </h2>
+    <p class="manager-pa-chooser-description">
+      Continue to the appraisal area that matches the work you need to do.
+    </p>
+  `;
 
   const closeButton = document.createElement("button");
   closeButton.type = "button";
-  closeButton.textContent = "Cancel";
+  closeButton.className = "manager-pa-chooser-close";
+  closeButton.setAttribute("aria-label", "Close appraisal workspace chooser");
+  closeButton.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
 
-  const employeeButton = document.createElement("button");
-  employeeButton.type = "button";
-  employeeButton.textContent = "My Appraisal";
+  const workspaceGrid = document.createElement("div");
+  workspaceGrid.className = "manager-pa-chooser-grid";
 
-  const managerButton = document.createElement("button");
-  managerButton.type = "button";
-  managerButton.textContent = "Manager Reviews";
+  const createWorkspaceCard = ({
+    mode,
+    title,
+    description,
+    iconClass,
+    extraClass = "",
+  }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `manager-pa-chooser-card ${extraClass}`.trim();
+    button.dataset.managerPaWorkspace = mode;
+    button.innerHTML = `
+      <span class="manager-pa-chooser-card-icon" aria-hidden="true">
+        <i class="${iconClass}"></i>
+      </span>
+      <span class="manager-pa-chooser-card-title">${title}</span>
+      <span class="manager-pa-chooser-card-copy">${description}</span>
+      <span class="manager-pa-chooser-card-action">Open workspace <span aria-hidden="true">↗</span></span>
+    `;
 
-  [closeButton, employeeButton, managerButton].forEach(
-    (button) => {
-      Object.assign(button.style, {
-        minHeight: "40px",
-        padding: "8px 16px",
-        borderRadius: "8px",
-        cursor: "pointer",
-      });
-    },
-  );
+    return button;
+  };
 
-  Object.assign(closeButton.style, {
-    border: "1px solid #cbd5e1",
-    background: "#ffffff",
+  const employeeButton = createWorkspaceCard({
+    mode: "employee",
+    title: "My Appraisal",
+    description:
+      "Open your own appraisal workspace and review your current appraisal progress.",
+    iconClass: "bi bi-person-check",
   });
 
-  Object.assign(employeeButton.style, {
-    border: "1px solid #0f6f8f",
-    background: "#ffffff",
-    color: "#0f6f8f",
+  const managerButton = createWorkspaceCard({
+    mode: "primary-manager",
+    title: "Manager Reviews",
+    description:
+      "Review appraisal work for employees assigned to your primary or secondary reporting scope.",
+    iconClass: "bi bi-people",
+    extraClass: "manager-pa-chooser-card--manager",
   });
 
-  Object.assign(managerButton.style, {
-    border: "1px solid #0f6f8f",
-    background: "#0f6f8f",
-    color: "#ffffff",
-  });
+  const footer = document.createElement("div");
+  footer.className = "manager-pa-chooser-footer";
+
+  const footerNote = document.createElement("p");
+  footerNote.className = "manager-pa-chooser-note";
+  footerNote.innerHTML =
+    '<i class="bi bi-shield-check me-2" aria-hidden="true"></i>Available appraisal workspaces follow your assigned responsibilities.';
+
+  const footerCloseButton = document.createElement("button");
+  footerCloseButton.type = "button";
+  footerCloseButton.className = "manager-pa-chooser-footer-close";
+  footerCloseButton.textContent = "Close";
 
   const closeChooser = () => {
-    document.removeEventListener(
-      "keydown",
-      handleKeydown,
-    );
-
+    document.removeEventListener("keydown", handleKeydown);
     overlay.remove();
   };
 
-  closeButton.addEventListener(
-    "click",
-    closeChooser,
-  );
+  const openWorkspace = (mode) => {
+    closeChooser();
+    openManagerPerformanceAppraisal(mode);
+  };
 
-  employeeButton.addEventListener(
-    "click",
-    () => {
+  const handleKeydown = (event) => {
+    if (event.key === "Escape") {
       closeChooser();
-      openManagerPerformanceAppraisal("employee");
-    },
-  );
+    }
+  };
 
-  managerButton.addEventListener(
-    "click",
-    () => {
-      closeChooser();
-      openManagerPerformanceAppraisal("primary-manager");
-    },
-  );
+  closeButton.addEventListener("click", closeChooser);
+  footerCloseButton.addEventListener("click", closeChooser);
+  employeeButton.addEventListener("click", () => openWorkspace("employee"));
+  managerButton.addEventListener("click", () => openWorkspace("primary-manager"));
 
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) {
@@ -1733,35 +1939,16 @@ function showManagerPerformanceAppraisalChooser() {
     }
   });
 
-  const handleKeydown = (event) => {
-    if (event.key !== "Escape") {
-      return;
-    }
+  document.addEventListener("keydown", handleKeydown);
 
-    closeChooser();
-  };
-
-  document.addEventListener(
-    "keydown",
-    handleKeydown,
-  );
-
-  actions.append(
-    closeButton,
-    employeeButton,
-    managerButton,
-  );
-
-  dialog.append(
-    title,
-    description,
-    actions,
-  );
-
+  header.append(icon, headingCopy, closeButton);
+  workspaceGrid.append(employeeButton, managerButton);
+  footer.append(footerNote, footerCloseButton);
+  dialog.append(header, workspaceGrid, footer);
   overlay.append(dialog);
   document.body.append(overlay);
 
-  employeeButton.focus();
+  employeeButton.focus({ preventScroll: true });
 }
 
 async function openManagerPerformanceAppraisal(
