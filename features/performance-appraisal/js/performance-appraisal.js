@@ -58,6 +58,12 @@
   const BEX_PA_SELF_APPRAISAL_TASK_MEMORY_KEY =
     "bexhr:performance-appraisal:self-appraisal-task:v1";
 
+  const BEX_PA_HR_REVIEW_TASK_MEMORY_KEY =
+    "bexhr:performance-appraisal:hr-review-task:v1";
+
+  const BEX_PA_MANAGER_REVIEW_TASK_MEMORY_KEY =
+    "bexhr:performance-appraisal:manager-review-task:v1";
+
   const BEX_PA_REPORT_CYCLE_MEMORY_KEY =
     "bexhr:performance-appraisal:report-cycle:v1";
 
@@ -3242,6 +3248,682 @@
       );
 
     registerCard?.classList.toggle("d-none", !shouldShow);
+  }
+
+  // BEXHR MANAGER APPRAISAL FOCUS - US-07 QA CORRECTION
+  // A manager may have several employee appraisals, so the register remains the
+  // selection surface. Once one appraisal is opened, replace the queue with one
+  // focused review flow instead of stacking the detail underneath the register.
+  function bexPaEnsureManagerAppraisalClarityStyles() {
+    if (document.getElementById("bexPaManagerAppraisalClarityStyles")) return;
+
+    const style = document.createElement("style");
+    style.id = "bexPaManagerAppraisalClarityStyles";
+    style.textContent = `
+      #bexPaManagerAppraisalSection .bex-pa-manager-review-shell {
+        margin-bottom: 18px;
+      }
+
+      #bexPaManagerAppraisalSection .bex-pa-manager-review-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+      }
+
+      #bexPaManagerAppraisalSection .bex-pa-manager-review-switcher {
+        flex: 1 1 620px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid #cfe0e8;
+        border-radius: 16px;
+        background: #f8fbfc;
+      }
+
+      #bexPaManagerAppraisalSection .bex-pa-manager-review-tab {
+        min-height: 46px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        background: transparent;
+        color: #475569;
+        font-weight: 700;
+        text-align: center;
+        cursor: pointer;
+      }
+
+      #bexPaManagerAppraisalSection .bex-pa-manager-review-tab:hover,
+      #bexPaManagerAppraisalSection .bex-pa-manager-review-tab:focus-visible,
+      #bexPaManagerAppraisalSection .bex-pa-manager-review-tab.active {
+        border-color: #7bd3d1;
+        background: #ffffff;
+        color: #087a80;
+        outline: none;
+      }
+
+      #bexPaManagerAppraisalSection .bex-pa-manager-review-panel {
+        min-width: 0;
+      }
+
+      @media (max-width: 767.98px) {
+        #bexPaManagerAppraisalSection .bex-pa-manager-review-switcher {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function bexPaSetManagerReviewTask(taskKey, options = {}) {
+    const section = bexPaElements.managerAppraisalSection;
+    if (!section) return false;
+
+    const normalizedTask = ["employee", "goals", "summary"].includes(taskKey)
+      ? taskKey
+      : "employee";
+
+    section
+      .querySelectorAll("[data-bex-pa-manager-review-task]")
+      .forEach((button) => {
+        const isActive =
+          button.dataset.bexPaManagerReviewTask === normalizedTask;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", String(isActive));
+        button.setAttribute("tabindex", isActive ? "0" : "-1");
+      });
+
+    section
+      .querySelectorAll("[data-bex-pa-manager-review-panel]")
+      .forEach((panel) => {
+        const isActive =
+          panel.dataset.bexPaManagerReviewPanel === normalizedTask;
+        panel.classList.toggle("d-none", !isActive);
+        panel.hidden = !isActive;
+      });
+
+    section.dataset.bexPaManagerReviewTask = normalizedTask;
+
+    try {
+      window.sessionStorage.setItem(
+        BEX_PA_MANAGER_REVIEW_TASK_MEMORY_KEY,
+        normalizedTask,
+      );
+    } catch (error) {
+      console.warn(
+        "Performance appraisal manager review task could not be remembered.",
+        error,
+      );
+    }
+
+    if (options.focus === true) {
+      section
+        .querySelector(
+          `[data-bex-pa-manager-review-task="${normalizedTask}"]`,
+        )
+        ?.focus({ preventScroll: true });
+    }
+
+    return true;
+  }
+
+  function bexPaApplyManagerAppraisalClarity(appraisal) {
+    if (!appraisal?.id) return;
+
+    const section = bexPaElements.managerAppraisalSection;
+    const form = bexPaElements.managerAppraisalForm;
+    const selfAppraisalContent =
+      bexPaElements.managerAppraisalSelfAppraisal;
+    const goals = bexPaElements.managerAppraisalGoals;
+    const summaryField = bexPaElements.managerAppraisalOverallComment;
+
+    if (!section || !form || !selfAppraisalContent || !goals || !summaryField) {
+      return;
+    }
+
+    bexPaEnsureManagerAppraisalClarityStyles();
+
+    let shell = form.querySelector(".bex-pa-manager-review-shell");
+    if (!shell) {
+      const selfDetails = selfAppraisalContent.closest("details");
+      const goalsIntro = goals.previousElementSibling;
+      const summaryBlock = summaryField.closest(".mt-4.border-top.pt-4");
+      const actionRow =
+        bexPaElements.saveManagerAppraisalButton?.parentElement ||
+        bexPaElements.submitManagerAppraisalButton?.parentElement ||
+        bexPaElements.closeManagerAppraisalButton?.parentElement;
+
+      if (!selfDetails || !goalsIntro || !summaryBlock || !actionRow) {
+        return;
+      }
+
+      shell = document.createElement("div");
+      shell.className = "bex-pa-manager-review-shell";
+
+      const toolbar = document.createElement("div");
+      toolbar.className = "bex-pa-manager-review-toolbar";
+
+      const switcher = document.createElement("div");
+      switcher.className = "bex-pa-manager-review-switcher";
+      switcher.setAttribute("role", "tablist");
+      switcher.setAttribute("aria-label", "Manager appraisal review sections");
+
+      [
+        ["employee", "Employee Self-Appraisal", "bi bi-person-check"],
+        ["goals", "Goals & Ratings", "bi bi-bullseye"],
+        ["summary", "Summary & Submit", "bi bi-chat-square-text"],
+      ].forEach(([key, label, iconClass]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "bex-pa-manager-review-tab";
+        button.dataset.bexPaManagerReviewTask = key;
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", "false");
+        button.setAttribute("tabindex", "-1");
+        button.innerHTML = `<i class="${iconClass}" aria-hidden="true"></i><span>${label}</span>`;
+        button.addEventListener("click", () => {
+          bexPaSetManagerReviewTask(key, { focus: true });
+        });
+        switcher.appendChild(button);
+      });
+
+      toolbar.appendChild(switcher);
+
+      const topActions = document.createElement("div");
+      topActions.className = "d-flex align-items-center gap-2 flex-wrap";
+      if (bexPaElements.closeManagerAppraisalButton) {
+        bexPaElements.closeManagerAppraisalButton.innerHTML =
+          '<i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Review Queue';
+        topActions.appendChild(bexPaElements.closeManagerAppraisalButton);
+      }
+      toolbar.appendChild(topActions);
+
+      const panelHost = document.createElement("div");
+      panelHost.className = "bex-pa-manager-review-panel-host";
+
+      const employeePanel = document.createElement("section");
+      employeePanel.className = "bex-pa-manager-review-panel d-none";
+      employeePanel.dataset.bexPaManagerReviewPanel = "employee";
+      employeePanel.hidden = true;
+      // BEXHR MANAGER APPRAISAL FOCUS - US-07 DISCLOSURE CLEANUP
+      // Employee Self-Appraisal is already a dedicated focused tab. Move the
+      // existing content out of the legacy <details> disclosure so the selected
+      // tab opens immediately and does not present a second play/expand control.
+      selfAppraisalContent.classList.remove("pt-3");
+      employeePanel.appendChild(selfAppraisalContent);
+      selfDetails.remove();
+
+      const goalsPanel = document.createElement("section");
+      goalsPanel.className = "bex-pa-manager-review-panel d-none";
+      goalsPanel.dataset.bexPaManagerReviewPanel = "goals";
+      goalsPanel.hidden = true;
+      goalsPanel.append(goalsIntro, goals);
+
+      const summaryPanel = document.createElement("section");
+      summaryPanel.className = "bex-pa-manager-review-panel d-none";
+      summaryPanel.dataset.bexPaManagerReviewPanel = "summary";
+      summaryPanel.hidden = true;
+      summaryPanel.append(summaryBlock, actionRow);
+
+      panelHost.append(employeePanel, goalsPanel, summaryPanel);
+      shell.append(toolbar, panelHost);
+      form.prepend(shell);
+    }
+
+    const previousAppraisalId =
+      section.dataset.bexPaManagerReviewAppraisalId || "";
+    const isSameAppraisal =
+      previousAppraisalId === String(appraisal.id);
+    section.dataset.bexPaManagerReviewAppraisalId = String(appraisal.id);
+
+    let task = isSameAppraisal
+      ? section.dataset.bexPaManagerReviewTask || ""
+      : "";
+
+    if (!task) {
+      try {
+        const rememberedTask = window.sessionStorage.getItem(
+          BEX_PA_MANAGER_REVIEW_TASK_MEMORY_KEY,
+        );
+        if (["employee", "goals", "summary"].includes(rememberedTask)) {
+          task = rememberedTask;
+        }
+      } catch (error) {
+        console.warn(
+          "Performance appraisal manager review task could not be restored.",
+          error,
+        );
+      }
+    }
+
+    if (!isSameAppraisal || !task) {
+      task = "employee";
+    }
+
+    bexPaSetManagerReviewTask(task);
+  }
+
+  // BEXHR HR FINALISATION CLARITY - US-07
+  // HR review is one focused workspace once an appraisal is selected.
+  // Existing review content and the existing Finalise button are moved/presented
+  // in one-at-a-time panels; IDs, handlers, permission checks, and persistence
+  // remain unchanged.
+  function bexPaEnsureHrFinalisationClarityStyles() {
+    if (document.getElementById("bexPaUs07HrFinalisationStyles")) return;
+
+    const style = document.createElement("style");
+    style.id = "bexPaUs07HrFinalisationStyles";
+    style.textContent = `
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-review-shell {
+        margin-bottom: 18px;
+      }
+
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-review-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+      }
+
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-review-switcher {
+        flex: 1 1 620px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid #cfe0e8;
+        border-radius: 16px;
+        background: #f8fbfc;
+      }
+
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-review-tab {
+        min-height: 46px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        background: transparent;
+        color: #475569;
+        font-weight: 700;
+        text-align: center;
+        cursor: pointer;
+      }
+
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-review-tab:hover,
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-review-tab:focus-visible,
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-review-tab.active {
+        border-color: #7bd3d1;
+        background: #ffffff;
+        color: #087a80;
+        outline: none;
+      }
+
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-finalisation-panel {
+        padding: clamp(16px, 2.5vw, 24px);
+        border: 1px solid #d7e4ea;
+        border-radius: 18px;
+        background: linear-gradient(135deg, #f8fbfc 0%, #ffffff 100%);
+      }
+
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-finalisation-status-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin: 16px 0;
+      }
+
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-finalisation-status-item {
+        padding: 14px;
+        border: 1px solid #dbe4ee;
+        border-radius: 14px;
+        background: #ffffff;
+      }
+
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-finalisation-status-label {
+        display: block;
+        margin-bottom: 4px;
+        color: #64748b;
+        font-size: .72rem;
+        font-weight: 800;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+      }
+
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-finalisation-status-value {
+        color: #0f172a;
+        font-weight: 800;
+      }
+
+      #bexPaHrAppraisalReviewSection .bex-pa-hr-finalisation-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+
+      @media (max-width: 760px) {
+        #bexPaHrAppraisalReviewSection .bex-pa-hr-review-switcher,
+        #bexPaHrAppraisalReviewSection .bex-pa-hr-finalisation-status-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function bexPaGetHrReviewDefaultTask(appraisal) {
+    const selfAppraisal = bexPaState.selfAppraisals.find(
+      (item) => item.appraisalId === appraisal?.id,
+    );
+    const managerAppraisal = bexPaState.managerAppraisals.find(
+      (item) => item.appraisalId === appraisal?.id,
+    );
+    const hrFinalisation = bexPaState.hrFinalisations.find(
+      (item) => item.appraisalId === appraisal?.id,
+    );
+
+    if (hrFinalisation?.status === "Finalised") {
+      return "finalisation";
+    }
+
+    if (selfAppraisal?.status !== "Submitted") {
+      return "employee";
+    }
+
+    if (managerAppraisal?.status !== "Submitted") {
+      return "manager";
+    }
+
+    return "finalisation";
+  }
+
+  function bexPaSetHrReviewTask(taskKey = "", options = {}) {
+    const section = bexPaElements.hrAppraisalReviewSection;
+    if (!section) return false;
+
+    const normalizedTask = ["employee", "manager", "finalisation"].includes(taskKey)
+      ? taskKey
+      : "employee";
+
+    section
+      .querySelectorAll("[data-bex-pa-hr-review-task]")
+      .forEach((button) => {
+        const isActive = button.dataset.bexPaHrReviewTask === normalizedTask;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", String(isActive));
+        button.setAttribute("tabindex", isActive ? "0" : "-1");
+      });
+
+    bexPaElements.hrAppraisalReviewEmployee?.classList.toggle(
+      "d-none",
+      normalizedTask !== "employee",
+    );
+    bexPaElements.hrAppraisalReviewManager?.classList.toggle(
+      "d-none",
+      normalizedTask !== "manager",
+    );
+
+    const finalisationPanel = document.getElementById(
+      "bexPaHrFinalisationFocusPanel",
+    );
+    finalisationPanel?.classList.toggle(
+      "d-none",
+      normalizedTask !== "finalisation",
+    );
+
+    bexPaElements.hrAppraisalReviewPrerequisites?.classList.toggle(
+      "d-none",
+      normalizedTask !== "finalisation",
+    );
+
+    const canFinalise = section.dataset.bexPaHrCanFinalise === "true";
+    const isFinalised = section.dataset.bexPaHrIsFinalised === "true";
+    bexPaElements.finaliseHrAppraisalButton?.classList.toggle(
+      "d-none",
+      normalizedTask !== "finalisation" || !canFinalise || isFinalised,
+    );
+
+    section.dataset.bexPaHrReviewTask = normalizedTask;
+
+    try {
+      window.sessionStorage.setItem(
+        BEX_PA_HR_REVIEW_TASK_MEMORY_KEY,
+        normalizedTask,
+      );
+    } catch (error) {
+      console.warn(
+        "Performance appraisal HR review task could not be remembered.",
+        error,
+      );
+    }
+
+    if (options.focus === true) {
+      section
+        .querySelector(
+          `[data-bex-pa-hr-review-task="${normalizedTask}"]`,
+        )
+        ?.focus({ preventScroll: true });
+    }
+
+    return true;
+  }
+
+  function bexPaApplyHrFinalisationClarity(appraisal) {
+    if (!bexPaIsHrAdminMode() || !appraisal?.id) return;
+
+    const section = bexPaElements.hrAppraisalReviewSection;
+    const employeePanel = bexPaElements.hrAppraisalReviewEmployee;
+    const managerPanel = bexPaElements.hrAppraisalReviewManager;
+    if (!section || !employeePanel || !managerPanel) return;
+
+    bexPaEnsureHrFinalisationClarityStyles();
+
+    let shell = section.querySelector(".bex-pa-hr-review-shell");
+    if (!shell) {
+      shell = document.createElement("div");
+      shell.className = "bex-pa-hr-review-shell";
+
+      const toolbar = document.createElement("div");
+      toolbar.className = "bex-pa-hr-review-toolbar";
+
+      const switcher = document.createElement("div");
+      switcher.className = "bex-pa-hr-review-switcher";
+      switcher.setAttribute("role", "tablist");
+      switcher.setAttribute("aria-label", "HR appraisal review sections");
+
+      [
+        ["employee", "Employee Self-Appraisal", "bi bi-person-check"],
+        ["manager", "Manager Appraisal", "bi bi-people"],
+        ["finalisation", "Finalisation", "bi bi-shield-check"],
+      ].forEach(([key, label, iconClass]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "bex-pa-hr-review-tab";
+        button.dataset.bexPaHrReviewTask = key;
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", "false");
+        button.setAttribute("tabindex", "-1");
+        button.innerHTML = `<i class="${iconClass}" aria-hidden="true"></i><span>${label}</span>`;
+        button.addEventListener("click", () => {
+          bexPaSetHrReviewTask(key, { focus: true });
+        });
+        switcher.appendChild(button);
+      });
+
+      toolbar.appendChild(switcher);
+
+      const topActions = document.createElement("div");
+      topActions.className = "d-flex align-items-center gap-2 flex-wrap";
+      toolbar.appendChild(topActions);
+
+      if (bexPaElements.closeHrAppraisalReviewButton) {
+        bexPaElements.closeHrAppraisalReviewButton.innerHTML =
+          '<i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Appraisal Register';
+        topActions.appendChild(bexPaElements.closeHrAppraisalReviewButton);
+      }
+
+      const finalisationPanel = document.createElement("section");
+      finalisationPanel.id = "bexPaHrFinalisationFocusPanel";
+      finalisationPanel.className = "bex-pa-hr-finalisation-panel d-none";
+      finalisationPanel.innerHTML = `
+        <div>
+          <div id="bexPaHrFinalisationEyebrow" class="small fw-bold text-uppercase text-secondary mb-1">Finalisation readiness</div>
+          <h3 id="bexPaHrFinalisationHeading" class="h5 fw-bold mb-1">Confirm both submitted reviews before finalising</h3>
+          <p id="bexPaHrFinalisationSummary" class="text-body-secondary mb-0"></p>
+        </div>
+        <div class="bex-pa-hr-finalisation-status-grid" aria-label="Appraisal finalisation status">
+          <div class="bex-pa-hr-finalisation-status-item">
+            <span class="bex-pa-hr-finalisation-status-label">Employee</span>
+            <span id="bexPaHrFinalisationEmployeeStatus" class="bex-pa-hr-finalisation-status-value"></span>
+          </div>
+          <div class="bex-pa-hr-finalisation-status-item">
+            <span class="bex-pa-hr-finalisation-status-label">Manager</span>
+            <span id="bexPaHrFinalisationManagerStatus" class="bex-pa-hr-finalisation-status-value"></span>
+          </div>
+          <div class="bex-pa-hr-finalisation-status-item">
+            <span class="bex-pa-hr-finalisation-status-label">HR</span>
+            <span id="bexPaHrFinalisationHrStatus" class="bex-pa-hr-finalisation-status-value"></span>
+          </div>
+        </div>
+        <div id="bexPaHrFinalisationActions" class="bex-pa-hr-finalisation-actions"></div>
+      `;
+
+      const finalisationStatusGrid = finalisationPanel.querySelector(
+        ".bex-pa-hr-finalisation-status-grid",
+      );
+      if (
+        finalisationStatusGrid &&
+        bexPaElements.hrAppraisalReviewPrerequisites
+      ) {
+        finalisationPanel.insertBefore(
+          bexPaElements.hrAppraisalReviewPrerequisites,
+          finalisationStatusGrid,
+        );
+      }
+
+      shell.append(toolbar, finalisationPanel);
+      employeePanel.parentElement?.insertBefore(shell, employeePanel);
+
+      const finalisationActions = finalisationPanel.querySelector(
+        "#bexPaHrFinalisationActions",
+      );
+      if (finalisationActions && bexPaElements.finaliseHrAppraisalButton) {
+        finalisationActions.appendChild(bexPaElements.finaliseHrAppraisalButton);
+      }
+    }
+
+    const selfAppraisal = bexPaState.selfAppraisals.find(
+      (item) => item.appraisalId === appraisal.id,
+    );
+    const managerAppraisal = bexPaState.managerAppraisals.find(
+      (item) => item.appraisalId === appraisal.id,
+    );
+    const hrFinalisation = bexPaState.hrFinalisations.find(
+      (item) => item.appraisalId === appraisal.id,
+    );
+
+    const selfSubmitted = selfAppraisal?.status === "Submitted";
+    const managerSubmitted = managerAppraisal?.status === "Submitted";
+    const isFinalised = hrFinalisation?.status === "Finalised";
+    const canFinalise = selfSubmitted && managerSubmitted && !isFinalised;
+
+    section.dataset.bexPaHrCanFinalise = String(canFinalise);
+    section.dataset.bexPaHrIsFinalised = String(isFinalised);
+
+    const employeeStatus = document.getElementById(
+      "bexPaHrFinalisationEmployeeStatus",
+    );
+    const managerStatus = document.getElementById(
+      "bexPaHrFinalisationManagerStatus",
+    );
+    const hrStatus = document.getElementById(
+      "bexPaHrFinalisationHrStatus",
+    );
+    const summary = document.getElementById(
+      "bexPaHrFinalisationSummary",
+    );
+    const finalisationEyebrow = document.getElementById(
+      "bexPaHrFinalisationEyebrow",
+    );
+    const finalisationHeading = document.getElementById(
+      "bexPaHrFinalisationHeading",
+    );
+
+    if (finalisationEyebrow) {
+      finalisationEyebrow.textContent = isFinalised
+        ? "Finalisation complete"
+        : "Finalisation readiness";
+    }
+    if (finalisationHeading) {
+      finalisationHeading.textContent = isFinalised
+        ? "Appraisal finalised"
+        : "Confirm both submitted reviews before finalising";
+    }
+
+    if (employeeStatus) {
+      employeeStatus.textContent = selfSubmitted ? "Submitted" : "Pending";
+    }
+    if (managerStatus) {
+      managerStatus.textContent = managerSubmitted ? "Submitted" : "Pending";
+    }
+    if (hrStatus) {
+      hrStatus.textContent = isFinalised
+        ? "Finalised"
+        : canFinalise
+          ? "Ready to finalise"
+          : "Waiting";
+    }
+    if (summary) {
+      summary.textContent = isFinalised
+        ? "This appraisal is finalised. Employee acknowledgement is the next stage."
+        : canFinalise
+          ? "Employee and Manager appraisals are submitted. Review both sections, then use the existing Finalise Appraisal action."
+          : "Finalisation remains locked until both Employee and Manager appraisals are submitted.";
+    }
+
+    const previousAppraisalId = section.dataset.bexPaHrReviewAppraisalId || "";
+    const isSameAppraisal = previousAppraisalId === String(appraisal.id);
+    section.dataset.bexPaHrReviewAppraisalId = String(appraisal.id);
+
+    let task = isSameAppraisal
+      ? section.dataset.bexPaHrReviewTask || ""
+      : "";
+
+    if (!task) {
+      try {
+        const rememberedTask = window.sessionStorage.getItem(
+          BEX_PA_HR_REVIEW_TASK_MEMORY_KEY,
+        );
+        if (["employee", "manager", "finalisation"].includes(rememberedTask)) {
+          task = rememberedTask;
+        }
+      } catch (error) {
+        console.warn(
+          "Performance appraisal HR review task could not be restored.",
+          error,
+        );
+      }
+    }
+
+    if (!isSameAppraisal || !task) {
+      task = bexPaGetHrReviewDefaultTask(appraisal);
+    }
+
+    bexPaSetHrReviewTask(task);
   }
 
   function bexPaGetDirectEmployeeAppraisal() {
@@ -12760,6 +13442,21 @@
 
       bexPaElements.hrAppraisalReviewPrerequisites.classList.remove(
         "d-none",
+        "alert-success",
+      );
+      bexPaElements.hrAppraisalReviewPrerequisites.classList.add(
+        "alert-warning",
+      );
+    } else if (isFinalised) {
+      bexPaElements.hrAppraisalReviewPrerequisites.textContent =
+        "Finalisation complete. Employee acknowledgement is the next stage.";
+
+      bexPaElements.hrAppraisalReviewPrerequisites.classList.remove(
+        "d-none",
+        "alert-warning",
+      );
+      bexPaElements.hrAppraisalReviewPrerequisites.classList.add(
+        "alert-success",
       );
     } else {
       bexPaElements.hrAppraisalReviewPrerequisites.textContent =
@@ -12767,6 +13464,10 @@
 
       bexPaElements.hrAppraisalReviewPrerequisites.classList.remove(
         "d-none",
+        "alert-success",
+      );
+      bexPaElements.hrAppraisalReviewPrerequisites.classList.add(
+        "alert-warning",
       );
     }
 
@@ -13217,6 +13918,11 @@
       );
     }
 
+    // BEXHR HR FINALISATION CLARITY - US-07
+    // Present one review task at a time and keep the existing Finalise action
+    // in the dedicated finalisation panel.
+    bexPaApplyHrFinalisationClarity(appraisal);
+
     bexPaElements.hrAppraisalReviewSection.classList.remove(
       "d-none",
     );
@@ -13239,6 +13945,11 @@
 
     bexPaState.editingHrAppraisalId = appraisal.id;
 
+    // BEXHR HR FINALISATION CLARITY - US-07
+    // Once HR selects an appraisal, the register becomes navigation rather
+    // than a second copy of the active task. Keep only the focused review visible.
+    bexPaSetEmployeeAppraisalRegisterVisible(false);
+
     bexPaElements.selfAppraisalSection?.classList.add(
       "d-none",
     );
@@ -13260,6 +13971,19 @@
     bexPaElements.hrAppraisalReviewSection?.classList.add(
       "d-none",
     );
+    bexPaSetEmployeeAppraisalRegisterVisible(true);
+
+    const registerCard =
+      bexPaElements.employeeAppraisalsList?.closest(
+        ".bex-pa-appraisal-register-card",
+      );
+
+    window.requestAnimationFrame(() => {
+      registerCard?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
 
     if (bexPaElements.hrAppraisalReviewPrerequisites) {
       bexPaElements.hrAppraisalReviewPrerequisites.textContent =
@@ -14590,6 +15314,12 @@
       bexPaElements.managerAppraisalMeta.textContent +=
         ` | Manager Appraisal: ${managerDisplayStatus}`;
     }
+
+    // BEXHR MANAGER APPRAISAL FOCUS - US-07 QA CORRECTION
+    // Keep the existing form fields/actions but present them as one focused
+    // manager-review task at a time.
+    bexPaApplyManagerAppraisalClarity(appraisal);
+
     bexPaElements.managerAppraisalSection.classList.remove(
       "d-none",
     );
@@ -14600,7 +15330,20 @@
     bexPaElements.managerAppraisalSection?.classList.add(
       "d-none",
     );
+    bexPaSetEmployeeAppraisalRegisterVisible(true);
     bexPaClearManagerAppraisalError();
+
+    const registerCard =
+      bexPaElements.employeeAppraisalsList?.closest(
+        ".bex-pa-appraisal-register-card",
+      );
+
+    window.requestAnimationFrame(() => {
+      registerCard?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
   }
 
   function bexPaOpenManagerAppraisal(appraisalId) {
@@ -14615,10 +15358,23 @@
     }
 
     bexPaClearManagerAppraisalError();
-    bexPaRenderManagerAppraisalDetail(appraisal);
+
+    // BEXHR MANAGER APPRAISAL FOCUS - US-07 QA CORRECTION
+    // The queue selects an employee; it must not remain stacked above the
+    // active manager review once that employee has been opened.
+    bexPaSetEmployeeAppraisalRegisterVisible(false);
+
     bexPaElements.selfAppraisalSection?.classList.add(
       "d-none",
     );
+    bexPaElements.hrAppraisalReviewSection?.classList.add(
+      "d-none",
+    );
+    bexPaElements.finalAppraisalSection?.classList.add(
+      "d-none",
+    );
+
+    bexPaRenderManagerAppraisalDetail(appraisal);
     bexPaElements.managerAppraisalSection.scrollIntoView({
       behavior: "smooth",
       block: "start",
