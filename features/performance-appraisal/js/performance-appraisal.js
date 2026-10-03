@@ -55,6 +55,9 @@
   const BEX_PA_WORKSPACE_MEMORY_KEY =
     "bexhr:performance-appraisal:workspace:v1";
 
+  const BEX_PA_SELF_APPRAISAL_TASK_MEMORY_KEY =
+    "bexhr:performance-appraisal:self-appraisal-task:v1";
+
   const BEX_PA_REPORT_CYCLE_MEMORY_KEY =
     "bexhr:performance-appraisal:report-cycle:v1";
 
@@ -1277,6 +1280,46 @@
     return true;
   }
 
+  function bexPaGetWorkspaceLabelForMode(mode = bexPaGetActiveMode()) {
+    return {
+      employee: "My Appraisal",
+      "primary-manager": "Manager Reviews",
+      "hr-standard": "HR Standard View",
+      "hr-admin": "HR Administration",
+    }[String(mode || "").trim()] || "Performance Appraisal";
+  }
+
+  function bexPaGetAvailableWorkspaceModes() {
+    const modes = [];
+
+    if (bexPaHasEmployeeCapability()) {
+      modes.push("employee");
+    }
+    if (bexPaHasManagerReviewVisibilityCapability()) {
+      modes.push("primary-manager");
+    }
+    if (bexPaHasHrStandardCapability()) {
+      modes.push("hr-standard");
+    }
+    if (bexPaHasHrAdminCapability()) {
+      modes.push("hr-admin");
+    }
+
+    return modes;
+  }
+
+  function bexPaGetDefaultSectionForMode(mode = bexPaGetActiveMode()) {
+    if (
+      mode === "employee" ||
+      mode === "primary-manager" ||
+      mode === "hr-standard"
+    ) {
+      return "employeeAppraisals";
+    }
+
+    return "overview";
+  }
+
   function bexPaIsEmployeeMode() {
     return (
       bexPaHasEmployeeCapability() &&
@@ -1415,9 +1458,22 @@
   }
 
   function bexPaGetAvailableEmployees() {
-    const availableEmployees =
-      bexPaGetIntegratedContext()
-        ?.availableEmployees;
+    const context = bexPaGetIntegratedContext() || {};
+    const activeMode = bexPaGetActiveMode();
+
+    let availableEmployees = context.availableEmployees;
+
+    if (
+      activeMode === "primary-manager" &&
+      Array.isArray(context.managerAvailableEmployees)
+    ) {
+      availableEmployees = context.managerAvailableEmployees;
+    } else if (
+      (activeMode === "hr-standard" || activeMode === "hr-admin") &&
+      Array.isArray(context.hrAvailableEmployees)
+    ) {
+      availableEmployees = context.hrAvailableEmployees;
+    }
 
     if (!Array.isArray(availableEmployees)) {
       return [];
@@ -2028,6 +2084,472 @@
     ) {
       bexPaShowSection("overview");
     }
+  }
+
+  // BEXHR PA WORKSPACE SWITCHING - US-06 DEFECT CLOSEOUT
+  // Users with more than one already-permitted PA responsibility can switch
+  // workspace inside the module. This changes presentation mode only; the
+  // existing capability checks continue to decide which workspaces/actions exist.
+  function bexPaEnsureWorkspaceSwitcherStyles() {
+    if (document.getElementById("bexPaWorkspaceSwitcherStyles")) return;
+
+    const style = document.createElement("style");
+    style.id = "bexPaWorkspaceSwitcherStyles";
+    style.textContent = `
+      .bex-pa-integrated-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .bex-pa-workspace-switch-button {
+        min-height: 34px;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      #bexPaWorkspaceChooser {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: rgba(15, 23, 42, 0.56);
+        backdrop-filter: blur(2px);
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-dialog {
+        width: min(900px, 100%);
+        max-height: min(740px, calc(100vh - 48px));
+        overflow: auto;
+        background: #ffffff;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 24px;
+        box-shadow: 0 28px 72px rgba(15, 23, 42, 0.28);
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-header {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: start;
+        padding: 22px 24px;
+        border-bottom: 1px solid #e2e8f0;
+        background: linear-gradient(110deg, #ffffff 0%, #f8fbfc 56%, #d9f4f2 100%);
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-icon {
+        width: 46px;
+        height: 46px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 14px;
+        border: 1px solid #b9e7e7;
+        background: #e8f8f8;
+        color: #0f7f85;
+        font-size: 1.15rem;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-kicker {
+        margin: 0 0 4px;
+        color: #0f7f85;
+        font-size: .74rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-title {
+        margin: 0;
+        color: #0f172a;
+        font-size: clamp(1.45rem, 3vw, 1.9rem);
+        line-height: 1.15;
+        font-weight: 800;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-description {
+        margin: 7px 0 0;
+        color: #64748b;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-close {
+        width: 38px;
+        height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #d9e2ec;
+        border-radius: 12px;
+        background: rgba(255,255,255,.9);
+        color: #64748b;
+        cursor: pointer;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        padding: 20px 24px 22px;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-card {
+        min-width: 0;
+        min-height: 178px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        text-align: left;
+        padding: 18px;
+        border: 1px solid #dbe4ee;
+        border-radius: 18px;
+        background: #ffffff;
+        color: #0f172a;
+        cursor: pointer;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-card:hover,
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-card:focus-visible {
+        border-color: #8ed8d5;
+        box-shadow: 0 12px 28px rgba(15,23,42,.1);
+        outline: none;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-card.is-current {
+        border-color: #53c7c5;
+        background: #f7fdfd;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-card-icon {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 14px;
+        border-radius: 12px;
+        background: #e4f8fb;
+        color: #0f7f85;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-card-title {
+        font-weight: 800;
+        margin-bottom: 6px;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-card-copy {
+        color: #64748b;
+        font-size: .9rem;
+        line-height: 1.45;
+        flex: 1;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-card-action {
+        margin-top: 16px;
+        color: #0f7f85;
+        font-size: .83rem;
+        font-weight: 800;
+      }
+
+      #bexPaWorkspaceChooser .bex-pa-workspace-chooser-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 24px;
+        border-top: 1px solid #e2e8f0;
+        background: #f8fafc;
+        color: #64748b;
+        font-size: .82rem;
+      }
+
+      @media (max-width: 760px) {
+        .bex-pa-integrated-actions {
+          width: 100%;
+          justify-content: flex-start;
+        }
+        #bexPaWorkspaceChooser {
+          align-items: flex-end;
+          padding: 12px;
+        }
+        #bexPaWorkspaceChooser .bex-pa-workspace-chooser-grid {
+          grid-template-columns: 1fr;
+          padding: 16px 18px 18px;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function bexPaUpdateIntegratedWorkspaceLabel() {
+    if (bexPaElements.integratedWorkspaceLabel) {
+      bexPaElements.integratedWorkspaceLabel.textContent =
+        bexPaGetWorkspaceLabelForMode();
+    }
+  }
+
+  function bexPaEnsureIntegratedWorkspaceSwitchButton() {
+    const toolbar = bexPaElements.integratedToolbar;
+    const backLink = bexPaElements.backToDashboardLink;
+    if (!toolbar || !backLink) return null;
+
+    bexPaEnsureWorkspaceSwitcherStyles();
+
+    let actions = toolbar.querySelector(".bex-pa-integrated-actions");
+    if (!actions) {
+      actions = document.createElement("div");
+      actions.className = "bex-pa-integrated-actions";
+      toolbar.appendChild(actions);
+      actions.appendChild(backLink);
+    }
+
+    let button = document.getElementById("bexPaSwitchWorkspaceButton");
+    if (!button) {
+      button = document.createElement("button");
+      button.type = "button";
+      button.id = "bexPaSwitchWorkspaceButton";
+      button.className =
+        "btn btn-outline-primary btn-sm bex-pa-workspace-switch-button";
+      button.innerHTML =
+        '<i class="bi bi-grid" aria-hidden="true"></i><span>Switch workspace</span>';
+      button.addEventListener("click", bexPaShowWorkspaceChooser);
+      actions.insertBefore(button, backLink);
+    }
+
+    const availableModes = bexPaGetAvailableWorkspaceModes();
+    const shouldShow = availableModes.length > 1;
+    button.hidden = !shouldShow;
+    button.classList.toggle("d-none", !shouldShow);
+
+    return button;
+  }
+
+  function bexPaGetWorkspaceChooserCopy(mode) {
+    return {
+      employee: {
+        title: "My Appraisal",
+        description:
+          "Open your own appraisal and continue the actions assigned to you.",
+        iconClass: "bi bi-person-check",
+      },
+      "primary-manager": {
+        title: "Manager Reviews",
+        description:
+          "Review appraisal work for employees in your permitted reporting scope.",
+        iconClass: "bi bi-people",
+      },
+      "hr-standard": {
+        title: "HR Standard View",
+        description:
+          "Review appraisal progress using the visibility already assigned to your HR role.",
+        iconClass: "bi bi-clipboard-data",
+      },
+      "hr-admin": {
+        title: "HR Administration",
+        description:
+          "Open the HR appraisal administration and oversight workspace available to your role.",
+        iconClass: "bi bi-clipboard-data",
+      },
+    }[mode];
+  }
+
+  function bexPaGetVisibleSectionName() {
+    const sectionMap = {
+      overview: bexPaElements.overviewSection,
+      cycles: bexPaElements.cyclesSection,
+      goals: bexPaElements.goalsSection,
+      templates: bexPaElements.templatesSection,
+      employeeAppraisals: bexPaElements.employeeAppraisalsSection,
+      reports: bexPaElements.reportsSection,
+    };
+
+    return Object.entries(sectionMap).find(
+      ([, section]) => section && !section.classList.contains("d-none"),
+    )?.[0] || "";
+  }
+
+  async function bexPaSwitchWorkspaceMode(mode) {
+    const nextMode = String(mode || "").trim();
+    if (nextMode === bexPaGetActiveMode()) {
+      bexPaUpdateIntegratedWorkspaceLabel();
+      return true;
+    }
+
+    if (!bexPaSetActiveMode(nextMode)) {
+      return false;
+    }
+
+    // Keep an open self-appraisal DOM intact while the user temporarily
+    // switches PA workspace. No appraisal content is written to UI storage.
+    bexPaState.editingManagerAppraisalId = null;
+    bexPaState.editingHrAppraisalId = null;
+    bexPaState.editingFinalAppraisalId = null;
+
+    [
+      bexPaElements.selfAppraisalSection,
+      bexPaElements.managerAppraisalSection,
+      bexPaElements.hrAppraisalReviewSection,
+      bexPaElements.finalAppraisalSection,
+    ].forEach((section) => section?.classList.add("d-none"));
+
+    bexPaSetEmployeeAppraisalRegisterVisible(true);
+
+    bexPaApplyCycleAccess();
+    bexPaApplyGoalAccess();
+    bexPaApplyTemplateAccess();
+    bexPaApplyReportAccess();
+    bexPaApplyRoleWorkspaceClarity();
+
+    bexPaRenderCycles();
+    bexPaPopulateOrganisationGoalCycles();
+    bexPaRenderOrganisationGoals();
+    bexPaPopulateDeliverableOrganisationGoals();
+    bexPaRenderDeliverables();
+    bexPaPopulateDepartmentGoalOrganisationGoals();
+    bexPaRenderDepartmentGoals();
+    bexPaPopulateIndividualGoalEmployees();
+    bexPaPopulateIndividualGoalDepartmentGoals();
+    bexPaRenderIndividualGoals();
+    bexPaRenderProgressUpdates();
+    bexPaRenderTemplates();
+    bexPaRenderEmployeeAppraisals();
+
+    bexPaUpdateIntegratedWorkspaceLabel();
+    bexPaEnsureIntegratedWorkspaceSwitchButton();
+
+    bexPaShowSection(
+      bexPaGetRememberedSection(
+        nextMode,
+        bexPaGetDefaultSectionForMode(nextMode),
+      ),
+    );
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        `Opened ${bexPaGetWorkspaceLabelForMode(nextMode)}.`;
+    }
+
+    return true;
+  }
+
+  function bexPaShowWorkspaceChooser() {
+    const availableModes = bexPaGetAvailableWorkspaceModes();
+    if (availableModes.length <= 1) return;
+
+    document.getElementById("bexPaWorkspaceChooser")?.remove();
+    bexPaEnsureWorkspaceSwitcherStyles();
+
+    const overlay = document.createElement("div");
+    overlay.id = "bexPaWorkspaceChooser";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "bexPaWorkspaceChooserTitle");
+
+    const dialog = document.createElement("section");
+    dialog.className = "bex-pa-workspace-chooser-dialog";
+
+    const header = document.createElement("div");
+    header.className = "bex-pa-workspace-chooser-header";
+    header.innerHTML = `
+      <span class="bex-pa-workspace-chooser-icon" aria-hidden="true">
+        <i class="bi bi-clipboard2-check"></i>
+      </span>
+      <div>
+        <p class="bex-pa-workspace-chooser-kicker">Performance Appraisal</p>
+        <h2 class="bex-pa-workspace-chooser-title" id="bexPaWorkspaceChooserTitle">
+          Choose your appraisal workspace
+        </h2>
+        <p class="bex-pa-workspace-chooser-description">
+          Switch between the appraisal responsibilities already available to you.
+        </p>
+      </div>
+    `;
+
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "bex-pa-workspace-chooser-close";
+    closeButton.setAttribute("aria-label", "Close appraisal workspace chooser");
+    closeButton.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
+    header.appendChild(closeButton);
+
+    const grid = document.createElement("div");
+    grid.className = "bex-pa-workspace-chooser-grid";
+    grid.style.gridTemplateColumns =
+      `repeat(${Math.min(3, availableModes.length)}, minmax(0, 1fr))`;
+
+    const closeChooser = () => {
+      document.removeEventListener("keydown", handleKeydown);
+      overlay.remove();
+    };
+
+    const handleKeydown = (event) => {
+      if (event.key === "Escape") {
+        closeChooser();
+      }
+    };
+
+    availableModes.forEach((mode) => {
+      const copy = bexPaGetWorkspaceChooserCopy(mode);
+      if (!copy) return;
+
+      const button = document.createElement("button");
+      const isCurrent = mode === bexPaGetActiveMode();
+      button.type = "button";
+      button.className =
+        `bex-pa-workspace-chooser-card${isCurrent ? " is-current" : ""}`;
+      button.dataset.bexPaWorkspaceMode = mode;
+      button.innerHTML = `
+        <span class="bex-pa-workspace-chooser-card-icon" aria-hidden="true">
+          <i class="${copy.iconClass}"></i>
+        </span>
+        <span class="bex-pa-workspace-chooser-card-title">${copy.title}</span>
+        <span class="bex-pa-workspace-chooser-card-copy">${copy.description}</span>
+        <span class="bex-pa-workspace-chooser-card-action">
+          ${isCurrent ? "Current workspace" : "Open workspace ↗"}
+        </span>
+      `;
+
+      button.addEventListener("click", async () => {
+        if (isCurrent) {
+          closeChooser();
+          return;
+        }
+        closeChooser();
+        await bexPaSwitchWorkspaceMode(mode);
+      });
+
+      grid.appendChild(button);
+    });
+
+    const footer = document.createElement("div");
+    footer.className = "bex-pa-workspace-chooser-footer";
+    footer.innerHTML =
+      '<span><i class="bi bi-shield-check me-2" aria-hidden="true"></i>Available workspaces follow your existing permissions and reporting responsibilities.</span>';
+
+    const footerCloseButton = document.createElement("button");
+    footerCloseButton.type = "button";
+    footerCloseButton.className = "btn btn-outline-secondary btn-sm";
+    footerCloseButton.textContent = "Close";
+    footerCloseButton.addEventListener("click", closeChooser);
+    footer.appendChild(footerCloseButton);
+
+    closeButton.addEventListener("click", closeChooser);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeChooser();
+    });
+    document.addEventListener("keydown", handleKeydown);
+
+    dialog.append(header, grid, footer);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    grid.querySelector("button")?.focus({ preventScroll: true });
   }
 
   // BEXHR PERFORMANCE APPRAISAL ROLE CLARITY - US-05
@@ -2691,6 +3213,257 @@
     bexPaSetFocusedGoalTask(nextTask, {
       remember: false,
     });
+  }
+
+  function bexPaGetRememberedSelfAppraisalTask() {
+    try {
+      const taskKey = String(
+        window.sessionStorage.getItem(
+          BEX_PA_SELF_APPRAISAL_TASK_MEMORY_KEY,
+        ) || "",
+      ).trim();
+
+      return ["assessment", "goals", "reflection"].includes(taskKey)
+        ? taskKey
+        : "assessment";
+    } catch (error) {
+      console.warn(
+        "Performance appraisal self-appraisal task could not be read.",
+        error,
+      );
+      return "assessment";
+    }
+  }
+
+  function bexPaSetEmployeeAppraisalRegisterVisible(shouldShow = true) {
+    const registerCard =
+      bexPaElements.employeeAppraisalsList?.closest(
+        ".bex-pa-appraisal-register-card",
+      );
+
+    registerCard?.classList.toggle("d-none", !shouldShow);
+  }
+
+  function bexPaGetDirectEmployeeAppraisal() {
+    if (!bexPaIsEmployeeMode()) return null;
+
+    const eligibleAppraisals = bexPaGetEligibleEmployeeAppraisals();
+    return eligibleAppraisals.length === 1
+      ? eligibleAppraisals[0]
+      : null;
+  }
+
+  // BEXHR EMPLOYEE APPRAISAL CLARITY - US-06
+  // Reuse the existing self-appraisal fields and form submission path, but
+  // present them as three focused employee sections instead of one long form.
+  function bexPaEnsureEmployeeAppraisalClarityStyles() {
+    if (document.getElementById("bexPaUs06EmployeeAppraisalStyles")) return;
+
+    const style = document.createElement("style");
+    style.id = "bexPaUs06EmployeeAppraisalStyles";
+    style.textContent = `
+      #bexPaSelfAppraisalSection .bex-pa-self-appraisal-switcher {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        padding: 8px;
+        margin-bottom: 16px;
+        border: 1px solid #cfe0e8;
+        border-radius: 16px;
+        background: #f8fbfc;
+      }
+
+      #bexPaSelfAppraisalSection .bex-pa-self-appraisal-tab {
+        min-height: 48px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        background: transparent;
+        color: #475569;
+        font-weight: 700;
+        text-align: center;
+        cursor: pointer;
+      }
+
+      #bexPaSelfAppraisalSection .bex-pa-self-appraisal-tab:hover,
+      #bexPaSelfAppraisalSection .bex-pa-self-appraisal-tab:focus-visible,
+      #bexPaSelfAppraisalSection .bex-pa-self-appraisal-tab.active {
+        border-color: #7bd3d1;
+        background: #ffffff;
+        color: #087a80;
+        outline: none;
+      }
+
+      #bexPaSelfAppraisalSection .bex-pa-self-appraisal-panel {
+        padding: 18px;
+        border: 1px solid #dbe7ec;
+        border-radius: 16px;
+        background: #ffffff;
+      }
+
+      #bexPaSelfAppraisalSection .bex-pa-self-appraisal-panel[hidden] {
+        display: none !important;
+      }
+
+      @media (max-width: 760px) {
+        #bexPaSelfAppraisalSection .bex-pa-self-appraisal-switcher {
+          grid-template-columns: 1fr;
+        }
+        #bexPaSelfAppraisalSection .bex-pa-self-appraisal-tab {
+          justify-content: flex-start;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function bexPaSetFocusedSelfAppraisalTask(taskKey = "", options = {}) {
+    const shell = document.getElementById("bexPaFocusedSelfAppraisalWorkspace");
+    const cleanTaskKey = String(taskKey || "").trim();
+    if (!shell || !["assessment", "goals", "reflection"].includes(cleanTaskKey)) {
+      return false;
+    }
+
+    shell
+      .querySelectorAll("[data-bex-pa-self-appraisal-task-button]")
+      .forEach((button) => {
+        const isActive =
+          button.dataset.bexPaSelfAppraisalTaskButton === cleanTaskKey;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", String(isActive));
+      });
+
+    shell
+      .querySelectorAll("[data-bex-pa-self-appraisal-task-panel]")
+      .forEach((panel) => {
+        const isActive =
+          panel.dataset.bexPaSelfAppraisalTaskPanel === cleanTaskKey;
+        panel.hidden = !isActive;
+        panel.classList.toggle("d-none", !isActive);
+      });
+
+    if (options.remember !== false) {
+      try {
+        window.sessionStorage.setItem(
+          BEX_PA_SELF_APPRAISAL_TASK_MEMORY_KEY,
+          cleanTaskKey,
+        );
+      } catch (error) {
+        console.warn(
+          "Performance appraisal self-appraisal task could not be remembered.",
+          error,
+        );
+      }
+    }
+
+    return true;
+  }
+
+  function bexPaEnsureFocusedSelfAppraisalWorkspace() {
+    const form = bexPaElements.selfAppraisalForm;
+    const competencies = bexPaElements.selfAppraisalCompetencies;
+    const goals = bexPaElements.selfAppraisalGoals;
+    const reflectionRow =
+      bexPaElements.selfAppraisalAchievement?.closest(".row");
+
+    if (!form || !competencies || !goals || !reflectionRow) return null;
+
+    const existingShell = document.getElementById(
+      "bexPaFocusedSelfAppraisalWorkspace",
+    );
+    if (existingShell) return existingShell;
+
+    bexPaEnsureEmployeeAppraisalClarityStyles();
+
+    const shell = document.createElement("div");
+    shell.id = "bexPaFocusedSelfAppraisalWorkspace";
+
+    const switcher = document.createElement("div");
+    switcher.className = "bex-pa-self-appraisal-switcher";
+    switcher.setAttribute("role", "tablist");
+    switcher.setAttribute("aria-label", "Self-appraisal sections");
+
+    const panelHost = document.createElement("div");
+
+    shell.append(switcher, panelHost);
+    form.insertBefore(shell, competencies);
+
+    [
+      ["assessment", "Assessment Areas", "bi bi-ui-checks-grid", competencies],
+      ["goals", "Goals & Achievements", "bi bi-bullseye", goals],
+      ["reflection", "Reflection & Summary", "bi bi-chat-square-text", reflectionRow],
+    ].forEach(([key, label, iconClass, node]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "bex-pa-self-appraisal-tab";
+      button.dataset.bexPaSelfAppraisalTaskButton = key;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-selected", "false");
+      button.innerHTML = `
+        <i class="${iconClass}" aria-hidden="true"></i>
+        <span>${label}</span>
+      `;
+
+      const panel = document.createElement("section");
+      panel.className = "bex-pa-self-appraisal-panel d-none";
+      panel.dataset.bexPaSelfAppraisalTaskPanel = key;
+      panel.setAttribute("role", "tabpanel");
+      panel.hidden = true;
+      panel.appendChild(node);
+
+      button.addEventListener("click", () => {
+        bexPaSetFocusedSelfAppraisalTask(key);
+      });
+
+      switcher.appendChild(button);
+      panelHost.appendChild(panel);
+    });
+
+    return shell;
+  }
+
+  function bexPaApplyEmployeeSelfAppraisalClarity() {
+    if (!bexPaIsEmployeeMode()) return;
+
+    const shell = bexPaEnsureFocusedSelfAppraisalWorkspace();
+    if (!shell) return;
+
+    const sectionDescription =
+      bexPaElements.selfAppraisalSection?.querySelector(
+        "#bexPaSelfAppraisalMeta + p",
+      );
+    if (sectionDescription) {
+      sectionDescription.textContent =
+        "Work through Assessment Areas, Goals & Achievements, then Reflection & Summary before submitting your appraisal.";
+    }
+
+    const summaryLabel = document.querySelector(
+      'label[for="bexPaSelfAppraisalAchievement"]',
+    );
+    const summaryHelp = summaryLabel?.nextElementSibling;
+
+    if (summaryLabel) {
+      summaryLabel.textContent =
+        "Achievements, challenges & suggestions";
+    }
+    if (summaryHelp?.matches("p")) {
+      summaryHelp.textContent =
+        "Summarise your key achievements, challenges encountered, and suggestions or development needs for the next review period.";
+    }
+    if (bexPaElements.selfAppraisalAchievement) {
+      bexPaElements.selfAppraisalAchievement.placeholder =
+        "Summarise achievements, challenges, and suggestions or development needs.";
+    }
+
+    bexPaSetFocusedSelfAppraisalTask(
+      bexPaGetRememberedSelfAppraisalTask(),
+      { remember: false },
+    );
   }
 
   const bexPaElements = {
@@ -3430,6 +4203,10 @@
         BEX_PA_WORKSPACE_MEMORY_KEY,
         sectionName,
       );
+      window.sessionStorage.setItem(
+        `${BEX_PA_WORKSPACE_MEMORY_KEY}:${bexPaGetActiveMode() || "unknown"}`,
+        sectionName,
+      );
     } catch (error) {
       console.warn(
         "Performance appraisal workspace section could not be saved.",
@@ -3471,6 +4248,24 @@
     detailSections.forEach((section) => {
       section?.classList.add("d-none");
     });
+
+    if (sectionName === "employeeAppraisals") {
+      if (bexPaIsEmployeeMode()) {
+        const currentAppraisal =
+          bexPaGetDirectEmployeeAppraisal();
+
+        if (currentAppraisal) {
+          bexPaOpenSelfAppraisal(
+            currentAppraisal.id,
+            { scroll: false },
+          );
+        } else {
+          bexPaSetEmployeeAppraisalRegisterVisible(true);
+        }
+      } else {
+        bexPaSetEmployeeAppraisalRegisterVisible(true);
+      }
+    }
 
     if (
       sectionName === "reports" &&
@@ -3563,7 +4358,10 @@
     });
   }
 
-  function bexPaGetRememberedSection() {
+  function bexPaGetRememberedSection(
+    mode = bexPaGetActiveMode(),
+    fallbackSection = "overview",
+  ) {
     const allowedSections = [
       "overview",
       "cycles",
@@ -3574,27 +4372,29 @@
     ];
 
     try {
-      const rememberedSection =
+      const scopedRememberedSection =
         window.sessionStorage.getItem(
-          BEX_PA_WORKSPACE_MEMORY_KEY,
+          `${BEX_PA_WORKSPACE_MEMORY_KEY}:${String(mode || "unknown")}`,
         );
+      const rememberedSection =
+        scopedRememberedSection;
 
       if (!allowedSections.includes(rememberedSection)) {
-        return "overview";
+        return fallbackSection;
       }
 
       if (
         rememberedSection === "templates" &&
         !bexPaCanManageTemplates()
       ) {
-        return "overview";
+        return fallbackSection;
       }
 
       if (
         rememberedSection === "reports" &&
         !bexPaCanViewReports()
       ) {
-        return "overview";
+        return fallbackSection;
       }
 
       return rememberedSection;
@@ -3604,7 +4404,7 @@
         error,
       );
 
-      return "overview";
+      return fallbackSection;
     }
   }
 
@@ -11845,7 +12645,7 @@
   }
 
   function bexPaRenderHrAppraisalReview(appraisal) {
-    if (bexPaGetCurrentPersona() !== "hr-admin") {
+    if (!bexPaIsHrAdminMode()) {
       return;
     }
 
@@ -12423,7 +13223,7 @@
   }
 
   function bexPaOpenHrAppraisalReview(appraisalId) {
-    if (bexPaGetCurrentPersona() !== "hr-admin") {
+    if (!bexPaIsHrAdminMode()) {
       return;
     }
 
@@ -13080,7 +13880,7 @@
   async function bexPaCompleteEligibleCycles() {
     if (
       bexPaIsIntegratedPersistenceContext() &&
-      bexPaGetCurrentPersona() !== "hr-admin"
+      !bexPaIsHrAdminMode()
     ) {
       return false;
     }
@@ -13307,7 +14107,7 @@
   }
 
   async function bexPaFinaliseHrAppraisal() {
-    if (bexPaGetCurrentPersona() !== "hr-admin") {
+    if (!bexPaIsHrAdminMode()) {
       return;
     }
 
@@ -14338,6 +15138,10 @@
       "d-none",
       isSubmitted,
     );
+
+    // BEXHR EMPLOYEE APPRAISAL CLARITY - US-06
+    bexPaApplyEmployeeSelfAppraisalClarity();
+
     bexPaElements.selfAppraisalSection.classList.remove(
       "d-none",
     );
@@ -14348,10 +15152,11 @@
     bexPaElements.selfAppraisalSection?.classList.add(
       "d-none",
     );
+    bexPaSetEmployeeAppraisalRegisterVisible(true);
     bexPaClearSelfAppraisalError();
   }
 
-  function bexPaOpenSelfAppraisal(appraisalId) {
+  function bexPaOpenSelfAppraisal(appraisalId, options = {}) {
     const appraisal =
       bexPaGetEligibleEmployeeAppraisals().find(
         (existingAppraisal) =>
@@ -14363,11 +15168,26 @@
     }
 
     bexPaClearSelfAppraisalError();
-    bexPaRenderSelfAppraisalDetail(appraisal);
-    bexPaElements.selfAppraisalSection.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    bexPaSetEmployeeAppraisalRegisterVisible(false);
+
+    const isAlreadyOpen =
+      bexPaState.editingSelfAppraisalId === appraisal.id &&
+      bexPaElements.selfAppraisalSection &&
+      bexPaElements.selfAppraisalForm;
+
+    if (isAlreadyOpen) {
+      bexPaElements.selfAppraisalSection.classList.remove("d-none");
+      bexPaApplyEmployeeSelfAppraisalClarity();
+    } else {
+      bexPaRenderSelfAppraisalDetail(appraisal);
+    }
+
+    if (options.scroll !== false) {
+      bexPaElements.selfAppraisalSection.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
   }
 
   function bexPaValidateSelfAppraisalDraft(
@@ -14378,7 +15198,7 @@
     ratingScale,
   ) {
     if (!selfAppraisal.employeeAchievement.trim()) {
-      return "Enter your Employee's Achievement before saving the draft.";
+      return "Complete your achievements, challenges and suggestions summary before saving the draft.";
     }
 
     if (
@@ -14891,7 +15711,7 @@
           actions.appendChild(openButton);
         }
 
-        if (bexPaGetCurrentPersona() === "hr-admin") {
+        if (bexPaIsHrAdminMode()) {
           const reviewButton = document.createElement("button");
 
           reviewButton.type = "button";
@@ -15160,6 +15980,9 @@
           bexPaElements.integratedWorkspaceLabel.textContent =
             workspace;
         }
+
+        bexPaUpdateIntegratedWorkspaceLabel();
+        bexPaEnsureIntegratedWorkspaceSwitchButton();
       }
     }
 
@@ -15669,10 +16492,17 @@
     const isPageRefresh =
       navigationEntry?.type === "reload";
 
+    const initialMode = bexPaGetActiveMode();
+    const defaultSection =
+      bexPaGetDefaultSectionForMode(initialMode);
+
     bexPaShowSection(
       isPageRefresh
-        ? bexPaGetRememberedSection()
-        : "overview",
+        ? bexPaGetRememberedSection(
+          initialMode,
+          defaultSection,
+        )
+        : defaultSection,
     );
 
     // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING

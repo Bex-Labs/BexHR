@@ -3936,6 +3936,11 @@ function publishManagerPerformanceAppraisalContext(
   const isEmployeeMode =
     mode === "employee";
 
+  // BEXHR PA WORKSPACE SWITCHING - US-06 DEFECT CLOSEOUT
+  // Keep the signed-in manager's existing reporting capability in context even
+  // when they enter through My Appraisal. Active mode still controls what the
+  // PA UI can do; this only lets the same PA page switch between permitted
+  // personal and manager-review workspaces without returning to the dashboard.
   const performanceAppraisalContext = {
     source: "bexhr",
     sourceDashboard: "manager-dashboard",
@@ -3944,39 +3949,31 @@ function publishManagerPerformanceAppraisalContext(
       ? "employee"
       : "primary-manager",
 
-    managerEmployeeId: isEmployeeMode
-      ? ""
-      : employeeId,
-
     employeeId,
+    managerEmployeeId: employeeId,
 
-    managedEmployeeIds: isEmployeeMode
-      ? []
-      : [
-        ...new Set(
-          primaryEmployees.map(
-            (employee) => employee.id,
-          ),
+    managedEmployeeIds: [
+      ...new Set(
+        primaryEmployees.map(
+          (employee) => employee.id,
         ),
-      ],
+      ),
+    ],
 
     availableEmployees: isEmployeeMode
       ? []
       : primaryEmployees,
+    managerAvailableEmployees: primaryEmployees,
 
-    secondaryEmployeeIds: isEmployeeMode
-      ? []
-      : [
-        ...new Set(
-          secondaryEmployees.map(
-            (employee) => employee.id,
-          ),
+    secondaryEmployeeIds: [
+      ...new Set(
+        secondaryEmployees.map(
+          (employee) => employee.id,
         ),
-      ],
+      ),
+    ],
 
-    secondaryEmployees: isEmployeeMode
-      ? []
-      : secondaryEmployees,
+    secondaryEmployees,
   };
 
   window.BexHrPerformanceAppraisalContext =

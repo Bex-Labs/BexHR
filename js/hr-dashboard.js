@@ -25565,7 +25565,99 @@ function getPerformanceAppraisalDepartmentId(departmentName = "") {
   ).trim();
 }
 
-function publishHrPerformanceAppraisalContext({ mode = "hr-admin" } = {}) {
+// BEXHR PA WORKSPACE SWITCHING - US-06 DEFECT CLOSEOUT
+// Build one capability-rich PA context so HR users can move between their
+// permitted My Appraisal, Manager Reviews and HR workspaces without leaving PA.
+// Existing role checks remain authoritative; this only carries the already
+// resolved tenant-scoped people/reporting context into the standalone module.
+function getHrPerformanceAppraisalAvailableEmployees() {
+  return (Array.isArray(state.employees) ? state.employees : [])
+    .map((employee) => {
+      const employeeName = [
+        employee.first_name,
+        employee.middle_name,
+        employee.last_name,
+      ]
+        .map((namePart) => String(namePart || "").trim())
+        .filter(Boolean)
+        .join(" ");
+
+      return {
+        id: String(employee.id || "").trim(),
+        name:
+          employeeName ||
+          String(
+            employee.full_name ||
+            employee.fullName ||
+            employee.name ||
+            employee.work_email ||
+            "Employee",
+          ).trim(),
+        department: String(employee.department || "").trim(),
+        departmentId:
+          String(
+            employee.department_id ||
+            employee.departmentId ||
+            "",
+          ).trim() ||
+          getPerformanceAppraisalDepartmentId(employee.department),
+        jobTitle: String(
+          employee.job_title ||
+          employee.jobTitle ||
+          "",
+        ).trim(),
+      };
+    })
+    .filter((employee) => employee.id && employee.name)
+    .sort((firstEmployee, secondEmployee) =>
+      firstEmployee.name.localeCompare(secondEmployee.name),
+    );
+}
+
+function getHrPerformanceAppraisalManagerContext(managerScope = null) {
+  const allEmployees = getHrPerformanceAppraisalAvailableEmployees();
+  const managerEmployeeId = String(
+    managerScope?.managerEmployeeId || "",
+  ).trim();
+
+  const primaryEmployeeIds = [
+    ...new Set(
+      Array.isArray(managerScope?.primaryEmployeeIds)
+        ? managerScope.primaryEmployeeIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+        : [],
+    ),
+  ];
+
+  const secondaryEmployeeIds = [
+    ...new Set(
+      Array.isArray(managerScope?.secondaryEmployeeIds)
+        ? managerScope.secondaryEmployeeIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+        : [],
+    ),
+  ];
+
+  const primaryEmployeeIdSet = new Set(primaryEmployeeIds);
+  const secondaryEmployeeIdSet = new Set(secondaryEmployeeIds);
+
+  return {
+    managerEmployeeId,
+    primaryEmployeeIds,
+    secondaryEmployeeIds,
+    primaryEmployees: allEmployees.filter((employee) =>
+      primaryEmployeeIdSet.has(employee.id),
+    ),
+    secondaryEmployees: allEmployees.filter((employee) =>
+      secondaryEmployeeIdSet.has(employee.id),
+    ),
+    allEmployees,
+  };
+}
+
+function publishHrPerformanceAppraisalContext({ mode = "hr-admin", managerScope = null } = {}) {
   const isHrAdmin =
     canCurrentUserMaintainOrganizationSetupData();
 
@@ -25600,48 +25692,16 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin" } = {}) {
       return false;
     }
 
-    const hrStandardEmployees =
-      mode === "hr-standard" && isHrStandard
-        ? (Array.isArray(state.employees)
-          ? state.employees
-          : []
-        )
-          .map((employee) => ({
-            id: String(
-              employee?.id || "",
-            ).trim(),
-
-            name: String(
-              employee?.full_name ||
-              employee?.fullName ||
-              employee?.name ||
-              employee?.work_email ||
-              "Employee",
-            ).trim(),
-
-            department: String(
-              employee?.department ||
-              "",
-            ).trim(),
-
-            departmentId: String(
-              employee?.department_id ||
-              employee?.departmentId ||
-              "",
-            ).trim(),
-
-            jobTitle: String(
-              employee?.job_title ||
-              employee?.jobTitle ||
-              "",
-            ).trim(),
-          }))
-          .filter(
-            (employee) =>
-              employee.id &&
-              employee.name,
-          )
-        : [];
+    const managerContext =
+      getHrPerformanceAppraisalManagerContext(managerScope);
+    const availableDepartments = Array.isArray(state.organizationDepartments)
+      ? state.organizationDepartments
+        .map((department) => ({
+          id: String(department?.id || "").trim(),
+          name: String(department?.department_name || "").trim(),
+        }))
+        .filter((department) => department.id && department.name)
+      : [];
 
     const performanceAppraisalContext = {
       source: "bexhr",
@@ -25652,10 +25712,25 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin" } = {}) {
           ? "hr-standard"
           : "employee",
       hrStandardCapability: isHrStandard,
+      hrAdminCapability: isHrAdmin,
       employeeId,
-      managerEmployeeId: "",
-      managedEmployeeIds: [],
-      availableEmployees: hrStandardEmployees,
+
+      managerEmployeeId: managerContext.managerEmployeeId,
+      managedEmployeeIds: managerContext.primaryEmployeeIds,
+      managerAvailableEmployees: managerContext.primaryEmployees,
+      secondaryEmployeeIds: managerContext.secondaryEmployeeIds,
+      secondaryEmployees: managerContext.secondaryEmployees,
+
+      availableEmployees:
+        mode === "hr-standard"
+          ? managerContext.allEmployees
+          : [],
+      hrAvailableEmployees: managerContext.allEmployees,
+      availableDepartments,
+      canonicalDepartments:
+        Array.isArray(state.organizationDepartments)
+          ? state.organizationDepartments
+          : [],
     };
 
     window.BexHrPerformanceAppraisalContext = performanceAppraisalContext;
@@ -25677,55 +25752,10 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin" } = {}) {
     return false;
   }
 
-  const availableEmployees = (
-    Array.isArray(state.employees)
-      ? state.employees
-      : []
-  )
-    .map((employee) => {
-      const employeeName = [
-        employee.first_name,
-        employee.middle_name,
-        employee.last_name,
-      ]
-        .map((namePart) =>
-          String(namePart || "").trim(),
-        )
-        .filter(Boolean)
-        .join(" ");
-
-      return {
-        id: String(
-          employee.id || "",
-        ).trim(),
-
-        name:
-          employeeName ||
-          String(
-            employee.work_email ||
-            "Employee",
-          ).trim(),
-
-        department: String(
-          employee.department || "",
-        ).trim(),
-
-        departmentId:
-          getPerformanceAppraisalDepartmentId(
-            employee.department,
-          ),
-
-        jobTitle: String(
-          employee.job_title || "",
-        ).trim(),
-      };
-    })
-    .filter((employee) => employee.id)
-    .sort((firstEmployee, secondEmployee) =>
-      firstEmployee.name.localeCompare(
-        secondEmployee.name,
-      ),
-    );
+  const availableEmployees =
+    getHrPerformanceAppraisalAvailableEmployees();
+  const managerContext =
+    getHrPerformanceAppraisalManagerContext(managerScope);
 
   const availableDepartments = Array.isArray(state.organizationDepartments)
     ? state.organizationDepartments
@@ -25754,11 +25784,22 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin" } = {}) {
     issuedAt: new Date().toISOString(),
     persona: "hr-admin",
     hrAdminCapability: true,
+    hrStandardCapability: false,
     employeeId: currentEmployeeId,
-    managerEmployeeId: "",
-    managedEmployeeIds: [],
+
+    managerEmployeeId: managerContext.managerEmployeeId,
+    managedEmployeeIds: managerContext.primaryEmployeeIds,
+    managerAvailableEmployees: managerContext.primaryEmployees,
+    secondaryEmployeeIds: managerContext.secondaryEmployeeIds,
+    secondaryEmployees: managerContext.secondaryEmployees,
+
     availableEmployees,
+    hrAvailableEmployees: availableEmployees,
     availableDepartments,
+    canonicalDepartments:
+      Array.isArray(state.organizationDepartments)
+        ? state.organizationDepartments
+        : [],
   };
 
   window.BexHrPerformanceAppraisalContext =
@@ -25853,11 +25894,35 @@ function publishHrPerformanceAppraisalManagerContext(
       ),
     );
 
+  const isHrAdmin =
+    canCurrentUserMaintainOrganizationSetupData();
+  const isHrStandard =
+    state.currentProfile?.is_active === true &&
+    normaliseHrBusinessRole(
+      state.currentProfile?.role || "",
+    ) === "hr" &&
+    normaliseHrBusinessRole(
+      state.currentProfile?.hr_access_level || "standard",
+    ) !== "tenant_admin" &&
+    Boolean(String(state.currentProfile?.tenant_id || "").trim());
+  const hrAvailableEmployees =
+    getHrPerformanceAppraisalAvailableEmployees();
+  const availableDepartments = Array.isArray(state.organizationDepartments)
+    ? state.organizationDepartments
+      .map((department) => ({
+        id: String(department?.id || "").trim(),
+        name: String(department?.department_name || "").trim(),
+      }))
+      .filter((department) => department.id && department.name)
+    : [];
+
   const performanceAppraisalContext = {
     source: "bexhr",
     sourceDashboard: "hr-dashboard",
     issuedAt: new Date().toISOString(),
     persona: "primary-manager",
+    hrAdminCapability: isHrAdmin,
+    hrStandardCapability: isHrStandard,
 
     employeeId,
     managerEmployeeId,
@@ -25867,11 +25932,14 @@ function publishHrPerformanceAppraisalManagerContext(
 
     availableEmployees:
       primaryEmployees,
+    managerAvailableEmployees:
+      primaryEmployees,
 
     secondaryEmployeeIds,
-
     secondaryEmployees,
 
+    hrAvailableEmployees,
+    availableDepartments,
     canonicalDepartments:
       Array.isArray(state.organizationDepartments)
         ? state.organizationDepartments
@@ -26168,7 +26236,7 @@ async function showHrPerformanceAppraisalChooser() {
     "click",
     () => {
       closeChooser();
-      openHrPerformanceAppraisal("employee");
+      openHrPerformanceAppraisal("employee", managerScope);
     },
   );
 
@@ -26223,6 +26291,7 @@ async function showHrPerformanceAppraisalChooser() {
           mode: isHrAdmin
             ? "hr-admin"
             : "hr-standard",
+          managerScope,
         })
       ) {
         return;
@@ -26295,7 +26364,7 @@ async function ensureHrPerformanceAppraisalDepartmentsLoaded() {
   }
 }
 
-function openHrPerformanceAppraisal(mode = "auto") {
+function openHrPerformanceAppraisal(mode = "auto", managerScope = null) {
   const isHrAdmin =
     canCurrentUserMaintainOrganizationSetupData();
 
@@ -26310,7 +26379,10 @@ function openHrPerformanceAppraisal(mode = "auto") {
       return;
     }
 
-    publishHrPerformanceAppraisalContext({ mode: "employee" });
+    publishHrPerformanceAppraisalContext({
+      mode: "employee",
+      managerScope,
+    });
     window.location.assign(
       "features/performance-appraisal/performance-appraisal.html",
     );
