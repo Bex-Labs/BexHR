@@ -23,7 +23,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     state.currentUser = access.session.user;
     state.currentProfile = access.profile;
 
+    // BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+    // Start signing/preloading the authenticated manager image in parallel with
+    // the latest profile refresh. renderManagerProfile() reuses the same cached
+    // or in-flight URL instead of starting another Storage signing request.
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
+
     await loadLatestManagerProfile();
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
 
     // ALPATECH TENANT BRANDING - MANAGER STEP 1D
     // Apply final tenant-scoped Manager Dashboard branding after the signed-in
@@ -96,6 +103,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 const PROFILE_IMAGES_BUCKET = "profile-images";
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+// Reuse the same short-lived signed URL during this browser tab session so
+// role/workspace switches do not generate a brand-new private Storage URL on
+// every page load. Cache entries remain user + file-path scoped and expire
+// before the 1-hour signed URL itself expires.
+const PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX =
+  "bexhr:profile-image:signed-url:v1";
+const PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS = 50 * 60 * 1000;
+const profileImageSignedUrlPromises = new Map();
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Stores only the active Manager workspace tab for refresh recovery.
 // No employee, leave, decision, comment, or team data is stored.
@@ -507,6 +523,8 @@ function clearRememberedManagerWorkspace() {
   try {
     sessionStorage.removeItem(getManagerWorkspaceMemoryKey());
     sessionStorage.removeItem(MANAGER_DASHBOARD_WORKSPACE_BOOT_KEY);
+    sessionStorage.removeItem(getManagerFocusedTaskMemoryKey("team-task"));
+    sessionStorage.removeItem(getManagerFocusedTaskMemoryKey("self-service-task"));
   } catch (error) {
     console.warn("Manager workspace memory could not be cleared.", error);
   }
@@ -566,16 +584,11 @@ function revealRestoredManagerWorkspace() {
 function restoreManagerWorkspaceAfterRefresh() {
   const workspace = getRememberedManagerWorkspace();
 
-  switchManagerWorkspace(workspace);
-
-  // MANAGER PAYSLIP EMAIL DEEP LINK ROUTING - STEP 3A
-  // If a payslip email link or remembered workspace opens My Self-Service,
-  // initialise the shared self-service module immediately. Without this,
-  // the Manager workspace can show the shell but not load Payroll/Leave data.
   if (workspace === "selfservice") {
-    initManagerSelfServiceOnFirstOpen();
+    void initManagerSelfServiceOnFirstOpen(getRememberedManagerSelfServiceTask());
   }
 
+  switchManagerWorkspace(workspace);
   forceManagerDashboardToTopAfterRefresh();
 
   window.requestAnimationFrame(() => {
@@ -886,38 +899,9 @@ function renderManagerTeamWorkspaceSummary() {
 // Open one existing Team card and place its heading near the top of the viewport.
 // Existing collapse helpers and panel IDs remain the source of truth.
 function openManagerTeamWorkspacePanel(panelKey = "") {
-  const panelMap = {
-    pending: {
-      button: state.dom.togglePendingRequestsCardBtn,
-      panel: state.dom.pendingRequestsCardCollapse,
-      header: state.dom.pendingRequestsCardHeader,
-    },
-    processed: {
-      button: state.dom.toggleProcessedRequestsCardBtn,
-      panel: state.dom.processedRequestsCardCollapse,
-      header: state.dom.processedRequestsCardHeader,
-    },
-    schedule: {
-      button: state.dom.toggleTeamScheduleCardBtn,
-      panel: state.dom.teamScheduleCardCollapse,
-      header: state.dom.teamScheduleCardHeader,
-    },
-    employees: {
-      button: state.dom.toggleAssignedEmployeeRecordsCardBtn,
-      panel: state.dom.assignedEmployeeRecordsCardCollapse,
-      header: state.dom.assignedEmployeeRecordsCardHeader,
-    },
-  };
-
-  const target = panelMap[String(panelKey || "").trim().toLowerCase()];
-  if (!target?.button || !target?.panel || !target?.header) return;
-
-  setManagerCardExpanded(target.button, target.panel, true);
-
-  window.requestAnimationFrame(() => {
-    const card = target.header.closest(".dashboard-section-card") || target.header;
-    const top = card.getBoundingClientRect().top + window.scrollY - 20;
-    window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+  setManagerTeamTask(panelKey, {
+    remember: true,
+    scroll: true,
   });
 }
 
@@ -988,34 +972,15 @@ function bindManagerCardCollapseToggle(button, panel, header) {
 // After a manager decision, show the audit-history card automatically.
 // This confirms the decision moved from Pending Requests into Processed Decisions.
 function openProcessedRequestsCardAfterDecision() {
-  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1I-B
-  // After a decision, show the processed audit card exactly from the top:
-  // card heading visible, newest processed row visible, and inner scrollbar reset.
-  setManagerCardExpanded(
-    state.dom.toggleProcessedRequestsCardBtn,
-    state.dom.processedRequestsCardCollapse,
-    true,
-  );
+  // R-02 focused flow: after a decision, move directly to Decision History.
+  setManagerTeamTask("processed", {
+    remember: true,
+    scroll: true,
+  });
 
   if (state.dom.processedRequestsTableWrapper) {
     state.dom.processedRequestsTableWrapper.scrollTop = 0;
   }
-
-  window.requestAnimationFrame(() => {
-    const targetCard =
-      state.dom.processedRequestsCardHeader?.closest(".dashboard-section-card") ||
-      state.dom.processedRequestsCardHeader;
-
-    if (!targetCard) return;
-
-    const topWithBreathingRoom =
-      targetCard.getBoundingClientRect().top + window.scrollY - 24;
-
-    window.scrollTo({
-      top: Math.max(topWithBreathingRoom, 0),
-      behavior: "smooth",
-    });
-  });
 }
 
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
@@ -1428,6 +1393,7 @@ function bindManagerOperatingGuideFocusManagement() {
 
 function bindEvents() {
   bindManagerOperatingGuideFocusManagement();
+  bindManagerFocusedNavigation();
   state.dom.sidebarManagerPerformanceAppraisalBtn?.addEventListener(
     "click",
     () => {
@@ -1467,8 +1433,8 @@ function bindEvents() {
   // Data loads lazily on first open; subsequent opens simply show the section.
   state.dom.managerTabSelfServiceBtn?.addEventListener("click", () => {
     rememberManagerWorkspace("selfservice");
+    void initManagerSelfServiceOnFirstOpen(getRememberedManagerSelfServiceTask());
     switchManagerWorkspace("selfservice");
-    initManagerSelfServiceOnFirstOpen();
   });
 
   state.dom.managerProfileForm?.addEventListener("submit", async (event) => {
@@ -2245,6 +2211,11 @@ function navigateFromManagerGuide(target = "dashboard") {
       return;
     }
 
+    if (target === "performance") {
+      openManagerPerformanceAppraisal();
+      return;
+    }
+
     if (target === "selfservice") {
       state.dom.managerTabSelfServiceBtn?.click();
       return;
@@ -2262,39 +2233,12 @@ function navigateFromManagerGuide(target = "dashboard") {
       return;
     }
 
-    const destinationMap = {
-      pending: {
-        toggle: state.dom.togglePendingRequestsCardBtn,
-        panel: state.dom.pendingRequestsCardCollapse,
-        header: state.dom.pendingRequestsCardHeader,
-      },
-      processed: {
-        toggle: state.dom.toggleProcessedRequestsCardBtn,
-        panel: state.dom.processedRequestsCardCollapse,
-        header: state.dom.processedRequestsCardHeader,
-      },
-      schedule: {
-        toggle: state.dom.toggleTeamScheduleCardBtn,
-        panel: state.dom.teamScheduleCardCollapse,
-        header: state.dom.teamScheduleCardHeader,
-      },
-      employees: {
-        toggle: state.dom.toggleAssignedEmployeeRecordsCardBtn,
-        panel: state.dom.assignedEmployeeRecordsCardCollapse,
-        header: state.dom.assignedEmployeeRecordsCardHeader,
-      },
-    };
-
-    const destination = destinationMap[target];
-    if (!destination) return;
-
-    openManagerGuideDestinationPanel(destination.toggle, destination.panel);
-
-    window.requestAnimationFrame(() => {
-      const card = destination.header?.closest(".dashboard-section-card") || destination.header;
-      card?.scrollIntoView({ behavior: "smooth", block: "start" });
-      destination.toggle?.focus({ preventScroll: true });
-    });
+    if (Object.hasOwn(MANAGER_TEAM_TASKS, target)) {
+      setManagerTeamTask(target, {
+        remember: true,
+        scroll: true,
+      });
+    }
   }, 220);
 }
 
@@ -2639,6 +2583,293 @@ ${errorMessage}`);
   }
 }
 
+// =========================================================
+// BEXHR UNIFIED FOCUSED WORKSPACE CORRECTION - R-02.1/R-02.2
+// Selected Manager tasks now start directly below the application header,
+// and shared Self-Service is prepared before it becomes visible.
+// MANAGER FOCUSED TASK NAVIGATION - R-02
+// Team and My Self-Service now follow the HR navigation model:
+// parent disclosure -> exact task -> one job per screen.
+// Existing cards, IDs, handlers, EmployeeSelfService, leave authority,
+// reporting-line visibility, PA capability checks, Supabase, and RLS remain authoritative.
+// =========================================================
+const MANAGER_TEAM_TASK_DEFAULT = "pending";
+const MANAGER_SELF_SERVICE_TASK_DEFAULT = "payroll";
+
+const MANAGER_TEAM_TASKS = Object.freeze({
+  pending: {
+    title: "Pending Leave Requests",
+    subtitle: "Review requests that need your attention and take only the actions allowed by your current Manager authority.",
+    moduleLabel: "Pending Requests",
+    headerId: "pendingRequestsCardHeader",
+    toggleId: "togglePendingRequestsCardBtn",
+    panelId: "pendingRequestsCardCollapse",
+    sidebarId: "sidebarManagerTeamPendingBtn",
+  },
+  processed: {
+    title: "Decision History",
+    subtitle: "Review completed leave outcomes and the available decision audit history.",
+    moduleLabel: "Decision History",
+    headerId: "processedRequestsCardHeader",
+    toggleId: "toggleProcessedRequestsCardBtn",
+    panelId: "processedRequestsCardCollapse",
+    sidebarId: "sidebarManagerTeamProcessedBtn",
+  },
+  schedule: {
+    title: "Team Leave Schedule",
+    subtitle: "Review approved absences, overlaps, and operational coverage for employees in your reporting scope.",
+    moduleLabel: "Team Schedule",
+    headerId: "teamScheduleCardHeader",
+    toggleId: "toggleTeamScheduleCardBtn",
+    panelId: "teamScheduleCardCollapse",
+    sidebarId: "sidebarManagerTeamScheduleBtn",
+  },
+  employees: {
+    title: "Assigned Employee Records",
+    subtitle: "Find employees in your reporting coverage and review the role-appropriate records available to you.",
+    moduleLabel: "Employee Records",
+    headerId: "assignedEmployeeRecordsCardHeader",
+    toggleId: "toggleAssignedEmployeeRecordsCardBtn",
+    panelId: "assignedEmployeeRecordsCardCollapse",
+    sidebarId: "sidebarManagerTeamEmployeesBtn",
+  },
+});
+
+const MANAGER_SELF_SERVICE_TASKS = Object.freeze({
+  leave: {
+    title: "My Leave",
+    subtitle: "Manage your own leave request, balances, latest decision, and leave history.",
+    moduleLabel: "Leave",
+    navButtonId: "ssNavLeaveBtn",
+    sectionId: "ssLeaveSection",
+    sidebarId: "sidebarManagerSelfServiceLeaveBtn",
+  },
+  payroll: {
+    title: "My Payroll",
+    subtitle: "Review your authorised payroll summary, payroll history, and payslip records.",
+    moduleLabel: "My Payroll",
+    navButtonId: "ssNavPayrollBtn",
+    sectionId: "ssPayrollSection",
+    sidebarId: "sidebarManagerSelfServicePayrollBtn",
+  },
+});
+
+function getManagerFocusedTaskMemoryKey(kind) {
+  return `${getManagerWorkspaceMemoryKey()}:${kind}`;
+}
+
+function rememberManagerFocusedTask(kind, taskKey) {
+  try {
+    sessionStorage.setItem(getManagerFocusedTaskMemoryKey(kind), taskKey);
+  } catch (error) {
+    console.warn("Manager focused task memory could not be saved.", error);
+  }
+}
+
+function getRequestedManagerSelfServiceTaskFromUrl() {
+  try {
+    const section = String(
+      new URLSearchParams(window.location.search || "").get("section") || "",
+    ).trim().toLowerCase();
+
+    return Object.hasOwn(MANAGER_SELF_SERVICE_TASKS, section) ? section : "";
+  } catch (error) {
+    console.warn("Manager self-service URL task could not be resolved.", error);
+    return "";
+  }
+}
+
+function getRememberedManagerFocusedTask(kind, taskMap, fallback) {
+  try {
+    const remembered = String(
+      sessionStorage.getItem(getManagerFocusedTaskMemoryKey(kind)) || "",
+    ).trim().toLowerCase();
+
+    return Object.hasOwn(taskMap, remembered) ? remembered : fallback;
+  } catch (error) {
+    console.warn("Manager focused task memory could not be read.", error);
+    return fallback;
+  }
+}
+
+function getRememberedManagerTeamTask() {
+  return getRememberedManagerFocusedTask(
+    "team-task",
+    MANAGER_TEAM_TASKS,
+    MANAGER_TEAM_TASK_DEFAULT,
+  );
+}
+
+function getRememberedManagerSelfServiceTask() {
+  const requestedTask = getRequestedManagerSelfServiceTaskFromUrl();
+  if (requestedTask) return requestedTask;
+
+  return getRememberedManagerFocusedTask(
+    "self-service-task",
+    MANAGER_SELF_SERVICE_TASKS,
+    MANAGER_SELF_SERVICE_TASK_DEFAULT,
+  );
+}
+
+function setManagerSidebarGroupExpanded(groupKey = "") {
+  document.querySelectorAll("[data-manager-sidebar-group]").forEach((group) => {
+    const key = String(group.dataset.managerSidebarGroup || "").trim();
+    const toggle = group.querySelector(".bexhr-manager-sidebar-group-toggle");
+    const subnav = group.querySelector(".bexhr-manager-sidebar-subnav");
+    const expanded = Boolean(groupKey) && key === groupKey;
+
+    toggle?.classList.toggle("is-expanded", expanded);
+    toggle?.setAttribute("aria-expanded", String(expanded));
+    if (subnav) subnav.hidden = !expanded;
+  });
+}
+
+function setManagerFocusedHeader(moduleLabel, title, subtitle) {
+  if (state.dom.managerModuleValue) {
+    state.dom.managerModuleValue.textContent = moduleLabel;
+  }
+  if (state.dom.managerModernPageTitle) {
+    state.dom.managerModernPageTitle.textContent = title;
+  }
+  if (state.dom.managerModernPageSubtitle) {
+    state.dom.managerModernPageSubtitle.textContent = subtitle;
+  }
+}
+
+function setManagerTeamTask(taskKey = MANAGER_TEAM_TASK_DEFAULT, options = {}) {
+  const normalised = String(taskKey || "").trim().toLowerCase();
+  const resolvedKey = Object.hasOwn(MANAGER_TEAM_TASKS, normalised)
+    ? normalised
+    : MANAGER_TEAM_TASK_DEFAULT;
+  const config = MANAGER_TEAM_TASKS[resolvedKey];
+  const shouldRemember = options.remember !== false;
+
+  state.dom.managerTeamSection?.classList.add("manager-team-focused-mode");
+  if (state.dom.managerTeamSection) {
+    state.dom.managerTeamSection.dataset.managerTeamTask = resolvedKey;
+  }
+
+  Object.entries(MANAGER_TEAM_TASKS).forEach(([key, task]) => {
+    const header = document.getElementById(task.headerId);
+    const card = header?.closest(".dashboard-section-card");
+    const isActive = key === resolvedKey;
+
+    card?.classList.toggle("d-none", !isActive);
+    document.getElementById(task.sidebarId)?.classList.toggle("active", isActive);
+
+    if (isActive) {
+      setManagerCardExpanded(
+        document.getElementById(task.toggleId),
+        document.getElementById(task.panelId),
+        true,
+      );
+    }
+  });
+
+  if (shouldRemember) {
+    rememberManagerFocusedTask("team-task", resolvedKey);
+  }
+
+  setManagerSidebarGroupExpanded("team");
+  setManagerFocusedHeader(
+    "Team / " + config.moduleLabel,
+    config.title,
+    config.subtitle,
+  );
+
+  if (options.scroll === true) {
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  }
+}
+
+function syncManagerSelfServiceTaskChrome(taskKey = MANAGER_SELF_SERVICE_TASK_DEFAULT, options = {}) {
+  const normalised = String(taskKey || "").trim().toLowerCase();
+  const resolvedKey = Object.hasOwn(MANAGER_SELF_SERVICE_TASKS, normalised)
+    ? normalised
+    : MANAGER_SELF_SERVICE_TASK_DEFAULT;
+  const config = MANAGER_SELF_SERVICE_TASKS[resolvedKey];
+
+  Object.entries(MANAGER_SELF_SERVICE_TASKS).forEach(([key, task]) => {
+    document.getElementById(task.sidebarId)?.classList.toggle("active", key === resolvedKey);
+  });
+
+  if (options.remember !== false) {
+    rememberManagerFocusedTask("self-service-task", resolvedKey);
+  }
+
+  setManagerSidebarGroupExpanded("selfservice");
+  setManagerFocusedHeader(
+    `My Self-Service / ${config.moduleLabel}`,
+    config.title,
+    config.subtitle,
+  );
+
+  return resolvedKey;
+}
+
+function applyManagerSelfServiceTask(taskKey = MANAGER_SELF_SERVICE_TASK_DEFAULT, options = {}) {
+  const resolvedKey = syncManagerSelfServiceTaskChrome(taskKey, options);
+  const config = MANAGER_SELF_SERVICE_TASKS[resolvedKey];
+
+  if (typeof window.EmployeeSelfService?.show === "function") {
+    window.EmployeeSelfService.show(resolvedKey, {
+      leaveView: resolvedKey === "leave" ? "request" : undefined,
+    });
+  } else {
+    document.getElementById(config.navButtonId)?.click();
+  }
+
+  if (options.scroll === true) {
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  }
+}
+
+function bindManagerFocusedNavigation() {
+  document.querySelectorAll("[data-manager-sidebar-group]").forEach((group) => {
+    const toggle = group.querySelector(".bexhr-manager-sidebar-group-toggle");
+    if (!toggle || toggle.dataset.managerGroupBound === "true") return;
+
+    toggle.dataset.managerGroupBound = "true";
+    toggle.addEventListener("click", () => {
+      const key = String(group.dataset.managerSidebarGroup || "").trim();
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      setManagerSidebarGroupExpanded(expanded ? "" : key);
+    });
+  });
+
+  document.querySelectorAll("[data-manager-team-task]").forEach((button) => {
+    if (button.dataset.managerTaskBound === "true") return;
+    button.dataset.managerTaskBound = "true";
+
+    button.addEventListener("click", () => {
+      rememberManagerWorkspace("team");
+      switchManagerWorkspace("team");
+      setManagerTeamTask(button.dataset.managerTeamTask, { scroll: true });
+    });
+  });
+
+  document.querySelectorAll("[data-manager-selfservice-task]").forEach((button) => {
+    if (button.dataset.managerTaskBound === "true") return;
+    button.dataset.managerTaskBound = "true";
+
+    button.addEventListener("click", () => {
+      const task = String(button.dataset.managerSelfserviceTask || "").trim().toLowerCase();
+      rememberManagerWorkspace("selfservice");
+      rememberManagerFocusedTask("self-service-task", task);
+
+      // Prepare the exact sub-section while the workspace is still hidden.
+      // This prevents Payroll/Leave from flashing before the requested task.
+      void initManagerSelfServiceOnFirstOpen(task);
+      switchManagerWorkspace("selfservice");
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  });
+}
+
 function switchManagerWorkspace(workspace) {
   const isDashboard = workspace === "dashboard";
   const isProfile = workspace === "profile";
@@ -2680,7 +2911,6 @@ function switchManagerWorkspace(workspace) {
 
   renderManagerModernWorkspaceHeader(workspace);
 
-  // Profile is opened from the account control, not the desktop sidebar.
   [
     { id: "sidebarManagerDashboardBtn", active: isDashboard },
     { id: "sidebarManagerTeamBtn", active: isTeam },
@@ -2689,26 +2919,76 @@ function switchManagerWorkspace(workspace) {
     const item = document.getElementById(id);
     if (item) item.classList.toggle("active", active);
   });
+
+  if (isTeam) {
+    setManagerTeamTask(getRememberedManagerTeamTask(), {
+      remember: false,
+      scroll: false,
+    });
+    return;
+  }
+
+  if (isSelfService) {
+    syncManagerSelfServiceTaskChrome(getRememberedManagerSelfServiceTask(), {
+      remember: false,
+    });
+    return;
+  }
+
+  setManagerSidebarGroupExpanded("");
 }
 
 // EMPLOYEE SELF-SERVICE - MANAGER
 // Lazily initialises the self-service module on the first time the Manager opens
 // the Self-Service tab. Subsequent clicks only remember/switch the workspace.
 let _managerSelfServiceInitialised = false;
+let _managerSelfServiceInitPromise = null;
 
-function initManagerSelfServiceOnFirstOpen() {
-  if (_managerSelfServiceInitialised) return;
+function initManagerSelfServiceOnFirstOpen(preferredTask = getRememberedManagerSelfServiceTask()) {
+  const task = Object.hasOwn(MANAGER_SELF_SERVICE_TASKS, preferredTask)
+    ? preferredTask
+    : MANAGER_SELF_SERVICE_TASK_DEFAULT;
+
+  syncManagerSelfServiceTaskChrome(task, { remember: true });
+
+  window.EmployeeSelfService?.prepare?.(task, {
+    leaveView: task === "leave" ? "request" : undefined,
+  });
+
+  if (_managerSelfServiceInitialised) {
+    applyManagerSelfServiceTask(task, { remember: true, scroll: false });
+    return Promise.resolve();
+  }
+
+  if (_managerSelfServiceInitPromise) {
+    return _managerSelfServiceInitPromise.then(() => {
+      applyManagerSelfServiceTask(task, { remember: true, scroll: false });
+    });
+  }
 
   if (!window.EmployeeSelfService) {
     console.warn("EmployeeSelfService module is not loaded.");
-    return;
+    return Promise.resolve();
   }
 
-  _managerSelfServiceInitialised = true;
-  window.EmployeeSelfService.init(state.currentUser, state.currentProfile).catch((err) => {
-    console.error("Manager self-service init error:", err);
-    _managerSelfServiceInitialised = false; // allow retry on next open
-  });
+  _managerSelfServiceInitPromise = window.EmployeeSelfService
+    .init(state.currentUser, state.currentProfile, {
+      initialSection: task,
+      leaveView: task === "leave" ? "request" : undefined,
+    })
+    .then(() => {
+      _managerSelfServiceInitialised = true;
+      applyManagerSelfServiceTask(task, { remember: true, scroll: false });
+    })
+    .catch((err) => {
+      console.error("Manager self-service init error:", err);
+      _managerSelfServiceInitialised = false;
+    })
+    .finally(() => {
+      _managerSelfServiceInitPromise = null;
+    });
+
+  return _managerSelfServiceInitPromise;
 }
 
 function normalizeText(value) {
@@ -2924,21 +3204,105 @@ async function loadLatestManagerProfile() {
   }
 }
 
-async function getSignedProfileImageUrl(filePath) {
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+function getProfileImageSignedUrlCacheKey(filePath) {
+  const userId = String(state.currentUser?.id || "anonymous").trim();
+  return `${PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX}:${userId}:${filePath}`;
+}
+
+function getCachedProfileImageSignedUrl(filePath) {
   if (!filePath) return null;
 
   try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.storage
-      .from(PROFILE_IMAGES_BUCKET)
-      .createSignedUrl(filePath, 3600);
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    const rawValue = window.sessionStorage.getItem(cacheKey);
+    if (!rawValue) return null;
 
-    if (error) throw error;
-    return data?.signedUrl || null;
+    const cached = JSON.parse(rawValue);
+    const signedUrl = String(cached?.signedUrl || "").trim();
+    const expiresAt = Number(cached?.expiresAt || 0);
+
+    if (!signedUrl || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      window.sessionStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    return signedUrl;
   } catch (error) {
-    console.error("Error creating signed profile image URL:", error);
     return null;
   }
+}
+
+function cacheProfileImageSignedUrl(filePath, signedUrl) {
+  if (!filePath || !signedUrl) return;
+
+  try {
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    window.sessionStorage.setItem(
+      cacheKey,
+      JSON.stringify({
+        signedUrl,
+        expiresAt: Date.now() + PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS,
+      }),
+    );
+  } catch (error) {
+    // Browser storage is an optimisation only. Profile rendering must still
+    // succeed when sessionStorage is restricted or unavailable.
+  }
+}
+
+function preloadProfileImageUrl(signedUrl) {
+  if (!signedUrl) return;
+
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = signedUrl;
+  } catch (error) {
+    // Preloading is best-effort only. The visible <img> remains authoritative.
+  }
+}
+
+function primeProfileImageSignedUrl(filePath) {
+  if (!filePath) return;
+
+  void getSignedProfileImageUrl(filePath).then((signedUrl) => {
+    if (signedUrl) preloadProfileImageUrl(signedUrl);
+  });
+}
+
+async function getSignedProfileImageUrl(filePath) {
+  if (!filePath) return null;
+
+  const cachedSignedUrl = getCachedProfileImageSignedUrl(filePath);
+  if (cachedSignedUrl) return cachedSignedUrl;
+
+  const requestKey = getProfileImageSignedUrlCacheKey(filePath);
+  const existingRequest = profileImageSignedUrlPromises.get(requestKey);
+  if (existingRequest) return existingRequest;
+
+  const signedUrlRequest = (async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.storage
+        .from(PROFILE_IMAGES_BUCKET)
+        .createSignedUrl(filePath, 3600);
+
+      if (error) throw error;
+
+      const signedUrl = data?.signedUrl || null;
+      if (signedUrl) cacheProfileImageSignedUrl(filePath, signedUrl);
+      return signedUrl;
+    } catch (error) {
+      console.error("Error creating signed profile image URL:", error);
+      return null;
+    } finally {
+      profileImageSignedUrlPromises.delete(requestKey);
+    }
+  })();
+
+  profileImageSignedUrlPromises.set(requestKey, signedUrlRequest);
+  return signedUrlRequest;
 }
 
 function showPageAlert(type, message) {
@@ -5624,6 +5988,13 @@ async function loadAssignedTeamMembers() {
     const reportingLineByEmployeeId =
       buildReportingLineByEmployeeId(reportingLineRows);
 
+    // BEXHR MANAGER COVERAGE EARLY RESOLUTION - R-05
+    // The reporting-line rows already contain the manager's authoritative
+    // Primary/Secondary relationship. Resolve the visible responsibility now,
+    // before slower employee/profile/access enrichment continues below.
+    // The existing full action-centre render still runs later as the final pass.
+    renderManagerCoverageModeFromReportingLines(reportingLineByEmployeeId);
+
     const assignedEmployeeIds = [...reportingLineByEmployeeId.keys()];
 
     if (!assignedEmployeeIds.length) {
@@ -5907,6 +6278,107 @@ function setManagerActionCentreText(elementId, value) {
   if (element) {
     element.textContent = String(value ?? "");
   }
+}
+
+// BEXHR MANAGER COVERAGE EARLY RESOLUTION - R-05
+// Display-only first pass. It uses the same de-duplicated reporting-line rows
+// that later build state.teamMembers, so the label can settle as soon as the
+// reporting-line source of truth is known. No authority or data access changes.
+function renderManagerCoverageModeFromReportingLines(reportingLineByEmployeeId) {
+  const reportingLineRows = reportingLineByEmployeeId instanceof Map
+    ? [...reportingLineByEmployeeId.values()]
+    : [];
+
+  const relationshipLabels = reportingLineRows.map((row) =>
+    getReportingLineRelationshipLabel(row),
+  );
+
+  const hasPrimaryRelationship = relationshipLabels.some((label) =>
+    isPrimaryReportingManagerRelationship(label),
+  );
+
+  const hasSecondaryRelationship = relationshipLabels.some((label) =>
+    normalizeText(label).includes("secondary"),
+  );
+
+  let coverageMode = "Manager";
+  let coverageModeKey = "default";
+  let coverageDescription =
+    "Review team activity and reporting-line responsibilities.";
+  let decisionAuthority = "Reporting-line rules apply";
+
+  if (hasPrimaryRelationship && hasSecondaryRelationship) {
+    coverageMode = "Mixed Manager Coverage";
+    coverageModeKey = "mixed";
+    coverageDescription =
+      "Your scope contains Primary and Secondary reporting lines. Decision rights apply only to employees assigned to you as Primary Manager.";
+    decisionAuthority = "Primary assignments only";
+  } else if (hasSecondaryRelationship) {
+    coverageMode = "Secondary Manager";
+    coverageModeKey = "secondary";
+    coverageDescription =
+      "You can monitor leave activity and team coverage. Pending decisions remain with each employee's Primary Manager.";
+    decisionAuthority = "Primary Manager action required";
+  } else if (hasPrimaryRelationship) {
+    coverageMode = "Primary Manager";
+    coverageModeKey = "primary";
+    coverageDescription =
+      "You can review team coverage and decide pending requests for employees assigned to you as Primary Manager.";
+    decisionAuthority = "You can review and decide";
+  }
+
+  const modeBadge = document.getElementById(
+    "managerCoverageModeBadge",
+  );
+
+  if (modeBadge) {
+    modeBadge.textContent = coverageMode;
+    modeBadge.className =
+      "manager-coverage-mode-badge " +
+      `manager-coverage-mode-badge--${coverageModeKey}`;
+
+    setManagerCoverageModeLoading(false);
+  }
+
+  let headerCoverageLabel = "Manager";
+
+  if (coverageModeKey === "mixed") {
+    headerCoverageLabel = "Mixed Manager Coverage";
+  } else if (coverageModeKey === "primary") {
+    headerCoverageLabel = "Primary Manager";
+  } else if (coverageModeKey === "secondary") {
+    headerCoverageLabel = "Secondary Manager";
+  }
+
+  renderManagerHeaderResponsibilityBadge(
+    headerCoverageLabel,
+    coverageModeKey || "manager",
+  );
+
+  if (state.dom.managerProfileAuthorityText) {
+    state.dom.managerProfileAuthorityText.textContent =
+      `${coverageMode} workspace member`;
+  }
+
+  if (state.dom.managerProfileAuthorityPill) {
+    state.dom.managerProfileAuthorityPill.dataset.managerAuthority =
+      coverageModeKey;
+  }
+
+  if (state.dom.managerProfileRole) {
+    state.dom.managerProfileRole.value = coverageMode;
+    state.dom.managerProfileRole.removeAttribute("placeholder");
+  }
+
+  setManagerActionCentreText(
+    "managerCoverageModeDescription",
+    coverageDescription,
+  );
+
+  setManagerActionCentreText(
+    "managerDecisionAuthority",
+    decisionAuthority,
+  );
 }
 
 function formatManagerActionCentreDate(value) {

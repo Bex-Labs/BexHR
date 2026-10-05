@@ -13,6 +13,15 @@ try {
 ========================================================= */
 
 const PROFILE_IMAGES_BUCKET = "profile-images";
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+// Reuse the same short-lived signed URL during this browser tab session so
+// role/workspace switches do not generate a brand-new private Storage URL on
+// every page load. Cache entries remain user + file-path scoped and expire
+// before the 1-hour signed URL itself expires.
+const PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX =
+  "bexhr:profile-image:signed-url:v1";
+const PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS = 50 * 60 * 1000;
+const profileImageSignedUrlPromises = new Map();
 const PAYROLL_MODEL_GENERIC = "GENERIC";
 const PAYROLL_MODEL_REGULAR = "REGULAR";
 
@@ -171,6 +180,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     cacheDomElements();
     bindNavigationEvents();
+    bindEmployeeLeaveInlineTabs();
 
     // EMPLOYEE PROFILE CARD HEIGHT SYNC - v1.0.0
     // Presentation-only synchronisation between the natural
@@ -223,7 +233,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     state.currentUser = authResult.session.user;
     state.currentProfile = authResult.profile;
 
+    // BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+    // Start signing/preloading the already-authenticated profile image while
+    // the latest profile row is refreshed. A changed image path is primed again
+    // immediately after that refresh.
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
+
     await loadLatestEmployeeProfile();
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
 
     // ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
     // Apply final tenant-scoped Employee Dashboard branding after the signed-in
@@ -258,6 +275,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       authResult.session.user.email,
     );
 
+    // BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+    // The profile image no longer waits behind reporting-manager and profile-
+    // correction reads. It resolves independently as soon as employee identity
+    // is known and can finish while the rest of the workspace loads.
+    void renderEmployeeProfileImage();
+
     // Reveal the authenticated Employee workspace as soon as authentication,
     // tenant branding, profile identity, and the intended top-level workspace
     // are ready. Slower reporting, image, leave, request, and payroll data
@@ -275,7 +298,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // has been resolved. This is read-only and does not update HR master data.
     await loadEmployeeProfileCorrectionRequests();
 
-    await renderEmployeeProfileImage();
     await loadEmployeeLeaveBalances();
     await loadLeaveTypes();
     await loadEmployeeLeaveRequests();
@@ -307,6 +329,10 @@ const state = {
   currentProfile: null,
   employeeRecord: null,
   payrollRecords: [],
+
+  // BEXHR EMPLOYEE SELF-SERVICE COHESION - R-03
+  // UI-only active Leave pane. No business or employee data is stored here.
+  employeeLeaveActiveView: "request",
 
   // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
   // Employee-side read-only status history for correction requests submitted to HR.
@@ -1192,6 +1218,14 @@ function bindNavigationEvents() {
         }
 
         rememberEmployeeWorkspace(target);
+
+        // BEXHR EMPLOYEE SELF-SERVICE COHESION - R-03
+        // The Overview action is explicitly "Request Leave", so it should
+        // open that Leave pane rather than restoring a previously viewed pane.
+        if (target === "leave") {
+          state.employeeLeaveActiveView = "request";
+        }
+
         showSection(target);
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
@@ -1241,6 +1275,7 @@ function bindUtilityEvents() {
           "navProfileBtn",
           "navLeaveBtn",
           "navPayrollBtn",
+          "sidebarEmployeePerformanceAppraisalBtn",
         ]);
 
         if (!allowedTargets.has(targetButtonId)) {
@@ -1601,8 +1636,9 @@ function bindEmployeePayrollHistoryCardEvents() {
 
   if (!card || !button || !panel) return;
 
-  // Keep Payroll History collapsed by default on page load.
-  setEmployeePayrollHistoryCardExpanded(false);
+  // BEXHR EMPLOYEE SELF-SERVICE COHESION - R-03
+  // Payroll History is primary Employee payroll work, so it opens immediately.
+  setEmployeePayrollHistoryCardExpanded(true);
 
   button.addEventListener("click", () => {
     const isExpanded = !panel.classList.contains("d-none");
@@ -1953,6 +1989,115 @@ function showInitialEmployeeDashboardSection() {
   }
 }
 
+// BEXHR EMPLOYEE SELF-SERVICE COHESION - R-03
+// Employee Leave now follows the same one-job / inline-subview model used by
+// HR and Manager Self-Service. Existing forms, IDs, handlers and data logic remain intact.
+const EMPLOYEE_LEAVE_VIEW_DEFAULT = "request";
+const EMPLOYEE_LEAVE_VIEW_KEYS = new Set([
+  "request",
+  "history",
+  "balances",
+  "decision",
+]);
+
+function normaliseEmployeeLeaveView(view = "") {
+  const key = String(view || "").trim().toLowerCase();
+  return EMPLOYEE_LEAVE_VIEW_KEYS.has(key)
+    ? key
+    : EMPLOYEE_LEAVE_VIEW_DEFAULT;
+}
+
+function getEmployeeLeaveViewNodes() {
+  const balanceCard = state.dom.employeeLeaveBalancesCard || null;
+  const decisionCard = state.dom.employeeLatestDecisionCard || null;
+  const requestCard =
+    state.dom.leaveRequestForm?.closest(".dashboard-section-card") || null;
+  const historyCard = state.dom.employeeLeaveHistoryCard || null;
+  const requestColumn = requestCard?.closest(".col-12") || null;
+  const historyColumn = historyCard?.closest(".col-12") || null;
+  const mainRow =
+    requestCard?.closest(".employee-leave-main-row") ||
+    historyCard?.closest(".employee-leave-main-row") ||
+    null;
+
+  return {
+    balanceCard,
+    decisionCard,
+    requestColumn,
+    historyColumn,
+    mainRow,
+  };
+}
+
+function setEmployeeLeaveView(view = EMPLOYEE_LEAVE_VIEW_DEFAULT, options = {}) {
+  const section =
+    state.dom.leaveSection || document.getElementById("leaveSection");
+
+  if (!section) return EMPLOYEE_LEAVE_VIEW_DEFAULT;
+
+  const resolved = normaliseEmployeeLeaveView(view);
+  const nodes = getEmployeeLeaveViewNodes();
+  const usesMainRow = resolved === "request" || resolved === "history";
+
+  state.employeeLeaveActiveView = resolved;
+  section.classList.add("ss-leave-inline-mode");
+  section.dataset.employeeLeaveView = resolved;
+
+  nodes.balanceCard?.classList.toggle("d-none", resolved !== "balances");
+  nodes.decisionCard?.classList.toggle("d-none", resolved !== "decision");
+  nodes.mainRow?.classList.toggle("d-none", !usesMainRow);
+  nodes.requestColumn?.classList.toggle("d-none", resolved !== "request");
+  nodes.historyColumn?.classList.toggle("d-none", resolved !== "history");
+  nodes.requestColumn?.classList.toggle(
+    "employee-leave-focused-column",
+    resolved === "request",
+  );
+  nodes.historyColumn?.classList.toggle(
+    "employee-leave-focused-column",
+    resolved === "history",
+  );
+
+  document
+    .querySelectorAll("#employeeLeaveInlineTabs [data-employee-leave-view]")
+    .forEach((button) => {
+      const active = button.dataset.employeeLeaveView === resolved;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+
+  if (resolved === "balances") {
+    setEmployeeLeaveBalancesCardExpanded(true);
+  } else if (resolved === "decision") {
+    setEmployeeLatestDecisionCardExpanded(true);
+  } else if (resolved === "history") {
+    setEmployeeLeaveHistoryCardExpanded(true);
+  }
+
+  if (options.focus === true) {
+    document
+      .querySelector(
+        `#employeeLeaveInlineTabs [data-employee-leave-view="${resolved}"]`,
+      )
+      ?.focus({ preventScroll: true });
+  }
+
+  requestEmployeeLeaveLayoutSync();
+  return resolved;
+}
+
+function bindEmployeeLeaveInlineTabs() {
+  document
+    .querySelectorAll("#employeeLeaveInlineTabs [data-employee-leave-view]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        setEmployeeLeaveView(button.dataset.employeeLeaveView, { focus: true });
+      });
+    });
+}
+
 function showSection(sectionName) {
   const isOverview = sectionName === "overview";
   const isProfile = sectionName === "profile";
@@ -2053,6 +2198,18 @@ function showSection(sectionName) {
   if (isPayroll && state.dom.navPayrollBtn) {
     state.dom.navPayrollBtn.classList.remove("btn-outline-primary");
     state.dom.navPayrollBtn.classList.add("btn-primary");
+  }
+
+  // BEXHR EMPLOYEE SELF-SERVICE COHESION - R-03
+  // Primary Employee tasks open ready to work; no second disclosure step.
+  if (isLeave) {
+    setEmployeeLeaveView(
+      state.employeeLeaveActiveView || EMPLOYEE_LEAVE_VIEW_DEFAULT,
+    );
+  }
+
+  if (isPayroll) {
+    setEmployeePayrollHistoryCardExpanded(true);
   }
 
   // CROSS-DASHBOARD SIDEBAR REPLICATION - EMPLOYEE STEP 1C-3
@@ -3445,21 +3602,105 @@ async function loadLatestEmployeeProfile() {
   }
 }
 
-async function getSignedProfileImageUrl(filePath) {
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+function getProfileImageSignedUrlCacheKey(filePath) {
+  const userId = String(state.currentUser?.id || "anonymous").trim();
+  return `${PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX}:${userId}:${filePath}`;
+}
+
+function getCachedProfileImageSignedUrl(filePath) {
   if (!filePath) return null;
 
   try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.storage
-      .from(PROFILE_IMAGES_BUCKET)
-      .createSignedUrl(filePath, 3600);
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    const rawValue = window.sessionStorage.getItem(cacheKey);
+    if (!rawValue) return null;
 
-    if (error) throw error;
-    return data?.signedUrl || null;
+    const cached = JSON.parse(rawValue);
+    const signedUrl = String(cached?.signedUrl || "").trim();
+    const expiresAt = Number(cached?.expiresAt || 0);
+
+    if (!signedUrl || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      window.sessionStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    return signedUrl;
   } catch (error) {
-    console.error("Error creating signed profile image URL:", error);
     return null;
   }
+}
+
+function cacheProfileImageSignedUrl(filePath, signedUrl) {
+  if (!filePath || !signedUrl) return;
+
+  try {
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    window.sessionStorage.setItem(
+      cacheKey,
+      JSON.stringify({
+        signedUrl,
+        expiresAt: Date.now() + PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS,
+      }),
+    );
+  } catch (error) {
+    // Browser storage is an optimisation only. Profile rendering must still
+    // succeed when sessionStorage is restricted or unavailable.
+  }
+}
+
+function preloadProfileImageUrl(signedUrl) {
+  if (!signedUrl) return;
+
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = signedUrl;
+  } catch (error) {
+    // Preloading is best-effort only. The visible <img> remains authoritative.
+  }
+}
+
+function primeProfileImageSignedUrl(filePath) {
+  if (!filePath) return;
+
+  void getSignedProfileImageUrl(filePath).then((signedUrl) => {
+    if (signedUrl) preloadProfileImageUrl(signedUrl);
+  });
+}
+
+async function getSignedProfileImageUrl(filePath) {
+  if (!filePath) return null;
+
+  const cachedSignedUrl = getCachedProfileImageSignedUrl(filePath);
+  if (cachedSignedUrl) return cachedSignedUrl;
+
+  const requestKey = getProfileImageSignedUrlCacheKey(filePath);
+  const existingRequest = profileImageSignedUrlPromises.get(requestKey);
+  if (existingRequest) return existingRequest;
+
+  const signedUrlRequest = (async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.storage
+        .from(PROFILE_IMAGES_BUCKET)
+        .createSignedUrl(filePath, 3600);
+
+      if (error) throw error;
+
+      const signedUrl = data?.signedUrl || null;
+      if (signedUrl) cacheProfileImageSignedUrl(filePath, signedUrl);
+      return signedUrl;
+    } catch (error) {
+      console.error("Error creating signed profile image URL:", error);
+      return null;
+    } finally {
+      profileImageSignedUrlPromises.delete(requestKey);
+    }
+  })();
+
+  profileImageSignedUrlPromises.set(requestKey, signedUrlRequest);
+  return signedUrlRequest;
 }
 
 async function renderEmployeeProfileImage() {

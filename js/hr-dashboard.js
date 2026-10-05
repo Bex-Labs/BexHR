@@ -1124,10 +1124,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     state.currentUser = access.session.user;
     state.currentProfile = access.profile;
 
+    // BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+    // Start signing/preloading the authenticated HR image while the latest
+    // profile row is refreshed. The visible profile renderer then reuses that
+    // same cached or in-flight private Storage URL.
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
+
     console.time("BexHR startup: loadLatestHrProfile");
     console.log("[BexHR STARTUP] 3 - before loadLatestHrProfile");
 
     await loadLatestHrProfile();
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
 
     console.timeEnd("BexHR startup: loadLatestHrProfile");
     console.log("[BexHR STARTUP] 4 - loadLatestHrProfile completed");
@@ -1511,6 +1518,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 const EMPLOYEE_DOCUMENTS_BUCKET = "employee-documents";
 const PROFILE_IMAGES_BUCKET = "profile-images";
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+// Reuse the same short-lived signed URL during this browser tab session so
+// role/workspace switches do not generate a brand-new private Storage URL on
+// every page load. Cache entries remain user + file-path scoped and expire
+// before the 1-hour signed URL itself expires.
+const PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX =
+  "bexhr:profile-image:signed-url:v1";
+const PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS = 50 * 60 * 1000;
+const profileImageSignedUrlPromises = new Map();
 
 // HRP-85 - STEP 1E CLEANUP
 // The validation email body is fixed so users cannot accidentally enter
@@ -4783,11 +4799,11 @@ function getHrNavigationTaskTarget(taskKey = "") {
       return state.dom.hrp85EmailIntegrationCard;
 
     case "selfservice.leave":
-      document.getElementById("ssNavLeaveBtn")?.click();
+      window.EmployeeSelfService?.show?.("leave", { leaveView: "request" });
       return document.getElementById("ssLeaveSection");
 
     case "selfservice.payroll":
-      document.getElementById("ssNavPayrollBtn")?.click();
+      window.EmployeeSelfService?.show?.("payroll");
       return document.getElementById("ssPayrollSection");
 
     default:
@@ -4847,6 +4863,20 @@ function openHrNavigationTask(taskKey = "") {
   const task = HR_NAVIGATION_TASKS[normalizedTaskKey];
   if (!task) return false;
 
+  const pendingSelfServiceSection =
+    normalizedTaskKey === "selfservice.leave"
+      ? "leave"
+      : normalizedTaskKey === "selfservice.payroll"
+        ? "payroll"
+        : "";
+
+  if (pendingSelfServiceSection) {
+    _hrPendingSelfServiceSection = pendingSelfServiceSection;
+    window.EmployeeSelfService?.prepare?.(pendingSelfServiceSection, {
+      leaveView: pendingSelfServiceSection === "leave" ? "request" : undefined,
+    });
+  }
+
   if (normalizedTaskKey === "payroll.run") {
     if (!canCurrentUserMaintainPayrollOperationsData()) {
       state.dom.runPayrollActionBtn?.click();
@@ -4868,7 +4898,9 @@ function openHrNavigationTask(taskKey = "") {
     _hrSidebarTaskRoutingInProgress = false;
   }
 
-  return applyHrNavigationTask(normalizedTaskKey);
+  const applied = applyHrNavigationTask(normalizedTaskKey);
+  _hrPendingSelfServiceSection = "";
+  return applied;
 }
 
 function restoreRememberedHrNavigationTask(workspace = "") {
@@ -11016,7 +11048,6 @@ function bindEvents() {
   state.dom.hrTabSelfServiceBtn?.addEventListener("click", () => {
     rememberHrWorkspace("selfservice");
     switchHrWorkspace("selfservice");
-    initHrSelfServiceOnFirstOpen();
   });
 
   // PAYROLL WORKFLOW UX REPAIR - STEP 2
@@ -27126,6 +27157,14 @@ function switchHrWorkspace(workspace) {
   const isPayroll = workspace === "payroll";
   const isSelfService = workspace === "selfservice";
 
+  if (isSelfService) {
+    const preferredSelfServiceSection = getPreferredHrSelfServiceSection();
+    window.EmployeeSelfService?.prepare?.(preferredSelfServiceSection, {
+      leaveView: preferredSelfServiceSection === "leave" ? "request" : undefined,
+    });
+    void initHrSelfServiceOnFirstOpen(preferredSelfServiceSection);
+  }
+
   state.dom.hrDashboardSection?.classList.toggle("d-none", !isDashboard);
   state.dom.hrProfileSection?.classList.toggle("d-none", !isProfile);
   state.dom.hrEmployeesSection?.classList.toggle("d-none", !isEmployees);
@@ -27177,9 +27216,6 @@ function switchHrWorkspace(workspace) {
     renderHrModernOverview();
   }
 
-  if (isSelfService) {
-    initHrSelfServiceOnFirstOpen();
-  }
 }
 
 function normalizeText(value) {
@@ -27792,21 +27828,105 @@ function clearPageAlert() {
   state.dom.pageAlert.textContent = "";
 }
 
-async function getSignedProfileImageUrl(filePath) {
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+function getProfileImageSignedUrlCacheKey(filePath) {
+  const userId = String(state.currentUser?.id || "anonymous").trim();
+  return `${PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX}:${userId}:${filePath}`;
+}
+
+function getCachedProfileImageSignedUrl(filePath) {
   if (!filePath) return null;
 
   try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.storage
-      .from(PROFILE_IMAGES_BUCKET)
-      .createSignedUrl(filePath, 3600);
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    const rawValue = window.sessionStorage.getItem(cacheKey);
+    if (!rawValue) return null;
 
-    if (error) throw error;
-    return data?.signedUrl || null;
+    const cached = JSON.parse(rawValue);
+    const signedUrl = String(cached?.signedUrl || "").trim();
+    const expiresAt = Number(cached?.expiresAt || 0);
+
+    if (!signedUrl || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      window.sessionStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    return signedUrl;
   } catch (error) {
-    console.error("Error creating signed profile image URL:", error);
     return null;
   }
+}
+
+function cacheProfileImageSignedUrl(filePath, signedUrl) {
+  if (!filePath || !signedUrl) return;
+
+  try {
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    window.sessionStorage.setItem(
+      cacheKey,
+      JSON.stringify({
+        signedUrl,
+        expiresAt: Date.now() + PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS,
+      }),
+    );
+  } catch (error) {
+    // Browser storage is an optimisation only. Profile rendering must still
+    // succeed when sessionStorage is restricted or unavailable.
+  }
+}
+
+function preloadProfileImageUrl(signedUrl) {
+  if (!signedUrl) return;
+
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = signedUrl;
+  } catch (error) {
+    // Preloading is best-effort only. The visible <img> remains authoritative.
+  }
+}
+
+function primeProfileImageSignedUrl(filePath) {
+  if (!filePath) return;
+
+  void getSignedProfileImageUrl(filePath).then((signedUrl) => {
+    if (signedUrl) preloadProfileImageUrl(signedUrl);
+  });
+}
+
+async function getSignedProfileImageUrl(filePath) {
+  if (!filePath) return null;
+
+  const cachedSignedUrl = getCachedProfileImageSignedUrl(filePath);
+  if (cachedSignedUrl) return cachedSignedUrl;
+
+  const requestKey = getProfileImageSignedUrlCacheKey(filePath);
+  const existingRequest = profileImageSignedUrlPromises.get(requestKey);
+  if (existingRequest) return existingRequest;
+
+  const signedUrlRequest = (async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.storage
+        .from(PROFILE_IMAGES_BUCKET)
+        .createSignedUrl(filePath, 3600);
+
+      if (error) throw error;
+
+      const signedUrl = data?.signedUrl || null;
+      if (signedUrl) cacheProfileImageSignedUrl(filePath, signedUrl);
+      return signedUrl;
+    } catch (error) {
+      console.error("Error creating signed profile image URL:", error);
+      return null;
+    } finally {
+      profileImageSignedUrlPromises.delete(requestKey);
+    }
+  })();
+
+  profileImageSignedUrlPromises.set(requestKey, signedUrlRequest);
+  return signedUrlRequest;
 }
 
 function renderHrProfile(profile, user) {
@@ -44779,10 +44899,41 @@ function initHrSelfServiceNotificationBridge() {
 
 let _hrSelfServiceInitialised = false;
 
-function initHrSelfServiceOnFirstOpen() {
+// BEXHR HR SELF-SERVICE FIRST-PAINT STABILISATION - R-02.2
+// Resolve the requested Self-Service area before the HR workspace becomes visible.
+// This is UI sequencing only; no leave/payroll data, permissions, or queries change.
+let _hrSelfServiceInitPromise = null;
+let _hrPendingSelfServiceSection = "";
+
+function getPreferredHrSelfServiceSection() {
+  if (_hrPendingSelfServiceSection === "leave" || _hrPendingSelfServiceSection === "payroll") {
+    return _hrPendingSelfServiceSection;
+  }
+
+  try {
+    const requestedSection = String(
+      new URLSearchParams(window.location.search || "").get("section") || "",
+    ).trim().toLowerCase();
+
+    if (requestedSection === "leave" || requestedSection === "payroll") {
+      return requestedSection;
+    }
+  } catch (error) {
+    console.warn("HR Self-Service URL section could not be resolved.", error);
+  }
+
+  const rememberedTask = String(getRememberedHrNavigationTask?.() || "").trim();
+  if (rememberedTask === "selfservice.leave") return "leave";
+  if (rememberedTask === "selfservice.payroll") return "payroll";
+
+  return "payroll";
+}
+
+function initHrSelfServiceOnFirstOpen(preferredSection = getPreferredHrSelfServiceSection()) {
   initHrSelfServiceNotificationBridge();
 
-  if (_hrSelfServiceInitialised) return;
+  const section = preferredSection === "leave" ? "leave" : "payroll";
+
   if (!window.EmployeeSelfService) {
     console.warn("EmployeeSelfService module is not loaded.");
     showDashboardToast(
@@ -44790,18 +44941,53 @@ function initHrSelfServiceOnFirstOpen() {
       "Self-service could not load",
       "The employee self-service module is not available. Refresh the page and try again.",
     );
-    return;
+    return Promise.resolve();
   }
-  _hrSelfServiceInitialised = true;
-  window.EmployeeSelfService.init(state.currentUser, state.currentProfile).catch((err) => {
-    console.error("Employee self-service init error:", err);
-    _hrSelfServiceInitialised = false; // allow retry on next open
-    showDashboardToast(
-      "danger",
-      "Self-service could not load",
-      escapeHtml(err?.message || "Your leave and payroll records could not be loaded."),
-    );
+
+  window.EmployeeSelfService.prepare?.(section, {
+    leaveView: section === "leave" ? "request" : undefined,
   });
+
+  if (_hrSelfServiceInitialised) {
+    window.EmployeeSelfService.show?.(section, {
+      leaveView: section === "leave" ? "request" : undefined,
+    });
+    return Promise.resolve();
+  }
+
+  if (_hrSelfServiceInitPromise) {
+    return _hrSelfServiceInitPromise.then(() => {
+      window.EmployeeSelfService.show?.(section, {
+        leaveView: section === "leave" ? "request" : undefined,
+      });
+    });
+  }
+
+  _hrSelfServiceInitPromise = window.EmployeeSelfService
+    .init(state.currentUser, state.currentProfile, {
+      initialSection: section,
+      leaveView: section === "leave" ? "request" : undefined,
+    })
+    .then(() => {
+      _hrSelfServiceInitialised = true;
+      window.EmployeeSelfService.show?.(section, {
+        leaveView: section === "leave" ? "request" : undefined,
+      });
+    })
+    .catch((err) => {
+      console.error("Employee self-service init error:", err);
+      _hrSelfServiceInitialised = false;
+      showDashboardToast(
+        "danger",
+        "Self-service could not load",
+        escapeHtml(err?.message || "Your leave and payroll records could not be loaded."),
+      );
+    })
+    .finally(() => {
+      _hrSelfServiceInitPromise = null;
+    });
+
+  return _hrSelfServiceInitPromise;
 }
 
 // HR EMPLOYEE SALARY SETUP MODERN RECORD CARDS - v1.0.1

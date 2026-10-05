@@ -4282,3 +4282,20 @@ body.bex-pa-page.alpatech-workspace #bexPaBackToTopButton {
     line-height: 1;
   }
 }
+
+/* =========================================================
+   BEXHR R-06 EMPLOYEE MY APPRAISAL FLOATING CONTROL CLEARANCE
+   Reserve a bottom safe area for the fixed Back to Top control so
+   it cannot cover the final appraisal Close/Acknowledge actions.
+   Presentation only; appraisal lifecycle and button handlers unchanged.
+   ========================================================= */
+
+body.bex-pa-page .bex-pa-main > div {
+  padding-bottom: 6rem !important;
+}
+
+@media (max-width: 575.98px) {
+  body.bex-pa-page .bex-pa-main > div {
+    padding-bottom: 5.5rem !important;
+  }
+}

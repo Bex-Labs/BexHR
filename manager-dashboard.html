@@ -396,20 +396,63 @@
         </button>
       </li>
 
-      <li>
-        <button class="bexhr-sidebar-item" id="sidebarManagerTeamBtn"
-          onclick="document.getElementById('managerTabTeamBtn')?.click()" title="Team Management">
+      <!-- BEXHR MANAGER FOCUSED NAVIGATION - R-02
+           Desktop Manager navigation now follows the same parent-group / exact-task
+           model as HR. Parent buttons disclose tasks; child buttons open the exact
+           existing Team or Self-Service work area without changing authority. -->
+      <li class="bexhr-manager-sidebar-group" data-manager-sidebar-group="team">
+        <button type="button" class="bexhr-sidebar-item bexhr-manager-sidebar-group-toggle" id="sidebarManagerTeamBtn"
+          aria-expanded="false" aria-controls="sidebarManagerTeamSubnav" title="Team">
           <i class="bi bi-people"></i>
           <span>Team</span>
+          <i class="bi bi-chevron-right bexhr-manager-sidebar-chevron" aria-hidden="true"></i>
         </button>
+        <div class="bexhr-manager-sidebar-subnav" id="sidebarManagerTeamSubnav" hidden>
+          <button type="button" class="bexhr-manager-sidebar-subitem" id="sidebarManagerTeamPendingBtn"
+            data-manager-team-task="pending">
+            <i class="bi bi-hourglass-split"></i>
+            <span>Pending Requests</span>
+          </button>
+          <button type="button" class="bexhr-manager-sidebar-subitem" id="sidebarManagerTeamProcessedBtn"
+            data-manager-team-task="processed">
+            <i class="bi bi-clock-history"></i>
+            <span>Decision History</span>
+          </button>
+          <button type="button" class="bexhr-manager-sidebar-subitem" id="sidebarManagerTeamScheduleBtn"
+            data-manager-team-task="schedule">
+            <i class="bi bi-calendar3"></i>
+            <span>Team Schedule</span>
+          </button>
+          <button type="button" class="bexhr-manager-sidebar-subitem" id="sidebarManagerTeamEmployeesBtn"
+            data-manager-team-task="employees">
+            <i class="bi bi-person-vcard"></i>
+            <span>Employee Records</span>
+          </button>
+        </div>
       </li>
-      <li>
-        <button class="bexhr-sidebar-item" id="sidebarManagerSelfServiceBtn"
-          onclick="document.getElementById('managerTabSelfServiceBtn')?.click()" title="My Self-Service">
+
+      <li class="bexhr-manager-sidebar-group" data-manager-sidebar-group="selfservice">
+        <button type="button" class="bexhr-sidebar-item bexhr-manager-sidebar-group-toggle"
+          id="sidebarManagerSelfServiceBtn" aria-expanded="false" aria-controls="sidebarManagerSelfServiceSubnav"
+          title="My Self-Service">
           <i class="bi bi-person-badge"></i>
-          <span>Self-Service</span>
+          <span>My Self-Service</span>
+          <i class="bi bi-chevron-right bexhr-manager-sidebar-chevron" aria-hidden="true"></i>
         </button>
+        <div class="bexhr-manager-sidebar-subnav" id="sidebarManagerSelfServiceSubnav" hidden>
+          <button type="button" class="bexhr-manager-sidebar-subitem" id="sidebarManagerSelfServiceLeaveBtn"
+            data-manager-selfservice-task="leave">
+            <i class="bi bi-calendar2-check"></i>
+            <span>Leave</span>
+          </button>
+          <button type="button" class="bexhr-manager-sidebar-subitem" id="sidebarManagerSelfServicePayrollBtn"
+            data-manager-selfservice-task="payroll">
+            <i class="bi bi-wallet2"></i>
+            <span>My Payroll</span>
+          </button>
+        </div>
       </li>
+
       <li>
         <button class="bexhr-sidebar-item" id="sidebarManagerPerformanceAppraisalBtn" title="Performance Appraisal">
           <i class="bi bi-clipboard2-check"></i>
@@ -2211,6 +2254,14 @@
                 records.</p>
               <button type="button" class="manager-guide-card-link" data-manager-guide-target="selfservice">Open
                 workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+            </article>
+
+            <article class="manager-guide-workspace-card manager-guide-workspace-card--performance">
+              <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-clipboard2-check"></i></span>
+              <h3 id="managerGuidePerformanceTitle">Performance Appraisal</h3>
+              <p>Open My Appraisal or Manager Reviews from the appraisal workspace chooser without changing your current Manager authority.</p>
+              <button type="button" class="manager-guide-card-link" data-manager-guide-target="performance">Open workspace
+                <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
           </section>
 

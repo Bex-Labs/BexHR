@@ -524,9 +524,11 @@ document.addEventListener("DOMContentLoaded", function () {
       mfa: isHrDashboardMfaRequiredRole(profile.role) ? "aal2-required" : "not-required",
     });
 
-    setTimeout(function () {
-      window.location.href = redirectTarget;
-    }, 1200);
+    // BEXHR R-09 - SIGN-IN SUCCESS REDIRECT
+    // Authentication, profile/role resolution and tenant validation have already
+    // completed at this point. Redirect immediately instead of adding a fixed
+    // post-success delay.
+    window.location.href = redirectTarget;
   }
 
   async function getVerifiedHrTotpFactor() {

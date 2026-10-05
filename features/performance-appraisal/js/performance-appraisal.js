@@ -6155,6 +6155,9 @@
       return;
     }
     bexPaRenderCycles();
+    // BEXHR PA LIVE CONFIGURATION SYNC - R-01
+    bexPaPopulateOrganisationGoalCycles();
+    bexPaRenderOperationalReport();
     bexPaHideCycleForm();
 
     if (bexPaElements.announcement) {
@@ -9008,6 +9011,8 @@
       return;
     }
     bexPaRenderIndividualGoals();
+    // BEXHR PA LIVE CONFIGURATION SYNC - R-01
+    bexPaPopulateProgressUpdateIndividualGoals();
     bexPaCloseIndividualGoalDialog();
 
     if (bexPaElements.announcement) {
@@ -9384,6 +9389,8 @@
       return;
     }
     bexPaRenderDepartmentGoals();
+    // BEXHR PA LIVE CONFIGURATION SYNC - R-01
+    bexPaPopulateIndividualGoalDepartmentGoals();
     bexPaCloseDepartmentGoalDialog();
 
     if (bexPaElements.announcement) {
@@ -9984,6 +9991,9 @@
       return;
     }
     bexPaRenderOrganisationGoals();
+    // BEXHR PA LIVE CONFIGURATION SYNC - R-01
+    bexPaPopulateDeliverableOrganisationGoals();
+    bexPaPopulateDepartmentGoalOrganisationGoals();
     bexPaCloseOrganisationGoalDialog();
 
     if (bexPaElements.announcement) {
@@ -11132,6 +11142,8 @@
       return;
     }
     bexPaRenderTemplates();
+    // BEXHR PA LIVE CONFIGURATION SYNC - R-01
+    bexPaPopulateCycleTemplates();
     bexPaCloseTemplateDialog();
 
     if (bexPaElements.announcement) {
@@ -14573,6 +14585,12 @@
       return;
     }
 
+    // BEXHR R-07 EMPLOYEE FINAL APPRAISAL FOCUS PARITY
+    // Reuse the shared focused-workspace register behaviour already used by
+    // Self-Appraisal, Manager Review and HR Review. Do not stack the completed
+    // appraisal detail underneath the employee register.
+    bexPaSetEmployeeAppraisalRegisterVisible(false);
+
     bexPaElements.selfAppraisalSection?.classList.add(
       "d-none",
     );
@@ -14599,6 +14617,8 @@
     bexPaElements.finalAppraisalSection?.classList.add(
       "d-none",
     );
+
+    bexPaSetEmployeeAppraisalRegisterVisible(true);
   }
 
   async function bexPaCompleteEligibleCycles() {
