@@ -1242,11 +1242,18 @@
   }
 
   function bexPaHasHrAdminCapability() {
-    return (
-      bexPaGetIntegratedContext()
-        ?.hrAdminCapability === true
-    );
+  const context = bexPaGetIntegratedContext();
+
+  if (context) {
+    return context.hrAdminCapability === true;
   }
+
+  // Enable the HR Admin persona for standalone local development.
+  return (
+    bexPaIsDevelopmentHost() &&
+    bexPaGetCurrentPersona() === "hr-admin"
+  );
+}
 
   let bexPaActiveMode = "";
 
@@ -10708,6 +10715,117 @@
     });
   }
 
+  function bexPaOpenStarterTemplateDialog() {
+  if (!bexPaCanManageTemplates()) {
+    return;
+  }
+
+  bexPaOpenTemplateDialog();
+
+  const baseName = "Productivity Review — 10 Point";
+  let name = baseName;
+  let suffix = 2;
+
+  while (
+    bexPaState.templates.some(
+      (template) =>
+        template.name.toLowerCase() === name.toLowerCase(),
+    )
+  ) {
+    name = `${baseName} (${suffix})`;
+    suffix += 1;
+  }
+
+  bexPaElements.templateName.value = name;
+  bexPaElements.templateDescription.value =
+    "Manager productivity review using equally weighted competencies " +
+    "scored from 1 to 10. Overall percentage = total points divided " +
+    "by maximum applicable points, multiplied by 100. " +
+    "Below 50%: Below Standard; 50% to below 70%: Meet Standard; " +
+    "70% and above: Exceed Standard.";
+
+  bexPaElements.templateStatus.value = "Draft";
+
+  // Keep numeric scores separate from the calculated overall rating.
+  bexPaElements.templateRatingScale.value =
+    Array.from({ length: 10 }, (_, index) =>
+      String(index + 1),
+    ).join("\n");
+
+  const criteria = [
+    [
+      "Quality of work",
+      "Produces accurate, complete work that meets agreed standards.",
+      "All Employees",
+    ],
+    [
+      "Concentration at work",
+      "Maintains focus and attention while carrying out assigned work.",
+      "All Employees",
+    ],
+    [
+      "Job knowledge",
+      "Demonstrates the knowledge and skills required for the role.",
+      "All Employees",
+    ],
+    [
+      "Productivity",
+      "Completes the expected volume of work within agreed timelines.",
+      "All Employees",
+    ],
+    [
+      "Teamwork",
+      "Works constructively with colleagues to achieve shared results.",
+      "All Employees",
+    ],
+    [
+      "Attendance",
+      "Meets agreed attendance and punctuality requirements, taking " +
+        "approved leave and authorised arrangements into account.",
+      "All Employees",
+    ],
+    [
+      "Commitment to Safety",
+      "Follows relevant safety procedures and reports hazards promptly.",
+      "All Employees",
+    ],
+    [
+      "Reliability/Dependability",
+      "Follows through on commitments and can be relied upon.",
+      "All Employees",
+    ],
+    [
+      "Supervisory Ability",
+      "Provides clear direction, supports team members and monitors work.",
+      "Supervisors & Managers",
+    ],
+    [
+      "Initiative/Adaptability",
+      "Takes appropriate initiative and responds constructively to change.",
+      "All Employees",
+    ],
+  ];
+
+  const draftId = Date.now();
+
+  bexPaState.templateCompetencies = criteria.map(
+    ([name, description, applicability], index) => ({
+      id: `BEX-PA-PRODUCTIVITY-${draftId}-${index + 1}`,
+      name,
+      description,
+      applicability,
+      order: index + 1,
+    }),
+  );
+
+  bexPaRenderTemplateRatings();
+  bexPaRenderTemplateCompetencies();
+  bexPaCloseTemplateCompetencyEditor();
+
+  bexPaElements.templateDialogTitle.textContent =
+    "Customise Productivity Review Template";
+}
+
   function bexPaCloseTemplateDialog() {
     bexPaElements.templateDialog?.close();
     bexPaResetTemplateForm();
@@ -13798,6 +13916,7 @@
     );
 
     if (managerSubmitted) {
+      bexPaRenderHrProductivity(template, managerAppraisal);
       const goals =
         bexPaGetSelfAppraisalGoals(appraisal);
 
@@ -15010,6 +15129,174 @@
     );
   }
 
+  // PRODUCTIVITY SCORING V1: template competencies, independent of goal ratings.
+  function bexPaUsesTenPointScoring(template) {
+    const scale = template?.ratingScale;
+    return Array.isArray(scale) && scale.length === 10 &&
+      scale.every((value, index) => String(value) === String(index + 1));
+  }
+
+  function bexPaCalculateProductivityScore(competencies, responses) {
+    if (!Array.isArray(competencies) || competencies.length === 0 ||
+        !Array.isArray(responses) || responses.length !== competencies.length) {
+      return null;
+    }
+    const ids = new Set();
+    let total = 0;
+    let count = 0;
+    for (const competency of competencies) {
+      if (ids.has(competency.id)) return null;
+      ids.add(competency.id);
+      const matches = responses.filter(item => item.competencyId === competency.id);
+      if (matches.length !== 1) return null;
+      const response = matches[0];
+      if (response.rating === "N/A" &&
+          competency.applicability === "Supervisors & Managers") continue;
+      if (!/^(?:[1-9]|10)$/.test(String(response.rating || ""))) return null;
+      total += Number(response.rating);
+      count += 1;
+    }
+    if (!count) return null;
+    const percentage = total / (count * 10) * 100;
+    // Integer comparisons avoid display rounding changing the classification.
+    const rating = total < count * 5 ? "Below Standard" :
+      total < count * 7 ? "Meet Standard" : "Exceed Standard";
+    return {
+      model: "equal-competency-10-point-v1",
+      totalPoints: total,
+      maximumPoints: count * 10,
+      applicableCount: count,
+      averageScore: total / count,
+      percentage,
+      rating,
+    };
+  }
+
+  function bexPaFormatProductivityScore(score) {
+    return score ?
+      `Total: ${score.totalPoints}/${score.maximumPoints} | Average: ${score.averageScore.toFixed(2)}/10 | Overall: ${score.percentage.toFixed(2)}% | ${score.rating}` :
+      "Overall score pending: rate every applicable competency from 1 to 10.";
+  }
+
+  function bexPaReadManagerCompetencyResponses(competencies) {
+    return competencies.map(competency => ({
+      competencyId: competency.id,
+      rating: document.getElementById(`bexPaManagerCompetencyRating-${competency.id}`)?.value || "",
+      comment: document.getElementById(`bexPaManagerCompetencyComment-${competency.id}`)?.value.trim() || "",
+    }));
+  }
+
+  function bexPaRenderManagerProductivity(appraisal, template, managerAppraisal, isReadOnly) {
+    document.getElementById("bexPaManagerProductivity")?.remove();
+    if (!bexPaUsesTenPointScoring(template)) return;
+    const competencies = [...(template.competencies || [])].sort((a, b) => a.order - b.order);
+    const section = document.createElement("section");
+    section.id = "bexPaManagerProductivity";
+    section.className = "border rounded-3 p-3 mb-4";
+    const heading = document.createElement("h3");
+    heading.className = "h6 fw-bold";
+    heading.textContent = "Productivity Competency Scores";
+    const help = document.createElement("p");
+    help.className = "small text-body-secondary";
+    help.textContent = "Score each criterion from 1 to 10. Criteria are equally weighted. Use Not applicable for Supervisory Ability only when the employee has no supervisory responsibilities. Goal ratings are separate.";
+    const summary = document.createElement("p");
+    summary.className = "fw-semibold";
+    summary.setAttribute("role", "status");
+    section.append(heading, help, summary);
+    const savedResponses = managerAppraisal?.competencyResponses ||
+      bexPaGetRememberedFormValues(`managerAppraisal:${appraisal.id}`).competencyResponses || [];
+    competencies.forEach(competency => {
+      const saved = savedResponses.find(item => item.competencyId === competency.id);
+      const block = document.createElement("div");
+      block.className = "mb-3";
+      const label = document.createElement("label");
+      label.className = "form-label fw-semibold";
+      label.htmlFor = `bexPaManagerCompetencyRating-${competency.id}`;
+      label.textContent = competency.name;
+      const select = document.createElement("select");
+      select.id = label.htmlFor;
+      select.className = "form-select";
+      select.disabled = isReadOnly;
+      const optional = competency.applicability === "Supervisors & Managers";
+      const options = [["", "Select score"], ...Array.from({length: 10}, (_, i) => [String(i + 1), `${i + 1} / 10`])];
+      if (optional) options.push(["N/A", "Not applicable — no supervisory responsibilities"]);
+      options.forEach(([value, text]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = text;
+        select.appendChild(option);
+      });
+      select.value = saved?.rating || (optional ? "N/A" : "");
+      const description = document.createElement("p");
+      description.className = "small text-body-secondary";
+      description.textContent = competency.description || "";
+      const commentLabel = document.createElement("label");
+      commentLabel.className = "form-label small mt-2";
+      commentLabel.htmlFor = `bexPaManagerCompetencyComment-${competency.id}`;
+      commentLabel.textContent = `Comment — ${competency.name}`;
+      const comment = document.createElement("textarea");
+      comment.id = commentLabel.htmlFor;
+      comment.className = "form-control";
+      comment.rows = 2;
+      comment.maxLength = 1500;
+      comment.value = saved?.comment || "";
+      comment.readOnly = isReadOnly;
+      block.append(label, description, select, commentLabel, comment);
+      section.appendChild(block);
+      select.addEventListener("change", () => {
+        summary.textContent = bexPaFormatProductivityScore(
+          bexPaCalculateProductivityScore(competencies, bexPaReadManagerCompetencyResponses(competencies)),
+        );
+      });
+    });
+    const actionsLabel = document.createElement("label");
+    actionsLabel.htmlFor = "bexPaManagerActionsAgreed";
+    actionsLabel.className = "form-label fw-semibold";
+    actionsLabel.textContent = "Actions agreed during this review";
+    const actions = document.createElement("textarea");
+    actions.id = actionsLabel.htmlFor;
+    actions.className = "form-control";
+    actions.rows = 3;
+    actions.maxLength = 3000;
+    actions.readOnly = isReadOnly;
+    actions.value = managerAppraisal?.actionsAgreed ||
+      bexPaGetRememberedFormValues(`managerAppraisal:${appraisal.id}`).actionsAgreed || "";
+    section.append(actionsLabel, actions);
+    bexPaElements.managerAppraisalGoals.insertAdjacentElement("beforebegin", section);
+    summary.textContent = bexPaFormatProductivityScore(
+      bexPaCalculateProductivityScore(competencies, bexPaReadManagerCompetencyResponses(competencies)),
+    );
+  }
+
+  function bexPaRenderHrProductivity(template, managerAppraisal) {
+    if (!bexPaUsesTenPointScoring(template)) return;
+    const panel = document.createElement("section");
+    panel.className = "border rounded-3 p-3 mb-3";
+    const heading = document.createElement("h4");
+    heading.className = "h6 fw-bold";
+    heading.textContent = "Manager Productivity Result";
+    const summary = document.createElement("p");
+    summary.className = "fw-semibold";
+    const responses = managerAppraisal.competencyResponses || [];
+    const score = bexPaCalculateProductivityScore(template.competencies, responses);
+    summary.textContent = score ? bexPaFormatProductivityScore(score) :
+      "No complete competency score recorded. Existing goal ratings have not been converted.";
+    panel.append(heading, summary);
+    (template.competencies || []).forEach(competency => {
+      const response = responses.find(item => item.competencyId === competency.id);
+      const item = document.createElement("p");
+      item.className = "small";
+      item.textContent = `${competency.name}: ${response?.rating === "N/A" ? "Not applicable" : response?.rating ? `${response.rating}/10` : "Not recorded"} — ${response?.comment || "No comment"}`;
+      panel.appendChild(item);
+    });
+    const actions = document.createElement("p");
+    actions.className = "small";
+    actions.textContent = `Actions agreed: ${managerAppraisal.actionsAgreed || "Not recorded"}`;
+    panel.appendChild(actions);
+    bexPaElements.hrAppraisalReviewManager.appendChild(panel);
+  }
+
+
   function bexPaCreateManagerRatingField(
     individualGoal,
     ratingScale,
@@ -15334,10 +15621,14 @@
       bexPaElements.managerAppraisalMeta.textContent +=
         ` | Manager Appraisal: ${managerDisplayStatus}`;
     }
+    bexPaRenderManagerProductivity(
+      appraisal,
+      template,
+      managerAppraisal,
+      isSubmitted,
+    );
 
-    // BEXHR MANAGER APPRAISAL FOCUS - US-07 QA CORRECTION
-    // Keep the existing form fields/actions but present them as one focused
-    // manager-review task at a time.
+    // Preserve the redesign's focused manager-review layout.
     bexPaApplyManagerAppraisalClarity(appraisal);
 
     bexPaElements.managerAppraisalSection.classList.remove(
@@ -15504,6 +15795,22 @@
       updatedAt: new Date().toISOString(),
     };
 
+    if (bexPaUsesTenPointScoring(template)) {
+      managerAppraisal.competencyResponses =
+        bexPaReadManagerCompetencyResponses(template.competencies || []);
+      managerAppraisal.productivityScore = bexPaCalculateProductivityScore(
+        template.competencies, managerAppraisal.competencyResponses,
+      );
+      managerAppraisal.actionsAgreed =
+        document.getElementById("bexPaManagerActionsAgreed")?.value.trim() || "";
+      if (!managerAppraisal.productivityScore) {
+        bexPaShowManagerAppraisalError(
+          "Score every applicable competency from 1 to 10. Only supervisory criteria may be Not applicable.",
+        );
+        return;
+      }
+    }
+
     if (isFinalSubmission) {
       managerAppraisal.submittedAt =
         new Date().toISOString();
@@ -15529,6 +15836,10 @@
           (response) => ({ ...response }),
         ),
         overallComment: managerAppraisal.overallComment,
+        ...(bexPaUsesTenPointScoring(template) ? {
+          competencyResponses: managerAppraisal.competencyResponses.map(response => ({ ...response })),
+          actionsAgreed: managerAppraisal.actionsAgreed,
+        } : {}),
       },
     );
 
@@ -16793,6 +17104,42 @@
       "click",
       () => bexPaOpenTemplateDialog(),
     );
+
+    if (
+  bexPaElements.createTemplateButton &&
+  !document.getElementById("bexPaUseStarterTemplateButton")
+) {
+  const starterButton =
+    bexPaElements.createTemplateButton.cloneNode(false);
+
+  starterButton.id = "bexPaUseStarterTemplateButton";
+  starterButton.textContent = "Use BexHR Starter Template";
+
+  starterButton.addEventListener(
+    "click",
+    bexPaOpenStarterTemplateDialog,
+  );
+
+  bexPaElements.createTemplateButton.insertAdjacentElement(
+    "afterend",
+    starterButton,
+  );
+
+  // Keep visibility aligned when the workspace role changes.
+  const accessObserver = new MutationObserver(() => {
+    starterButton.className =
+      bexPaElements.createTemplateButton.className;
+    starterButton.hidden =
+      bexPaElements.createTemplateButton.hidden;
+    starterButton.disabled =
+      bexPaElements.createTemplateButton.disabled;
+  });
+
+  accessObserver.observe(bexPaElements.createTemplateButton, {
+    attributes: true,
+    attributeFilter: ["class", "hidden", "disabled"],
+  });
+}
 
     bexPaElements.closeTemplateDialogButton?.addEventListener(
       "click",
