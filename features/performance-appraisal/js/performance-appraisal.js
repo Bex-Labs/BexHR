@@ -15621,15 +15621,16 @@
       bexPaElements.managerAppraisalMeta.textContent +=
         ` | Manager Appraisal: ${managerDisplayStatus}`;
     }
+
+    // Preserve the redesign's focused manager-review layout.
+    bexPaApplyManagerAppraisalClarity(appraisal);
+
     bexPaRenderManagerProductivity(
       appraisal,
       template,
       managerAppraisal,
       isSubmitted,
     );
-
-    // Preserve the redesign's focused manager-review layout.
-    bexPaApplyManagerAppraisalClarity(appraisal);
 
     bexPaElements.managerAppraisalSection.classList.remove(
       "d-none",
