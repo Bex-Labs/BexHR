@@ -1522,6 +1522,7 @@
   }
 
   function bexPaGetAvailableDepartments() {
+    if (bexPaIsManagerReviewMode()) return bexPaGetManagedDepartments();
     const integratedDepartments =
       bexPaGetIntegratedContext()
         ?.availableDepartments;
@@ -1578,107 +1579,24 @@
     ];
   }
 
+  // GOAL OWNERSHIP V1: department scope includes active primary and secondary reports.
   function bexPaGetManagedDepartments() {
-    if (!bexPaIsPrimaryManagerMode()) {
-      return [];
-    }
-
-    const departmentsById = new Map();
-
-    bexPaGetAvailableEmployees().forEach(
-      (employee) => {
-        const departmentId = String(
-          employee.departmentId || "",
-        ).trim();
-
-        const departmentName = String(
-          employee.department || "",
-        ).trim();
-
-        if (
-          !departmentId ||
-          !departmentName
-        ) {
-          return;
-        }
-
-        departmentsById.set(
-          departmentId,
-          {
-            id: departmentId,
-            name: departmentName,
-          },
-        );
-      },
-    );
-
-    return [
-      ...departmentsById.values(),
-    ];
+    if (!bexPaIsManagerReviewMode()) return [];
+    const ids = new Set([...bexPaGetManagedEmployeeIds(), ...bexPaGetSecondaryEmployeeIds()]);
+    const departments = new Map();
+    [...bexPaGetAvailableEmployees(), ...bexPaGetSecondaryEmployees()].forEach(employee => {
+      if (!ids.has(employee.id) || !employee.departmentId || !employee.department) return;
+      departments.set(employee.departmentId, {id: employee.departmentId, name: employee.department});
+    });
+    return [...departments.values()];
   }
 
-  function bexPaCanManageDepartmentGoal(
-    departmentGoal = null,
-  ) {
-    if (bexPaIsHrAdminMode()) {
-      return true;
-    }
-
-    if (!bexPaIsPrimaryManagerMode()) {
-      return false;
-    }
-
-    const managedDepartments =
-      bexPaGetManagedDepartments();
-
-    if (managedDepartments.length === 0) {
-      return false;
-    }
-
-    if (!departmentGoal) {
-      return true;
-    }
-
-    const goalDepartmentId = String(
-      departmentGoal.departmentId || "",
-    ).trim();
-
-    if (
-      bexPaIsIntegratedPersistenceContext()
-    ) {
-      if (!goalDepartmentId) {
-        return false;
-      }
-
-      return managedDepartments.some(
-        (department) =>
-          department.id === goalDepartmentId,
-      );
-    }
-
-    if (goalDepartmentId) {
-      const matchesDepartmentId =
-        managedDepartments.some(
-          (department) =>
-            department.id === goalDepartmentId,
-        );
-
-      if (matchesDepartmentId) {
-        return true;
-      }
-    }
-
-    const goalDepartmentName = String(
-      departmentGoal.department || "",
-    ).trim();
-
-    return managedDepartments.some(
-      (department) =>
-        department.name &&
-        goalDepartmentName &&
-        department.name.toLowerCase() ===
-        goalDepartmentName.toLowerCase(),
-    );
+  function bexPaCanManageDepartmentGoal(departmentGoal = null) {
+    if (!bexPaIsManagerReviewMode()) return false;
+    const departments = bexPaGetManagedDepartments();
+    return departmentGoal
+      ? departments.some(department => department.id === departmentGoal.departmentId)
+      : departments.length > 0;
   }
 
   function bexPaGetSelectedIndividualGoalEmployee() {
@@ -1935,27 +1853,61 @@
   }
 
   function bexPaCanManageDepartmentGoals() {
-    if (bexPaIsHrAdminMode()) {
-      return true;
-    }
-
-    if (bexPaIsPrimaryManagerMode()) {
-      return bexPaGetManagedDepartments().length > 0;
-    }
-
-    return false;
+    return bexPaCanManageDepartmentGoal();
   }
 
   function bexPaCanEditIndividualGoals() {
-    if (bexPaIsHrAdminMode()) {
-      return true;
-    }
+    return bexPaIsPrimaryManagerMode() && bexPaGetManagedEmployeeIds().length > 0;
+  }
 
-    if (bexPaIsPrimaryManagerMode()) {
-      return bexPaGetManagedEmployeeIds().length > 0;
-    }
+  function bexPaIsIndividualGoalDefinitionLocked(goal) {
+    if (!goal) return false;
+    const appraisals = bexPaState.employeeAppraisals.filter(appraisal =>
+      appraisal.employeeId === bexPaGetIndividualGoalEmployeeId(goal) && appraisal.cycleId === goal.cycleId);
+    return appraisals.some(appraisal =>
+      bexPaState.selfAppraisals.some(self => self.appraisalId === appraisal.id && self.status === "Submitted") ||
+      bexPaState.managerAppraisals.some(manager => manager.appraisalId === appraisal.id && manager.status === "Submitted") ||
+      bexPaState.hrFinalisations.some(hr => hr.appraisalId === appraisal.id && hr.status === "Finalised") ||
+      bexPaState.employeeAcknowledgements.some(ack => ack.appraisalId === appraisal.id && ack.status === "Acknowledged"));
+  }
 
-    return false;
+  function bexPaPopulateGoalCycles(field, parentCycleId = "") {
+    if (!field) return;
+    const selectedId = parentCycleId || field.value;
+    field.replaceChildren();
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select appraisal cycle";
+    field.appendChild(placeholder);
+    bexPaState.cycles.forEach(cycle => {
+      const option = document.createElement("option");
+      option.value = cycle.id;
+      option.textContent = cycle.name;
+      field.appendChild(option);
+    });
+    field.value = selectedId;
+    field.disabled = Boolean(parentCycleId);
+    field.dataset.bexPaCycleId = field.value;
+  }
+
+  function bexPaValidateGoalDates(goal, parent = null) {
+    const cycle = bexPaState.cycles.find(item => item.id === goal.cycleId);
+    if (!cycle || cycle.status === "Closed") return "Select an open appraisal cycle.";
+    if (parent && parent.cycleId !== cycle.id) return "The linked goal must belong to the same appraisal cycle.";
+    const start = bexPaParseDate(goal.startDate);
+    const due = bexPaParseDate(goal.dueDate);
+    const cycleStart = bexPaParseDate(cycle.startDate);
+    const cycleEnd = bexPaParseDate(cycle.endDate);
+    if (!start || !due || !cycleStart || !cycleEnd) return "Enter valid goal and cycle dates.";
+    if (due < start) return "The goal due date cannot be earlier than its start date.";
+    if (start < cycleStart || due > cycleEnd) return "Goal dates must fall within the appraisal cycle dates.";
+    if (parent) {
+      const parentStart = bexPaParseDate(parent.startDate);
+      const parentDue = bexPaParseDate(parent.dueDate);
+      if (!parentStart || !parentDue || start < parentStart || due > parentDue)
+        return "Goal dates must fall within the linked parent goal dates.";
+    }
+    return "";
   }
 
   function bexPaIsIndividualGoalHistorical(
@@ -6915,7 +6867,7 @@
 
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "Select organisation goal";
+    placeholder.textContent = "No organisation link (optional)";
 
     bexPaElements.departmentGoalOrganisationGoal.appendChild(
       placeholder,
@@ -6951,28 +6903,10 @@
   }
 
   function bexPaUpdateDepartmentGoalCycleDisplay() {
-    if (!bexPaElements.departmentGoalCycle) {
-      return;
-    }
-
-    const goal = bexPaState.organisationGoals.find(
-      (existingGoal) =>
-        existingGoal.id ===
-        bexPaElements.departmentGoalOrganisationGoal?.value,
-    );
-
-    const cycle = goal
-      ? bexPaState.cycles.find(
-        (existingCycle) =>
-          existingCycle.id === goal.cycleId,
-      )
-      : null;
-
-    bexPaElements.departmentGoalCycle.value =
-      cycle?.name || "";
-
-    bexPaElements.departmentGoalCycle.dataset.bexPaCycleId =
-      goal?.cycleId || "";
+    const parent = bexPaState.organisationGoals.find(goal =>
+      goal.id === bexPaElements.departmentGoalOrganisationGoal?.value);
+    bexPaPopulateGoalCycles(bexPaElements.departmentGoalCycle, parent?.cycleId || "");
+    if (bexPaState.editingDepartmentGoalId) bexPaElements.departmentGoalCycle.disabled = true;
   }
 
   function bexPaClearDepartmentGoalError() {
@@ -7018,85 +6952,24 @@
   }
 
   function bexPaApplyDepartmentGoalDepartmentScope() {
-    const departmentField =
-      bexPaElements.departmentGoalDepartment;
-
-    if (!departmentField) {
-      return;
-    }
-
-    const currentValue =
-      String(departmentField.value || "").trim();
-
-    let availableDepartments =
-      bexPaGetAvailableDepartments();
-
-    if (bexPaIsPrimaryManagerMode()) {
-      const managedDepartmentIds =
-        new Set(
-          bexPaGetAvailableEmployees()
-            .map((employee) =>
-              String(
-                employee.departmentId || "",
-              ).trim(),
-            )
-            .filter(Boolean),
-        );
-
-      availableDepartments =
-        availableDepartments.filter(
-          (department) =>
-            managedDepartmentIds.has(
-              department.id,
-            ),
-        );
-    }
-
-    departmentField.replaceChildren();
-
-    const placeholder =
-      document.createElement("option");
-
+    const field = bexPaElements.departmentGoalDepartment;
+    if (!field) return;
+    const currentValue = field.value;
+    const departments = bexPaGetManagedDepartments();
+    field.replaceChildren();
+    const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent =
-      availableDepartments.length > 0
-        ? "Select department"
-        : "No departments available";
-
-    departmentField.appendChild(
-      placeholder,
-    );
-
-    availableDepartments.forEach(
-      (department) => {
-        const option =
-          document.createElement("option");
-
-        option.value = department.id;
-        option.textContent = department.name;
-
-        departmentField.appendChild(option);
-      },
-    );
-
-    departmentField.disabled =
-      availableDepartments.length === 0;
-
-    if (
-      currentValue &&
-      availableDepartments.some(
-        (department) =>
-          department.id === currentValue,
-      )
-    ) {
-      departmentField.value = currentValue;
-      return;
-    }
-
-    if (availableDepartments.length === 1) {
-      departmentField.value =
-        availableDepartments[0].id;
-    }
+    placeholder.textContent = departments.length ? "Select department" : "No departments in your reporting scope";
+    field.appendChild(placeholder);
+    departments.forEach(department => {
+      const option = document.createElement("option");
+      option.value = department.id;
+      option.textContent = department.name;
+      field.appendChild(option);
+    });
+    field.value = departments.some(item => item.id === currentValue) ? currentValue :
+      departments.length === 1 ? departments[0].id : "";
+    field.disabled = departments.length === 0 || Boolean(bexPaState.editingDepartmentGoalId);
   }
 
   function bexPaOpenDepartmentGoalDialog(
@@ -7113,6 +6986,7 @@
     const rememberedValues = bexPaGetRememberedFormValues("departmentGoal");
     bexPaApplyRememberedValues([
       [bexPaElements.departmentGoalOrganisationGoal, rememberedValues.organisationGoalId],
+      [bexPaElements.departmentGoalCycle, rememberedValues.cycleId],
       [bexPaElements.departmentGoalDepartment, rememberedValues.departmentId],
       [bexPaElements.departmentGoalTitle, rememberedValues.title],
       [bexPaElements.departmentGoalDescription, rememberedValues.description],
@@ -7151,6 +7025,7 @@
       bexPaElements.departmentGoalOrganisationGoal.value =
         departmentGoal.organisationGoalId;
 
+      bexPaElements.departmentGoalCycle.value = departmentGoal.cycleId;
       bexPaUpdateDepartmentGoalCycleDisplay();
 
       bexPaElements.departmentGoalDepartment.value =
@@ -7192,103 +7067,22 @@
     bexPaResetDepartmentGoalForm();
   }
 
-  function bexPaValidateDepartmentGoal(
-    departmentGoal,
-  ) {
-    const requiredValues = [
-      departmentGoal.organisationGoalId,
-      departmentGoal.department,
-      departmentGoal.title,
-      departmentGoal.description,
-      departmentGoal.target,
-      departmentGoal.owner,
-      departmentGoal.status,
-      departmentGoal.startDate,
-      departmentGoal.dueDate,
-    ];
-
-    if (requiredValues.some((value) => !value)) {
-      return "Complete all department goal fields before saving.";
-    }
-
-    const organisationGoal =
-      bexPaState.organisationGoals.find(
-        (goal) =>
-          goal.id ===
-          departmentGoal.organisationGoalId,
-      );
-
-    if (!organisationGoal) {
-      return "Select a valid organisation goal.";
-    }
-
-    if (
-      !departmentGoal.cycleId ||
-      departmentGoal.cycleId !==
-      organisationGoal.cycleId
-    ) {
-      return "The department goal appraisal cycle must match the selected organisation goal.";
-    }
-
-    const departmentGoalStartDate = bexPaParseDate(
-      departmentGoal.startDate,
-    );
-
-    const departmentGoalDueDate = bexPaParseDate(
-      departmentGoal.dueDate,
-    );
-
-    const organisationGoalStartDate = bexPaParseDate(
-      organisationGoal.startDate,
-    );
-
-    const organisationGoalDueDate = bexPaParseDate(
-      organisationGoal.dueDate,
-    );
-
-    if (
-      !departmentGoalStartDate ||
-      !departmentGoalDueDate ||
-      !organisationGoalStartDate ||
-      !organisationGoalDueDate
-    ) {
-      return "Enter valid department goal dates.";
-    }
-
-    if (
-      departmentGoalDueDate <
-      departmentGoalStartDate
-    ) {
-      return "The department goal due date cannot be earlier than its start date.";
-    }
-
-    if (
-      departmentGoalStartDate <
-      organisationGoalStartDate ||
-      departmentGoalDueDate >
-      organisationGoalDueDate
-    ) {
-      return "Department goal dates must fall within the parent organisation goal dates.";
-    }
-
-    const duplicateDepartmentGoal =
-      bexPaState.departmentGoals.some(
-        (existingDepartmentGoal) =>
-          existingDepartmentGoal.id !==
-          bexPaState.editingDepartmentGoalId &&
-          existingDepartmentGoal.organisationGoalId ===
-          departmentGoal.organisationGoalId &&
-          existingDepartmentGoal.department
-            .toLowerCase() ===
-          departmentGoal.department.toLowerCase() &&
-          existingDepartmentGoal.title.toLowerCase() ===
-          departmentGoal.title.toLowerCase(),
-      );
-
-    if (duplicateDepartmentGoal) {
-      return "A department goal with this title already exists for the selected department under this organisation goal.";
-    }
-
+  function bexPaValidateDepartmentGoal(goal) {
+    if ([goal.cycleId, goal.departmentId, goal.department, goal.title, goal.description,
+      goal.target, goal.owner, goal.status, goal.startDate, goal.dueDate].some(value => !value))
+      return "Complete all required department goal fields before saving.";
+    if (!bexPaCanManageDepartmentGoal(goal)) return "You can only manage goals in your department scope.";
+    const existing = bexPaState.departmentGoals.find(item => item.id === bexPaState.editingDepartmentGoalId);
+    if (existing && (existing.cycleId !== goal.cycleId || existing.departmentId !== goal.departmentId))
+      return "An existing goal cannot move to another cycle or department.";
+    const parent = bexPaState.organisationGoals.find(item => item.id === goal.organisationGoalId);
+    if (goal.organisationGoalId && !parent) return "Select a valid organisation goal or leave the link empty.";
+    const dateError = bexPaValidateGoalDates(goal, parent);
+    if (dateError) return dateError;
+    if (bexPaState.departmentGoals.some(item => item.id !== bexPaState.editingDepartmentGoalId &&
+      item.cycleId === goal.cycleId && item.departmentId === goal.departmentId &&
+      item.title.trim().toLowerCase() === goal.title.trim().toLowerCase()))
+      return "A goal with this title already exists for this department and cycle.";
     return "";
   }
 
@@ -7543,7 +7337,7 @@
     const placeholder = document.createElement("option");
     placeholder.value = "";
     placeholder.textContent = selectedDepartment
-      ? "Select department goal"
+      ? "No department link (optional)"
       : "Select employee first";
 
     bexPaElements.individualGoalDepartmentGoal.appendChild(
@@ -7631,39 +7425,15 @@
   }
 
   function bexPaUpdateIndividualGoalDerivedFields() {
-    const selectedDepartment =
-      bexPaGetSelectedIndividualGoalDepartment();
-
-    const departmentGoal =
-      bexPaState.departmentGoals.find(
-        (existingDepartmentGoal) =>
-          existingDepartmentGoal.id ===
-          bexPaElements.individualGoalDepartmentGoal?.value,
-      );
-
-    const cycle = departmentGoal
-      ? bexPaState.cycles.find(
-        (existingCycle) =>
-          existingCycle.id ===
-          departmentGoal.cycleId,
-      )
-      : null;
-
+    const department = bexPaGetSelectedIndividualGoalDepartment();
+    const parent = bexPaState.departmentGoals.find(goal =>
+      goal.id === bexPaElements.individualGoalDepartmentGoal?.value);
     if (bexPaElements.individualGoalDepartment) {
-      bexPaElements.individualGoalDepartment.value =
-        selectedDepartment?.name || "";
-
-      bexPaElements.individualGoalDepartment.dataset.bexPaDepartmentId =
-        selectedDepartment?.id || "";
+      bexPaElements.individualGoalDepartment.value = department?.name || "";
+      bexPaElements.individualGoalDepartment.dataset.bexPaDepartmentId = department?.id || "";
     }
-
-    if (bexPaElements.individualGoalCycle) {
-      bexPaElements.individualGoalCycle.value =
-        cycle?.name || "";
-
-      bexPaElements.individualGoalCycle.dataset.bexPaCycleId =
-        departmentGoal?.cycleId || "";
-    }
+    bexPaPopulateGoalCycles(bexPaElements.individualGoalCycle, parent?.cycleId || "");
+    if (bexPaState.editingIndividualGoalId) bexPaElements.individualGoalCycle.disabled = true;
   }
 
   function bexPaClearIndividualGoalError() {
@@ -7757,6 +7527,7 @@
     bexPaUpdateIndividualGoalDerivedFields();
     const rememberedValues = bexPaGetRememberedFormValues("individualGoal");
     bexPaApplyRememberedValues([
+      [bexPaElements.individualGoalCycle, rememberedValues.cycleId],
       [bexPaElements.individualGoalTitle, rememberedValues.title],
       [bexPaElements.individualGoalDescription, rememberedValues.description],
       [bexPaElements.individualGoalTarget, rememberedValues.target],
@@ -7778,7 +7549,7 @@
       }
 
       if (
-        bexPaIsIndividualGoalHistorical(
+        bexPaIsIndividualGoalDefinitionLocked(
           individualGoal,
         )
       ) {
@@ -7860,6 +7631,7 @@
       bexPaElements.individualGoalDepartmentGoal.value =
         individualGoal.departmentGoalId;
 
+      bexPaElements.individualGoalCycle.value = individualGoal.cycleId;
       bexPaUpdateIndividualGoalDerivedFields();
 
       bexPaElements.individualGoalTitle.value =
@@ -7897,129 +7669,28 @@
     bexPaResetIndividualGoalForm();
   }
 
-  function bexPaValidateIndividualGoal(
-    individualGoal,
-  ) {
-    const requiredValues = [
-      individualGoal.employee,
-      individualGoal.departmentGoalId,
-      individualGoal.title,
-      individualGoal.description,
-      individualGoal.target,
-      individualGoal.status,
-      individualGoal.startDate,
-      individualGoal.dueDate,
-    ];
-
-    if (requiredValues.some((value) => !value)) {
-      return "Complete all individual employee goal fields before saving.";
-    }
-
-    if (
-      bexPaGetAvailableEmployees().length > 0 &&
-      !individualGoal.employeeId
-    ) {
-      return "Select a valid employee.";
-    }
-
-    if (
-      bexPaIsPrimaryManagerMode() &&
-      !bexPaGetManagedEmployeeIds().includes(
-        individualGoal.employeeId,
-      )
-    ) {
-      return "You can only manage individual goals for employees within your Primary Manager reporting scope.";
-    }
-
-    if (
-      bexPaIsIndividualGoalHistorical(
-        individualGoal,
-      )
-    ) {
-      return "Individual goals cannot be changed for a finalised or acknowledged appraisal.";
-    }
-
-    const departmentGoal =
-      bexPaState.departmentGoals.find(
-        (existingDepartmentGoal) =>
-          existingDepartmentGoal.id ===
-          individualGoal.departmentGoalId,
-      );
-
-    if (!departmentGoal) {
-      return "Select a valid department goal.";
-    }
-
-    if (
-      bexPaIsPrimaryManagerMode() &&
-      !bexPaCanManageDepartmentGoal(
-        departmentGoal,
-      )
-    ) {
-      return "You can only assign individual goals within departments in your Primary reporting scope.";
-    }
-
-    if (
-      !individualGoal.cycleId ||
-      individualGoal.cycleId !==
-      departmentGoal.cycleId
-    ) {
-      return "The individual goal appraisal cycle must match the selected department goal.";
-    }
-
-    const individualStartDate = bexPaParseDate(
-      individualGoal.startDate,
-    );
-
-    const individualDueDate = bexPaParseDate(
-      individualGoal.dueDate,
-    );
-
-    const departmentStartDate = bexPaParseDate(
-      departmentGoal.startDate,
-    );
-
-    const departmentDueDate = bexPaParseDate(
-      departmentGoal.dueDate,
-    );
-
-    if (
-      !individualStartDate ||
-      !individualDueDate ||
-      !departmentStartDate ||
-      !departmentDueDate
-    ) {
-      return "Enter valid individual goal dates.";
-    }
-
-    if (individualDueDate < individualStartDate) {
-      return "The individual goal due date cannot be earlier than its start date.";
-    }
-
-    if (
-      individualStartDate < departmentStartDate ||
-      individualDueDate > departmentDueDate
-    ) {
-      return "Individual goal dates must fall within the parent department goal dates.";
-    }
-
-    const duplicateIndividualGoal =
-      bexPaState.individualGoals.some(
-        (existingIndividualGoal) =>
-          existingIndividualGoal.id !==
-          bexPaState.editingIndividualGoalId &&
-          existingIndividualGoal.departmentGoalId ===
-          individualGoal.departmentGoalId &&
-          existingIndividualGoal.employee.toLowerCase() ===
-          individualGoal.employee.toLowerCase() &&
-          existingIndividualGoal.title.toLowerCase() ===
-          individualGoal.title.toLowerCase(),
-      );
-
-    if (duplicateIndividualGoal) {
-      return "An individual goal with this title already exists for this employee under the selected department goal.";
-    }
-
+  function bexPaValidateIndividualGoal(goal) {
+    if ([goal.employeeId, goal.employee, goal.departmentId, goal.cycleId, goal.title, goal.description,
+      goal.target, goal.status, goal.startDate, goal.dueDate].some(value => !value))
+      return "Complete all required individual goal fields before saving.";
+    if (!bexPaCanEditIndividualGoals() || !bexPaGetManagedEmployeeIds().includes(goal.employeeId))
+      return "Only the Primary Manager can manage a direct report's individual goals.";
+    const employee = bexPaGetAvailableEmployees().find(item => item.id === goal.employeeId);
+    if (!employee || employee.departmentId !== goal.departmentId) return "Select a valid employee department.";
+    if (bexPaIsIndividualGoalDefinitionLocked(goal))
+      return "Goal definitions cannot change after self-appraisal submission or finalisation.";
+    const existing = bexPaState.individualGoals.find(item => item.id === bexPaState.editingIndividualGoalId);
+    if (existing && (existing.employeeId !== goal.employeeId || existing.cycleId !== goal.cycleId ||
+      existing.departmentId !== goal.departmentId)) return "An existing goal cannot move to another employee, cycle or department.";
+    const parent = bexPaState.departmentGoals.find(item => item.id === goal.departmentGoalId);
+    if (goal.departmentGoalId && !parent) return "Select a valid department goal or leave the link empty.";
+    if (parent && parent.departmentId !== goal.departmentId) return "The linked goal must belong to the employee's department.";
+    const dateError = bexPaValidateGoalDates(goal, parent);
+    if (dateError) return dateError;
+    if (bexPaState.individualGoals.some(item => item.id !== bexPaState.editingIndividualGoalId &&
+      item.employeeId === goal.employeeId && item.cycleId === goal.cycleId &&
+      item.title.trim().toLowerCase() === goal.title.trim().toLowerCase()))
+      return "A goal with this title already exists for this employee and cycle.";
     return "";
   }
 
@@ -8702,13 +8373,11 @@
               individualGoal.departmentGoalId,
           );
 
-        const cycle = departmentGoal
-          ? bexPaState.cycles.find(
-            (existingCycle) =>
-              existingCycle.id ===
-              departmentGoal.cycleId,
-          )
-          : null;
+               const cycle = bexPaState.cycles.find(
+          (existingCycle) =>
+            existingCycle.id ===
+            (individualGoal.cycleId || departmentGoal?.cycleId),
+        );
 
         const item = document.createElement("article");
         item.className = "bex-pa-goal-item";
@@ -8736,7 +8405,8 @@
 
         const departmentLabel =
           document.createElement("span");
-        departmentLabel.textContent =
+          departmentLabel.textContent =
+          individualGoal.department ||
           departmentGoal?.department ||
           "Unknown department";
 
@@ -8744,7 +8414,7 @@
           document.createElement("span");
         parentGoalLabel.textContent =
           departmentGoal?.title ||
-          "Unknown department goal";
+          "No department link";
 
         const cycleLabel =
           document.createElement("span");
@@ -8806,7 +8476,8 @@
 
         if (
           bexPaCanEditIndividualGoals() &&
-          !bexPaIsIndividualGoalHistorical(
+          bexPaIsIndividualGoalInPrimaryManagerScope(individualGoal) &&
+          !bexPaIsIndividualGoalDefinitionLocked(
             individualGoal,
           )
         ) {
@@ -8855,7 +8526,7 @@
     bexPaRememberFormValues("individualGoal", {
       departmentGoalId: bexPaElements.individualGoalDepartmentGoal.value,
       department: bexPaElements.individualGoalDepartment.value,
-      cycle: bexPaElements.individualGoalCycle.value,
+      cycleId: bexPaElements.individualGoalCycle.value,
       title: bexPaElements.individualGoalTitle.value,
       description: bexPaElements.individualGoalDescription.value,
       target: bexPaElements.individualGoalTarget.value,
@@ -8906,7 +8577,7 @@
         selectedDepartment.id,
 
       cycleId:
-        departmentGoal?.cycleId || "",
+        bexPaElements.individualGoalCycle.value,
 
       title:
         bexPaElements.individualGoalTitle.value.trim(),
@@ -9160,7 +8831,7 @@
           document.createElement("span");
         organisationGoalLabel.textContent =
           organisationGoal?.title ||
-          "Unknown organisation goal";
+          "No organisation link";
 
         const cycleLabel =
           document.createElement("span");
@@ -9247,6 +8918,7 @@
 
     bexPaRememberFormValues("departmentGoal", {
       organisationGoalId: bexPaElements.departmentGoalOrganisationGoal.value,
+      cycleId: bexPaElements.departmentGoalCycle.value,
       departmentId: bexPaElements.departmentGoalDepartment.value,
       title: bexPaElements.departmentGoalTitle.value,
       description: bexPaElements.departmentGoalDescription.value,
@@ -9290,7 +8962,7 @@
         bexPaElements.departmentGoalOrganisationGoal.value,
 
       cycleId:
-        organisationGoal?.cycleId || "",
+        bexPaElements.departmentGoalCycle.value,
 
       department:
         selectedDepartment.name,
@@ -9322,7 +8994,7 @@
 
     if (!bexPaCanManageDepartmentGoal(departmentGoal)) {
       bexPaShowDepartmentGoalError(
-        "You can only manage goals for departments within your Primary reporting scope.",
+        "You can only manage goals for departments within your department reporting scope.",
       );
       return;
     }
@@ -9516,7 +9188,7 @@
 
       const goalLabel = document.createElement("span");
       goalLabel.textContent =
-        organisationGoal?.title || "Unknown organisation goal";
+        organisationGoal?.title || "No organisation link";
 
       const cycleLabel = document.createElement("span");
       cycleLabel.textContent =
@@ -15905,9 +15577,16 @@
     );
   }
 
-  function bexPaGetApplicableSelfAppraisalCompetencies(
+    function bexPaGetApplicableSelfAppraisalCompetencies(
     template,
+    selfAppraisal = null,
   ) {
+    // Employees document achievements; managers score the template.
+    // Preserve previously submitted employee ratings as historical data.
+    if (selfAppraisal?.status !== "Submitted") {
+      return [];
+    }
+
     return (
       Array.isArray(template?.competencies)
         ? template.competencies
@@ -15915,7 +15594,10 @@
     )
       .filter(
         (competency) =>
-          competency.applicability === "All Employees",
+          competency.applicability === "All Employees" &&
+          selfAppraisal.competencyResponses?.some(
+            (response) => response.competencyId === competency.id,
+          ),
       )
       .sort(
         (firstCompetency, secondCompetency) =>
@@ -16023,9 +15705,10 @@
         existingSelfAppraisal.appraisalId === appraisal.id,
     );
 
-    const competencies =
+        const competencies =
       bexPaGetApplicableSelfAppraisalCompetencies(
         template,
+        selfAppraisal,
       );
 
     const ratingScale = Array.isArray(template?.ratingScale)
@@ -16059,11 +15742,24 @@
     if (competencies.length === 0) {
       const emptyCompetencies = document.createElement("p");
       emptyCompetencies.className = "text-body-secondary";
-      emptyCompetencies.textContent =
-        "No employee-applicable competencies are configured for this template.";
+           emptyCompetencies.textContent =
+        "Your manager completes the competency ratings. Record your achievements, challenges and development needs in the other sections.";
       bexPaElements.selfAppraisalCompetencies.appendChild(
         emptyCompetencies,
       );
+
+      const assessmentAreas = document.createElement("ul");
+      (Array.isArray(template?.competencies) ? template.competencies : [])
+        .slice()
+        .sort((first, second) => first.order - second.order)
+        .forEach((competency) => {
+          const area = document.createElement("li");
+          area.textContent = competency.description
+            ? `${competency.name}: ${competency.description}`
+            : competency.name;
+          assessmentAreas.appendChild(area);
+        });
+      bexPaElements.selfAppraisalCompetencies.appendChild(assessmentAreas);
     } else {
       competencies.forEach((competency) => {
         const response = selfAppraisal?.competencyResponses?.find(

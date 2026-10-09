@@ -884,7 +884,7 @@
                                                         </h2>
 
                                                         <p class="mb-0 small text-body-secondary">
-                                                            Link department priorities to organisation goals.
+                                                            Managers set department goals; organisation links are optional.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -928,7 +928,7 @@
                                                         </h2>
 
                                                         <p class="mb-0 small text-body-secondary">
-                                                            Assign employee goals linked to department priorities.
+                                                            Primary managers set employee goals; department links are optional.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1136,7 +1136,7 @@
                                             <div class="col-12">
                                                 <label class="form-label fw-semibold"
                                                     for="bexPaDeliverableOrganisationGoal">
-                                                    Organisation goal
+                                                    Organisation goal (optional)
                                                 </label>
 
                                                 <select class="form-select" id="bexPaDeliverableOrganisationGoal"
@@ -1265,11 +1265,10 @@
                                             <div class="col-12">
                                                 <label class="form-label fw-semibold"
                                                     for="bexPaDepartmentGoalOrganisationGoal">
-                                                    Organisation goal
+                                                    Organisation goal (optional)
                                                 </label>
 
-                                                <select class="form-select" id="bexPaDepartmentGoalOrganisationGoal"
-                                                    required>
+                                                <select class="form-select" id="bexPaDepartmentGoalOrganisationGoal">
                                                     <option value="">
                                                         Select organisation goal
                                                     </option>
@@ -1281,9 +1280,9 @@
                                                     Appraisal cycle
                                                 </label>
 
-                                                <input class="form-control" id="bexPaDepartmentGoalCycle" type="text"
-                                                    readonly
-                                                    placeholder="Selected automatically from organisation goal" />
+                                                <select class="form-select" id="bexPaDepartmentGoalCycle" required>
+                                                    <option value="">Select appraisal cycle</option>
+                                                </select>
                                             </div>
 
                                             <div class="col-12">
@@ -1428,19 +1427,18 @@
                                                 </div>
 
                                                 <div class="form-text">
-                                                    Select one employee. Department and department goals will be derived
-                                                    automatically.
+                                                    Select one direct report. Department comes from the employee record;
+                                                    linking a department goal is optional.
                                                 </div>
                                             </div>
 
                                             <div class="col-12">
                                                 <label class="form-label fw-semibold"
                                                     for="bexPaIndividualGoalDepartmentGoal">
-                                                    Department goal
+                                                    Department goal (optional)
                                                 </label>
 
-                                                <select class="form-select" id="bexPaIndividualGoalDepartmentGoal"
-                                                    required>
+                                                <select class="form-select" id="bexPaIndividualGoalDepartmentGoal">
                                                     <option value="">
                                                         Select department goal
                                                     </option>
@@ -1455,7 +1453,7 @@
 
                                                 <input class="form-control" id="bexPaIndividualGoalDepartment"
                                                     type="text" readonly
-                                                    placeholder="Selected automatically from department goal" />
+                                                    placeholder="Selected from employee" />
                                             </div>
 
                                             <div class="col-12 col-md-6">
@@ -1463,9 +1461,9 @@
                                                     Appraisal cycle
                                                 </label>
 
-                                                <input class="form-control" id="bexPaIndividualGoalCycle" type="text"
-                                                    readonly
-                                                    placeholder="Selected automatically from department goal" />
+                                                <select class="form-select" id="bexPaIndividualGoalCycle" required>
+                                                    <option value="">Select appraisal cycle</option>
+                                                </select>
                                             </div>
 
                                             <div class="col-12">
