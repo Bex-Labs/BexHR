@@ -12,26 +12,40 @@ try {
 // Presentation only. Releases the first-paint gate after the
 // existing authenticated Admin startup sequence completes.
 function releaseAdminWorkspaceLoader() {
-  const body = document.body;
-  const loader = document.getElementById("bexhrWorkspaceLoader");
-  const firstPaintGate = document.getElementById(
-    "adminWorkspaceFirstPaintGate",
-  );
+  // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
+  // Keep fast Admin restores visible long enough to read as intentional.
+  const releaseWorkspace = () => {
+    const body = document.body;
+    const loader = document.getElementById("bexhrWorkspaceLoader");
+    const firstPaintGate = document.getElementById(
+      "adminWorkspaceFirstPaintGate",
+    );
 
-  body?.classList.remove("admin-workspace-booting");
-  body?.removeAttribute("aria-busy");
+    body?.classList.remove("admin-workspace-booting");
+    body?.removeAttribute("aria-busy");
 
-  firstPaintGate?.remove();
+    firstPaintGate?.remove();
 
-  if (!loader) return;
+    if (!loader) return;
 
-  loader.setAttribute("aria-hidden", "true");
-  loader.style.opacity = "0";
-  loader.style.pointerEvents = "none";
+    loader.setAttribute("aria-hidden", "true");
+    loader.style.opacity = "0";
+    loader.style.pointerEvents = "none";
 
-  window.setTimeout(() => {
-    loader.remove();
-  }, 220);
+    window.setTimeout(() => {
+      loader.remove();
+    }, 220);
+  };
+
+  const loaderElapsed = Number(window.performance?.now?.()) || 0;
+  const remainingLoaderTime = Math.max(0, 650 - loaderElapsed);
+
+  if (remainingLoaderTime > 0) {
+    window.setTimeout(releaseWorkspace, remainingLoaderTime);
+    return;
+  }
+
+  releaseWorkspace();
 }
 
 document.addEventListener("DOMContentLoaded", async () => {

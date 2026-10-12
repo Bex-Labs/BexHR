@@ -1248,6 +1248,28 @@
     </section>
 
     <section id="leaveSection" class="dashboard-section d-none">
+      <!-- BEXHR EMPLOYEE SELF-SERVICE COHESION - R-03
+           Same presentation rule as HR/Manager Self-Service:
+           one Leave job, peer inline views, selected content opens immediately. -->
+      <nav id="employeeLeaveInlineTabs" class="ss-leave-inline-tabs" aria-label="Leave workspace views">
+        <button type="button" class="ss-leave-inline-tab active" data-employee-leave-view="request"
+          aria-selected="true" aria-current="page">
+          <i class="bi bi-calendar2-plus" aria-hidden="true"></i><span>Request Leave</span>
+        </button>
+        <button type="button" class="ss-leave-inline-tab" data-employee-leave-view="history"
+          aria-selected="false">
+          <i class="bi bi-clock-history" aria-hidden="true"></i><span>History</span>
+        </button>
+        <button type="button" class="ss-leave-inline-tab" data-employee-leave-view="balances"
+          aria-selected="false">
+          <i class="bi bi-pie-chart" aria-hidden="true"></i><span>Leave Balances</span>
+        </button>
+        <button type="button" class="ss-leave-inline-tab" data-employee-leave-view="decision"
+          aria-selected="false">
+          <i class="bi bi-calendar2-check" aria-hidden="true"></i><span>Latest Decision</span>
+        </button>
+      </nav>
+
       <!-- EMPLOYEE LEAVE STRUCTURAL HR MANAGER PARITY - v1.0.1
            Approved self-service structure with Employee IDs preserved. -->
       <!-- EMPLOYEE UI CLEANUP - STEP 1L-C
@@ -1965,6 +1987,29 @@
               </span>
             </button>
 
+            <!-- BEXHR EMPLOYEE HELP / PERFORMANCE APPRAISAL - R-03 -->
+            <button type="button" class="employee-guide-workspace-card employee-guide-workspace-action"
+              data-employee-guide-target="sidebarEmployeePerformanceAppraisalBtn"
+              aria-label="Open Performance Appraisal workspace">
+              <span class="employee-guide-workspace-icon" aria-hidden="true">
+                <i class="bi bi-clipboard2-check"></i>
+              </span>
+
+              <span class="employee-guide-workspace-copy">
+                <strong>Performance Appraisal</strong>
+
+                <small>
+                  Open My Appraisal to review your active cycle, complete self-appraisal work,
+                  and follow your current appraisal progress.
+                </small>
+
+                <span class="employee-guide-open-action">
+                  Open workspace
+                  <i class="bi bi-arrow-up-right"></i>
+                </span>
+              </span>
+            </button>
+
             <button type="button" class="employee-guide-workspace-card employee-guide-workspace-action"
               data-employee-guide-target="navProfileBtn" aria-label="Open My Profile workspace">
               <span class="employee-guide-workspace-icon employee-guide-workspace-icon-profile" aria-hidden="true">
@@ -2079,7 +2124,7 @@
 
               <p>
                 Start on Overview. Your status cards and quick actions will
-                direct you to My Profile, Leave or Payroll.
+                direct you to My Profile, Leave, Payroll or Performance Appraisal.
               </p>
             </div>
           </aside>

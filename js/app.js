@@ -47,20 +47,43 @@ function releaseLandingPageLoader() {
 }
 
 
-// LANDING PAGE LOADER - v1.0.0
-// Do not introduce an artificial loading delay.
-// Release as soon as the browser reports the landing page ready.
+// BEXHR UNIVERSAL WORKSPACE LOADER - US-01 LANDING TIMING
+//
+// Keep the landing loader visible long enough to feel intentional
+// on fast connections. Slower real page loads receive no extra delay.
+
+const BEXHR_LANDING_LOADER_MINIMUM_MS = 1200;
+
+const bexhrLandingLoaderStartedAt =
+  window.performance.now();
+
+function releaseLandingPageLoaderWithMinimumTime() {
+  const elapsed =
+    window.performance.now() -
+    bexhrLandingLoaderStartedAt;
+
+  const remaining =
+    Math.max(
+      BEXHR_LANDING_LOADER_MINIMUM_MS - elapsed,
+      0,
+    );
+
+  window.setTimeout(() => {
+    releaseLandingPageLoader();
+  }, remaining);
+}
+
 if (document.readyState === "complete") {
 
   window.requestAnimationFrame(() => {
-    releaseLandingPageLoader();
+    releaseLandingPageLoaderWithMinimumTime();
   });
 
 } else {
 
   window.addEventListener(
     "load",
-    releaseLandingPageLoader,
+    releaseLandingPageLoaderWithMinimumTime,
     { once: true },
   );
 
@@ -501,9 +524,11 @@ document.addEventListener("DOMContentLoaded", function () {
       mfa: isHrDashboardMfaRequiredRole(profile.role) ? "aal2-required" : "not-required",
     });
 
-    setTimeout(function () {
-      window.location.href = redirectTarget;
-    }, 1200);
+    // BEXHR R-09 - SIGN-IN SUCCESS REDIRECT
+    // Authentication, profile/role resolution and tenant validation have already
+    // completed at this point. Redirect immediately instead of adding a fixed
+    // post-success delay.
+    window.location.href = redirectTarget;
   }
 
   async function getVerifiedHrTotpFactor() {

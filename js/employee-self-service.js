@@ -350,9 +350,148 @@
   // -----------------------------------------------------------------------
   // Sub-navigation (Leave / Payroll)
   // -----------------------------------------------------------------------
-  function switchSsSubSection(section) {
-    const isLeave = section === "leave";
-    const isPayroll = section === "payroll";
+  // =======================================================
+  // BEXHR UNIFIED SELF-SERVICE LEAVE TABS - R-02.2
+  // One Leave job, four peer views. Existing forms, IDs, handlers,
+  // leave rules, payroll rules, Supabase queries, and permissions remain intact.
+  // =======================================================
+  const SS_LEAVE_VIEW_DEFAULT = "request";
+  const SS_LEAVE_VIEWS = Object.freeze({
+    request: { label: "Request Leave", icon: "bi-calendar2-plus" },
+    history: { label: "History", icon: "bi-clock-history" },
+    balances: { label: "Leave Balances", icon: "bi-pie-chart" },
+    decision: { label: "Latest Decision", icon: "bi-calendar2-check" },
+  });
+
+  function normaliseSsLeaveView(view = "") {
+    const key = String(view || "").trim().toLowerCase();
+    return Object.hasOwn(SS_LEAVE_VIEWS, key) ? key : SS_LEAVE_VIEW_DEFAULT;
+  }
+
+  function getSsLeaveViewNodes() {
+    const balanceCard = ssState.dom.ssLeaveBalancesCardCollapse?.closest(".dashboard-section-card") || null;
+    const decisionCard = ssState.dom.ssLatestDecisionCardCollapse?.closest(".dashboard-section-card") || null;
+    const requestCard = ssState.dom.ssLeaveRequestForm?.closest(".dashboard-section-card") || null;
+    const historyCard = ssState.dom.ssLeaveHistoryCardCollapse?.closest(".dashboard-section-card") || null;
+    const requestColumn = requestCard?.closest(".col-12") || null;
+    const historyColumn = historyCard?.closest(".col-12") || null;
+    const mainRow = requestCard?.closest(".ss-leave-main-row") || historyCard?.closest(".ss-leave-main-row") || null;
+
+    return {
+      balanceCard,
+      decisionCard,
+      requestCard,
+      historyCard,
+      requestColumn,
+      historyColumn,
+      mainRow,
+    };
+  }
+
+  function ensureSsLeaveInlineTabs() {
+    const section = ssState.dom.ssLeaveSection;
+    if (!section) return null;
+
+    section.classList.add("ss-leave-inline-mode");
+
+    const existing = document.getElementById("ssLeaveInlineTabs");
+    if (existing) return existing;
+
+    const nav = document.createElement("nav");
+    nav.id = "ssLeaveInlineTabs";
+    nav.className = "ss-leave-inline-tabs";
+    nav.setAttribute("aria-label", "Leave workspace views");
+
+    Object.entries(SS_LEAVE_VIEWS).forEach(([key, config]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ss-leave-inline-tab";
+      button.dataset.ssLeaveView = key;
+      button.setAttribute("aria-selected", "false");
+      button.innerHTML = '<i class="bi ' + config.icon + '" aria-hidden="true"></i><span>' + config.label + '</span>';
+      button.addEventListener("click", () => {
+        setSsLeaveView(key, { focus: true });
+      });
+      nav.appendChild(button);
+    });
+
+    section.insertBefore(nav, section.firstChild);
+    return nav;
+  }
+
+  function setSsLeaveView(view = SS_LEAVE_VIEW_DEFAULT, options = {}) {
+    const section = ssState.dom.ssLeaveSection;
+    if (!section) return SS_LEAVE_VIEW_DEFAULT;
+
+    ensureSsLeaveInlineTabs();
+
+    const resolved = normaliseSsLeaveView(view);
+    const nodes = getSsLeaveViewNodes();
+    const usesMainRow = resolved === "request" || resolved === "history";
+
+    ssState.activeLeaveView = resolved;
+    section.dataset.ssLeaveView = resolved;
+
+    nodes.balanceCard?.classList.toggle("d-none", resolved !== "balances");
+    nodes.decisionCard?.classList.toggle("d-none", resolved !== "decision");
+    nodes.mainRow?.classList.toggle("d-none", !usesMainRow);
+    nodes.requestColumn?.classList.toggle("d-none", resolved !== "request");
+    nodes.historyColumn?.classList.toggle("d-none", resolved !== "history");
+    nodes.requestColumn?.classList.toggle("ss-leave-focused-column", resolved === "request");
+    nodes.historyColumn?.classList.toggle("ss-leave-focused-column", resolved === "history");
+
+    document.querySelectorAll("#ssLeaveInlineTabs [data-ss-leave-view]").forEach((button) => {
+      const active = button.dataset.ssLeaveView === resolved;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+
+    if (resolved === "balances") {
+      setSsCardExpanded(
+        ssState.dom.ssToggleLeaveBalancesCardBtn,
+        ssState.dom.ssLeaveBalancesCardCollapse,
+        true,
+      );
+    } else if (resolved === "decision") {
+      setSsCardExpanded(
+        ssState.dom.ssToggleLatestDecisionCardBtn,
+        ssState.dom.ssLatestDecisionCardCollapse,
+        true,
+      );
+    } else if (resolved === "history") {
+      setSsCardExpanded(
+        ssState.dom.ssToggleLeaveHistoryCardBtn,
+        ssState.dom.ssLeaveHistoryCardCollapse,
+        true,
+      );
+    }
+
+    if (options.focus === true) {
+      document.querySelector('#ssLeaveInlineTabs [data-ss-leave-view="' + resolved + '"]')?.focus({ preventScroll: true });
+    }
+
+    scheduleSsLeaveMainCardHeightSync();
+    return resolved;
+  }
+
+  function prepareSsSubSection(section = "payroll", options = {}) {
+    if (!ssState.dom.ssLeaveSection || !ssState.dom.ssPayrollSection) {
+      cacheSsDomElements();
+    }
+
+    ensureSsLeaveInlineTabs();
+    return switchSsSubSection(section, options);
+  }
+
+  function switchSsSubSection(section, options = {}) {
+    const resolvedSection = section === "leave" ? "leave" : "payroll";
+    const isLeave = resolvedSection === "leave";
+    const isPayroll = resolvedSection === "payroll";
+
+    ssState.activeSection = resolvedSection;
+    ensureSsLeaveInlineTabs();
 
     ssState.dom.ssLeaveSection?.classList.toggle("d-none", !isLeave);
     ssState.dom.ssPayrollSection?.classList.toggle("d-none", !isPayroll);
@@ -369,35 +508,12 @@
         : "btn btn-outline-primary dashboard-action-btn";
     }
 
-    // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3
-    // Employee Dashboard behaviour:
-    // - Leave Balances stays closed by default.
-    // - Latest Leave Decision stays closed by default.
-    // - My Leave History opens so the employee/HR user can immediately
-    //   see submitted requests and manager decisions.
     if (isLeave) {
-      setSsCardExpanded(
-        ssState.dom.ssToggleLeaveBalancesCardBtn,
-        ssState.dom.ssLeaveBalancesCardCollapse,
-        false,
-      );
-
-      setSsCardExpanded(
-        ssState.dom.ssToggleLatestDecisionCardBtn,
-        ssState.dom.ssLatestDecisionCardCollapse,
-        false,
-      );
-
-      setSsCardExpanded(
-        ssState.dom.ssToggleLeaveHistoryCardBtn,
-        ssState.dom.ssLeaveHistoryCardCollapse,
-        true,
+      setSsLeaveView(
+        options.leaveView || ssState.activeLeaveView || SS_LEAVE_VIEW_DEFAULT,
       );
     }
 
-    // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3
-    // Payroll opens with Payroll History visible because this is where HR
-    // confirms their own authorised payslip records.
     if (isPayroll) {
       setSsCardExpanded(
         ssState.dom.ssTogglePayrollHistoryCardBtn,
@@ -405,6 +521,8 @@
         true,
       );
     }
+
+    return resolvedSection;
   }
 
   function bindSsNavigationEvents() {
@@ -470,12 +588,6 @@
         ssState.dom.ssLeaveSection ||
         document.getElementById("ssLeaveSection");
 
-      // MANAGER SELF-SERVICE PARITY - STEP 2C-2
-      // This shared self-service module runs inside HR and Manager dashboards.
-      // Resolve the active self-service host from the visible Leave section
-      // instead of hardcoding #hrSelfServiceSection. This preserves HR behaviour
-      // and makes Manager My Leave History use the same open/collapse/double-click
-      // height handling as HR.
       const selfServiceSection =
         leaveSection?.closest(".workspace-section") ||
         document.getElementById("hrSelfServiceSection") ||
@@ -496,6 +608,11 @@
         row.removeAttribute("data-ss-leave-card-height");
       };
 
+      if (leaveSection?.classList.contains("ss-leave-inline-mode")) {
+        clearHeight();
+        return;
+      }
+
       const isDesktop = window.matchMedia("(min-width: 1200px)").matches;
       const isHistoryExpanded = !historyPanel.classList.contains("d-none");
       const isSelfServiceHidden = selfServiceSection?.classList.contains("d-none");
@@ -511,7 +628,7 @@
       const measuredHeight = Math.ceil(requestCard.getBoundingClientRect().height);
 
       if (measuredHeight > 0) {
-        row.style.setProperty("--ss-leave-card-height", `${measuredHeight}px`);
+        row.style.setProperty("--ss-leave-card-height", String(measuredHeight) + "px");
         row.setAttribute("data-ss-leave-card-height", "true");
       }
     });
@@ -3271,19 +3388,22 @@ ${isCancelledAudit
   // -----------------------------------------------------------------------
   // Public init
   // -----------------------------------------------------------------------
-  async function init(currentUser, currentProfile) {
+  async function init(currentUser, currentProfile, options = {}) {
     if (!currentUser) {
       console.warn("[SS] init() called without currentUser — aborting.");
       return;
     }
 
+    const requestedInitialSection = options.initialSection === "leave" ? "leave" : "payroll";
+    const requestedLeaveView = normaliseSsLeaveView(options.leaveView || SS_LEAVE_VIEW_DEFAULT);
+
     ssState.currentUser = currentUser;
     ssState.currentProfile = currentProfile;
 
     cacheSsDomElements();
+    ensureSsLeaveInlineTabs();
 
     if (!ssState.isInitialized) {
-      // Wire up events only on first open
       bindSsNavigationEvents();
       bindSsLeaveBalancesCardEvents();
       bindSsLatestDecisionCardEvents();
@@ -3294,24 +3414,11 @@ ${isCancelledAudit
       ssState.isInitialized = true;
     }
 
-    // SYSTEM-WIDE SELF-SERVICE PAYROLL FIRST-PAINT FIX - STEP 1G
-    // Self-Service defaults to Payroll for HR/Manager staff. Switch the visible
-    // sub-section before any async data loading starts so the page does not
-    // briefly show Leave Management before Payroll History appears.
-    // This is UI timing only; it does not change leave, payroll, payslip,
-    // authorisation, tenant filtering, or Alpatech branding logic.
-    switchSsSubSection("payroll");
+    // Establish the exact requested presentation before any async data load.
+    switchSsSubSection(requestedInitialSection, {
+      leaveView: requestedLeaveView,
+    });
 
-    // SYSTEM-WIDE SELF-SERVICE PAYROLL FIRST-PAINT FIX - STEP 1G
-    // Keep Payroll History visibly open during loading. The final init block
-    // below repeats this after data loads, so this only prevents first-paint flash.
-    setSsCardExpanded(
-      ssState.dom.ssTogglePayrollHistoryCardBtn,
-      ssState.dom.ssPayrollHistoryCardCollapse,
-      true,
-    );
-
-    // Load data
     clearSsAlert();
 
     await loadSsEmployeeRecord();
@@ -3322,33 +3429,11 @@ ${isCancelledAudit
       loadSsPayroll(),
     ]);
 
-    // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1B
-    // HR users often enter My Self-Service from payslip email/payment context.
-    // Show Payroll first so their own authorised payslip records are immediately visible.
-    // Leave remains available through the Leave Management sub-tab.
-    switchSsSubSection("payroll");
-
-    // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1B
-    // Keep leave cards closed by default. This avoids the Leave workspace
-    // taking over the self-service page when HR is trying to check payroll.
-    setSsCardExpanded(
-      ssState.dom.ssToggleLeaveBalancesCardBtn,
-      ssState.dom.ssLeaveBalancesCardCollapse,
-      false,
-    );
-    setSsCardExpanded(
-      ssState.dom.ssToggleLeaveHistoryCardBtn,
-      ssState.dom.ssLeaveHistoryCardCollapse,
-      false,
-    );
-
-    // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1B
-    // Payroll History should be open when Payroll is the default sub-section.
-    setSsCardExpanded(
-      ssState.dom.ssTogglePayrollHistoryCardBtn,
-      ssState.dom.ssPayrollHistoryCardCollapse,
-      true,
-    );
+    // Respect any navigation change made while data was loading.
+    const finalSection = ssState.activeSection || requestedInitialSection;
+    switchSsSubSection(finalSection, {
+      leaveView: ssState.activeLeaveView || requestedLeaveView,
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -3356,5 +3441,8 @@ ${isCancelledAudit
   // -----------------------------------------------------------------------
   window.EmployeeSelfService = {
     init,
+    prepare: prepareSsSubSection,
+    show: prepareSsSubSection,
+    showLeaveView: setSsLeaveView,
   };
 })();
