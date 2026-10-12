@@ -27,8 +27,14 @@
 
     <script>
         (() => {
-            // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
-            // Show the same quiet loader on first entry and browser refresh.
+            const navigationEntry =
+                window.performance
+                    .getEntriesByType("navigation")[0];
+
+            if (navigationEntry?.type !== "reload") {
+                return;
+            }
+
             window.BexPaRefreshLoaderStartedAt =
                 window.performance.now();
 
@@ -884,7 +890,7 @@
                                                         </h2>
 
                                                         <p class="mb-0 small text-body-secondary">
-                                                            Managers set department goals; organisation links are optional.
+                                                            Link department priorities to organisation goals.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -928,7 +934,7 @@
                                                         </h2>
 
                                                         <p class="mb-0 small text-body-secondary">
-                                                            Primary managers set employee goals; department links are optional.
+                                                            Assign employee goals linked to department priorities.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1136,7 +1142,7 @@
                                             <div class="col-12">
                                                 <label class="form-label fw-semibold"
                                                     for="bexPaDeliverableOrganisationGoal">
-                                                    Organisation goal (optional)
+                                                    Organisation goal
                                                 </label>
 
                                                 <select class="form-select" id="bexPaDeliverableOrganisationGoal"
@@ -1265,10 +1271,11 @@
                                             <div class="col-12">
                                                 <label class="form-label fw-semibold"
                                                     for="bexPaDepartmentGoalOrganisationGoal">
-                                                    Organisation goal (optional)
+                                                    Organisation goal
                                                 </label>
 
-                                                <select class="form-select" id="bexPaDepartmentGoalOrganisationGoal">
+                                                <select class="form-select" id="bexPaDepartmentGoalOrganisationGoal"
+                                                    required>
                                                     <option value="">
                                                         Select organisation goal
                                                     </option>
@@ -1280,9 +1287,9 @@
                                                     Appraisal cycle
                                                 </label>
 
-                                                <select class="form-select" id="bexPaDepartmentGoalCycle" required>
-                                                    <option value="">Select appraisal cycle</option>
-                                                </select>
+                                                <input class="form-control" id="bexPaDepartmentGoalCycle" type="text"
+                                                    readonly
+                                                    placeholder="Selected automatically from organisation goal" />
                                             </div>
 
                                             <div class="col-12">
@@ -1427,18 +1434,19 @@
                                                 </div>
 
                                                 <div class="form-text">
-                                                    Select one direct report. Department comes from the employee record;
-                                                    linking a department goal is optional.
+                                                    Select one employee. Department and department goals will be derived
+                                                    automatically.
                                                 </div>
                                             </div>
 
                                             <div class="col-12">
                                                 <label class="form-label fw-semibold"
                                                     for="bexPaIndividualGoalDepartmentGoal">
-                                                    Department goal (optional)
+                                                    Department goal
                                                 </label>
 
-                                                <select class="form-select" id="bexPaIndividualGoalDepartmentGoal">
+                                                <select class="form-select" id="bexPaIndividualGoalDepartmentGoal"
+                                                    required>
                                                     <option value="">
                                                         Select department goal
                                                     </option>
@@ -1453,7 +1461,7 @@
 
                                                 <input class="form-control" id="bexPaIndividualGoalDepartment"
                                                     type="text" readonly
-                                                    placeholder="Selected from employee" />
+                                                    placeholder="Selected automatically from department goal" />
                                             </div>
 
                                             <div class="col-12 col-md-6">
@@ -1461,9 +1469,9 @@
                                                     Appraisal cycle
                                                 </label>
 
-                                                <select class="form-select" id="bexPaIndividualGoalCycle" required>
-                                                    <option value="">Select appraisal cycle</option>
-                                                </select>
+                                                <input class="form-control" id="bexPaIndividualGoalCycle" type="text"
+                                                    readonly
+                                                    placeholder="Selected automatically from department goal" />
                                             </div>
 
                                             <div class="col-12">
@@ -1803,17 +1811,17 @@
                                                             </h3>
 
                                                             <p class="mb-0 small text-body-secondary">
-                                                                Choose the numeric scale managers will use. Scores are generated automatically. Existing appraisals retain their saved scale.
+                                                                Add the rating options managers and employees will
+                                                                choose from.
                                                             </p>
                                                         </div>
 
+                                                        <button class="btn btn-outline-primary btn-sm"
+                                                            id="bexPaAddTemplateRatingButton" type="button">
+                                                            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+                                                            Add Rating Option
+                                                        </button>
                                                     </div>
-                                                    <label class="form-label" for="bexPaTemplateScaleMaximum">Rating scale</label>
-                                                    <select class="form-select mb-3" id="bexPaTemplateScaleMaximum">
-                                                        <option value="5">Five-point scale (1–5)</option>
-                                                        <option value="10" selected>Ten-point scale (1–10)</option>
-                                                        <option value="legacy" disabled hidden>Existing custom scale</option>
-                                                    </select>
 
                                                     <div class="vstack gap-2" id="bexPaTemplateRatingsList">
                                                     </div>
