@@ -10120,121 +10120,45 @@
     });
   }
 
+  // Fixed numeric scales prevent gaps and unsupported rating options.
   function bexPaSyncTemplateRatingScale() {
-    if (
-      !bexPaElements.templateRatingsList ||
-      !bexPaElements.templateRatingScale
-    ) {
-      return;
-    }
-
-    const ratings = [
-      ...bexPaElements.templateRatingsList.querySelectorAll(
-        "[data-bex-pa-template-rating]",
-      ),
-    ]
-      .map((input) => input.value.trim())
-      .filter(Boolean);
-
-    bexPaElements.templateRatingScale.value =
-      ratings.join("\n");
-
-    bexPaElements.templateRatingsEmpty?.classList.toggle(
-      "d-none",
-      ratings.length > 0,
-    );
-  }
-
-  function bexPaAddTemplateRatingRow(
-    ratingValue = "",
-  ) {
-    if (!bexPaElements.templateRatingsList) {
-      return null;
-    }
-
-    const row = document.createElement("div");
-    row.className =
-      "d-flex align-items-center gap-2";
-
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "form-control";
-    input.maxLength = 120;
-    input.placeholder =
-      "e.g. Meets Expectations";
-    input.value = ratingValue;
-    input.dataset.bexPaTemplateRating = "";
-
-    const removeButton =
-      document.createElement("button");
-
-    removeButton.type = "button";
-    removeButton.className =
-      "btn btn-outline-danger";
-
-    removeButton.innerHTML =
-      '<i class="bi bi-trash" aria-hidden="true"></i>';
-
-    removeButton.title =
-      "Remove rating option";
-
-    removeButton.setAttribute(
-      "aria-label",
-      "Remove rating option",
-    );
-
-    input.addEventListener(
-      "input",
-      bexPaSyncTemplateRatingScale,
-    );
-
-    removeButton.addEventListener(
-      "click",
-      () => {
-        row.remove();
-        bexPaSyncTemplateRatingScale();
-      },
-    );
-
-    row.append(
-      input,
-      removeButton,
-    );
-
-    bexPaElements.templateRatingsList.appendChild(
-      row,
-    );
-
-    bexPaSyncTemplateRatingScale();
-
-    return input;
+    const selector = document.getElementById("bexPaTemplateScaleMaximum");
+    if (!selector || !bexPaElements.templateRatingScale) return;
+    const maximum = Number(selector.value);
+    if (![5, 10].includes(maximum)) return;
+    bexPaElements.templateRatingScale.value = Array.from(
+      { length: maximum }, (_, index) => String(index + 1),
+    ).join("\n");
+    bexPaRenderTemplateRatings();
   }
 
   function bexPaRenderTemplateRatings() {
-    if (
-      !bexPaElements.templateRatingsList ||
-      !bexPaElements.templateRatingScale
-    ) {
-      return;
+    const list = bexPaElements.templateRatingsList;
+    const field = bexPaElements.templateRatingScale;
+    const selector = document.getElementById("bexPaTemplateScaleMaximum");
+    if (!list || !field || !selector) return;
+    let ratings = field.value.split("\n").map(value => value.trim()).filter(Boolean);
+    if (!ratings.length) {
+      ratings = Array.from({ length: 10 }, (_, index) => String(index + 1));
+      field.value = ratings.join("\n");
     }
-
-    const ratings =
-      bexPaElements.templateRatingScale.value
-        .split("\n")
-        .map((rating) => rating.trim())
-        .filter(Boolean);
-
-    bexPaElements.templateRatingsList.replaceChildren();
-
-    ratings.forEach((rating) => {
-      bexPaAddTemplateRatingRow(rating);
-    });
-
-    bexPaElements.templateRatingsEmpty?.classList.toggle(
-      "d-none",
-      ratings.length > 0,
-    );
+    const maximum = bexPaGetScoringMaximum({ ratingScale: ratings });
+    selector.value = maximum ? String(maximum) : "legacy";
+    const legacy = selector.querySelector('[value="legacy"]');
+    legacy.hidden = Boolean(maximum);
+    list.replaceChildren();
+    const preview = document.createElement("p");
+    preview.className = "mb-0 small text-body-secondary";
+    preview.textContent = maximum
+      ? `Available scores: ${ratings.join(", ")}. Each applicable criterion has a maximum of ${maximum} points.`
+      : `Existing rating options preserved: ${ratings.join(", ")}. Select a numeric scale to replace them for future appraisals.`;
+    list.appendChild(preview);
+    bexPaElements.templateRatingsEmpty?.classList.add("d-none");
   }
+
+  document.getElementById("bexPaTemplateScaleMaximum")?.addEventListener(
+    "change", bexPaSyncTemplateRatingScale,
+  );
 
   function bexPaResetTemplateForm() {
     bexPaState.editingTemplateId = null;
@@ -14802,13 +14726,19 @@
   }
 
   // PRODUCTIVITY SCORING V1: template competencies, independent of goal ratings.
-  function bexPaUsesTenPointScoring(template) {
+  function bexPaGetScoringMaximum(template) {
     const scale = template?.ratingScale;
-    return Array.isArray(scale) && scale.length === 10 &&
-      scale.every((value, index) => String(value) === String(index + 1));
+    return Array.isArray(scale) && [5, 10].includes(scale.length) &&
+      scale.every((value, index) => String(value) === String(index + 1))
+      ? scale.length : null;
   }
 
-  function bexPaCalculateProductivityScore(competencies, responses) {
+  function bexPaUsesNumericScoring(template) {
+    return bexPaGetScoringMaximum(template) !== null;
+  }
+
+  function bexPaCalculateProductivityScore(competencies, responses, maximum = 10) {
+    if (![5, 10].includes(maximum)) return null;
     if (!Array.isArray(competencies) || competencies.length === 0 ||
         !Array.isArray(responses) || responses.length !== competencies.length) {
       return null;
@@ -14824,19 +14754,21 @@
       const response = matches[0];
       if (response.rating === "N/A" &&
           competency.applicability === "Supervisors & Managers") continue;
-      if (!/^(?:[1-9]|10)$/.test(String(response.rating || ""))) return null;
+      if (!/^(?:[1-9]|10)$/.test(String(response.rating || "")) ||
+          Number(response.rating) > maximum) return null;
       total += Number(response.rating);
       count += 1;
     }
     if (!count) return null;
-    const percentage = total / (count * 10) * 100;
+    const percentage = total / (count * maximum) * 100;
     // Integer comparisons avoid display rounding changing the classification.
-    const rating = total < count * 5 ? "Below Standard" :
-      total < count * 7 ? "Meet Standard" : "Exceed Standard";
+    const rating = total * 100 < count * maximum * 50 ? "Below Standard" :
+      total * 100 < count * maximum * 70 ? "Meet Standard" : "Exceed Standard";
     return {
-      model: "equal-competency-10-point-v1",
+      model: `equal-competency-${maximum}-point-v1`,
+      scaleMaximum: maximum,
       totalPoints: total,
-      maximumPoints: count * 10,
+      maximumPoints: count * maximum,
       applicableCount: count,
       averageScore: total / count,
       percentage,
@@ -14846,8 +14778,8 @@
 
   function bexPaFormatProductivityScore(score) {
     return score ?
-      `Total: ${score.totalPoints}/${score.maximumPoints} | Average: ${score.averageScore.toFixed(2)}/10 | Overall: ${score.percentage.toFixed(2)}% | ${score.rating}` :
-      "Overall score pending: rate every applicable competency from 1 to 10.";
+      `Total: ${score.totalPoints}/${score.maximumPoints} | Average: ${score.averageScore.toFixed(2)}/${score.scaleMaximum || 10} | Overall: ${score.percentage.toFixed(2)}% | ${score.rating}` :
+      "Overall score pending: rate every applicable competency using the selected scale.";
   }
 
   function bexPaReadManagerCompetencyResponses(competencies) {
@@ -14860,7 +14792,8 @@
 
   function bexPaRenderManagerProductivity(appraisal, template, managerAppraisal, isReadOnly) {
     document.getElementById("bexPaManagerProductivity")?.remove();
-    if (!bexPaUsesTenPointScoring(template)) return;
+    if (!bexPaUsesNumericScoring(template)) return;
+    const maximum = bexPaGetScoringMaximum(template);
     const competencies = [...(template.competencies || [])].sort((a, b) => a.order - b.order);
     const section = document.createElement("section");
     section.id = "bexPaManagerProductivity";
@@ -14870,7 +14803,7 @@
     heading.textContent = "Productivity Competency Scores";
     const help = document.createElement("p");
     help.className = "small text-body-secondary";
-    help.textContent = "Score each criterion from 1 to 10. Criteria are equally weighted. Use Not applicable for Supervisory Ability only when the employee has no supervisory responsibilities. Goal ratings are separate.";
+    help.textContent = `Score each criterion from 1 to ${maximum}. Criteria are equally weighted. Use Not applicable for supervisory criteria only when the employee has no supervisory responsibilities. Goal ratings are separate.`;
     const summary = document.createElement("p");
     summary.className = "fw-semibold";
     summary.setAttribute("role", "status");
@@ -14890,7 +14823,7 @@
       select.className = "form-select";
       select.disabled = isReadOnly;
       const optional = competency.applicability === "Supervisors & Managers";
-      const options = [["", "Select score"], ...Array.from({length: 10}, (_, i) => [String(i + 1), `${i + 1} / 10`])];
+      const options = [["", "Select score"], ...Array.from({length: maximum}, (_, i) => [String(i + 1), `${i + 1} / ${maximum}`])];
       if (optional) options.push(["N/A", "Not applicable — no supervisory responsibilities"]);
       options.forEach(([value, text]) => {
         const option = document.createElement("option");
@@ -14917,7 +14850,7 @@
       section.appendChild(block);
       select.addEventListener("change", () => {
         summary.textContent = bexPaFormatProductivityScore(
-          bexPaCalculateProductivityScore(competencies, bexPaReadManagerCompetencyResponses(competencies)),
+          bexPaCalculateProductivityScore(competencies, bexPaReadManagerCompetencyResponses(competencies), maximum),
         );
       });
     });
@@ -14936,12 +14869,13 @@
     section.append(actionsLabel, actions);
     bexPaElements.managerAppraisalGoals.insertAdjacentElement("beforebegin", section);
     summary.textContent = bexPaFormatProductivityScore(
-      bexPaCalculateProductivityScore(competencies, bexPaReadManagerCompetencyResponses(competencies)),
+      bexPaCalculateProductivityScore(competencies, bexPaReadManagerCompetencyResponses(competencies), maximum),
     );
   }
 
   function bexPaRenderHrProductivity(template, managerAppraisal) {
-    if (!bexPaUsesTenPointScoring(template)) return;
+    if (!bexPaUsesNumericScoring(template)) return;
+    const maximum = bexPaGetScoringMaximum(template);
     const panel = document.createElement("section");
     panel.className = "border rounded-3 p-3 mb-3";
     const heading = document.createElement("h4");
@@ -14950,7 +14884,7 @@
     const summary = document.createElement("p");
     summary.className = "fw-semibold";
     const responses = managerAppraisal.competencyResponses || [];
-    const score = bexPaCalculateProductivityScore(template.competencies, responses);
+    const score = bexPaCalculateProductivityScore(template.competencies, responses, maximum);
     summary.textContent = score ? bexPaFormatProductivityScore(score) :
       "No complete competency score recorded. Existing goal ratings have not been converted.";
     panel.append(heading, summary);
@@ -14958,7 +14892,7 @@
       const response = responses.find(item => item.competencyId === competency.id);
       const item = document.createElement("p");
       item.className = "small";
-      item.textContent = `${competency.name}: ${response?.rating === "N/A" ? "Not applicable" : response?.rating ? `${response.rating}/10` : "Not recorded"} — ${response?.comment || "No comment"}`;
+      item.textContent = `${competency.name}: ${response?.rating === "N/A" ? "Not applicable" : response?.rating ? `${response.rating}/${maximum}` : "Not recorded"} — ${response?.comment || "No comment"}`;
       panel.appendChild(item);
     });
     const actions = document.createElement("p");
@@ -15468,17 +15402,17 @@
       updatedAt: new Date().toISOString(),
     };
 
-    if (bexPaUsesTenPointScoring(template)) {
+    if (bexPaUsesNumericScoring(template)) {
       managerAppraisal.competencyResponses =
         bexPaReadManagerCompetencyResponses(template.competencies || []);
       managerAppraisal.productivityScore = bexPaCalculateProductivityScore(
-        template.competencies, managerAppraisal.competencyResponses,
+        template.competencies, managerAppraisal.competencyResponses, bexPaGetScoringMaximum(template),
       );
       managerAppraisal.actionsAgreed =
         document.getElementById("bexPaManagerActionsAgreed")?.value.trim() || "";
       if (!managerAppraisal.productivityScore) {
         bexPaShowManagerAppraisalError(
-          "Score every applicable competency from 1 to 10. Only supervisory criteria may be Not applicable.",
+          `Score every applicable competency from 1 to ${bexPaGetScoringMaximum(template)}. Only supervisory criteria may be Not applicable.`,
         );
         return;
       }
@@ -15509,7 +15443,7 @@
           (response) => ({ ...response }),
         ),
         overallComment: managerAppraisal.overallComment,
-        ...(bexPaUsesTenPointScoring(template) ? {
+        ...(bexPaUsesNumericScoring(template) ? {
           competencyResponses: managerAppraisal.competencyResponses.map(response => ({ ...response })),
           actionsAgreed: managerAppraisal.actionsAgreed,
         } : {}),
@@ -16858,15 +16792,7 @@
       bexPaHandleTemplateListAction,
     );
 
-    bexPaElements.addTemplateRatingButton?.addEventListener(
-      "click",
-      () => {
-        const input =
-          bexPaAddTemplateRatingRow();
 
-        input?.focus();
-      },
-    );
 
     bexPaElements.addTemplateCompetencyButton?.addEventListener(
       "click",

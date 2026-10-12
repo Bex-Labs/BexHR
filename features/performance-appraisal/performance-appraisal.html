@@ -1803,17 +1803,17 @@
                                                             </h3>
 
                                                             <p class="mb-0 small text-body-secondary">
-                                                                Add the rating options managers and employees will
-                                                                choose from.
+                                                                Choose the numeric scale managers will use. Scores are generated automatically. Existing appraisals retain their saved scale.
                                                             </p>
                                                         </div>
 
-                                                        <button class="btn btn-outline-primary btn-sm"
-                                                            id="bexPaAddTemplateRatingButton" type="button">
-                                                            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-                                                            Add Rating Option
-                                                        </button>
                                                     </div>
+                                                    <label class="form-label" for="bexPaTemplateScaleMaximum">Rating scale</label>
+                                                    <select class="form-select mb-3" id="bexPaTemplateScaleMaximum">
+                                                        <option value="5">Five-point scale (1–5)</option>
+                                                        <option value="10" selected>Ten-point scale (1–10)</option>
+                                                        <option value="legacy" disabled hidden>Existing custom scale</option>
+                                                    </select>
 
                                                     <div class="vstack gap-2" id="bexPaTemplateRatingsList">
                                                     </div>
