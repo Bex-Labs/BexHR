@@ -33021,3 +33021,52 @@ body.bexhr-employee-visual-refresh
     overflow-y: auto !important;
   }
 }
+
+/* =========================================================
+   BEXHR R-10B ADD EMPLOYEE SINGLE-SCROLL CORRECTION
+   Desktop/tablet use the normal page scroll. Preserve the existing mobile
+   full-screen employee workspace and its controlled internal scroll.
+   Presentation only; employee form behaviour and persistence are unchanged.
+   ========================================================= */
+@media (min-width: 768px) {
+  .hr-create-employee-collapse:not(.d-none) {
+    display: block;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .hr-create-employee-collapse > .hr-create-employee-form {
+    min-height: 0;
+    overflow: visible;
+    overscroll-behavior: auto;
+    scroll-behavior: auto;
+    scrollbar-width: auto;
+    padding: 0.15rem 0 1rem;
+  }
+}
+
+/* =========================================================
+   BEXHR R-10C ADD EMPLOYEE SUBMIT FLOW CORRECTION
+   Desktop/tablet now use the normal page flow, so the save action follows
+   the currently visible employee section instead of being promoted above it.
+   Mobile full-screen behaviour remains unchanged. Presentation only; save,
+   validation, access, tenant, and Supabase behaviour are untouched.
+   ========================================================= */
+@media (min-width: 768px) {
+  .hr-create-employee-form > .row > .hr-create-employee-submit-wrap {
+    position: static;
+    top: auto;
+    z-index: auto;
+    order: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .hr-create-employee-collapse .hr-create-employee-submit-bar {
+    margin-bottom: 0;
+  }
+}
