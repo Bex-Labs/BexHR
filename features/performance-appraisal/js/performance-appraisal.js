@@ -14622,6 +14622,11 @@
     return true;
   }
   async function bexPaAcknowledgeFinalAppraisal() {
+    // BEXHR R-11 EMPLOYEE ACKNOWLEDGEMENT REGRESSION FIX
+    // Employee acknowledgement is append-only employee-owned workflow data.
+    // Do not write the HR-owned pa_employee_appraisals row from employee mode.
+    // Reflect successful acknowledgement immediately, then isolate housekeeping so
+    // a later non-critical failure cannot hide a successful acknowledgement.
     if (!bexPaIsEmployeeMode()) {
       return;
     }
@@ -14664,20 +14669,30 @@
       existingAcknowledgement?.status ===
       "Acknowledged"
     ) {
+      bexPaRenderFinalAppraisal(appraisal);
+      bexPaRenderEmployeeAppraisals();
       return;
+    }
+
+    const acknowledgeButton =
+      bexPaElements.acknowledgeFinalAppraisalButton;
+
+    const previousButtonText =
+      acknowledgeButton?.textContent ||
+      "Acknowledge Appraisal";
+
+    if (acknowledgeButton) {
+      acknowledgeButton.disabled = true;
+      acknowledgeButton.textContent =
+        "Acknowledging...";
+      acknowledgeButton.setAttribute(
+        "aria-busy",
+        "true",
+      );
     }
 
     const timestamp =
       new Date().toISOString();
-
-    const previousAppraisalStatus =
-      appraisal.status;
-
-    const previousAppraisalUpdatedAt =
-      appraisal.updatedAt;
-
-    appraisal.status = "Acknowledged";
-    appraisal.updatedAt = timestamp;
 
     const acknowledgement = {
       id:
@@ -14691,10 +14706,17 @@
 
     const existingIndex =
       bexPaState.employeeAcknowledgements.findIndex(
-        (existingAcknowledgement) =>
-          existingAcknowledgement.appraisalId ===
+        (currentAcknowledgement) =>
+          currentAcknowledgement.appraisalId ===
           appraisal.id,
       );
+
+    const previousAcknowledgement =
+      existingIndex === -1
+        ? null
+        : bexPaState.employeeAcknowledgements[
+          existingIndex
+        ];
 
     if (existingIndex === -1) {
       bexPaState.employeeAcknowledgements.push(
@@ -14712,18 +14734,26 @@
         acknowledgement,
         bexPaSaveEmployeeAcknowledgements,
       );
-
-      await bexPaPersistDatasetMutation(
-        "employeeAppraisals",
-        appraisal,
-        bexPaSaveEmployeeAppraisals,
-      );
     } catch (error) {
-      appraisal.status =
-        previousAppraisalStatus;
+      if (existingIndex === -1) {
+        const acknowledgementIndex =
+          bexPaState.employeeAcknowledgements.findIndex(
+            (currentAcknowledgement) =>
+              currentAcknowledgement.appraisalId ===
+              appraisal.id,
+          );
 
-      appraisal.updatedAt =
-        previousAppraisalUpdatedAt;
+        if (acknowledgementIndex !== -1) {
+          bexPaState.employeeAcknowledgements.splice(
+            acknowledgementIndex,
+            1,
+          );
+        }
+      } else {
+        bexPaState.employeeAcknowledgements[
+          existingIndex
+        ] = previousAcknowledgement;
+      }
 
       console.error(
         "Performance appraisal acknowledgement persistence failed.",
@@ -14741,6 +14771,15 @@
         }
       }
 
+      if (acknowledgeButton) {
+        acknowledgeButton.disabled = false;
+        acknowledgeButton.textContent =
+          previousButtonText;
+        acknowledgeButton.removeAttribute(
+          "aria-busy",
+        );
+      }
+
       if (bexPaElements.announcement) {
         bexPaElements.announcement.textContent =
           "The appraisal acknowledgement could not be saved. Please try again.";
@@ -14749,16 +14788,28 @@
       return;
     }
 
-    await bexPaCompleteEligibleCycles();
-
-    bexPaCloseFinalAppraisal();
+    // The acknowledgement is the authoritative employee-owned completion record.
+    // Render it immediately before any secondary cycle housekeeping runs.
+    bexPaRenderFinalAppraisal(appraisal);
     bexPaRenderEmployeeAppraisals();
-    bexPaRenderCycles();
 
     if (bexPaElements.announcement) {
       bexPaElements.announcement.textContent =
         "Appraisal acknowledged successfully.";
     }
+
+    bexPaCloseFinalAppraisal();
+
+    try {
+      await bexPaCompleteEligibleCycles();
+    } catch (error) {
+      console.error(
+        "Performance appraisal post-acknowledgement cycle completion failed.",
+        error,
+      );
+    }
+
+    bexPaRenderCycles();
   }
 
   async function bexPaFinaliseHrAppraisal() {
