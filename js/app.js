@@ -126,9 +126,20 @@ document.addEventListener("DOMContentLoaded", function () {
   const SUPABASE_PUBLISHABLE_KEY =
     "sb_publishable_zNz3vsLoaw9ul1UmwEDAMg_YX-MxMG_";
 
+  // BEXHR TRUSTED HR SESSION - v1.0.0
+  // Persist the real Supabase browser session and let supabase-js refresh
+  // short-lived access tokens. Device trust is represented only by a valid
+  // persisted Supabase session; no custom MFA-bypass flag is introduced.
   window.supabaseClient = window.supabase.createClient(
     SUPABASE_URL,
     SUPABASE_PUBLISHABLE_KEY,
+    {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    },
   );
 
   window.SUPABASE_URL = "https://zoeglonuxkiwnaabzjqo.supabase.co";
@@ -695,7 +706,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   async function cancelHrMfaVerification() {
     try {
-      await supabaseClient.auth.signOut();
+      await supabaseClient.auth.signOut({ scope: "local" });
     } catch (error) {
       console.warn("HR MFA cancel sign-out failed:", error);
     }
@@ -812,6 +823,192 @@ document.addEventListener("DOMContentLoaded", function () {
       localStorage.removeItem(TENANT_CONTEXT_STORAGE_KEY);
       return null;
     }
+  }
+
+  // BEXHR TRUSTED HR SESSION - v1.0.0
+  // A trusted HR browser is one that still holds a valid Supabase AAL2
+  // session plus the tenant context that was previously server-validated.
+  // Local flags alone never bypass MFA.
+  function isHrIdleTimeoutLanding() {
+    const params = new URLSearchParams(window.location.search || "");
+
+    return (
+      String(params.get("message") || "")
+        .trim()
+        .toLowerCase() === "session-timeout"
+    );
+  }
+
+  function buildTrustedHrLoginContext(
+    session,
+    profile,
+    cachedTenantContext,
+  ) {
+    return {
+      authData: {
+        user: session.user,
+        session,
+      },
+      profile,
+      tenantValidation: {
+        isValid: true,
+        tenantId: cachedTenantContext.tenantId,
+        tenantCode: cachedTenantContext.tenantCode,
+        companyName: cachedTenantContext.companyName,
+        reason: "Previously validated trusted HR browser session.",
+      },
+      cachedTenantContext,
+    };
+  }
+
+  function showTrustedHrSessionResumePrompt(loginContext) {
+    if (!alertContainer || !loginForm) {
+      finishSuccessfulLoginRedirect(loginContext);
+      return;
+    }
+
+    loginForm.classList.add("d-none");
+    alertContainer.replaceChildren();
+
+    const prompt = document.createElement("div");
+    prompt.className = "alert alert-info";
+    prompt.setAttribute("role", "status");
+
+    const title = document.createElement("div");
+    title.className = "fw-semibold mb-2";
+    title.textContent = "Your HR workspace is locked";
+
+    const description = document.createElement("p");
+    description.className = "mb-3";
+    description.textContent =
+      "This browser still has your verified HR session. Continue on this trusted device without another authenticator code, or sign out to require a full sign-in.";
+
+    const actions = document.createElement("div");
+    actions.className = "d-flex flex-wrap gap-2";
+
+    const continueButton = document.createElement("button");
+    continueButton.type = "button";
+    continueButton.className = "btn btn-primary btn-sm";
+    continueButton.textContent = "Continue on this trusted device";
+
+    const signOutButton = document.createElement("button");
+    signOutButton.type = "button";
+    signOutButton.className = "btn btn-outline-secondary btn-sm";
+    signOutButton.textContent = "Sign out and use another account";
+
+    continueButton.addEventListener("click", () => {
+      continueButton.disabled = true;
+      signOutButton.disabled = true;
+      continueButton.textContent = "Continuing...";
+      finishSuccessfulLoginRedirect(loginContext);
+    });
+
+    signOutButton.addEventListener("click", async () => {
+      continueButton.disabled = true;
+      signOutButton.disabled = true;
+
+      try {
+        await supabaseClient.auth.signOut({ scope: "local" });
+      } catch (error) {
+        console.warn("Trusted HR session sign-out failed:", error);
+      }
+
+      localStorage.removeItem("hrPayrollSession");
+      localStorage.removeItem("hrPayrollTenantContext");
+
+      loginForm.classList.remove("d-none");
+      showAlert(
+        "Trusted session ended. Sign in again to continue.",
+        "info",
+      );
+    });
+
+    actions.append(continueButton, signOutButton);
+    prompt.append(title, description, actions);
+    alertContainer.appendChild(prompt);
+  }
+
+  async function restoreTrustedHrSessionIfAvailable() {
+    if (!loginForm) {
+      return false;
+    }
+
+    const { data: sessionData, error: sessionError } =
+      await supabaseClient.auth.getSession();
+
+    if (sessionError || !sessionData?.session?.user?.id) {
+      return false;
+    }
+
+    // Validate the persisted browser session with Supabase before trusting it.
+    // refreshSession() throws/returns an error when the refresh token is no
+    // longer valid, so a stale local token cannot become a trusted-device bypass.
+    const { data: refreshedData, error: refreshError } =
+      await supabaseClient.auth.refreshSession();
+
+    if (refreshError || !refreshedData?.session?.user?.id) {
+      return false;
+    }
+
+    const session = refreshedData.session;
+
+    const { data: profile, error: profileError } =
+      await supabaseClient
+        .from("profiles")
+        .select(
+          "id, email, full_name, role, department, tenant_id, is_active, must_change_password",
+        )
+        .eq("id", session.user.id)
+        .single();
+
+    if (
+      profileError ||
+      !profile ||
+      profile.is_active === false ||
+      profile.must_change_password === true ||
+      !isHrDashboardMfaRequiredRole(profile.role)
+    ) {
+      return false;
+    }
+
+    const cachedTenantContext = getCachedTenantContext();
+
+    if (
+      !cachedTenantContext?.tenantId ||
+      cachedTenantContext.userId !== session.user.id ||
+      (profile.tenant_id &&
+        cachedTenantContext.tenantId !== profile.tenant_id)
+    ) {
+      return false;
+    }
+
+    if (!supabaseClient.auth?.mfa?.getAuthenticatorAssuranceLevel) {
+      return false;
+    }
+
+    const { data: assuranceData, error: assuranceError } =
+      await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+
+    if (
+      assuranceError ||
+      assuranceData?.currentLevel !== "aal2"
+    ) {
+      return false;
+    }
+
+    const loginContext = buildTrustedHrLoginContext(
+      session,
+      profile,
+      cachedTenantContext,
+    );
+
+    if (isHrIdleTimeoutLanding()) {
+      showTrustedHrSessionResumePrompt(loginContext);
+      return true;
+    }
+
+    finishSuccessfulLoginRedirect(loginContext);
+    return true;
   }
 
   // REMEMBER ME - LOGIN PREFILL
@@ -984,7 +1181,7 @@ document.addEventListener("DOMContentLoaded", function () {
     switch (message) {
       case "session-timeout":
         showAlert(
-          "Your session expired due to inactivity. Please sign in again.",
+          "Your workspace was locked due to inactivity. A verified HR session on this browser can continue without another authenticator code.",
           "warning",
         );
         break;
@@ -1164,7 +1361,7 @@ document.addEventListener("DOMContentLoaded", function () {
             "Your account is inactive. Please contact support.",
             "danger",
           );
-          await supabaseClient.auth.signOut();
+          await supabaseClient.auth.signOut({ scope: "local" });
           return;
         }
 
@@ -1178,7 +1375,7 @@ document.addEventListener("DOMContentLoaded", function () {
           localStorage.removeItem("hrPayrollSession");
           localStorage.removeItem("hrPayrollTenantContext");
 
-          await supabaseClient.auth.signOut();
+          await supabaseClient.auth.signOut({ scope: "local" });
 
           loginTenantCodeInput?.classList.add("is-invalid");
 
@@ -1217,7 +1414,7 @@ document.addEventListener("DOMContentLoaded", function () {
           // Clear any previous tenant context if tenant validation fails.
           localStorage.removeItem("hrPayrollTenantContext");
 
-          await supabaseClient.auth.signOut();
+          await supabaseClient.auth.signOut({ scope: "local" });
 
           showAlert(
             "Tenant validation could not be completed. Please try again or contact support.",
@@ -1234,7 +1431,7 @@ document.addEventListener("DOMContentLoaded", function () {
           // Wrong tenant login must not leave an old tenant/company cached locally.
           localStorage.removeItem("hrPayrollTenantContext");
 
-          await supabaseClient.auth.signOut();
+          await supabaseClient.auth.signOut({ scope: "local" });
 
           loginTenantCodeInput?.classList.add("is-invalid");
 
@@ -1300,7 +1497,7 @@ document.addEventListener("DOMContentLoaded", function () {
           } catch (mfaStartError) {
             console.error("HR MFA start failed:", mfaStartError);
 
-            await supabaseClient.auth.signOut();
+            await supabaseClient.auth.signOut({ scope: "local" });
 
             localStorage.removeItem("hrPayrollSession");
             localStorage.removeItem("hrPayrollTenantContext");
@@ -1334,4 +1531,13 @@ document.addEventListener("DOMContentLoaded", function () {
   prefillTenantCodeFromCache();
 
   showMessageFromQueryString();
+
+  if (loginForm) {
+    restoreTrustedHrSessionIfAvailable().catch((error) => {
+      console.warn(
+        "Trusted HR session restore could not be completed:",
+        error,
+      );
+    });
+  }
 });

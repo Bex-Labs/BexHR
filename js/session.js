@@ -124,31 +124,66 @@
     }
   }
 
+  // BEXHR TRUSTED HR SESSION TIMEOUT - v1.0.0
+  // A normal HR inactivity timeout locks the BexHR workspace but preserves the
+  // real AAL2 Supabase session on this browser. Explicit sign-out, true auth
+  // expiry, unauthorised access, or MFA failure still revoke the current
+  // browser session. No local flag can grant access on its own.
+  function getCurrentApplicationRole() {
+    try {
+      const storedSession = JSON.parse(
+        localStorage.getItem(APP_SESSION_STORAGE_KEY) || "null",
+      );
+
+      return String(storedSession?.role || "")
+        .trim()
+        .toLowerCase();
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function shouldPreserveTrustedHrSession(reason = "") {
+    return (
+      reason === "timeout" &&
+      getCurrentApplicationRole() === "hr"
+    );
+  }
+
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - RECOVERY PATCH
-  // Clear local browser session data, including the validated tenant/company
-  // context. This must exist because logoutUser calls it on logout, timeout,
-  // expiry, and unauthorised redirects.
-  //
-  // PAYROLL SECURE DELIVERY - STEP 2F-3B-1
-  // Do not clear sessionStorage here because the safe payroll post-login
-  // redirect is temporarily stored there while the user signs back in.
-  function clearLocalSessionContext() {
+  // App-session UI state is always cleared. The previously validated tenant
+  // context is retained only for a trusted HR inactivity lock so the same
+  // AAL2 browser session can be safely restored.
+  function clearLocalSessionContext({
+    preserveTenantContext = false,
+  } = {}) {
     localStorage.removeItem(APP_SESSION_STORAGE_KEY);
-    localStorage.removeItem(TENANT_CONTEXT_STORAGE_KEY);
+
+    if (!preserveTenantContext) {
+      localStorage.removeItem(TENANT_CONTEXT_STORAGE_KEY);
+    }
   }
 
   async function logoutUser(reason = "logout") {
     const supabase = getSupabaseClient();
+    const preserveTrustedHrSession =
+      shouldPreserveTrustedHrSession(reason);
 
-    try {
-      if (supabase) {
-        await supabase.auth.signOut();
+    if (preserveTrustedHrSession) {
+      clearLocalSessionContext({
+        preserveTenantContext: true,
+      });
+    } else {
+      try {
+        if (supabase) {
+          await supabase.auth.signOut({ scope: "local" });
+        }
+      } catch (error) {
+        console.error("Error during logout:", error);
       }
-    } catch (error) {
-      console.error("Error during logout:", error);
-    }
 
-    clearLocalSessionContext();
+      clearLocalSessionContext();
+    }
 
     if (reason === "timeout") {
       window.location.href = "index.html?message=session-timeout";
@@ -208,7 +243,7 @@
       Session timeout warning
     </div>
     <div style="font-size:14px;line-height:1.5;margin-bottom:14px;">
-      You have been inactive for a while. You will be signed out in
+      You have been inactive for a while. Your workspace will lock in
       ${IDLE_WARNING_REMAINING_MINUTES} minutes unless you continue working.
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;">
@@ -239,7 +274,7 @@
 
     if (logoutButton) {
       logoutButton.addEventListener("click", async () => {
-        await logoutUser("timeout");
+        await logoutUser("logout");
       });
     }
   }
