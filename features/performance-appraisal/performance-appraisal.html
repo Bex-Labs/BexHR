@@ -1695,7 +1695,7 @@
 
                             <section class="card border-0 shadow-sm bex-pa-template-library-card"
                                 aria-labelledby="bexPaTemplateListTitle">
-                                <div class="card-header bg-white py-3 py-lg-4">
+                                <div class="card-header bg-white py-3 py-lg-4 bex-pa-template-library-header">
                                     <div class="bex-pa-template-library-heading">
                                         <span class="bex-pa-template-library-icon" aria-hidden="true">
                                             <i class="bi bi-collection"></i>
@@ -1707,9 +1707,33 @@
                                             </h2>
 
                                             <p class="mb-0 small text-body-secondary">
-                                                Reusable assessment formats available for future appraisal cycles.
+                                                Active templates stay ready for future cycles. Drafts and archived templates are kept separately.
                                             </p>
                                         </div>
+                                    </div>
+
+                                    <div class="bex-pa-template-library-views" id="bexPaTemplateLibraryToolbar"
+                                        role="group" aria-label="Template library views">
+                                        <button class="bex-pa-template-view-button active" type="button"
+                                            data-bex-pa-template-view="active" aria-pressed="true">
+                                            <i class="bi bi-check-circle" aria-hidden="true"></i>
+                                            <span>Active</span>
+                                            <span class="bex-pa-template-view-count" data-bex-pa-template-count="active">0</span>
+                                        </button>
+
+                                        <button class="bex-pa-template-view-button" type="button"
+                                            data-bex-pa-template-view="draft" aria-pressed="false">
+                                            <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+                                            <span>Drafts</span>
+                                            <span class="bex-pa-template-view-count" data-bex-pa-template-count="draft">0</span>
+                                        </button>
+
+                                        <button class="bex-pa-template-view-button" type="button"
+                                            data-bex-pa-template-view="archive" aria-pressed="false">
+                                            <i class="bi bi-archive" aria-hidden="true"></i>
+                                            <span>Archive</span>
+                                            <span class="bex-pa-template-view-count" data-bex-pa-template-count="archive">0</span>
+                                        </button>
                                     </div>
                                 </div>
 

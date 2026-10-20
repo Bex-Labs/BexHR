@@ -570,6 +570,7 @@
     individualGoals: [],
     progressUpdates: [],
     templates: [],
+    templateLibraryView: "active",
     employeeAppraisals: [],
     selfAppraisals: [],
     managerAppraisals: [],
@@ -4342,6 +4343,9 @@
     templatesList: document.getElementById(
       "bexPaTemplatesList",
     ),
+    templateLibraryToolbar: document.getElementById(
+      "bexPaTemplateLibraryToolbar",
+    ),
     templateDialog: document.getElementById(
       "bexPaTemplateDialog",
     ),
@@ -7746,7 +7750,7 @@
     const tasks = [
       isHr ? bexPaReadCataloguePages(() => client.from("employee_reporting_lines")
         .select("id,employee_id,manager_employee_id,manager_type,status")
-        .eq("tenant_id", tenant).eq("status", "Active").order("id"))
+        .eq("tenant_id", tenant).ilike("status", "active").order("id"))
         : client.rpc("get_manager_reporting_line_assignments").then(({data,error}) => {
           if (error) throw error;
           return data || [];
@@ -10890,6 +10894,10 @@
     return "";
   }
 
+  // BEXHR R-10A TEMPLATE LIBRARY OPERATIONAL CLEANUP
+  // Keep the live library focused on Active templates. Draft and archived
+  // templates remain available without mixing non-operational records into the
+  // default view. Existing persistence and cycle-selection rules stay intact.
   function bexPaCreateTemplateActionButton(
     templateId,
   ) {
@@ -10930,6 +10938,7 @@
     bexPaState.templates[index] = updated;
     try {
       await bexPaPersistDatasetMutation("templates", updated, bexPaSaveTemplates);
+      bexPaState.templateLibraryView = {Active:"active", Draft:"draft", Inactive:"archive"}[nextStatus];
     } catch (error) {
       bexPaState.templates[index] = previous;
       window.alert("The template status could not be saved. Please try again.");
@@ -10939,14 +10948,125 @@
     bexPaPopulateCycleTemplates();
   }
 
+  function bexPaCreateTemplateRestoreButton(
+    templateId,
+  ) {
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.className =
+      "btn btn-sm btn-outline-primary bex-pa-template-restore-button";
+
+    button.dataset.bexPaTemplateAction = "restore";
+    button.dataset.bexPaTemplateId = templateId;
+
+    button.innerHTML =
+      '<i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i><span>Restore to Draft</span>';
+
+    button.title = "Restore archived template to Draft";
+    button.setAttribute(
+      "aria-label",
+      "Restore archived template to Draft",
+    );
+
+    return button;
+  }
+
+  function bexPaHandleTemplateLibraryViewChange(event) {
+    const button = event.target.closest(
+      "[data-bex-pa-template-view]",
+    );
+
+    if (
+      !button ||
+      !bexPaElements.templateLibraryToolbar?.contains(button)
+    ) {
+      return;
+    }
+
+    const view = String(
+      button.dataset.bexPaTemplateView || "",
+    ).trim();
+
+    if (!["active", "draft", "archive"].includes(view)) {
+      return;
+    }
+
+    bexPaState.templateLibraryView = view;
+    bexPaRenderTemplates();
+  }
+
   function bexPaRenderTemplates() {
     if (!bexPaElements.templatesList) {
       return;
     }
 
+    const viewConfig = {
+      active: {
+        status: "Active",
+        empty: "No active appraisal templates are available. Open Drafts to continue preparing a template.",
+      },
+      draft: {
+        status: "Draft",
+        empty: "No draft appraisal templates are waiting for review.",
+      },
+      archive: {
+        status: "Inactive",
+        empty: "No archived appraisal templates are available.",
+      },
+    };
+
+    const currentView =
+      viewConfig[bexPaState.templateLibraryView]
+        ? bexPaState.templateLibraryView
+        : "active";
+
+    bexPaState.templateLibraryView = currentView;
+
+    const counts = {
+      active: 0,
+      draft: 0,
+      archive: 0,
+    };
+
+    bexPaState.templates.forEach((template) => {
+      const status = String(template?.status || "")
+        .trim()
+        .toLowerCase();
+
+      if (status === "active") counts.active += 1;
+      if (status === "draft") counts.draft += 1;
+      if (status === "inactive") counts.archive += 1;
+    });
+
+    bexPaElements.templateLibraryToolbar
+      ?.querySelectorAll("[data-bex-pa-template-view]")
+      .forEach((button) => {
+        const isActive =
+          button.dataset.bexPaTemplateView === currentView;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", String(isActive));
+      });
+
+    bexPaElements.templateLibraryToolbar
+      ?.querySelectorAll("[data-bex-pa-template-count]")
+      .forEach((count) => {
+        const key = count.dataset.bexPaTemplateCount;
+        count.textContent = String(counts[key] || 0);
+      });
+
+    const visibleTemplates =
+      bexPaState.templates.filter(
+        (template) =>
+          String(template?.status || "")
+            .trim()
+            .toLowerCase() ===
+          viewConfig[currentView].status.toLowerCase(),
+      );
+
     bexPaElements.templatesList.replaceChildren();
 
-    if (bexPaState.templates.length === 0) {
+    if (visibleTemplates.length === 0) {
       const emptyState =
         document.createElement("p");
 
@@ -10954,9 +11074,10 @@
         "bex-pa-template-empty mb-0 text-body-secondary";
 
       emptyState.id = "bexPaTemplatesEmpty";
-
       emptyState.textContent =
-        "No appraisal templates have been created yet.";
+        bexPaState.templates.length === 0
+          ? "No appraisal templates have been created yet."
+          : viewConfig[currentView].empty;
 
       bexPaElements.templatesList.appendChild(
         emptyState,
@@ -10965,7 +11086,7 @@
       return;
     }
 
-    bexPaState.templates.forEach((template) => {
+    visibleTemplates.forEach((template) => {
       const item =
         document.createElement("article");
 
@@ -10994,7 +11115,7 @@
 
       const status = document.createElement(bexPaCanManageTemplates() ? "select" : "span");
       status.className = "bex-pa-template-status";
-      status.dataset.status = template.status.toLowerCase();
+      status.dataset.status = String(template.status || "Draft").toLowerCase();
       if (bexPaCanManageTemplates()) {
         status.setAttribute("aria-label", `Status for ${template.name}`);
         const statuses = template.status === "Draft" ? ["Draft", "Active"] : ["Active", "Inactive"];
@@ -11117,10 +11238,7 @@
         document.createElement("strong");
 
       competencyValue.textContent =
-        `${templateCompetencies.length} ${templateCompetencies.length === 1
-          ? "area"
-          : "areas"
-        } configured`;
+        `${templateCompetencies.length} ${templateCompetencies.length === 1 ? "area" : "areas"} configured`;
 
       competencySummary.append(
         competencyIcon,
@@ -11144,6 +11262,14 @@
         "bex-pa-template-item-actions";
 
       if (bexPaCanManageTemplates()) {
+        if (template.status === "Inactive") {
+          actions.appendChild(
+            bexPaCreateTemplateRestoreButton(
+              template.id,
+            ),
+          );
+        }
+
         actions.appendChild(
           bexPaCreateTemplateActionButton(
             template.id,
@@ -11310,7 +11436,7 @@
     }
   }
 
-  function bexPaHandleTemplateListAction(
+  async function bexPaHandleTemplateListAction(
     event,
   ) {
     const button = event.target.closest(
@@ -11328,9 +11454,78 @@
       return;
     }
 
-    bexPaOpenTemplateDialog(
-      templateId,
-    );
+    const action =
+      button.dataset.bexPaTemplateAction;
+
+    if (action !== "restore") {
+      bexPaOpenTemplateDialog(
+        templateId,
+      );
+      return;
+    }
+
+    if (!bexPaCanManageTemplates()) {
+      return;
+    }
+
+    const template =
+      bexPaState.templates.find(
+        (existingTemplate) =>
+          existingTemplate.id === templateId,
+      );
+
+    if (!template || template.status !== "Inactive") {
+      return;
+    }
+
+    const previousStatus = template.status;
+    template.status = "Draft";
+    button.disabled = true;
+
+    try {
+      await bexPaPersistDatasetMutation(
+        "templates",
+        template,
+        bexPaSaveTemplates,
+      );
+    } catch (error) {
+      template.status = previousStatus;
+
+      console.error(
+        "Performance appraisal template restore failed.",
+        error,
+      );
+
+      if (bexPaIsIntegratedPersistenceContext()) {
+        try {
+          await bexPaHydrateRemoteState();
+        } catch (hydrateError) {
+          console.error(
+            "Performance appraisal state recovery failed.",
+            hydrateError,
+          );
+        }
+      }
+
+      bexPaRenderTemplates();
+      bexPaPopulateCycleTemplates();
+
+      if (bexPaElements.announcement) {
+        bexPaElements.announcement.textContent =
+          "The archived template could not be restored. Please try again.";
+      }
+
+      return;
+    }
+
+    bexPaState.templateLibraryView = "draft";
+    bexPaRenderTemplates();
+    bexPaPopulateCycleTemplates();
+
+    if (bexPaElements.announcement) {
+      bexPaElements.announcement.textContent =
+        `${template.name} was restored to Draft.`;
+    }
   }
 
   function bexPaGetAppraisalTemplate(appraisal) {
@@ -14868,6 +15063,11 @@
     return true;
   }
   async function bexPaAcknowledgeFinalAppraisal() {
+    // BEXHR R-11 EMPLOYEE ACKNOWLEDGEMENT REGRESSION FIX
+    // Employee acknowledgement is append-only employee-owned workflow data.
+    // Do not write the HR-owned pa_employee_appraisals row from employee mode.
+    // Reflect successful acknowledgement immediately, then isolate housekeeping so
+    // a later non-critical failure cannot hide a successful acknowledgement.
     if (!bexPaIsEmployeeMode()) {
       return;
     }
@@ -14910,20 +15110,30 @@
       existingAcknowledgement?.status ===
       "Acknowledged"
     ) {
+      bexPaRenderFinalAppraisal(appraisal);
+      bexPaRenderEmployeeAppraisals();
       return;
+    }
+
+    const acknowledgeButton =
+      bexPaElements.acknowledgeFinalAppraisalButton;
+
+    const previousButtonText =
+      acknowledgeButton?.textContent ||
+      "Acknowledge Appraisal";
+
+    if (acknowledgeButton) {
+      acknowledgeButton.disabled = true;
+      acknowledgeButton.textContent =
+        "Acknowledging...";
+      acknowledgeButton.setAttribute(
+        "aria-busy",
+        "true",
+      );
     }
 
     const timestamp =
       new Date().toISOString();
-
-    const previousAppraisalStatus =
-      appraisal.status;
-
-    const previousAppraisalUpdatedAt =
-      appraisal.updatedAt;
-
-    appraisal.status = "Acknowledged";
-    appraisal.updatedAt = timestamp;
 
     const acknowledgement = {
       id:
@@ -14937,10 +15147,17 @@
 
     const existingIndex =
       bexPaState.employeeAcknowledgements.findIndex(
-        (existingAcknowledgement) =>
-          existingAcknowledgement.appraisalId ===
+        (currentAcknowledgement) =>
+          currentAcknowledgement.appraisalId ===
           appraisal.id,
       );
+
+    const previousAcknowledgement =
+      existingIndex === -1
+        ? null
+        : bexPaState.employeeAcknowledgements[
+          existingIndex
+        ];
 
     if (existingIndex === -1) {
       bexPaState.employeeAcknowledgements.push(
@@ -14958,18 +15175,26 @@
         acknowledgement,
         bexPaSaveEmployeeAcknowledgements,
       );
-
-      await bexPaPersistDatasetMutation(
-        "employeeAppraisals",
-        appraisal,
-        bexPaSaveEmployeeAppraisals,
-      );
     } catch (error) {
-      appraisal.status =
-        previousAppraisalStatus;
+      if (existingIndex === -1) {
+        const acknowledgementIndex =
+          bexPaState.employeeAcknowledgements.findIndex(
+            (currentAcknowledgement) =>
+              currentAcknowledgement.appraisalId ===
+              appraisal.id,
+          );
 
-      appraisal.updatedAt =
-        previousAppraisalUpdatedAt;
+        if (acknowledgementIndex !== -1) {
+          bexPaState.employeeAcknowledgements.splice(
+            acknowledgementIndex,
+            1,
+          );
+        }
+      } else {
+        bexPaState.employeeAcknowledgements[
+          existingIndex
+        ] = previousAcknowledgement;
+      }
 
       console.error(
         "Performance appraisal acknowledgement persistence failed.",
@@ -14987,6 +15212,15 @@
         }
       }
 
+      if (acknowledgeButton) {
+        acknowledgeButton.disabled = false;
+        acknowledgeButton.textContent =
+          previousButtonText;
+        acknowledgeButton.removeAttribute(
+          "aria-busy",
+        );
+      }
+
       if (bexPaElements.announcement) {
         bexPaElements.announcement.textContent =
           "The appraisal acknowledgement could not be saved. Please try again.";
@@ -14995,17 +15229,28 @@
       return;
     }
 
-    await bexPaLoadGoalDirectory();
-    await bexPaCompleteEligibleCycles();
-
-    bexPaCloseFinalAppraisal();
+    // The acknowledgement is the authoritative employee-owned completion record.
+    // Render it immediately before any secondary cycle housekeeping runs.
+    bexPaRenderFinalAppraisal(appraisal);
     bexPaRenderEmployeeAppraisals();
-    bexPaRenderCycles();
 
     if (bexPaElements.announcement) {
       bexPaElements.announcement.textContent =
         "Appraisal acknowledged successfully.";
     }
+
+    bexPaCloseFinalAppraisal();
+
+    try {
+      await bexPaCompleteEligibleCycles();
+    } catch (error) {
+      console.error(
+        "Performance appraisal post-acknowledgement cycle completion failed.",
+        error,
+      );
+    }
+
+    bexPaRenderCycles();
   }
 
   async function bexPaFinaliseHrAppraisal() {
@@ -17171,6 +17416,7 @@
       bexPaPersistence.lastError = null;
     }
 
+    await bexPaLoadGoalDirectory();
     await bexPaCompleteEligibleCycles();
 
 
@@ -17228,6 +17474,11 @@
     bexPaElements.templateForm?.addEventListener(
       "submit",
       bexPaHandleTemplateSubmit,
+    );
+
+    bexPaElements.templateLibraryToolbar?.addEventListener(
+      "click",
+      bexPaHandleTemplateLibraryViewChange,
     );
 
     bexPaElements.templatesList?.addEventListener(
