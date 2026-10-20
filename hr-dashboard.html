@@ -215,6 +215,15 @@
       visibility: visible !important;
     }
   </style>
+  <!-- HR sign-out placement: use the existing account-header action. -->
+  <style id="hrSignOutPlacementStyles">
+    body.bexhr-hr-visual-refresh .hr-modern-account-area > #logoutBtn {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+  </style>
 </head>
 
 <body class="dashboard-page bexhr-has-sidebar bexhr-hr-visual-refresh hr-workspace-booting" aria-busy="true">
@@ -534,11 +543,6 @@
         <span>Help</span>
       </button>
 
-      <button type="button" class="bexhr-sidebar-item" id="sidebarHrSignOutBtn"
-        onclick="document.getElementById('logoutBtn')?.click()" title="Sign Out">
-        <i class="bi bi-box-arrow-right"></i>
-        <span>Sign Out</span>
-      </button>
     </div>
   </nav>
 

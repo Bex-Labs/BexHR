@@ -4308,6 +4308,7 @@ function publishManagerPerformanceAppraisalContext(
   const performanceAppraisalContext = {
     source: "bexhr",
     sourceDashboard: "manager-dashboard",
+    managerDisplayName: String(state.currentProfile?.full_name || "Current manager"),
     issuedAt: new Date().toISOString(),
     persona: isEmployeeMode
       ? "employee"
