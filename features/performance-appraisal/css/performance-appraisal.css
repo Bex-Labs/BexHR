@@ -4299,3 +4299,17 @@ body.bex-pa-page .bex-pa-main > div {
     padding-bottom: 5.5rem !important;
   }
 }
+
+/* Goal workspace filters and progress report */
+.bex-pa-workspace-filters { display:flex; flex-wrap:wrap; gap:1rem; padding:1rem; border-bottom:1px solid var(--bex-pa-border, #dee2e6); }
+.bex-pa-workspace-filters > label { flex:1 1 180px; min-width:0; }
+.bex-pa-progress-report { margin:1rem; }
+.bex-pa-progress-report td { min-width:110px; white-space:normal; overflow-wrap:anywhere; }
+#bexPaTemplateDialog .bex-pa-confirm-dialog-body { overflow-anchor:none; }
+
+
+/* PA_STORY_NAVIGATION_V3 */
+.bex-pa-story { padding:1.25rem; border-bottom:1px solid var(--bex-pa-border,#dee2e6); }
+.bex-pa-story-nav { display:flex; flex-wrap:wrap; gap:.6rem; }
+.bex-pa-story-choices { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:.75rem; }
+.bex-pa-story-choice { min-height:72px; padding:1rem; text-align:left; white-space:normal; font-weight:600; }

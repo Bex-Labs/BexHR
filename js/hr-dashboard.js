@@ -25737,6 +25737,7 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin", managerScope 
     const performanceAppraisalContext = {
       source: "bexhr",
       sourceDashboard: "hr-dashboard",
+    managerDisplayName: String(state.currentProfile?.full_name || "Current manager"),
       issuedAt: new Date().toISOString(),
       persona:
         mode === "hr-standard"
@@ -25812,6 +25813,7 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin", managerScope 
   const performanceAppraisalContext = {
     source: "bexhr",
     sourceDashboard: "hr-dashboard",
+    managerDisplayName: String(state.currentProfile?.full_name || "Current manager"),
     issuedAt: new Date().toISOString(),
     persona: "hr-admin",
     hrAdminCapability: true,
@@ -25950,6 +25952,7 @@ function publishHrPerformanceAppraisalManagerContext(
   const performanceAppraisalContext = {
     source: "bexhr",
     sourceDashboard: "hr-dashboard",
+    managerDisplayName: String(state.currentProfile?.full_name || "Current manager"),
     issuedAt: new Date().toISOString(),
     persona: "primary-manager",
     hrAdminCapability: isHrAdmin,

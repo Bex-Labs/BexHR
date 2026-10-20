@@ -1059,8 +1059,8 @@
                                                     Responsible owner
                                                 </label>
 
-                                                <input class="form-control" id="bexPaOrganisationGoalOwner" type="text"
-                                                    maxlength="120" placeholder="e.g. Head of Operations" required />
+                                                <select class="form-select" id="bexPaOrganisationGoalOwner" required><option value="">Select a configured position</option></select>
+                                                <p class="form-text" id="bexPaPositionOwnerNote"></p>
                                             </div>
 
                                             <div class="col-12 col-md-6">
@@ -1136,7 +1136,7 @@
                                             <div class="col-12">
                                                 <label class="form-label fw-semibold"
                                                     for="bexPaDeliverableOrganisationGoal">
-                                                    Organisation goal (optional)
+                                                    Organisation goal
                                                 </label>
 
                                                 <select class="form-select" id="bexPaDeliverableOrganisationGoal"
@@ -1675,9 +1675,6 @@
                                     </span>
 
                                     <div class="bex-pa-workspace-heading-copy">
-                                        <p class="bex-pa-workspace-heading-kicker mb-1">
-                                            Appraisal configuration
-                                        </p>
 
                                         <h1 class="bex-pa-workspace-heading-title mb-1" id="bexPaTemplatesTitle">
                                             Appraisal Templates
@@ -1692,7 +1689,7 @@
                                 <button class="btn btn-primary bex-pa-workspace-heading-action"
                                     id="bexPaCreateTemplateButton" type="button">
                                     <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>
-                                    Add Template
+                                    Configure Appraisal
                                 </button>
                             </div>
 
@@ -1733,7 +1730,7 @@
                                             </p>
 
                                             <h2 class="mb-0 h5 fw-bold" id="bexPaTemplateDialogTitle">
-                                                Add Appraisal Template
+                                                Configure Appraisal
                                             </h2>
                                         </div>
 
@@ -1769,11 +1766,7 @@
                                                 <textarea class="form-control" id="bexPaTemplateDescription" rows="4"
                                                     maxlength="1500"
                                                     placeholder="e.g. Annual performance review for all employees."
-                                                    required></textarea>
-
-                                                <div class="form-text">
-                                                    Briefly describe when this appraisal template should be used.
-                                                </div>
+                                                    ></textarea>
                                             </div>
 
                                             <div class="col-12">
