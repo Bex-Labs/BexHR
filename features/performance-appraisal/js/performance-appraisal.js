@@ -7828,6 +7828,11 @@
   function bexPaBuildWorkspaceFilters(scope, list, rows, rerender, includePeople = true) {
     const id = `bexPaWorkspaceFilters-${scope}`;
     document.getElementById(id)?.remove();
+    // Employees see their own authorised records without directory navigation.
+    if (bexPaGetActiveMode() === "employee" && ["individual", "progress"].includes(scope)) {
+      list.hidden = false;
+      return rows.filter(bexPaIsIndividualGoalOwnedByCurrentEmployee);
+    }
     const memoryScope = `story-v3-${scope}`;
     const saved = bexPaWorkspaceFilters(memoryScope);
     const values = {...saved};
@@ -7950,7 +7955,7 @@
   }
 
   function bexPaProgressReportRows() {
-    const filters = bexPaWorkspaceFilters("progress");
+    const filters = bexPaGetActiveMode() === "employee" ? {} : bexPaWorkspaceFilters("progress");
     return bexPaFilterGoalRows(bexPaGetVisibleIndividualGoals(), filters).map(goal => {
       const updates = bexPaState.progressUpdates.filter(item => item.individualGoalId === goal.id)
         .sort((a,b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
@@ -7979,7 +7984,8 @@
     document.getElementById("bexPaGeneratedProgressReport")?.remove();
     const section = document.createElement("section"); section.id = "bexPaGeneratedProgressReport";
     section.className = "bex-pa-progress-report border rounded-3 p-3 mb-3";
-    section.hidden = bexPaWorkspaceFilters("story-v3-progress").stage !== "results";
+    section.hidden = bexPaGetActiveMode() !== "employee" &&
+      bexPaWorkspaceFilters("story-v3-progress").stage !== "results";
     const title = document.createElement("h3"); title.className = "h6"; title.textContent = "Progress summary and report";
     const rows = bexPaProgressReportRows();
     const summary = document.createElement("p"); summary.className = "small text-body-secondary";
@@ -8038,12 +8044,22 @@
     note.textContent=cycle ? `Dates must fall within ${cycle.name}: ${cycle.startDate} to ${cycle.endDate}. ${parent ? `Linked goal dates also apply: ${min} to ${max}.` : ""}` : "Select an appraisal cycle first. Goal dates must fall within its start and end dates.";
   }
 
-  document.addEventListener("change", event => {
-    const id=event.target?.id || "";
-    for(const prefix of ["bexPaOrganisationGoal","bexPaDepartmentGoal","bexPaIndividualGoal","bexPaDeliverable"]) {
-      if(id.startsWith(prefix)) bexPaRefreshGoalDateGuidance(prefix);
-    }
-  });
+  // Refresh bounds only when their source changes. Rewriting min/max while a
+  // native date field is being typed can reset its partially entered segments.
+  function bexPaHandleGoalDateSourceChange(event) {
+    const sources = {
+      bexPaOrganisationGoalCycle: "bexPaOrganisationGoal",
+      bexPaDepartmentGoalCycle: "bexPaDepartmentGoal",
+      bexPaDepartmentGoalOrganisationGoal: "bexPaDepartmentGoal",
+      bexPaIndividualGoalCycle: "bexPaIndividualGoal",
+      bexPaIndividualGoalDepartmentGoal: "bexPaIndividualGoal",
+      bexPaDeliverableOrganisationGoal: "bexPaDeliverable",
+    };
+    const prefix = sources[event.target?.id];
+    if (prefix) bexPaRefreshGoalDateGuidance(prefix);
+  }
+
+  document.addEventListener("change", bexPaHandleGoalDateSourceChange);
 
   function bexPaRenderProgressUpdates() {
     if (!bexPaElements.progressUpdatesList) {
@@ -8703,7 +8719,7 @@
           : activeMode === "primary-manager"
             ? "No individual goals are available within your current reporting scope."
             : "No individual employee goals have been created yet.";
-      if (bexPaWorkspaceFilters("story-v3-individual").stage === "results") {
+      if (activeMode !== "employee" && bexPaWorkspaceFilters("story-v3-individual").stage === "results") {
         emptyState.textContent = "No tasks have been assigned to this employee.";
       }
 
