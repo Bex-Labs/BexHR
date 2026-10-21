@@ -11412,6 +11412,7 @@ function bindEvents() {
   // job titles that fit the selected department.
   state.dom.department?.addEventListener("change", () => {
     populateJobTitleOptionsForDepartment("");
+    refreshHrReportingDepartmentChoices();
   });
 
   // EMPLOYEE BIODATA COMPLETION - STEP 3I
@@ -14387,6 +14388,64 @@ function getSavedLineManagerOptionForEmployee(employee = {}) {
 // ASSIGN LINE MANAGER - STEP 1
 // Populate Assign Line Manager from existing active employee records.
 // This uses state.employees already loaded from Supabase, so no new table is needed.
+// Same-department reporting assignments: shared by both HR entry points.
+function getHrReportingFormEmployee() {
+  const current = state.currentEditingEmployee || {};
+  return {
+    ...current,
+    id: current.id || state.dom.editingEmployeeId?.value || "",
+    // The form stores department names. Do not retain the old department ID
+    // when HR has selected a different department during this edit.
+    department_id: "",
+    department: state.dom.department?.value ?? current.department ?? "",
+  };
+}
+
+function isHrManagerInEmployeeDepartment(manager, employee) {
+  if (!manager || !employee) return false;
+  if (String(manager.id || "") === String(employee.id || "")) return false;
+  if (manager.tenant_id && employee.tenant_id && manager.tenant_id !== employee.tenant_id) return false;
+  const key = person => {
+    const id = String(person.department_id || "").trim();
+    if (id) return `id:${id}`;
+    const name = String(person.department || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (!name) return "";
+    const matches = (state.organizationDepartments || []).filter(dept =>
+      (!person.tenant_id || !dept.tenant_id || person.tenant_id === dept.tenant_id) &&
+      String(dept.department_name || "").trim().toLowerCase().replace(/\s+/g, " ") === name);
+    if (matches.length > 1) return "";
+    return matches.length === 1 ? `id:${matches[0].id}` : `name:${name}`;
+  };
+  const employeeKey = key(employee);
+  return Boolean(employeeKey && employeeKey === key(manager));
+}
+
+function preserveHrUnavailableManagerOption(select, managerId) {
+  const id = String(managerId || "").trim();
+  if (!select || !id || Array.from(select.options).some(option => option.value === id)) return;
+  const manager = (state.employees || []).find(person => String(person.id) === id);
+  const option = document.createElement("option");
+  option.value = id;
+  option.textContent = `${manager ? getEmployeeManagerDisplayName(manager) : "Saved manager"} — unavailable for this department; replace or remove`;
+  option.disabled = true;
+  option.selected = true;
+  option.dataset.managerName = manager ? getEmployeeManagerDisplayName(manager) : "Saved manager";
+  option.dataset.managerEmail = manager?.work_email || "";
+  select.appendChild(option);
+}
+
+function refreshHrReportingDepartmentChoices() {
+  const primary = state.dom.assignedLineManagerEmployeeId;
+  const previous = primary?.value || "";
+  populateAssignedLineManagerOptions(previous);
+  state.dom.employeeReportingLinesList?.querySelectorAll("[data-reporting-line-manager-id]").forEach(select => {
+    const selected = select.value;
+    select.innerHTML = buildEmployeeReportingLineManagerOptions(selected);
+  });
+  applyAssignedLineManagerSelection();
+  updateEmployeeSaveButtonState();
+}
+
 function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
   const select = state.dom.assignedLineManagerEmployeeId;
   if (!select) return;
@@ -14429,6 +14488,7 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
         isActive &&
         hasEmail &&
         isNotCurrentEmployee &&
+        isHrManagerInEmployeeDepartment(employee, getHrReportingFormEmployee()) &&
         (hasManagerRole || hasManagerJobTitle)
       );
     })
@@ -14452,7 +14512,7 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
   placeholderOption.textContent =
     managerCandidates.length || savedManagerOption
       ? "Select line manager"
-      : "No manager employee records available";
+      : "No eligible managers in this department";
   select.appendChild(placeholderOption);
 
   managerCandidates.forEach((employee) => {
@@ -14481,13 +14541,15 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
       option.value = savedManagerOption.id;
       // EMPLOYEE BIODATA COMPLETION - STEP 6B-PREP
       // Avoid repeating email in the dropdown because Approver Email is displayed separately.
-      option.textContent = `${savedManagerOption.name} (saved manager)`;
+      option.textContent = `${savedManagerOption.name} (saved manager — replace with an eligible manager)`;
+      option.disabled = true;
       option.dataset.managerName = savedManagerOption.name;
       option.dataset.managerEmail = savedManagerOption.email;
       select.appendChild(option);
     }
   }
 
+  preserveHrUnavailableManagerOption(select, currentValue);
   if (currentValue) {
     const matchingOption = Array.from(select.options).find(
       (option) => String(option.value) === currentValue,
@@ -14634,6 +14696,7 @@ function getEmployeeReportingLineManagerCandidates() {
         isActive &&
         hasEmail &&
         isNotCurrentEmployee &&
+        isHrManagerInEmployeeDepartment(employee, getHrReportingFormEmployee()) &&
         (hasManagerRole || hasManagerJobTitle)
       );
     })
@@ -14667,6 +14730,10 @@ function buildEmployeeReportingLineManagerOptions(selectedManagerId = "") {
     `);
   });
 
+  if (selectedId && !candidates.some(person => String(person.id) === selectedId)) {
+    const manager = (state.employees || []).find(person => String(person.id) === selectedId);
+    options.push(`<option value="${escapeHtml(selectedId)}" disabled selected>${escapeHtml(manager ? getEmployeeManagerDisplayName(manager) : "Saved manager")} — unavailable for this department; replace or remove</option>`);
+  }
   return options.join("");
 }
 
@@ -14868,6 +14935,19 @@ function getEmployeeReportingLinesFromForm() {
 // and the same manager cannot be assigned twice.
 function validateEmployeeReportingLines() {
   const rows = getEmployeeReportingLinesFromForm();
+  const targetEmployee = getHrReportingFormEmployee();
+  const eligibleIds = new Set(getEmployeeReportingLineManagerCandidates().map(person => String(person.id)));
+  const invalidAssignment = rows.find(row => row.managerEmployeeId &&
+    (!eligibleIds.has(String(row.managerEmployeeId)) ||
+      !isHrManagerInEmployeeDepartment((state.employees || []).find(person => String(person.id) === String(row.managerEmployeeId)), targetEmployee)));
+  if (invalidAssignment) {
+    showPageAlert("warning", "Primary and secondary managers must be eligible managers in the employee's selected department. Replace or remove the unavailable assignment before saving.");
+    const field = invalidAssignment.rowElement?.matches?.("select") ? invalidAssignment.rowElement :
+      invalidAssignment.rowElement?.querySelector?.("[data-reporting-line-manager-id]");
+    field?.classList.add("is-invalid");
+    if (field) focusEmployeeBiodataField(field);
+    return false;
+  }
   const managerRowsById = new Map();
   let isValid = true;
   let firstInvalidField = null;
@@ -14991,6 +15071,7 @@ function validateEmployeeReportingLines() {
 // Save reporting lines by replacing this employee's current reporting setup.
 // This keeps the child table aligned with the latest employee form state.
 async function saveEmployeeReportingLinesForEmployee(employeeId) {
+  if (!validateEmployeeReportingLines()) throw new Error("Correct the reporting manager assignments before saving.");
   const employeeKey = String(employeeId || "").trim();
   if (!employeeKey) return;
 
@@ -35654,7 +35735,8 @@ function populateHrPrimaryManagerOptions(
         candidateId &&
         candidateId !== employeeKey &&
         !excludedIds.has(candidateId) &&
-        canEmployeeBeAssignedAsManager(employee)
+        canEmployeeBeAssignedAsManager(employee) &&
+        isHrManagerInEmployeeDepartment(employee, (state.employees || []).find(person => String(person.id) === employeeKey))
       );
     }),
   );
@@ -35665,7 +35747,7 @@ function populateHrPrimaryManagerOptions(
   placeholderOption.value = "";
   placeholderOption.textContent = candidates.length
     ? "Select Primary Manager"
-    : "No eligible managers available";
+    : "No eligible managers in this department";
 
   select.appendChild(placeholderOption);
 
@@ -35708,7 +35790,8 @@ function populateHrSupportingManagerOptions(employeeId, assignedManagerIds = [])
         candidateId &&
         candidateId !== employeeKey &&
         !assignedIds.has(candidateId) &&
-        canEmployeeBeAssignedAsManager(employee)
+        canEmployeeBeAssignedAsManager(employee) &&
+        isHrManagerInEmployeeDepartment(employee, (state.employees || []).find(person => String(person.id) === employeeKey))
       );
     }),
   );
@@ -35898,6 +35981,15 @@ ${canChangePrimaryManager
       <strong>No Primary Manager assigned.</strong>
     </div>
   `;
+  }
+  const targetEmployee = (state.employees || []).find(person => String(person.id) === employeeKey);
+  const outOfDepartment = activeRows.some(row => !isHrManagerInEmployeeDepartment(
+    (state.employees || []).find(person => String(person.id) === String(row.manager_employee_id)), targetEmployee));
+  if (primarySummary && outOfDepartment) {
+    const warning = document.createElement("p");
+    warning.className = "alert alert-warning mt-3";
+    warning.textContent = "An existing manager assignment is outside this employee's department or cannot be resolved. Review and replace or remove it; no assignments have been changed automatically.";
+    primarySummary.appendChild(warning);
   }
   // REPORTING MANAGER MANAGEMENT REPAIR - PRIMARY MANAGER REMOVE BUTTON
   // Bind the remove action after the Primary Manager summary HTML has been
@@ -36213,6 +36305,11 @@ async function assignHrPrimaryManagerFromModal() {
       "warning",
       `${getSupportingManagerDisplayName(manager)} does not currently have Manager or HR access and cannot be assigned as a manager.`,
     );
+    return;
+  }
+
+  if (!isHrManagerInEmployeeDepartment(manager, employee)) {
+    showPageAlert("warning", "Select a Primary Manager from the employee's department.");
     return;
   }
 
@@ -36659,6 +36756,13 @@ async function addHrSupportingManagerFromModal() {
 
   if (employeeId === managerEmployeeId) {
     showPageAlert("warning", "An employee cannot be assigned as their own manager.");
+    return;
+  }
+
+  const employee = (state.employees || []).find(person => String(person.id) === employeeId);
+  const manager = (state.employees || []).find(person => String(person.id) === managerEmployeeId);
+  if (!manager || !canEmployeeBeAssignedAsManager(manager) || !isHrManagerInEmployeeDepartment(manager, employee)) {
+    showPageAlert("warning", "Select an eligible Secondary Manager from the employee's department.");
     return;
   }
 

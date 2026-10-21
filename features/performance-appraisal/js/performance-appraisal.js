@@ -7905,12 +7905,12 @@
     }
     panel.appendChild(nav);
     const context=document.createElement("p");context.className="small text-body-secondary mt-3 mb-2";
-    context.textContent=[values.department,values.manager ? values.manager==="__unrecorded" ? "Manager not recorded" : bexPaManagerLabel(values.manager) : "",values.employee ? inManager.find(person=>person.employeeId===values.employee)?.employee : ""].filter(Boolean).join(" / ");panel.appendChild(context);
+    context.textContent=[values.department,values.manager ? values.manager==="__unrecorded" ? "No primary manager recorded" : bexPaManagerLabel(values.manager) : "",values.employee ? inManager.find(person=>person.employeeId===values.employee)?.employee : ""].filter(Boolean).join(" / ");panel.appendChild(context);
     const heading=document.createElement("h3");heading.className="h6";heading.tabIndex=-1;
     const titles={start:"Start with a department",department:"Choose a department",manager:"Choose a manager",employee:"Choose an employee",results:scope==="progress" ? "Employee progress" : includePeople ? "Assigned tasks" : "Department goals"};
     const selectedEmployee=inManager.find(person=>person.employeeId===values.employee)?.employee || "Employee";
     heading.textContent=stage === "manager" ? `Managers in ${values.department}` :
-      stage === "employee" ? `Employees under ${values.manager === "__unrecorded" ? "manager not recorded" : bexPaManagerLabel(values.manager)}` :
+      stage === "employee" ? values.manager === "__unrecorded" ? "Employees with no primary manager recorded" : `Employees under ${bexPaManagerLabel(values.manager)}` :
       stage === "results" && includePeople ? `${scope === "progress" ? "Progress" : "Assigned tasks"} — ${selectedEmployee}` : titles[stage];
     panel.appendChild(heading);
     const note=document.createElement("p");note.className="small text-body-secondary mb-3";note.setAttribute("role","status");
@@ -7925,7 +7925,7 @@
     }
     let choices=[];
     if(stage==="department") choices=departments.map(name=>[name,name]);
-    if(stage==="manager") choices=managers.map(manager=>[manager,manager==="__unrecorded" ? "Manager not recorded" : bexPaManagerLabel(manager)]);
+    if(stage==="manager") choices=managers.map(manager=>[manager,manager==="__unrecorded" ? "No primary manager recorded" : bexPaManagerLabel(manager)]);
     if(stage==="employee") choices=inManager.map(person=>[person.employeeId,person.employee]);
     choices.sort((a,b)=>a[1].localeCompare(b[1]));
     if(["department","manager","employee"].includes(stage)) {
