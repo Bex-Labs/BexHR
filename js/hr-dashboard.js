@@ -15107,20 +15107,20 @@ async function saveEmployeeReportingLinesForEmployee(employeeId) {
       updated_by: state.currentUser?.id || null,
     }));
 
-  const { error: deleteError } = await supabase
-    .from("employee_reporting_lines")
-    .delete()
-    .eq("employee_id", employeeKey);
+  // BEXHR REPORTING HIERARCHY INTEGRITY - R-12
+  // Replace reporting lines in one database transaction.
+  // If the hierarchy guard rejects a self/circular Primary Manager assignment,
+  // PostgreSQL rolls the whole replacement back so the employee's previous
+  // valid reporting lines are not lost.
+  const { error: replaceError } = await supabase.rpc(
+    "hr_replace_employee_reporting_lines",
+    {
+      p_employee_id: employeeKey,
+      p_rows: reportingRows,
+    },
+  );
 
-  if (deleteError) throw deleteError;
-
-  if (!reportingRows.length) return;
-
-  const { error: insertError } = await supabase
-    .from("employee_reporting_lines")
-    .insert(reportingRows);
-
-  if (insertError) throw insertError;
+  if (replaceError) throw replaceError;
 }
 
 // EMPLOYEE BIODATA COMPLETION - STEP 3C
@@ -37960,8 +37960,12 @@ async function handleEmployeeSave() {
     // EMPLOYEE SAVE PERFORMANCE - STEP 1
     // Independent child biodata tables save concurrently after the
     // employee record exists. Validation and tenant controls remain unchanged.
+    // BEXHR REPORTING HIERARCHY INTEGRITY - R-12
+    // Reporting lines save first so an invalid hierarchy blocks the remaining
+    // child-table writes. Other independent biodata tables still save together.
+    await saveEmployeeReportingLinesForEmployee(savedEmployeeId);
+
     await Promise.all([
-      saveEmployeeReportingLinesForEmployee(savedEmployeeId),
       saveEmployeeAddressesForEmployee(savedEmployeeId),
       saveEmployeeNextOfKinForEmployee(savedEmployeeId),
       saveEmployeeEducationRecordsForEmployee(savedEmployeeId),
@@ -38152,6 +38156,43 @@ async function handleEmployeeSave() {
       errorCode,
     ].join(" ");
 
+    // BEXHR REPORTING HIERARCHY INTEGRITY - R-12
+    // Database is authoritative. Convert its hierarchy guard into clear HR feedback.
+    const isSelfManagerAssignment =
+      combinedErrorText.includes("bexhr_reporting_self_manager") ||
+      combinedErrorText.includes("cannot be assigned as their own manager");
+
+    const isCircularPrimaryManagerAssignment =
+      combinedErrorText.includes("bexhr_reporting_cycle") ||
+      combinedErrorText.includes("circular primary manager") ||
+      combinedErrorText.includes("circular reporting relationship");
+
+    if (isSelfManagerAssignment || isCircularPrimaryManagerAssignment) {
+      const primaryManagerField =
+        state.dom.assignedLineManagerEmployeeId;
+
+      primaryManagerField?.classList.add("is-invalid");
+
+      if (primaryManagerField) {
+        focusEmployeeBiodataField(primaryManagerField);
+      }
+
+      const message = isSelfManagerAssignment
+        ? "An employee cannot be assigned as their own manager. Choose a different manager."
+        : "This Primary Manager assignment would create a circular reporting relationship. Choose a manager outside this employee's reporting chain.";
+
+      showPageAlert("warning", message);
+
+      showDashboardToast(
+        "warning",
+        isSelfManagerAssignment
+          ? "Self-management blocked"
+          : "Circular reporting blocked",
+        message,
+      );
+
+      return;
+    }
     const isDuplicateEmployeeNumber =
       combinedErrorText.includes("uq_employees_employee_number_normalised") ||
       (
