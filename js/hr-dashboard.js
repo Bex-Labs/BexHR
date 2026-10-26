@@ -2918,6 +2918,12 @@ const state = {
   employees: [],
   filteredEmployees: [],
 
+  // BEXHR REPORTING HIERARCHY UX CONSISTENCY - R-12B
+  // Cached active Primary reporting lines let every HR manager picker use the
+  // same descendant-aware hierarchy rule without changing system roles.
+  primaryReportingLines: [],
+  primaryReportingHierarchyLoaded: false,
+
   // EMPLOYEE LIST STABLE ORDER - STEP 1
   // Keep the employee list serially ordered by Employee Number.
   // The latest saved employee is highlighted instead of being moved to the top.
@@ -14434,6 +14440,219 @@ function preserveHrUnavailableManagerOption(select, managerId) {
   select.appendChild(option);
 }
 
+// BEXHR REPORTING HIERARCHY UX CONSISTENCY - R-12B
+// One shared manager-candidate rule for Edit Employee and Manage Reporting Managers.
+const HR_REPORTING_MANAGER_ELIGIBLE_ROLES = new Set([
+  "manager",
+  "hr",
+  "hr_manager",
+]);
+
+function hasHrReportingManagerRoleOrTitle(employee = {}) {
+  const systemRole = normalizeText(
+    employee.system_role || employee.role || "",
+  );
+
+  const jobTitle = normalizeText(employee.job_title || "");
+
+  return (
+    HR_REPORTING_MANAGER_ELIGIBLE_ROLES.has(systemRole) ||
+    jobTitle.includes("manager") ||
+    jobTitle.includes("supervisor") ||
+    jobTitle.includes("lead") ||
+    jobTitle.includes("head")
+  );
+}
+
+function isHrReportingManagerCandidate(manager, employee) {
+  if (!manager || !employee) return false;
+
+  const isActive = normalizeText(manager.status) === "active";
+  const hasEmail = Boolean(String(manager.work_email || "").trim());
+
+  return Boolean(
+    isActive &&
+    hasEmail &&
+    isHrManagerInEmployeeDepartment(manager, employee) &&
+    hasHrReportingManagerRoleOrTitle(manager)
+  );
+}
+
+function getHrPrimaryReportingDescendantIds(employeeId) {
+  const rootEmployeeId = String(employeeId || "").trim();
+  const descendantIds = new Set();
+
+  if (!rootEmployeeId) return descendantIds;
+
+  const childrenByManagerId = new Map();
+
+  (state.primaryReportingLines || []).forEach((row) => {
+    if (normalizeText(row?.manager_type || "") !== "primary") return;
+    if (normalizeText(row?.status || "active") !== "active") return;
+
+    const childEmployeeId = String(row?.employee_id || "").trim();
+    const managerEmployeeId = String(
+      row?.manager_employee_id || "",
+    ).trim();
+
+    if (!childEmployeeId || !managerEmployeeId) return;
+
+    if (!childrenByManagerId.has(managerEmployeeId)) {
+      childrenByManagerId.set(managerEmployeeId, new Set());
+    }
+
+    childrenByManagerId
+      .get(managerEmployeeId)
+      .add(childEmployeeId);
+  });
+
+  const queue = [rootEmployeeId];
+
+  while (queue.length) {
+    const managerEmployeeId = queue.shift();
+
+    (childrenByManagerId.get(managerEmployeeId) || []).forEach(
+      (childEmployeeId) => {
+        if (
+          childEmployeeId === rootEmployeeId ||
+          descendantIds.has(childEmployeeId)
+        ) {
+          return;
+        }
+
+        descendantIds.add(childEmployeeId);
+        queue.push(childEmployeeId);
+      },
+    );
+  }
+
+  return descendantIds;
+}
+
+function isHrPrimaryManagerHierarchySafe(
+  employeeId,
+  candidateManagerEmployeeId,
+) {
+  const employeeKey = String(employeeId || "").trim();
+  const candidateKey = String(
+    candidateManagerEmployeeId || "",
+  ).trim();
+
+  if (!employeeKey || !candidateKey) return true;
+  if (employeeKey === candidateKey) return false;
+
+  // Existing employees fail closed in the UI if hierarchy data could not load.
+  // The R-12 database trigger remains authoritative in every case.
+  if (!state.primaryReportingHierarchyLoaded) {
+    return false;
+  }
+
+  return !getHrPrimaryReportingDescendantIds(
+    employeeKey,
+  ).has(candidateKey);
+}
+
+function getHrReportingManagerCandidatesForEmployee(
+  employee,
+  {
+    primaryOnly = false,
+    excludedManagerIds = [],
+  } = {},
+) {
+  const employeeKey = String(employee?.id || "").trim();
+
+  const excludedIds = new Set(
+    (excludedManagerIds || [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean),
+  );
+
+  return (state.employees || [])
+    .filter((manager) => {
+      const managerId = String(manager?.id || "").trim();
+
+      if (
+        !managerId ||
+        excludedIds.has(managerId) ||
+        !isHrReportingManagerCandidate(manager, employee)
+      ) {
+        return false;
+      }
+
+      if (
+        primaryOnly &&
+        !isHrPrimaryManagerHierarchySafe(
+          employeeKey,
+          managerId,
+        )
+      ) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort((left, right) =>
+      getEmployeeManagerDisplayName(left).localeCompare(
+        getEmployeeManagerDisplayName(right),
+      ),
+    );
+}
+
+async function loadHrPrimaryReportingHierarchy() {
+  try {
+    const tenantId = getRequiredTenantIdForHrEmployeeData();
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("employee_reporting_lines")
+      .select("employee_id, manager_employee_id, manager_type, status")
+      .eq("tenant_id", tenantId);
+
+    if (error) throw error;
+
+    state.primaryReportingLines = (Array.isArray(data) ? data : [])
+      .filter(
+        (row) =>
+          normalizeText(row?.manager_type || "") === "primary" &&
+          normalizeText(row?.status || "active") === "active" &&
+          String(row?.employee_id || "").trim() &&
+          String(row?.manager_employee_id || "").trim(),
+      );
+
+    state.primaryReportingHierarchyLoaded = true;
+    return true;
+  } catch (error) {
+    console.error(
+      "Error loading Primary reporting hierarchy:",
+      error,
+    );
+
+    state.primaryReportingLines = [];
+    state.primaryReportingHierarchyLoaded = false;
+    return false;
+  }
+}
+
+function showHrReportingHierarchyBlockedFeedback(
+  { selfManager = false } = {},
+) {
+  const message = selfManager
+    ? "An employee cannot be assigned as their own manager. Choose a different manager."
+    : "This Primary Manager assignment would create a circular reporting relationship. Choose a manager outside this employee's reporting chain.";
+
+  showPageAlert("warning", message);
+
+  showDashboardToast(
+    "warning",
+    selfManager
+      ? "Self-management blocked"
+      : "Circular reporting blocked",
+    message,
+  );
+
+  return message;
+}
+
 function refreshHrReportingDepartmentChoices() {
   const primary = state.dom.assignedLineManagerEmployeeId;
   const previous = primary?.value || "";
@@ -14456,46 +14675,21 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
 
   const currentValue = String(preferredEmployeeId || select.value || "").trim();
 
-  // ASSIGN LINE MANAGER - STEP 1A
-  // Do not show every employee as a possible line manager.
-  // Only active employees with manager-level system roles or manager-style job titles
-  // should appear in the Assign Line Manager dropdown.
-  const managerEligibleRoles = new Set([
-    "manager",
-    "hr",
-    "hr_manager",
-  ]);
+  // BEXHR REPORTING HIERARCHY UX CONSISTENCY - R-12B
+  // Primary Manager choices use the same base eligibility rule as the reporting
+  // shortcut, then remove anyone already below this employee in the Primary chain.
+  const targetEmployee = getHrReportingFormEmployee();
 
-  const managerCandidates = (state.employees || [])
-    .filter((employee) => {
-      const isActive = normalizeText(employee.status) === "active";
-      const hasEmail = Boolean(String(employee.work_email || "").trim());
-      const isNotCurrentEmployee =
-        String(employee.id || "").trim() !== currentEditingEmployeeId;
+  const baseManagerCandidates =
+    getHrReportingManagerCandidatesForEmployee(
+      targetEmployee,
+      { primaryOnly: false },
+    );
 
-      const systemRole = normalizeText(employee.system_role || employee.role || "");
-      const jobTitle = normalizeText(employee.job_title || "");
-
-      const hasManagerRole = managerEligibleRoles.has(systemRole);
-
-      const hasManagerJobTitle =
-        jobTitle.includes("manager") ||
-        jobTitle.includes("supervisor") ||
-        jobTitle.includes("lead") ||
-        jobTitle.includes("head");
-
-      return (
-        isActive &&
-        hasEmail &&
-        isNotCurrentEmployee &&
-        isHrManagerInEmployeeDepartment(employee, getHrReportingFormEmployee()) &&
-        (hasManagerRole || hasManagerJobTitle)
-      );
-    })
-    .sort((a, b) =>
-      getEmployeeManagerDisplayName(a).localeCompare(
-        getEmployeeManagerDisplayName(b),
-      ),
+  const managerCandidates =
+    getHrReportingManagerCandidatesForEmployee(
+      targetEmployee,
+      { primaryOnly: true },
     );
 
   // ASSIGN LINE MANAGER - STEP 1D
@@ -14510,9 +14704,14 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
   const placeholderOption = document.createElement("option");
   placeholderOption.value = "";
   placeholderOption.textContent =
-    managerCandidates.length || savedManagerOption
-      ? "Select line manager"
-      : "No eligible managers in this department";
+    currentEditingEmployeeId &&
+      !state.primaryReportingHierarchyLoaded
+      ? "Reporting hierarchy unavailable - refresh records"
+      : managerCandidates.length || savedManagerOption
+        ? "Select line manager"
+        : baseManagerCandidates.length
+          ? "No valid Primary Managers outside this reporting chain"
+          : "No eligible managers in this department";
   select.appendChild(placeholderOption);
 
   managerCandidates.forEach((employee) => {
@@ -14664,47 +14863,10 @@ function syncAssignedLineManagerFromSavedValues(employee = {}) {
 // This mirrors the existing Primary Line Manager rule: active employees
 // with manager-level roles or manager-style job titles only.
 function getEmployeeReportingLineManagerCandidates() {
-  const currentEditingEmployeeId = String(
-    state.currentEditingEmployee?.id || state.dom.editingEmployeeId?.value || "",
-  ).trim();
-
-  const managerEligibleRoles = new Set([
-    "manager",
-    "hr",
-    "hr_manager",
-  ]);
-
-  return (state.employees || [])
-    .filter((employee) => {
-      const isActive = normalizeText(employee.status) === "active";
-      const hasEmail = Boolean(String(employee.work_email || "").trim());
-      const isNotCurrentEmployee =
-        String(employee.id || "").trim() !== currentEditingEmployeeId;
-
-      const systemRole = normalizeText(employee.system_role || employee.role || "");
-      const jobTitle = normalizeText(employee.job_title || "");
-
-      const hasManagerRole = managerEligibleRoles.has(systemRole);
-
-      const hasManagerJobTitle =
-        jobTitle.includes("manager") ||
-        jobTitle.includes("supervisor") ||
-        jobTitle.includes("lead") ||
-        jobTitle.includes("head");
-
-      return (
-        isActive &&
-        hasEmail &&
-        isNotCurrentEmployee &&
-        isHrManagerInEmployeeDepartment(employee, getHrReportingFormEmployee()) &&
-        (hasManagerRole || hasManagerJobTitle)
-      );
-    })
-    .sort((a, b) =>
-      getEmployeeManagerDisplayName(a).localeCompare(
-        getEmployeeManagerDisplayName(b),
-      ),
-    );
+  return getHrReportingManagerCandidatesForEmployee(
+    getHrReportingFormEmployee(),
+    { primaryOnly: false },
+  );
 }
 
 // EMPLOYEE BIODATA COMPLETION - STEP 3C
@@ -14936,14 +15098,65 @@ function getEmployeeReportingLinesFromForm() {
 function validateEmployeeReportingLines() {
   const rows = getEmployeeReportingLinesFromForm();
   const targetEmployee = getHrReportingFormEmployee();
-  const eligibleIds = new Set(getEmployeeReportingLineManagerCandidates().map(person => String(person.id)));
-  const invalidAssignment = rows.find(row => row.managerEmployeeId &&
-    (!eligibleIds.has(String(row.managerEmployeeId)) ||
-      !isHrManagerInEmployeeDepartment((state.employees || []).find(person => String(person.id) === String(row.managerEmployeeId)), targetEmployee)));
+
+  const primaryEligibleIds = new Set(
+    getHrReportingManagerCandidatesForEmployee(
+      targetEmployee,
+      { primaryOnly: true },
+    ).map((person) => String(person.id)),
+  );
+
+  const secondaryEligibleIds = new Set(
+    getHrReportingManagerCandidatesForEmployee(
+      targetEmployee,
+      { primaryOnly: false },
+    ).map((person) => String(person.id)),
+  );
+
+  const invalidAssignment = rows.find((row) => {
+    const managerId = String(row.managerEmployeeId || "").trim();
+    if (!managerId) return false;
+
+    const isPrimary =
+      normalizeText(row.managerType || "") === "primary";
+
+    return !(isPrimary
+      ? primaryEligibleIds
+      : secondaryEligibleIds
+    ).has(managerId);
+  });
+
   if (invalidAssignment) {
-    showPageAlert("warning", "Primary and secondary managers must be eligible managers in the employee's selected department. Replace or remove the unavailable assignment before saving.");
-    const field = invalidAssignment.rowElement?.matches?.("select") ? invalidAssignment.rowElement :
-      invalidAssignment.rowElement?.querySelector?.("[data-reporting-line-manager-id]");
+    const managerId = String(
+      invalidAssignment.managerEmployeeId || "",
+    ).trim();
+
+    const isPrimary =
+      normalizeText(invalidAssignment.managerType || "") ===
+      "primary";
+
+    if (
+      isPrimary &&
+      state.primaryReportingHierarchyLoaded &&
+      !isHrPrimaryManagerHierarchySafe(
+        targetEmployee?.id,
+        managerId,
+      )
+    ) {
+      showHrReportingHierarchyBlockedFeedback();
+    } else {
+      showPageAlert(
+        "warning",
+        "Primary and secondary managers must be eligible managers in the employee's selected department. Replace or remove the unavailable assignment before saving.",
+      );
+    }
+
+    const field = invalidAssignment.rowElement?.matches?.("select")
+      ? invalidAssignment.rowElement
+      : invalidAssignment.rowElement?.querySelector?.(
+        "[data-reporting-line-manager-id]",
+      );
+
     field?.classList.add("is-invalid");
     if (field) focusEmployeeBiodataField(field);
     return false;
@@ -30492,6 +30705,7 @@ async function refreshEmployeeWorkspace() {
   await loadAllEmployeeDocuments();
   await loadAuthProfilesForLinkage();
   await loadEmployees();
+  await loadHrPrimaryReportingHierarchy();
 
   // =========================================================
   // Keep payroll and employee bank dropdowns in sync with the
@@ -35527,9 +35741,9 @@ function getHrSupportingManagerModal() {
         <header class="hr-access-modal-header">
           <div class="hr-access-modal-heading">
             <span class="hr-access-modal-kicker">REPORTING RESPONSIBILITY</span>
-            <h2 id="hrSupportingManagerModalLabel">Manage supporting manager</h2>
+            <h2 id="hrSupportingManagerModalLabel">Manage reporting managers</h2>
             <p id="hrSupportingManagerModalDescription">
-              Add or remove Secondary Managers without changing dashboard access or the Primary Manager.
+              Review the Primary Manager and add or remove Secondary Managers without changing dashboard access.
             </p>
           </div>
           <div class="d-flex align-items-center gap-2">
@@ -35679,39 +35893,6 @@ function getSupportingManagerDisplayName(employee = {}) {
     .join(" ") || "Employee";
 }
 
-function canEmployeeBeAssignedAsManager(employee = {}) {
-  if (normalizeText(employee?.status || "") !== "active") {
-    return false;
-  }
-
-  const linkedProfile = getEmployeeLinkedAuthProfile(employee);
-
-  const employeeRole = normaliseHrBusinessRole(
-    employee?.system_role || "",
-  );
-
-  const profileRole = normaliseHrBusinessRole(
-    linkedProfile?.role || "",
-  );
-
-  const hasActiveProfile =
-    !linkedProfile || linkedProfile.is_active === true;
-
-  const managerRoles = new Set([
-    "manager",
-    "hr",
-    "hr_manager",
-  ]);
-
-  return Boolean(
-    hasActiveProfile &&
-    (
-      managerRoles.has(profileRole) ||
-      (!linkedProfile && managerRoles.has(employeeRole))
-    )
-  );
-}
-
 function populateHrPrimaryManagerOptions(
   employeeId,
   excludedManagerIds = [],
@@ -35727,27 +35908,38 @@ function populateHrPrimaryManagerOptions(
       .filter(Boolean),
   );
 
-  const candidates = sortEmployeeRecordsByEmployeeNumber(
-    (state.employees || []).filter((employee) => {
-      const candidateId = String(employee?.id || "").trim();
+  const targetEmployee = (state.employees || []).find(
+    (person) => String(person.id) === employeeKey,
+  );
 
-      return Boolean(
-        candidateId &&
-        candidateId !== employeeKey &&
-        !excludedIds.has(candidateId) &&
-        canEmployeeBeAssignedAsManager(employee) &&
-        isHrManagerInEmployeeDepartment(employee, (state.employees || []).find(person => String(person.id) === employeeKey))
-      );
-    }),
+  const baseCandidates = getHrReportingManagerCandidatesForEmployee(
+    targetEmployee,
+    {
+      primaryOnly: false,
+      excludedManagerIds: [...excludedIds],
+    },
+  );
+
+  const candidates = getHrReportingManagerCandidatesForEmployee(
+    targetEmployee,
+    {
+      primaryOnly: true,
+      excludedManagerIds: [...excludedIds],
+    },
   );
 
   select.innerHTML = "";
 
   const placeholderOption = document.createElement("option");
   placeholderOption.value = "";
-  placeholderOption.textContent = candidates.length
-    ? "Select Primary Manager"
-    : "No eligible managers in this department";
+  placeholderOption.textContent =
+    !state.primaryReportingHierarchyLoaded
+      ? "Reporting hierarchy unavailable - refresh"
+      : candidates.length
+        ? "Select Primary Manager"
+        : baseCandidates.length
+          ? "No valid Primary Managers outside this reporting chain"
+          : "No eligible managers in this department";
 
   select.appendChild(placeholderOption);
 
@@ -35783,17 +35975,16 @@ function populateHrSupportingManagerOptions(employeeId, assignedManagerIds = [])
     (assignedManagerIds || []).map((value) => String(value || "").trim()),
   );
 
-  const candidates = sortEmployeeRecordsByEmployeeNumber(
-    (state.employees || []).filter((employee) => {
-      const candidateId = String(employee?.id || "").trim();
-      return (
-        candidateId &&
-        candidateId !== employeeKey &&
-        !assignedIds.has(candidateId) &&
-        canEmployeeBeAssignedAsManager(employee) &&
-        isHrManagerInEmployeeDepartment(employee, (state.employees || []).find(person => String(person.id) === employeeKey))
-      );
-    }),
+  const targetEmployee = (state.employees || []).find(
+    (person) => String(person.id) === employeeKey,
+  );
+
+  const candidates = getHrReportingManagerCandidatesForEmployee(
+    targetEmployee,
+    {
+      primaryOnly: false,
+      excludedManagerIds: [...assignedIds],
+    },
   );
 
   select.innerHTML = [
@@ -35941,10 +36132,10 @@ ${canChangePrimaryManager
     `
       : canCurrentUserMaintainPeopleData()
         ? `
-    <div class="alert alert-warning mb-3">
+    <div class="alert alert-light border mb-3">
       <strong>No Primary Manager assigned.</strong>
       <div class="small mt-1">
-        Select an eligible employee below to assign the Primary Manager.
+        This is valid for a top-level employee. Assign one only if this employee reports to someone else.
       </div>
     </div>
 
@@ -35961,7 +36152,7 @@ ${canChangePrimaryManager
       </select>
 
       <div class="form-text">
-        The employee, inactive employees, and existing Supporting Managers are excluded.
+        Only hierarchy-safe Primary Manager candidates are shown. Employees already below this employee are excluded.
       </div>
 
       <div class="d-flex justify-content-end mt-3">
@@ -36043,8 +36234,8 @@ ${canChangePrimaryManager
           </select>
 
           <div class="form-text">
-            The employee, current Primary Manager, inactive employees, and
-            existing Supporting Managers are excluded.
+            The employee, current Primary Manager, inactive employees,
+            existing Supporting Managers, and anyone already below this employee are excluded.
           </div>
 
           <div class="d-flex justify-content-end gap-2 mt-3">
@@ -36228,6 +36419,7 @@ async function openEmployeeReportingManagerWorkspace(employeeId) {
   document.body?.classList.add("hr-employee-access-modal-open");
 
   try {
+    await loadHrPrimaryReportingHierarchy();
     await loadHrSupportingManagersForModal(employee.id);
     window.requestAnimationFrame(() => {
       document.getElementById("hrSupportingManagerSelect")?.focus();
@@ -36300,16 +36492,21 @@ async function assignHrPrimaryManagerFromModal() {
     return;
   }
 
-  if (!canEmployeeBeAssignedAsManager(manager)) {
+  if (!isHrReportingManagerCandidate(manager, employee)) {
     showPageAlert(
       "warning",
-      `${getSupportingManagerDisplayName(manager)} does not currently have Manager or HR access and cannot be assigned as a manager.`,
+      "Select an eligible Primary Manager from the employee's department.",
     );
     return;
   }
 
-  if (!isHrManagerInEmployeeDepartment(manager, employee)) {
-    showPageAlert("warning", "Select a Primary Manager from the employee's department.");
+  if (
+    !isHrPrimaryManagerHierarchySafe(
+      employeeId,
+      managerEmployeeId,
+    )
+  ) {
+    showHrReportingHierarchyBlockedFeedback();
     return;
   }
 
@@ -36568,6 +36765,36 @@ async function assignHrPrimaryManagerFromModal() {
       error,
     );
 
+    const combinedErrorText = [
+      error?.message,
+      error?.details,
+      error?.hint,
+      error?.code,
+    ]
+      .map((value) => String(value || "").toLowerCase())
+      .join(" ");
+
+    const isSelfManagerAssignment =
+      combinedErrorText.includes("bexhr_reporting_self_manager") ||
+      combinedErrorText.includes("cannot be assigned as their own manager");
+
+    const isCircularPrimaryManagerAssignment =
+      combinedErrorText.includes("bexhr_reporting_cycle") ||
+      combinedErrorText.includes("circular primary manager") ||
+      combinedErrorText.includes("circular reporting relationship");
+
+    if (
+      isSelfManagerAssignment ||
+      isCircularPrimaryManagerAssignment
+    ) {
+      showHrReportingHierarchyBlockedFeedback({
+        selfManager: isSelfManagerAssignment,
+      });
+
+      await loadHrPrimaryReportingHierarchy();
+      return;
+    }
+
     showPageAlert(
       "danger",
       error?.message ||
@@ -36761,7 +36988,7 @@ async function addHrSupportingManagerFromModal() {
 
   const employee = (state.employees || []).find(person => String(person.id) === employeeId);
   const manager = (state.employees || []).find(person => String(person.id) === managerEmployeeId);
-  if (!manager || !canEmployeeBeAssignedAsManager(manager) || !isHrManagerInEmployeeDepartment(manager, employee)) {
+  if (!employee || !manager || !isHrReportingManagerCandidate(manager, employee)) {
     showPageAlert("warning", "Select an eligible Secondary Manager from the employee's department.");
     return;
   }
@@ -37211,6 +37438,17 @@ function prepareEmployeeAsReportingManagerFromAccess() {
       "warning",
       "The selected reporting assignment could not be resolved. Please refresh and try again.",
     );
+    return;
+  }
+
+  if (
+    normalizeText(managerType) === "primary" &&
+    !isHrPrimaryManagerHierarchySafe(
+      managedEmployeeId,
+      managerEmployeeId,
+    )
+  ) {
+    showHrReportingHierarchyBlockedFeedback();
     return;
   }
 
@@ -37997,6 +38235,8 @@ async function handleEmployeeSave() {
       loadEmployees(),
     ]);
 
+    await loadHrPrimaryReportingHierarchy();
+
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
     // Keep payroll-related employee dropdowns aligned after employee create/update.
@@ -38177,19 +38417,9 @@ async function handleEmployeeSave() {
         focusEmployeeBiodataField(primaryManagerField);
       }
 
-      const message = isSelfManagerAssignment
-        ? "An employee cannot be assigned as their own manager. Choose a different manager."
-        : "This Primary Manager assignment would create a circular reporting relationship. Choose a manager outside this employee's reporting chain.";
-
-      showPageAlert("warning", message);
-
-      showDashboardToast(
-        "warning",
-        isSelfManagerAssignment
-          ? "Self-management blocked"
-          : "Circular reporting blocked",
-        message,
-      );
+      showHrReportingHierarchyBlockedFeedback({
+        selfManager: isSelfManagerAssignment,
+      });
 
       return;
     }
