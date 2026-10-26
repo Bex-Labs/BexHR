@@ -1691,7 +1691,7 @@
             <div id="organizationJobTitlesSection" class="mb-4">
               <h3 class="section-heading h5 mb-1">Manage Job Titles</h3>
               <p class="section-subtext mb-0">
-                Create and maintain approved job titles under each department.
+                Create approved job titles for a department or for the whole organization.
               </p>
             </div>
 
@@ -1699,7 +1699,22 @@
               <input type="hidden" id="editingOrganizationJobTitleId" />
 
               <div class="row g-4 align-items-end">
-                <div class="col-md-4">
+                <!-- BEXHR ORGANIZATION-WIDE POSITIONS - R-12C
+                     A title can belong to one department or apply to the whole organization. -->
+                <div class="col-md-6 col-xl-3">
+                  <label for="organizationJobTitleScope" class="form-label fw-semibold">
+                    Applies to <span class="text-danger">*</span>
+                  </label>
+                  <select id="organizationJobTitleScope" class="form-select" required>
+                    <option value="department">A department</option>
+                    <option value="organization">Whole organization</option>
+                  </select>
+                  <div class="form-text">
+                    Use Whole organization for positions such as CEO or COO that are not tied to one department.
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-3" id="organizationJobTitleDepartmentField">
                   <label for="organizationJobTitleDepartmentId" class="form-label fw-semibold">
                     Department <span class="text-danger">*</span>
                   </label>
@@ -1708,7 +1723,7 @@
                   </select>
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-6 col-xl-3">
                   <label for="organizationJobTitleName" class="form-label fw-semibold">
                     Job Title <span class="text-danger">*</span>
                   </label>
@@ -1716,7 +1731,7 @@
                     placeholder="Example: HR Officer" required />
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-6 col-xl-3">
                   <label for="organizationJobTitleStatus" class="form-label fw-semibold">
                     Status <span class="text-danger">*</span>
                   </label>
@@ -1779,7 +1794,7 @@
                   <thead>
                     <tr>
                       <th>Job Title</th>
-                      <th>Department</th>
+                      <th>Applies to</th>
                       <th>Status</th>
                       <th>Updated</th>
                       <th class="text-center">Action</th>

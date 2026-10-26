@@ -3638,6 +3638,7 @@ function applyHrOrganizationSetupAccessControls() {
     state.dom.saveOrganizationDepartmentBtn,
     state.dom.cancelOrganizationDepartmentEditBtn,
 
+    state.dom.organizationJobTitleScope,
     state.dom.organizationJobTitleDepartmentId,
     state.dom.organizationJobTitleName,
     state.dom.organizationJobTitleStatus,
@@ -5661,6 +5662,8 @@ function cacheDomElements() {
     // Cache Job Title management fields inside the Manage Organization card.
     organizationJobTitleForm: document.getElementById("organizationJobTitleForm"),
     editingOrganizationJobTitleId: document.getElementById("editingOrganizationJobTitleId"),
+    organizationJobTitleScope: document.getElementById("organizationJobTitleScope"),
+    organizationJobTitleDepartmentField: document.getElementById("organizationJobTitleDepartmentField"),
     organizationJobTitleDepartmentId: document.getElementById("organizationJobTitleDepartmentId"),
     organizationJobTitleName: document.getElementById("organizationJobTitleName"),
     organizationJobTitleStatus: document.getElementById("organizationJobTitleStatus"),
@@ -11378,6 +11381,11 @@ function bindEvents() {
     syncCustomSystemRoleVisibility();
     syncHrRoleAssignmentWarning();
     syncHrSelfRoleProtectionState();
+
+    // BEXHR REPORTING EDIT ROLE SEQUENCING - R-12C.2
+    // Manager eligibility depends on the employee's current System Role.
+    // Rebuild Primary/Secondary choices immediately when HR changes that role.
+    refreshHrReportingDepartmentChoices();
     updateEmployeeSaveButtonState();
   });
 
@@ -11716,6 +11724,7 @@ function bindEvents() {
   // ORGANIZATION HR SETUP VALUES - STEP 4B-2
   // Keep Job Title button grey/disabled until required fields are complete.
   [
+    state.dom.organizationJobTitleScope,
     state.dom.organizationJobTitleDepartmentId,
     state.dom.organizationJobTitleName,
     state.dom.organizationJobTitleStatus,
@@ -11724,6 +11733,11 @@ function bindEvents() {
     field?.addEventListener("change", updateOrganizationJobTitleSaveButtonState);
   });
 
+  state.dom.organizationJobTitleScope?.addEventListener("change", () => {
+    syncOrganizationJobTitleScopeControls();
+  });
+
+  syncOrganizationJobTitleScopeControls();
   updateOrganizationJobTitleSaveButtonState();
 
   state.dom.employeeDocumentsInput?.addEventListener("change", (event) => {
@@ -14400,28 +14414,60 @@ function getHrReportingFormEmployee() {
   return {
     ...current,
     id: current.id || state.dom.editingEmployeeId?.value || "",
-    // The form stores department names. Do not retain the old department ID
-    // when HR has selected a different department during this edit.
     department_id: "",
-    department: state.dom.department?.value ?? current.department ?? "",
+    department: getSelectedEmployeeDepartmentValue(),
+    job_title: state.dom.jobTitle?.value ?? current.job_title ?? "",
+    system_role:
+      getSelectedEmployeeSystemRoleValue() ||
+      current.system_role ||
+      "",
   };
 }
 
 function isHrManagerInEmployeeDepartment(manager, employee) {
   if (!manager || !employee) return false;
   if (String(manager.id || "") === String(employee.id || "")) return false;
-  if (manager.tenant_id && employee.tenant_id && manager.tenant_id !== employee.tenant_id) return false;
-  const key = person => {
+  if (
+    manager.tenant_id &&
+    employee.tenant_id &&
+    manager.tenant_id !== employee.tenant_id
+  ) {
+    return false;
+  }
+
+  // R-12C: a whole-organization position can manage across departments.
+  if (isHrWholeOrganizationEmployee(manager)) {
+    return true;
+  }
+
+  const key = (person) => {
     const id = String(person.department_id || "").trim();
-    if (id) return `id:${id}`;
-    const name = String(person.department || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (id) return "id:" + id;
+
+    const name = String(person.department || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+
     if (!name) return "";
-    const matches = (state.organizationDepartments || []).filter(dept =>
-      (!person.tenant_id || !dept.tenant_id || person.tenant_id === dept.tenant_id) &&
-      String(dept.department_name || "").trim().toLowerCase().replace(/\s+/g, " ") === name);
+
+    const matches = (state.organizationDepartments || []).filter(
+      (department) =>
+        (!person.tenant_id ||
+          !department.tenant_id ||
+          person.tenant_id === department.tenant_id) &&
+        String(department.department_name || "")
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, " ") === name,
+    );
+
     if (matches.length > 1) return "";
-    return matches.length === 1 ? `id:${matches[0].id}` : `name:${name}`;
+    return matches.length === 1
+      ? "id:" + matches[0].id
+      : "name:" + name;
   };
+
   const employeeKey = key(employee);
   return Boolean(employeeKey && employeeKey === key(manager));
 }
@@ -14432,7 +14478,7 @@ function preserveHrUnavailableManagerOption(select, managerId) {
   const manager = (state.employees || []).find(person => String(person.id) === id);
   const option = document.createElement("option");
   option.value = id;
-  option.textContent = `${manager ? getEmployeeManagerDisplayName(manager) : "Saved manager"} — unavailable for this department; replace or remove`;
+  option.textContent = `${manager ? getEmployeeManagerDisplayName(manager) : "Saved manager"} — unavailable for this reporting scope; replace or remove`;
   option.disabled = true;
   option.selected = true;
   option.dataset.managerName = manager ? getEmployeeManagerDisplayName(manager) : "Saved manager";
@@ -14442,25 +14488,72 @@ function preserveHrUnavailableManagerOption(select, managerId) {
 
 // BEXHR REPORTING HIERARCHY UX CONSISTENCY - R-12B
 // One shared manager-candidate rule for Edit Employee and Manage Reporting Managers.
+// Reporting eligibility comes from the employee's system role, never job-title text.
+// Stored role "hr" covers both HR Standard and HR Admin; hr_access_level controls
+// their HR access tier without changing reporting-manager eligibility.
 const HR_REPORTING_MANAGER_ELIGIBLE_ROLES = new Set([
   "manager",
   "hr",
   "hr_manager",
 ]);
 
-function hasHrReportingManagerRoleOrTitle(employee = {}) {
+function hasHrReportingManagerRole(employee = {}) {
   const systemRole = normalizeText(
     employee.system_role || employee.role || "",
   );
 
-  const jobTitle = normalizeText(employee.job_title || "");
+  return HR_REPORTING_MANAGER_ELIGIBLE_ROLES.has(systemRole);
+}
+
+// BEXHR REPORTING ROLE ORDER - R-12C.1
+// Normal departmental reporting follows the locked BexHR ladder:
+// HR Admin > HR Standard > Manager > Employee.
+// Whole-organization Manager positions are the deliberate exception: they may
+// sit above departmental roles and may themselves report only to another
+// whole-organization Manager. Primary graph checks still prevent cycles.
+function getHrReportingRoleTier(employee = {}) {
+  const systemRole = normalizeText(
+    employee.system_role || employee.role || "",
+  );
+
+  if (systemRole === "hr" || systemRole === "hr_manager") {
+    return formatEmployeeAccessRoleLabel(employee) === "HR Admin" ? 4 : 3;
+  }
+
+  if (systemRole === "manager") return 2;
+  return 1;
+}
+
+function isHrWholeOrganizationReportingManager(employee = {}) {
+  return Boolean(
+    isHrWholeOrganizationEmployee(employee) &&
+    normalizeText(employee.system_role || employee.role || "") === "manager"
+  );
+}
+
+function canHrReportingManagerSitAboveEmployee(manager, employee) {
+  if (!manager || !employee) return false;
+
+  const managerIsWholeOrganization =
+    isHrWholeOrganizationReportingManager(manager);
+  const employeeIsWholeOrganization =
+    isHrWholeOrganizationEmployee(employee);
+
+  // A whole-organization employee (for example COO) can only report upward to
+  // another whole-organization Manager (for example CEO). The Primary graph
+  // decides the actual order between those organization-wide positions.
+  if (employeeIsWholeOrganization) {
+    return managerIsWholeOrganization;
+  }
+
+  // A whole-organization Manager may sit above any departmental role.
+  if (managerIsWholeOrganization) {
+    return true;
+  }
 
   return (
-    HR_REPORTING_MANAGER_ELIGIBLE_ROLES.has(systemRole) ||
-    jobTitle.includes("manager") ||
-    jobTitle.includes("supervisor") ||
-    jobTitle.includes("lead") ||
-    jobTitle.includes("head")
+    getHrReportingRoleTier(manager) >
+    getHrReportingRoleTier(employee)
   );
 }
 
@@ -14474,7 +14567,8 @@ function isHrReportingManagerCandidate(manager, employee) {
     isActive &&
     hasEmail &&
     isHrManagerInEmployeeDepartment(manager, employee) &&
-    hasHrReportingManagerRoleOrTitle(manager)
+    hasHrReportingManagerRole(manager) &&
+    canHrReportingManagerSitAboveEmployee(manager, employee)
   );
 }
 
@@ -14711,7 +14805,7 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
         ? "Select line manager"
         : baseManagerCandidates.length
           ? "No valid Primary Managers outside this reporting chain"
-          : "No eligible managers in this department";
+          : "No eligible managers for this employee";
   select.appendChild(placeholderOption);
 
   managerCandidates.forEach((employee) => {
@@ -14894,7 +14988,7 @@ function buildEmployeeReportingLineManagerOptions(selectedManagerId = "") {
 
   if (selectedId && !candidates.some(person => String(person.id) === selectedId)) {
     const manager = (state.employees || []).find(person => String(person.id) === selectedId);
-    options.push(`<option value="${escapeHtml(selectedId)}" disabled selected>${escapeHtml(manager ? getEmployeeManagerDisplayName(manager) : "Saved manager")} — unavailable for this department; replace or remove</option>`);
+    options.push(`<option value="${escapeHtml(selectedId)}" disabled selected>${escapeHtml(manager ? getEmployeeManagerDisplayName(manager) : "Saved manager")} — unavailable for this reporting scope; replace or remove</option>`);
   }
   return options.join("");
 }
@@ -15147,7 +15241,7 @@ function validateEmployeeReportingLines() {
     } else {
       showPageAlert(
         "warning",
-        "Primary and secondary managers must be eligible managers in the employee's selected department. Replace or remove the unavailable assignment before saving.",
+        "Primary and secondary managers must be eligible for the employee's reporting scope. Department managers stay within their department; whole-organization managers can report across departments. Replace or remove the unavailable assignment before saving.",
       );
     }
 
@@ -27837,6 +27931,59 @@ const EMPLOYEE_DEPARTMENT_JOB_TITLES = Object.freeze({
 // Manage Organization departments.
 // Employee records currently save department as text, so option values remain
 // department names instead of department IDs.
+// BEXHR ORGANIZATION-WIDE POSITIONS - R-12C
+// Keep the UI sentinel separate from the database value. Employee records save
+// whole-organization positions with department = null.
+const HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE = "__whole_organization__";
+
+function isHrWholeOrganizationDepartmentSelection(value = "") {
+  return String(value || "").trim() === HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE;
+}
+
+function getSelectedEmployeeDepartmentValue() {
+  const selectedValue = String(state.dom.department?.value || "").trim();
+  return isHrWholeOrganizationDepartmentSelection(selectedValue)
+    ? ""
+    : selectedValue;
+}
+
+function isHrWholeOrganizationJobTitleValue(jobTitleValue = "", tenantId = "") {
+  const normalizedTitle = normalizeText(jobTitleValue);
+  const tenantKey = String(tenantId || "").trim();
+
+  if (!normalizedTitle) return false;
+
+  return (state.organizationJobTitles || []).some((record) => {
+    const recordTenantId = String(record?.tenant_id || "").trim();
+    const departmentId = String(record?.department_id || "").trim();
+
+    return (
+      !departmentId &&
+      normalizeText(record?.job_title || "") === normalizedTitle &&
+      (!tenantKey || !recordTenantId || recordTenantId === tenantKey)
+    );
+  });
+}
+
+function isHrWholeOrganizationEmployee(employee = {}) {
+  const department = String(employee?.department || "").trim();
+  if (department) return false;
+
+  return isHrWholeOrganizationJobTitleValue(
+    employee?.job_title || "",
+    employee?.tenant_id || "",
+  );
+}
+
+function getEmployeeDepartmentSelectionValue(employee = {}) {
+  const department = String(employee?.department || "").trim();
+  if (department) return department;
+
+  return isHrWholeOrganizationEmployee(employee)
+    ? HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE
+    : "";
+}
+
 function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartment = "") {
   const departmentSelect = state.dom.department;
   if (!departmentSelect) return;
@@ -27853,10 +28000,30 @@ function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartm
       ),
     );
 
-  // ORGANIZATION HR SETUP VALUES - STEP 5A
-  // If setup values have not loaded yet, keep existing hardcoded HTML options.
-  // This preserves existing employee form behaviour instead of leaving HR stuck.
+  // If setup values have not loaded yet, retain the existing fallback choices
+  // but still expose the whole-organization option.
   if (!activeDepartments.length) {
+    const hasWholeOrganizationOption = Array.from(departmentSelect.options).some(
+      (option) => option.value === HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE,
+    );
+
+    if (!hasWholeOrganizationOption) {
+      const wholeOrganizationOption = document.createElement("option");
+      wholeOrganizationOption.value = HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE;
+      wholeOrganizationOption.textContent = "No department - whole organization";
+      departmentSelect.insertBefore(
+        wholeOrganizationOption,
+        departmentSelect.options[1] || null,
+      );
+    }
+
+    if (currentValue) {
+      const matchingOption = Array.from(departmentSelect.options).find(
+        (option) => String(option.value) === currentValue,
+      );
+      if (matchingOption) departmentSelect.value = currentValue;
+    }
+
     return;
   }
 
@@ -27866,6 +28033,11 @@ function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartm
   placeholderOption.value = "";
   placeholderOption.textContent = "Select department";
   departmentSelect.appendChild(placeholderOption);
+
+  const wholeOrganizationOption = document.createElement("option");
+  wholeOrganizationOption.value = HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE;
+  wholeOrganizationOption.textContent = "No department - whole organization";
+  departmentSelect.appendChild(wholeOrganizationOption);
 
   activeDepartments.forEach((department) => {
     const option = document.createElement("option");
@@ -27881,13 +28053,10 @@ function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartm
 
     if (matchingOption) {
       departmentSelect.value = matchingOption.value;
-    } else {
-      // ORGANIZATION HR SETUP VALUES - STEP 5A
-      // Preserve an older saved department during edit mode, even if HR has
-      // since marked that department inactive or renamed it.
+    } else if (!isHrWholeOrganizationDepartmentSelection(currentValue)) {
       const savedOption = document.createElement("option");
       savedOption.value = currentValue;
-      savedOption.textContent = `${currentValue} (saved value)`;
+      savedOption.textContent = currentValue + " (saved value)";
       departmentSelect.appendChild(savedOption);
       departmentSelect.value = currentValue;
     }
@@ -27899,7 +28068,11 @@ function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartm
 // Department using Manage Organization setup values.
 // Falls back to the old hardcoded mapping only if setup values are unavailable.
 function populateJobTitleOptionsForDepartment(preferredJobTitle = "") {
-  const department = String(state.dom.department?.value || "").trim();
+  const departmentSelection = String(state.dom.department?.value || "").trim();
+  const isWholeOrganization = isHrWholeOrganizationDepartmentSelection(
+    departmentSelection,
+  );
+  const department = isWholeOrganization ? "" : departmentSelection;
   const jobTitleSelect = state.dom.jobTitle;
 
   if (!jobTitleSelect) return;
@@ -27912,44 +28085,50 @@ function populateJobTitleOptionsForDepartment(preferredJobTitle = "") {
 
   const placeholderOption = document.createElement("option");
   placeholderOption.value = "";
-  placeholderOption.textContent = department
-    ? "Select job title"
-    : "Select department first";
+  placeholderOption.textContent = isWholeOrganization
+    ? "Select whole-organization job title"
+    : department
+      ? "Select job title"
+      : "Select department first";
 
   jobTitleSelect.appendChild(placeholderOption);
 
   let jobTitles = [];
 
-  // ORGANIZATION HR SETUP VALUES - STEP 5A
-  // Preferred source: active Job Titles saved under active Departments
-  // in Manage Organization.
-  const matchingDepartment = (state.organizationDepartments || []).find(
-    (departmentRecord) =>
-      normalizeText(departmentRecord.department_name) === normalizeText(department) &&
-      normalizeText(departmentRecord.status) === "active",
-  );
-
-  if (matchingDepartment) {
+  if (isWholeOrganization) {
     jobTitles = (state.organizationJobTitles || [])
-      .filter((jobTitle) => {
-        const isSameDepartment =
-          String(jobTitle.department_id || "").trim() ===
-          String(matchingDepartment.id || "").trim();
-
-        const isActive = normalizeText(jobTitle.status) === "active";
-
-        return isSameDepartment && isActive;
-      })
+      .filter((jobTitle) =>
+        !String(jobTitle.department_id || "").trim() &&
+        normalizeText(jobTitle.status) === "active",
+      )
       .map((jobTitle) => String(jobTitle.job_title || "").trim())
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
-  }
+  } else {
+    const matchingDepartment = (state.organizationDepartments || []).find(
+      (departmentRecord) =>
+        normalizeText(departmentRecord.department_name) === normalizeText(department) &&
+        normalizeText(departmentRecord.status) === "active",
+    );
 
-  // ORGANIZATION HR SETUP VALUES - STEP 5A
-  // Safe fallback: use the old hardcoded mapping only if the setup table
-  // has not provided titles for this department yet.
-  if (!jobTitles.length && department) {
-    jobTitles = EMPLOYEE_DEPARTMENT_JOB_TITLES[department] || [];
+    if (matchingDepartment) {
+      jobTitles = (state.organizationJobTitles || [])
+        .filter((jobTitle) => {
+          const isSameDepartment =
+            String(jobTitle.department_id || "").trim() ===
+            String(matchingDepartment.id || "").trim();
+
+          const isActive = normalizeText(jobTitle.status) === "active";
+          return isSameDepartment && isActive;
+        })
+        .map((jobTitle) => String(jobTitle.job_title || "").trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+    }
+
+    if (!jobTitles.length && department) {
+      jobTitles = EMPLOYEE_DEPARTMENT_JOB_TITLES[department] || [];
+    }
   }
 
   jobTitles.forEach((jobTitle) => {
@@ -27959,30 +28138,23 @@ function populateJobTitleOptionsForDepartment(preferredJobTitle = "") {
     jobTitleSelect.appendChild(option);
   });
 
-  // ORGANIZATION HR SETUP VALUES - STEP 5A
-  // Preserve old/saved job titles during edit mode, even if HR later made
-  // the title inactive or it is not part of the active controlled list.
   if (savedOrCurrentJobTitle) {
-    const titleExists = jobTitles.some(
-      (jobTitle) =>
-        jobTitle.toLowerCase() === savedOrCurrentJobTitle.toLowerCase(),
+    const matchingTitle = jobTitles.find(
+      (jobTitle) => normalizeText(jobTitle) === normalizeText(savedOrCurrentJobTitle),
     );
 
-    if (titleExists) {
-      jobTitleSelect.value = jobTitles.find(
-        (jobTitle) =>
-          jobTitle.toLowerCase() === savedOrCurrentJobTitle.toLowerCase(),
-      );
-    } else if (department) {
+    if (matchingTitle) {
+      jobTitleSelect.value = matchingTitle;
+    } else if (departmentSelection) {
       const savedOption = document.createElement("option");
       savedOption.value = savedOrCurrentJobTitle;
-      savedOption.textContent = `${savedOrCurrentJobTitle} (saved value)`;
+      savedOption.textContent = savedOrCurrentJobTitle + " (saved value)";
       jobTitleSelect.appendChild(savedOption);
       jobTitleSelect.value = savedOrCurrentJobTitle;
     }
   }
 
-  jobTitleSelect.disabled = !department;
+  jobTitleSelect.disabled = !departmentSelection;
   jobTitleSelect.classList.remove("is-invalid");
 
   updateEmployeeSaveButtonState();
@@ -28774,6 +28946,7 @@ async function refreshOrganizationHrSetupValues() {
       state.dom.jobTitle?.value || "",
     );
 
+    refreshHrReportingDepartmentChoices();
     updateOrganizationJobTitleSaveButtonState();
   } catch (error) {
     console.error("Error loading organization HR setup values:", error);
@@ -29772,7 +29945,6 @@ function populateOrganizationJobTitleDepartmentOptions(preferredDepartmentId = "
   if (!select) return;
 
   const currentValue = String(preferredDepartmentId || select.value || "").trim();
-
   const departments = Array.isArray(state.organizationDepartments)
     ? state.organizationDepartments
     : [];
@@ -29804,30 +29976,56 @@ function populateOrganizationJobTitleDepartmentOptions(preferredDepartmentId = "
     const matchingOption = Array.from(select.options).find(
       (option) => String(option.value) === currentValue,
     );
-
-    if (matchingOption) {
-      select.value = currentValue;
-    }
+    if (matchingOption) select.value = currentValue;
   }
 
-  updateOrganizationJobTitleSaveButtonState();
+  syncOrganizationJobTitleScopeControls();
 }
 // ORGANIZATION HR SETUP VALUES - STEP 4B-2
 // Job Title form follows the same grey/blue button behaviour used elsewhere.
+// BEXHR ORGANIZATION-WIDE POSITIONS - R-12C
+function getOrganizationJobTitleScopeValue() {
+  return String(state.dom.organizationJobTitleScope?.value || "department").trim();
+}
+
+function syncOrganizationJobTitleScopeControls() {
+  const isWholeOrganization =
+    getOrganizationJobTitleScopeValue() === "organization";
+  const departmentSelect = state.dom.organizationJobTitleDepartmentId;
+  const departmentField = state.dom.organizationJobTitleDepartmentField;
+
+  if (departmentSelect) {
+    departmentSelect.disabled = isWholeOrganization;
+    departmentSelect.required = !isWholeOrganization;
+    if (isWholeOrganization) {
+      departmentSelect.value = "";
+      departmentSelect.classList.remove("is-invalid");
+    }
+  }
+
+  departmentField?.classList.toggle("opacity-50", isWholeOrganization);
+  updateOrganizationJobTitleSaveButtonState();
+}
+
 function isOrganizationJobTitleFormReadyForSubmit() {
+  const scope = getOrganizationJobTitleScopeValue();
+  const hasValidScope = scope === "department" || scope === "organization";
   const hasDepartment = Boolean(
     String(state.dom.organizationJobTitleDepartmentId?.value || "").trim(),
   );
-
   const hasJobTitle = Boolean(
     String(state.dom.organizationJobTitleName?.value || "").trim(),
   );
-
   const hasStatus = Boolean(
     String(state.dom.organizationJobTitleStatus?.value || "").trim(),
   );
 
-  return hasDepartment && hasJobTitle && hasStatus;
+  return Boolean(
+    hasValidScope &&
+    hasJobTitle &&
+    hasStatus &&
+    (scope === "organization" || hasDepartment)
+  );
 }
 
 // ORGANIZATION HR SETUP VALUES - STEP 4B-2
@@ -29850,6 +30048,10 @@ function resetOrganizationJobTitleForm() {
     state.dom.editingOrganizationJobTitleId.value = "";
   }
 
+  if (state.dom.organizationJobTitleScope) {
+    state.dom.organizationJobTitleScope.value = "department";
+  }
+
   if (state.dom.organizationJobTitleStatus) {
     state.dom.organizationJobTitleStatus.value = "Active";
   }
@@ -29861,6 +30063,7 @@ function resetOrganizationJobTitleForm() {
   state.dom.cancelOrganizationJobTitleEditBtn?.classList.add("d-none");
 
   populateOrganizationJobTitleDepartmentOptions("");
+  syncOrganizationJobTitleScopeControls();
   updateOrganizationJobTitleSaveButtonState();
 }
 
@@ -29927,61 +30130,46 @@ function renderOrganizationJobTitlesTable() {
   state.dom.organizationJobTitlesTableWrapper?.classList.remove("d-none");
 
   records.forEach((jobTitle) => {
-    // ORGANIZATION HR SETUP VALUES - STEP 4B-4
-    // Safe ID used by the edit button for this Job Title row.
     const safeJobTitleId = String(jobTitle.id || "").replaceAll("'", "\\'");
     const linkedDepartment = jobTitle.organization_departments || {};
+    const departmentId = String(jobTitle.department_id || "").trim();
 
     const fallbackDepartment = (state.organizationDepartments || []).find(
-      (department) => String(department.id) === String(jobTitle.department_id),
+      (department) => String(department.id) === departmentId,
     );
 
-    const departmentName =
-      linkedDepartment.department_name ||
-      fallbackDepartment?.department_name ||
-      "--";
+    const appliesToLabel = !departmentId
+      ? "Whole organization"
+      : linkedDepartment.department_name ||
+        fallbackDepartment?.department_name ||
+        "Department unavailable";
 
     const row = document.createElement("tr");
 
-    row.innerHTML = `
-      <td>
-        <!-- ORGANIZATION HR SETUP VALUES - STEP 4B-3
-             Show seeded or manually created Job Title name with optional note. -->
-        <div class="fw-semibold">${escapeHtml(jobTitle.job_title || "--")}</div>
-        ${getVisibleOrganizationSetupNote(jobTitle.notes)
-        ? `<div class="text-secondary small">${escapeHtml(
-          getVisibleOrganizationSetupNote(jobTitle.notes),
-        )}</div>`
-        : ""
-      }
-      </td>
-
-      <td>${escapeHtml(departmentName)}</td>
-
-      <td class="bexhr-status-cell" data-label="Status">
-        ${renderBexhrStatusPill(
-        formatStatusLabel(jobTitle.status),
-      )}
-      </td>
-
-      <td class="text-nowrap">
-        ${formatDate(jobTitle.updated_at || jobTitle.created_at)}
-      </td>
-
-      <td class="text-center">
-        <!-- ORGANIZATION HR SETUP VALUES - STEP 4B-4
-             Edit button loads the selected Job Title into the form above. -->
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-primary"
-          title="Edit job title"
-          aria-label="Edit job title"
-          onclick="window.hrEditOrganizationJobTitleRecord('${safeJobTitleId}')"
-        >
-          <i class="bi bi-pencil-square"></i>
-        </button>
-      </td>
-    `;
+    row.innerHTML = [
+      "<td>",
+      "<div class=\"fw-semibold\">" + escapeHtml(jobTitle.job_title || "--") + "</div>",
+      getVisibleOrganizationSetupNote(jobTitle.notes)
+        ? "<div class=\"text-secondary small\">" +
+          escapeHtml(getVisibleOrganizationSetupNote(jobTitle.notes)) +
+          "</div>"
+        : "",
+      "</td>",
+      "<td>" + escapeHtml(appliesToLabel) + "</td>",
+      "<td class=\"bexhr-status-cell\" data-label=\"Status\">" +
+        renderBexhrStatusPill(formatStatusLabel(jobTitle.status)) +
+        "</td>",
+      "<td class=\"text-nowrap\">" +
+        formatDate(jobTitle.updated_at || jobTitle.created_at) +
+        "</td>",
+      "<td class=\"text-center\">",
+      "<button type=\"button\" class=\"btn btn-sm btn-outline-primary\" " +
+        "title=\"Edit job title\" aria-label=\"Edit job title\" " +
+        "onclick=\"window.hrEditOrganizationJobTitleRecord('" + safeJobTitleId + "')\">",
+      "<i class=\"bi bi-pencil-square\"></i>",
+      "</button>",
+      "</td>",
+    ].join("");
 
     tbody.appendChild(row);
   });
@@ -29992,16 +30180,18 @@ function renderOrganizationJobTitlesTable() {
 function validateOrganizationJobTitleForm() {
   let isValid = true;
   let firstInvalidField = null;
-
+  const scope = getOrganizationJobTitleScopeValue();
   const requiredFields = [
-    state.dom.organizationJobTitleDepartmentId,
+    state.dom.organizationJobTitleScope,
+    ...(scope === "department"
+      ? [state.dom.organizationJobTitleDepartmentId]
+      : []),
     state.dom.organizationJobTitleName,
     state.dom.organizationJobTitleStatus,
   ];
 
   requiredFields.forEach((field) => {
     const value = String(field?.value || "").trim();
-
     if (!value) {
       field?.classList.add("is-invalid");
       isValid = false;
@@ -30010,6 +30200,12 @@ function validateOrganizationJobTitleForm() {
       field?.classList.remove("is-invalid");
     }
   });
+
+  if (scope !== "department" && scope !== "organization") {
+    state.dom.organizationJobTitleScope?.classList.add("is-invalid");
+    isValid = false;
+    if (!firstInvalidField) firstInvalidField = state.dom.organizationJobTitleScope;
+  }
 
   if (!isValid && firstInvalidField?.focus) {
     firstInvalidField.focus();
@@ -30022,13 +30218,17 @@ function validateOrganizationJobTitleForm() {
 // Build one clean Job Title payload for insert/update.
 // This only affects organization_job_titles.
 function buildOrganizationJobTitlePayload(isEditMode = false) {
+  const scope = getOrganizationJobTitleScopeValue();
+
   return {
     p_job_title_id: isEditMode
       ? String(state.dom.editingOrganizationJobTitleId?.value || "").trim()
       : null,
-    p_department_id: String(
-      state.dom.organizationJobTitleDepartmentId?.value || "",
-    ).trim(),
+    p_department_id: scope === "organization"
+      ? null
+      : String(
+        state.dom.organizationJobTitleDepartmentId?.value || "",
+      ).trim(),
     p_job_title: String(
       state.dom.organizationJobTitleName?.value || "",
     ).trim(),
@@ -30080,7 +30280,7 @@ async function handleOrganizationJobTitleSave() {
   if (!validateOrganizationJobTitleForm()) {
     showPageAlert(
       "warning",
-      "Please select a department and enter a job title before saving.",
+      "Choose where this job title applies and enter the job title before saving.",
     );
     return;
   }
@@ -30097,7 +30297,7 @@ async function handleOrganizationJobTitleSave() {
   ).find((jobTitle) => {
     const isSameDepartment =
       String(jobTitle.department_id || "").trim() ===
-      payload.p_department_id;
+      String(payload.p_department_id || "").trim();
 
     const isSameTitle =
       normalizeText(jobTitle.job_title) ===
@@ -30114,8 +30314,9 @@ async function handleOrganizationJobTitleSave() {
   });
 
   if (duplicateJobTitle) {
-    const message =
-      `Job Title <strong>${escapeHtml(payload.p_job_title)}</strong> already exists under the selected department.`;
+    const message = payload.p_department_id
+      ? `Job Title <strong>${escapeHtml(payload.p_job_title)}</strong> already exists under the selected department.`
+      : `Job Title <strong>${escapeHtml(payload.p_job_title)}</strong> already exists for the whole organization.`;
 
     showPageAlert("warning", message);
     showDashboardToast(
@@ -30200,12 +30401,11 @@ async function handleOrganizationJobTitleSave() {
 }
 
 function startOrganizationJobTitleEdit(jobTitleId) {
-  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
-  // View-only setup roles cannot load Job Title records into edit mode.
   if (!canCurrentUserMaintainOrganizationSetupData()) {
     showHrSetupAccessDeniedMessage("Job Title Setup");
     return;
   }
+
   const record = (state.organizationJobTitles || []).find(
     (jobTitle) => String(jobTitle.id) === String(jobTitleId),
   );
@@ -30224,7 +30424,18 @@ function startOrganizationJobTitleEdit(jobTitleId) {
     state.dom.editingOrganizationJobTitleId.value = record.id || "";
   }
 
-  populateOrganizationJobTitleDepartmentOptions(record.department_id || "");
+  const isWholeOrganization = !String(record.department_id || "").trim();
+
+  if (state.dom.organizationJobTitleScope) {
+    state.dom.organizationJobTitleScope.value = isWholeOrganization
+      ? "organization"
+      : "department";
+  }
+
+  populateOrganizationJobTitleDepartmentOptions(
+    isWholeOrganization ? "" : record.department_id || "",
+  );
+  syncOrganizationJobTitleScopeControls();
 
   if (state.dom.organizationJobTitleName) {
     state.dom.organizationJobTitleName.value = record.job_title || "";
@@ -30243,9 +30454,7 @@ function startOrganizationJobTitleEdit(jobTitleId) {
   }
 
   state.dom.cancelOrganizationJobTitleEditBtn?.classList.remove("d-none");
-
   updateOrganizationJobTitleSaveButtonState();
-
   state.dom.organizationJobTitleName?.focus();
 }
 
@@ -34023,23 +34232,34 @@ function enterEmployeeEditMode(employee) {
   // ORGANIZATION HR SETUP VALUES - STEP 5A
   // Edit mode must rebuild the Department dropdown from Manage Organization
   // before selecting the employee's saved department.
-  populateEmployeeDepartmentOptionsFromOrganizationSetup(employee.department || "");
+  const employeeDepartmentSelection =
+    getEmployeeDepartmentSelectionValue(employee);
+
+  populateEmployeeDepartmentOptionsFromOrganizationSetup(
+    employeeDepartmentSelection,
+  );
 
   if (state.dom.department) {
-    state.dom.department.value = employee.department || "";
+    state.dom.department.value = employeeDepartmentSelection;
   }
 
-  // ORGANIZATION HR SETUP VALUES - STEP 5A
-  // After the saved Department is selected, rebuild Job Title options
-  // from active Manage Organization Job Titles under that Department.
+  // R-12C: whole-organization employees use controlled titles with no department.
   populateJobTitleOptionsForDepartment(employee.job_title || "");
 
   if (state.dom.lineManager) state.dom.lineManager.value = employee.line_manager || "";
   if (state.dom.employmentDate) state.dom.employmentDate.value = employee.employment_date || "";
   if (state.dom.approverEmail) state.dom.approverEmail.value = employee.approver_email || "";
 
+  // BEXHR REPORTING EDIT ROLE SEQUENCING - R-12C.2
+  // Load the employee's saved System Role before reporting-manager candidates
+  // are rebuilt. Otherwise edit mode can briefly use the reset/default Employee
+  // role and incorrectly offer lower-tier employees as Primary Managers.
+  setEmployeeSystemRoleFieldValue(employee.system_role || "");
+  syncHrSelfRoleProtectionState();
+
   // ASSIGN LINE MANAGER - STEP 1
-  // In edit mode, select the matching manager in the primary dropdown where possible.
+  // In edit mode, select the matching manager only after the saved System Role
+  // is loaded so the shared reporting-role hierarchy evaluates the real employee.
   // Existing saved Line Manager and Approver Email values are still preserved.
   syncAssignedLineManagerFromSavedValues(employee);
 
@@ -34054,12 +34274,6 @@ function enterEmployeeEditMode(employee) {
     "active",
     "Active",
   ]);
-
-  // HR SELF-ROLE PROTECTION - STEP 1
-  // Edit mode loads the saved System Role, then locks it if HR is editing
-  // their own employee record.
-  setEmployeeSystemRoleFieldValue(employee.system_role || "");
-  syncHrSelfRoleProtectionState();
 
   setEmployeeAccountPanel(getEmployeeAccountLinkage(employee));
 
@@ -34470,7 +34684,7 @@ function buildEmployeePayload() {
     nin: ninForPayload || null,
 
     phone_number: String(state.dom.phoneNumber?.value || "").trim() || null,
-    department: String(state.dom.department?.value || "").trim(),
+    department: getSelectedEmployeeDepartmentValue() || null,
     job_title: String(state.dom.jobTitle?.value || "").trim(),
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
@@ -35939,7 +36153,7 @@ function populateHrPrimaryManagerOptions(
         ? "Select Primary Manager"
         : baseCandidates.length
           ? "No valid Primary Managers outside this reporting chain"
-          : "No eligible managers in this department";
+          : "No eligible managers for this employee";
 
   select.appendChild(placeholderOption);
 
@@ -36179,7 +36393,7 @@ ${canChangePrimaryManager
   if (primarySummary && outOfDepartment) {
     const warning = document.createElement("p");
     warning.className = "alert alert-warning mt-3";
-    warning.textContent = "An existing manager assignment is outside this employee's department or cannot be resolved. Review and replace or remove it; no assignments have been changed automatically.";
+    warning.textContent = "An existing manager assignment is outside this employee's reporting scope or cannot be resolved. Review and replace or remove it; no assignments have been changed automatically.";
     primarySummary.appendChild(warning);
   }
   // REPORTING MANAGER MANAGEMENT REPAIR - PRIMARY MANAGER REMOVE BUTTON
@@ -36495,7 +36709,7 @@ async function assignHrPrimaryManagerFromModal() {
   if (!isHrReportingManagerCandidate(manager, employee)) {
     showPageAlert(
       "warning",
-      "Select an eligible Primary Manager from the employee's department.",
+      "Select an eligible Primary Manager for this employee.",
     );
     return;
   }
@@ -36989,7 +37203,7 @@ async function addHrSupportingManagerFromModal() {
   const employee = (state.employees || []).find(person => String(person.id) === employeeId);
   const manager = (state.employees || []).find(person => String(person.id) === managerEmployeeId);
   if (!employee || !manager || !isHrReportingManagerCandidate(manager, employee)) {
-    showPageAlert("warning", "Select an eligible Secondary Manager from the employee's department.");
+    showPageAlert("warning", "Select an eligible Secondary Manager for this employee.");
     return;
   }
 
