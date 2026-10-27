@@ -6280,52 +6280,86 @@
       return;
     }
 
-    cycle.status = "Active";
+    // BEXHR R-13 PA CYCLE INTEGRITY
+    // Integrated BexHR activation is one database transaction: the RPC creates
+    // exactly one appraisal per active employee and then activates the cycle.
+    // Do not mutate browser state before the database commits successfully.
+    if (bexPaIsIntegratedPersistenceContext()) {
+      if (
+        bexPaPersistence.mode !== "remote" ||
+        !bexPaPersistence.ready
+      ) {
+        if (bexPaElements.announcement) {
+          bexPaElements.announcement.textContent =
+            "Performance Appraisal persistence is unavailable. The cycle was not activated.";
+        }
 
-    const newAppraisals =
-      bexPaGenerateEmployeeAppraisals(cycle);
+        return;
+      }
 
-    try {
-      await bexPaPersistDatasetMutation(
-        "cycles",
-        cycle,
-        bexPaSaveCycles,
-      );
+      let activationCommitted = false;
+
+      try {
+        const { error } = await window.supabaseClient.rpc(
+          "pa_activate_cycle",
+          {
+            p_cycle_id: cycle.id,
+          },
+        );
+
+        if (error) {
+          throw error;
+        }
+
+        activationCommitted = true;
+
+        // Re-read canonical database state after the atomic transaction rather
+        // than reproducing the assignment set in browser memory.
+        await bexPaHydrateRemoteState();
+      } catch (error) {
+        console.error(
+          activationCommitted
+            ? "Performance appraisal cycle activated, but state refresh failed."
+            : "Performance appraisal atomic cycle activation failed.",
+          error,
+        );
+
+        if (!activationCommitted) {
+          try {
+            await bexPaHydrateRemoteState();
+          } catch (hydrateError) {
+            console.error(
+              "Performance appraisal state recovery failed.",
+              hydrateError,
+            );
+          }
+        }
+
+        if (bexPaElements.announcement) {
+          bexPaElements.announcement.textContent =
+            activationCommitted
+              ? "The appraisal cycle was activated, but the page could not refresh. Reload Performance Appraisal to continue."
+              : "The appraisal cycle could not be activated. No partial cycle activation was saved.";
+        }
+
+        return;
+      }
+    } else {
+      // Preserve the existing standalone/local demo behaviour. Database-level
+      // PA integrity applies only in the integrated Supabase workflow.
+      cycle.status = "Active";
+
+      const newAppraisals =
+        bexPaGenerateEmployeeAppraisals(cycle);
+
+      bexPaSaveCycles();
 
       if (newAppraisals.length > 0) {
-        if (bexPaIsIntegratedPersistenceContext()) {
-          await bexPaPersistRemoteRecords(
-            "employeeAppraisals",
-            newAppraisals,
-          );
-        } else {
-          bexPaSaveEmployeeAppraisals();
-        }
+        bexPaSaveEmployeeAppraisals();
       }
-    } catch (error) {
-      console.error(
-        "Performance appraisal cycle activation persistence failed.",
-        error,
-      );
-
-      if (bexPaIsIntegratedPersistenceContext()) {
-        try {
-          await bexPaHydrateRemoteState();
-        } catch (hydrateError) {
-          console.error(
-            "Performance appraisal state recovery failed.",
-            hydrateError,
-          );
-        }
-      }
-
-      if (bexPaElements.announcement) {
-        bexPaElements.announcement.textContent =
-          "The appraisal cycle could not be activated. Please try again.";
-      }
-
-      return;
     }
+
+    bexPaState.activatingCycleId = null;
 
     bexPaRenderCycles();
     bexPaRenderEmployeeAppraisals();
