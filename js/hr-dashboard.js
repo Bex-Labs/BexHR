@@ -11429,11 +11429,23 @@ function bindEvents() {
     refreshHrReportingDepartmentChoices();
   });
 
+  // BEXHR EXECUTIVE REPORTING CHOICE REFRESH - R-12C.3
+  // Whole-organization executive order depends on the selected approved Job Title.
+  // Rebuild reporting choices immediately when HR changes CEO/COO/title selection.
+  state.dom.jobTitle?.addEventListener("change", () => {
+    refreshHrReportingDepartmentChoices();
+    updateEmployeeSaveButtonState();
+  });
+
   // EMPLOYEE BIODATA COMPLETION - STEP 3I
   // Selecting a primary manager auto-fills manager/approver fields and
   // immediately refreshes the employee save button state.
   state.dom.assignedLineManagerEmployeeId?.addEventListener("change", () => {
     applyAssignedLineManagerSelection();
+
+    // R-12C.5: the selected Primary Manager must never remain available as a
+    // Secondary Manager in the parent employee form.
+    refreshEmployeeSecondaryReportingManagerOptions();
     updateEmployeeSaveButtonState();
   });
 
@@ -14435,8 +14447,18 @@ function isHrManagerInEmployeeDepartment(manager, employee) {
     return false;
   }
 
-  // R-12C: a whole-organization position can manage across departments.
+  // R-12C: whole-organization positions can manage across departments.
   if (isHrWholeOrganizationEmployee(manager)) {
+    return true;
+  }
+
+  // BEXHR SIMPLIFIED REPORTING HIERARCHY - R-12C.5
+  // HR Admin is the single company-level parent for HR Standard and Manager
+  // roles. Reporting scope therefore cannot trap HR Admin inside the HR
+  // department when a Manager belongs to another department.
+  // This changes reporting eligibility only; it does not make HR Admin a
+  // whole-organization Job Title or change dashboard permissions.
+  if (getHrReportingRoleTier(manager) === 4) {
     return true;
   }
 
@@ -14531,6 +14553,27 @@ function isHrWholeOrganizationReportingManager(employee = {}) {
   );
 }
 
+// BEXHR WHOLE-ORGANIZATION EXECUTIVE ORDER - R-12C.3
+// Job Title still does NOT grant dashboard/system authority. System Role remains
+// the permission source. This narrow helper orders only approved whole-organization
+// executive positions after the employee is already a whole-organization Manager.
+// Locked BexHR executive reporting order: CEO > COO > other whole-organization Manager.
+function getHrWholeOrganizationExecutiveRank(employee = {}) {
+  if (!isHrWholeOrganizationReportingManager(employee)) return 0;
+
+  const jobTitle = normalizeText(employee.job_title || "");
+
+  if (jobTitle === "ceo" || jobTitle === "chief executive officer") {
+    return 3;
+  }
+
+  if (jobTitle === "coo" || jobTitle === "chief operating officer") {
+    return 2;
+  }
+
+  return 1;
+}
+
 function canHrReportingManagerSitAboveEmployee(manager, employee) {
   if (!manager || !employee) return false;
 
@@ -14539,20 +14582,27 @@ function canHrReportingManagerSitAboveEmployee(manager, employee) {
   const employeeIsWholeOrganization =
     isHrWholeOrganizationEmployee(employee);
 
-  // A whole-organization employee (for example COO) can only report upward to
-  // another whole-organization Manager (for example CEO). The Primary graph
-  // decides the actual order between those organization-wide positions.
+  // BEXHR SECONDARY / SUPPORTING MANAGER RULE - R-12C.5
+  // The shared/base candidate rule is deliberately broader than Primary:
+  // a supporting manager may be a peer or a higher reporting level.
+  // Self, descendants, the current Primary Manager, and duplicate Secondary
+  // Managers are filtered separately by the shared candidate/picker logic.
   if (employeeIsWholeOrganization) {
-    return managerIsWholeOrganization;
+    if (!managerIsWholeOrganization) return false;
+
+    return (
+      getHrWholeOrganizationExecutiveRank(manager) >=
+      getHrWholeOrganizationExecutiveRank(employee)
+    );
   }
 
-  // A whole-organization Manager may sit above any departmental role.
+  // Whole-organization Managers may support departmental employees.
   if (managerIsWholeOrganization) {
     return true;
   }
 
   return (
-    getHrReportingRoleTier(manager) >
+    getHrReportingRoleTier(manager) >=
     getHrReportingRoleTier(employee)
   );
 }
@@ -14570,6 +14620,71 @@ function isHrReportingManagerCandidate(manager, employee) {
     hasHrReportingManagerRole(manager) &&
     canHrReportingManagerSitAboveEmployee(manager, employee)
   );
+}
+
+// BEXHR STRICT PRIMARY REPORTING CHAIN - R-12C.4
+// Primary Manager is an immediate reporting relationship, not a generic
+// "any higher level" relationship. Keep the locked BexHR chain:
+// Employee -> Manager -> HR Standard -> HR Admin -> COO -> CEO.
+// Secondary/supporting manager eligibility remains on the broader shared rule.
+function canHrPrimaryReportingManagerSitImmediatelyAboveEmployee(manager, employee) {
+  if (!manager || !employee) return false;
+
+  const managerIsWholeOrganization =
+    isHrWholeOrganizationReportingManager(manager);
+  const employeeIsWholeOrganization =
+    isHrWholeOrganizationEmployee(employee);
+
+  if (employeeIsWholeOrganization) {
+    if (!managerIsWholeOrganization) return false;
+
+    const employeeExecutiveRank =
+      getHrWholeOrganizationExecutiveRank(employee);
+    const managerExecutiveRank =
+      getHrWholeOrganizationExecutiveRank(manager);
+
+    // CEO is top-level. COO reports only to CEO. Any future lower
+    // whole-organization Manager reports only to the next executive level.
+    if (
+      !employeeExecutiveRank ||
+      !managerExecutiveRank ||
+      employeeExecutiveRank >= 3
+    ) {
+      return false;
+    }
+
+    return managerExecutiveRank === employeeExecutiveRank + 1;
+  }
+
+  const employeeRoleTier = getHrReportingRoleTier(employee);
+  const managerRoleTier = getHrReportingRoleTier(manager);
+
+  // BEXHR SIMPLIFIED PRIMARY REPORTING HIERARCHY - R-12C.5
+  // CEO -> COO -> HR Admin -> { HR Standard, Manager } -> Employee.
+  //
+  // HR Admin reports specifically to COO. CEO is intentionally not offered
+  // directly because Primary Manager follows the immediate reporting parent.
+  if (employeeRoleTier === 4) {
+    return Boolean(
+      managerIsWholeOrganization &&
+      getHrWholeOrganizationExecutiveRank(manager) === 2
+    );
+  }
+
+  // Departmental roles do not report directly to CEO/COO except HR Admin.
+  if (managerIsWholeOrganization) return false;
+
+  // HR Standard and Manager are sibling branches directly under HR Admin.
+  if (employeeRoleTier === 3 || employeeRoleTier === 2) {
+    return managerRoleTier === 4;
+  }
+
+  // Employees report directly to Managers.
+  if (employeeRoleTier === 1) {
+    return managerRoleTier === 2;
+  }
+
+  return false;
 }
 
 function getHrPrimaryReportingDescendantIds(employeeId) {
@@ -14673,11 +14788,25 @@ function getHrReportingManagerCandidatesForEmployee(
         return false;
       }
 
+      // BEXHR GLOBAL REPORTING DESCENDANT SAFETY - R-12C.5
+      // Descendants never appear as Primary or Secondary/Supporting Manager
+      // candidates. This is global, not employee-specific UI cleanup.
+      // Existing employees fail closed if hierarchy data is unavailable.
       if (
-        primaryOnly &&
+        employeeKey &&
         !isHrPrimaryManagerHierarchySafe(
           employeeKey,
           managerId,
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        primaryOnly &&
+        !canHrPrimaryReportingManagerSitImmediatelyAboveEmployee(
+          manager,
+          employee,
         )
       ) {
         return false;
@@ -14751,10 +14880,7 @@ function refreshHrReportingDepartmentChoices() {
   const primary = state.dom.assignedLineManagerEmployeeId;
   const previous = primary?.value || "";
   populateAssignedLineManagerOptions(previous);
-  state.dom.employeeReportingLinesList?.querySelectorAll("[data-reporting-line-manager-id]").forEach(select => {
-    const selected = select.value;
-    select.innerHTML = buildEmployeeReportingLineManagerOptions(selected);
-  });
+  refreshEmployeeSecondaryReportingManagerOptions();
   applyAssignedLineManagerSelection();
   updateEmployeeSaveButtonState();
 }
@@ -14956,18 +15082,63 @@ function syncAssignedLineManagerFromSavedValues(employee = {}) {
 // Return manager candidates that can be assigned as reporting lines.
 // This mirrors the existing Primary Line Manager rule: active employees
 // with manager-level roles or manager-style job titles only.
-function getEmployeeReportingLineManagerCandidates() {
+function getEmployeeReportingLineManagerCandidates(selectedManagerId = "") {
+  const selectedId = String(selectedManagerId || "").trim();
+
+  const primaryManagerId = String(
+    state.dom.assignedLineManagerEmployeeId?.value || "",
+  ).trim();
+
+  const otherSecondaryManagerIds = Array.from(
+    state.dom.employeeReportingLinesList?.querySelectorAll(
+      "[data-reporting-line-manager-id]",
+    ) || [],
+  )
+    .map((select) => String(select.value || "").trim())
+    .filter(
+      (managerId) =>
+        managerId &&
+        managerId !== selectedId,
+    );
+
   return getHrReportingManagerCandidatesForEmployee(
     getHrReportingFormEmployee(),
-    { primaryOnly: false },
+    {
+      primaryOnly: false,
+      excludedManagerIds: [
+        primaryManagerId,
+        ...otherSecondaryManagerIds,
+      ].filter(Boolean),
+    },
   );
+}
+
+function refreshEmployeeSecondaryReportingManagerOptions(
+  changedSelect = null,
+) {
+  const selects = Array.from(
+    state.dom.employeeReportingLinesList?.querySelectorAll(
+      "[data-reporting-line-manager-id]",
+    ) || [],
+  );
+
+  selects.forEach((select) => {
+    // When HR changes one Secondary Manager, rebuild the sibling rows so the
+    // newly selected manager disappears from their available choices.
+    if (changedSelect && select === changedSelect) return;
+
+    const selectedManagerId = String(select.value || "").trim();
+    select.innerHTML = buildEmployeeReportingLineManagerOptions(
+      selectedManagerId,
+    );
+  });
 }
 
 // EMPLOYEE BIODATA COMPLETION - STEP 3C
 // Build select options for additional reporting manager rows.
 function buildEmployeeReportingLineManagerOptions(selectedManagerId = "") {
   const selectedId = String(selectedManagerId || "").trim();
-  const candidates = getEmployeeReportingLineManagerCandidates();
+  const candidates = getEmployeeReportingLineManagerCandidates(selectedId);
 
   const options = [
     `<option value="">Select manager</option>`,
@@ -15027,7 +15198,6 @@ function addEmployeeReportingLineRow(rowData = {}) {
 
   // EMPLOYEE BIODATA COMPLETION - STEP 3I
   // Keep additional reporting lines simple in the employee biodata form.
-  // The Product Owner asked for 2+ line managers, not complex reporting types.
   // Additional managers are saved as Secondary by default.
   row.innerHTML = `
     <div class="row g-3 align-items-end">
@@ -15062,9 +15232,19 @@ function addEmployeeReportingLineRow(rowData = {}) {
     field.addEventListener("change", updateEmployeeSaveButtonState);
   });
 
+  const managerSelect = row.querySelector("[data-reporting-line-manager-id]");
+  managerSelect?.addEventListener("change", () => {
+    // R-12C.5: once selected, remove this Secondary Manager from sibling
+    // Secondary dropdowns while preserving this row's current value.
+    refreshEmployeeSecondaryReportingManagerOptions(managerSelect);
+  });
+
   row.querySelector("[data-remove-reporting-line-row]")?.addEventListener("click", () => {
     row.remove();
     renderEmployeeReportingLinesEmptyStateIfNeeded();
+
+    // A removed Secondary Manager becomes available to the remaining rows.
+    refreshEmployeeSecondaryReportingManagerOptions();
     updateEmployeeSaveButtonState();
   });
 
@@ -15229,6 +15409,21 @@ function validateEmployeeReportingLines() {
       normalizeText(invalidAssignment.managerType || "") ===
       "primary";
 
+    const invalidManager = (state.employees || []).find(
+      (person) => String(person?.id || "").trim() === managerId,
+    );
+
+    const invalidWholeOrganizationOrder = Boolean(
+      isPrimary &&
+      invalidManager &&
+      isHrWholeOrganizationEmployee(targetEmployee) &&
+      isHrWholeOrganizationReportingManager(invalidManager) &&
+      !canHrReportingManagerSitAboveEmployee(
+        invalidManager,
+        targetEmployee,
+      )
+    );
+
     if (
       isPrimary &&
       state.primaryReportingHierarchyLoaded &&
@@ -15238,10 +15433,32 @@ function validateEmployeeReportingLines() {
       )
     ) {
       showHrReportingHierarchyBlockedFeedback();
+    } else if (invalidWholeOrganizationOrder) {
+      const employeeTitle = String(
+        targetEmployee?.job_title || "Whole-organization position",
+      ).trim();
+      const managerTitle = String(
+        invalidManager?.job_title || "selected manager",
+      ).trim();
+      const employeeExecutiveRank =
+        getHrWholeOrganizationExecutiveRank(targetEmployee);
+
+      const message = employeeExecutiveRank >= 3
+        ? "<strong>" + escapeHtml(employeeTitle) + "</strong> is the top whole-organization position and must not have a Primary Manager. Remove " + escapeHtml(managerTitle) + " before saving."
+        : "<strong>" + escapeHtml(employeeTitle) + "</strong> can report only to a higher whole-organization position. " + escapeHtml(managerTitle) + " cannot sit above this employee. Replace or remove the Primary Manager before saving.";
+
+      showPageAlert("warning", message);
+      showDashboardToast(
+        "warning",
+        "Primary Manager must be changed",
+        employeeExecutiveRank >= 3
+          ? employeeTitle + " is top-level and cannot report to " + managerTitle + "."
+          : managerTitle + " is not above " + employeeTitle + " in the whole-organization reporting order.",
+      );
     } else {
       showPageAlert(
         "warning",
-        "Primary and secondary managers must be eligible for the employee's reporting scope. Department managers stay within their department; whole-organization managers can report across departments. Replace or remove the unavailable assignment before saving.",
+        "Primary and secondary managers must be eligible for the employee's reporting scope. Department managers stay within their department; whole-organization managers must follow the executive reporting order. Replace or remove the unavailable assignment before saving.",
       );
     }
 
