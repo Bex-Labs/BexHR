@@ -1481,6 +1481,17 @@ document.addEventListener("DOMContentLoaded", async () => {
       startOrganizationJobTitleEdit(jobTitleId);
     };
 
+    // BEXHR R-14A SAFE ORGANIZATION SETUP DELETE
+    // Expose only the protected Tenant-Admin delete handlers used by the
+    // dynamically rendered Department / Job Title action buttons.
+    window.hrDeleteOrganizationDepartmentRecord = async (departmentId) => {
+      await deleteOrganizationDepartmentRecord(departmentId);
+    };
+
+    window.hrDeleteOrganizationJobTitleRecord = async (jobTitleId) => {
+      await deleteOrganizationJobTitleRecord(jobTitleId);
+    };
+
     // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
     // Expose only the HR-side approved leave cancellation modal opener.
     // The backend RPC still enforces HR-only cancellation and balance restoration.
@@ -3653,7 +3664,9 @@ function applyHrOrganizationSetupAccessControls() {
     .querySelectorAll(
       [
         '[onclick^="window.hrEditOrganizationDepartmentRecord"]',
+        '[onclick^="window.hrDeleteOrganizationDepartmentRecord"]',
         '[onclick^="window.hrEditOrganizationJobTitleRecord"]',
+        '[onclick^="window.hrDeleteOrganizationJobTitleRecord"]',
       ].join(","),
     )
     .forEach((button) => {
@@ -14436,6 +14449,68 @@ function getHrReportingFormEmployee() {
   };
 }
 
+// BEXHR R-14B SYSTEM HIERARCHY RECONCILIATION
+// This mirrors only the broad DB direct-report rule. It does not assign a
+// replacement manager and does not use CEO/COO title strings.
+function isHrPrimaryReportCompatibleWithManagerPosition(manager = {}, employee = {}) {
+  if (!manager || !employee) return false;
+
+  const managerRole = normalizeText(manager.system_role || manager.role || "");
+  const employeeRole = normalizeText(employee.system_role || employee.role || "");
+  const managerWholeOrganization = isHrWholeOrganizationReportingManager(manager);
+  const employeeWholeOrganization = isHrWholeOrganizationEmployee(employee);
+  const managerTier = getHrReportingRoleTier(manager);
+  const employeeTier = getHrReportingRoleTier(employee);
+
+  if (managerWholeOrganization && managerRole === "manager") {
+    return employeeTier === 4 || (employeeWholeOrganization && employeeRole === "manager");
+  }
+
+  if (managerTier === 4) {
+    return !employeeWholeOrganization && employeeTier !== 4 && ["hr", "hr_manager", "manager"].includes(employeeRole);
+  }
+
+  if (managerRole === "manager" && !managerWholeOrganization) {
+    const managerDepartment = normalizeText(manager.department || "");
+    const employeeDepartment = normalizeText(employee.department || "");
+    return !employeeWholeOrganization && !["hr", "hr_manager", "manager"].includes(employeeRole) && Boolean(managerDepartment) && managerDepartment === employeeDepartment;
+  }
+
+  return false;
+}
+
+function getHrInvalidPrimaryReportsForPendingManagerPosition(managerEmployeeId, pendingManager = {}) {
+  const managerKey = String(managerEmployeeId || "").trim();
+  if (!managerKey || !state.primaryReportingHierarchyLoaded) return [];
+
+  return (state.primaryReportingLines || [])
+    .filter((row) => String(row?.manager_employee_id || "").trim() === managerKey)
+    .map((row) => (state.employees || []).find((employee) => String(employee?.id || "").trim() === String(row?.employee_id || "").trim()))
+    .filter(Boolean)
+    .filter((employee) => !isHrPrimaryReportCompatibleWithManagerPosition(pendingManager, employee));
+}
+
+const HR_REPORTING_HIERARCHY_SYNC_STORAGE_KEY = "bexhrReportingHierarchySync";
+
+function publishHrReportingHierarchyChange(employeeId = "", reason = "reporting_hierarchy_changed") {
+  const detail = {
+    employeeId: String(employeeId || "").trim() || null,
+    reason: String(reason || "reporting_hierarchy_changed"),
+    changedAt: Date.now(),
+  };
+
+  window.dispatchEvent(new CustomEvent("bexhr:reporting-hierarchy-changed", { detail }));
+
+  try {
+    window.localStorage.setItem(
+      HR_REPORTING_HIERARCHY_SYNC_STORAGE_KEY,
+      JSON.stringify(detail),
+    );
+  } catch (error) {
+    console.warn("Unable to publish cross-tab reporting hierarchy refresh:", error);
+  }
+}
+
 function isHrManagerInEmployeeDepartment(manager, employee) {
   if (!manager || !employee) return false;
   if (String(manager.id || "") === String(employee.id || "")) return false;
@@ -15667,7 +15742,9 @@ async function loadEmployeeReportingLinesForEdit(employeeId) {
 
     if (error) throw error;
 
-    const rows = Array.isArray(data) ? data : [];
+    const rows = (Array.isArray(data) ? data : []).filter(
+      (row) => normalizeText(row?.status || "active") === "active",
+    );
 
     const primaryRow = rows.find(
       (row) => normalizeText(row.manager_type) === "primary",
@@ -30016,6 +30093,137 @@ async function handleOrganizationDepartmentSave() {
   }
 }
 
+// BEXHR R-14A SAFE ORGANIZATION SETUP DELETE
+// Deletion remains a Tenant-Admin-only protected RPC. Direct browser DELETE
+// stays revoked; dependencies fail closed instead of cascading.
+async function deleteOrganizationDepartmentRecord(departmentId) {
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Department Setup");
+    return;
+  }
+
+  const record = (state.organizationDepartments || []).find(
+    (department) => String(department.id) === String(departmentId),
+  );
+
+  if (!record) {
+    showPageAlert("warning", "The selected Department could not be found.");
+    return;
+  }
+
+  const departmentName = String(record.department_name || "Department").trim();
+  const confirmed = window.confirm(
+    "Delete Department \"" + departmentName + "\"? This is allowed only when no employees, job titles, appraisal records, or other protected records still use it.",
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "hr_tenant_admin_delete_organization_department",
+      { p_department_id: record.id },
+    );
+
+    if (error) throw error;
+
+    if (
+      String(state.dom.editingOrganizationDepartmentId?.value || "") ===
+      String(record.id)
+    ) {
+      resetOrganizationDepartmentForm();
+    }
+
+    await refreshOrganizationHrSetupValues();
+    redirectToOrganizationDepartmentRecordsAfterSave();
+
+    const successMessage =
+      "Department <strong>" + escapeHtml(departmentName) + "</strong> was deleted successfully.";
+    showPageAlert("success", successMessage);
+    showDashboardToast("success", "Department Deleted", successMessage);
+    return data;
+  } catch (error) {
+    console.error("Error deleting organization department:", error);
+    const message = String(error.message || "Department could not be deleted.");
+    const isInUse =
+      String(error.code || "") === "23503" ||
+      message.includes("BEXHR_ORG_DEPARTMENT_IN_USE");
+
+    showPageAlert(isInUse ? "warning" : "danger", escapeHtml(message));
+    showDashboardToast(
+      isInUse ? "warning" : "danger",
+      isInUse ? "Department Still In Use" : "Department Delete Failed",
+      escapeHtml(message),
+    );
+  } finally {
+    applyHrOrganizationSetupAccessControls();
+  }
+}
+
+async function deleteOrganizationJobTitleRecord(jobTitleId) {
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Job Title Setup");
+    return;
+  }
+
+  const record = (state.organizationJobTitles || []).find(
+    (jobTitle) => String(jobTitle.id) === String(jobTitleId),
+  );
+
+  if (!record) {
+    showPageAlert("warning", "The selected Job Title could not be found.");
+    return;
+  }
+
+  const jobTitleName = String(record.job_title || "Job Title").trim();
+  const confirmed = window.confirm(
+    "Delete Job Title \"" + jobTitleName + "\"? This is allowed only when no employee or protected company record still uses it.",
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "hr_tenant_admin_delete_organization_job_title",
+      { p_job_title_id: record.id },
+    );
+
+    if (error) throw error;
+
+    if (
+      String(state.dom.editingOrganizationJobTitleId?.value || "") ===
+      String(record.id)
+    ) {
+      resetOrganizationJobTitleForm();
+    }
+
+    await refreshOrganizationHrSetupValues();
+    redirectToOrganizationJobTitleRecordsAfterSave();
+
+    const successMessage =
+      "Job Title <strong>" + escapeHtml(jobTitleName) + "</strong> was deleted successfully.";
+    showPageAlert("success", successMessage);
+    showDashboardToast("success", "Job Title Deleted", successMessage);
+    return data;
+  } catch (error) {
+    console.error("Error deleting organization job title:", error);
+    const message = String(error.message || "Job Title could not be deleted.");
+    const isInUse =
+      String(error.code || "") === "23503" ||
+      message.includes("BEXHR_ORG_JOB_TITLE_IN_USE");
+
+    showPageAlert(isInUse ? "warning" : "danger", escapeHtml(message));
+    showDashboardToast(
+      isInUse ? "warning" : "danger",
+      isInUse ? "Job Title Still In Use" : "Job Title Delete Failed",
+      escapeHtml(message),
+    );
+  } finally {
+    applyHrOrganizationSetupAccessControls();
+  }
+}
+
 // AUDIT RECORD PRESENTATION CLEANUP - PHASE 2I-C1
 // Internal migration provenance remains stored for traceability but is not
 // useful in daily Company Administration tables. Preserve user-entered notes.
@@ -30082,15 +30290,26 @@ function renderOrganizationDepartmentsTable() {
       </td>
 
       <td class="text-center">
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-primary"
-          title="Edit department"
-          aria-label="Edit department"
-          onclick="window.hrEditOrganizationDepartmentRecord('${safeDepartmentId}')"
-        >
-          <i class="bi bi-pencil-square"></i>
-        </button>
+        <div class="d-inline-flex align-items-center gap-2">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary"
+            title="Edit department"
+            aria-label="Edit department"
+            onclick="window.hrEditOrganizationDepartmentRecord('${safeDepartmentId}')"
+          >
+            <i class="bi bi-pencil-square"></i>
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-danger"
+            title="Delete department"
+            aria-label="Delete department"
+            onclick="window.hrDeleteOrganizationDepartmentRecord('${safeDepartmentId}')"
+          >
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
       </td>
     `;
 
@@ -30380,11 +30599,18 @@ function renderOrganizationJobTitlesTable() {
         formatDate(jobTitle.updated_at || jobTitle.created_at) +
         "</td>",
       "<td class=\"text-center\">",
+      "<div class=\"d-inline-flex align-items-center gap-2\">",
       "<button type=\"button\" class=\"btn btn-sm btn-outline-primary\" " +
         "title=\"Edit job title\" aria-label=\"Edit job title\" " +
         "onclick=\"window.hrEditOrganizationJobTitleRecord('" + safeJobTitleId + "')\">",
       "<i class=\"bi bi-pencil-square\"></i>",
       "</button>",
+      "<button type=\"button\" class=\"btn btn-sm btn-outline-danger\" " +
+        "title=\"Delete job title\" aria-label=\"Delete job title\" " +
+        "onclick=\"window.hrDeleteOrganizationJobTitleRecord('" + safeJobTitleId + "')\">",
+      "<i class=\"bi bi-trash\"></i>",
+      "</button>",
+      "</div>",
       "</td>",
     ].join("");
 
@@ -37170,6 +37396,8 @@ async function assignHrPrimaryManagerFromModal() {
       state.currentProfile || {},
     );
 
+    publishHrReportingHierarchyChange(employeeId, "primary_manager_assigned");
+
     const primaryManagerWasChanged = Boolean(
       updatedPrimaryReportingLineId,
     );
@@ -37369,6 +37597,8 @@ async function removeHrPrimaryManagerFromModal(
       state.currentProfile || {},
     );
 
+    publishHrReportingHierarchyChange(employeeId, "primary_manager_removed");
+
     showPageAlert(
       "success",
       `${previousManagerName || "The Primary Manager"} was removed. Supporting Manager assignments were preserved.`,
@@ -37482,6 +37712,8 @@ async function addHrSupportingManagerFromModal() {
       state.currentProfile || {},
     );
 
+    publishHrReportingHierarchyChange(employeeId, "secondary_manager_assigned");
+
     showDashboardToast(
       "success",
       "Supporting manager added",
@@ -37538,6 +37770,8 @@ async function removeHrSupportingManagerFromModal(reportingLineId, managerName =
     await updateHrAccountResponsibilityTitle(
       state.currentProfile || {},
     );
+
+    publishHrReportingHierarchyChange(employeeId, "secondary_manager_removed");
 
     showDashboardToast(
       "success",
@@ -38419,6 +38653,38 @@ async function handleEmployeeSave() {
   const editingId = String(state.dom.editingEmployeeId?.value || "").trim();
   const isEditMode = Boolean(editingId);
 
+  let hierarchyPositionImpact = [];
+
+  if (isEditMode && state.currentEditingEmployee && state.primaryReportingHierarchyLoaded) {
+    const savedEmployee = state.currentEditingEmployee;
+    const hierarchyRelevantPositionChanged =
+      normalizeText(savedEmployee.department || "") !== normalizeText(employeePayload.department || "") ||
+      normalizeText(savedEmployee.job_title || "") !== normalizeText(employeePayload.job_title || "") ||
+      normalizeText(savedEmployee.system_role || "") !== normalizeText(employeePayload.system_role || "") ||
+      normalizeText(savedEmployee.status || "active") !== normalizeText(employeePayload.status || "active");
+
+    if (hierarchyRelevantPositionChanged) {
+      const pendingManager = { ...savedEmployee, ...employeePayload, id: editingId };
+      hierarchyPositionImpact = getHrInvalidPrimaryReportsForPendingManagerPosition(
+        editingId,
+        pendingManager,
+      );
+
+      if (hierarchyPositionImpact.length) {
+        const managerName = getSupportingManagerDisplayName(savedEmployee);
+        const affectedNames = hierarchyPositionImpact
+          .map((employee) => getSupportingManagerDisplayName(employee))
+          .join(", ");
+        const confirmed = window.confirm(
+          managerName + "'s position change will make these current Primary reporting lines invalid: " +
+          affectedNames + ". BexHR will deactivate those old Primary lines so they stop granting team/Leave authority. The affected employees must then be reassigned to a valid Primary Manager. Continue?",
+        );
+
+        if (!confirmed) return;
+      }
+    }
+  }
+
   try {
     setEmployeeSaveLoading(true, isEditMode);
 
@@ -38668,6 +38934,9 @@ async function handleEmployeeSave() {
 
     await loadHrPrimaryReportingHierarchy();
 
+    // BEXHR R-14B LIVE REPORTING HIERARCHY REFRESH
+    publishHrReportingHierarchyChange(savedEmployeeId, "employee_saved");
+
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
     // Keep payroll-related employee dropdowns aligned after employee create/update.
@@ -38725,6 +38994,17 @@ async function handleEmployeeSave() {
     // Show the employee save result together with the dashboard routing result.
     // If no login profile exists yet, HR gets a warning but the employee record
     // and selected system role still save successfully.
+    if (hierarchyPositionImpact.length) {
+      const affectedNames = hierarchyPositionImpact
+        .map((employee) => getSupportingManagerDisplayName(employee))
+        .join(", ");
+
+      employeeSaveSuccessMessage +=
+        '<div class="mt-2 small text-warning"><strong>Reporting hierarchy refreshed:</strong> ' +
+        escapeHtml(affectedNames) +
+        ' no longer report directly to this position. Their previous Primary lines were preserved as inactive history; assign a valid Primary Manager before they submit new Leave requests.</div>';
+    }
+
     const roleSyncMessage = roleSyncResult?.message || "";
     // EMPLOYEE LOGIN INVITE WORDING - STEP 2A
     // Existing login account is a successful linked-account outcome, not a

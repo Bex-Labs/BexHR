@@ -38,6 +38,13 @@
       linkedUserId: null,
     },
     leaveRequests: [],
+
+    // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+    // Shared HR/Manager self-service uses the same hierarchy-driven rule as
+    // Employee Dashboard: own Leave submission requires an active Primary Manager.
+    leavePrimaryManagerReadinessStatus: "loading",
+    hasPrimaryManagerForLeave: false,
+
     payrollRecords: [],
     isPayrollFiguresHidden: false,
     returnedLeaveAmendmentRequestId: null,
@@ -264,6 +271,126 @@
 
     return null;
   }
+
+  // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+  function setSsLeavePrimaryManagerReadiness(
+    readinessStatus = "ready",
+    hasPrimaryManager = false,
+  ) {
+    ssState.leavePrimaryManagerReadinessStatus = readinessStatus;
+    ssState.hasPrimaryManagerForLeave =
+      readinessStatus === "ready" && hasPrimaryManager === true;
+
+    updateSsLeaveRequestBlockNotice();
+  }
+
+  async function loadSsLeavePrimaryManagerReadiness() {
+    setSsLeavePrimaryManagerReadiness("loading", false);
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.rpc(
+        "get_employee_leave_primary_manager_readiness",
+      );
+
+      if (error) throw error;
+
+      const readiness = Array.isArray(data) ? data[0] : data;
+
+      if (!readiness || !readiness.employee_id) {
+        throw new Error(
+          "The signed-in employee could not be resolved for Leave readiness.",
+        );
+      }
+
+      setSsLeavePrimaryManagerReadiness(
+        "ready",
+        readiness.has_primary_manager === true,
+      );
+
+      return ssState.hasPrimaryManagerForLeave;
+    } catch (error) {
+      console.warn(
+        "[SS] Unable to verify Primary Manager availability for Leave submission:",
+        error,
+      );
+      setSsLeavePrimaryManagerReadiness("error", false);
+      return false;
+    }
+  }
+
+  function getSsLeavePrimaryManagerBlock() {
+    if (ssState.leavePrimaryManagerReadinessStatus === "loading") {
+      return {
+        message:
+          "Leave request availability is being checked against your current Primary Manager assignment.",
+      };
+    }
+
+    if (ssState.leavePrimaryManagerReadinessStatus !== "ready") {
+      return {
+        message:
+          "Your Primary Manager assignment could not be verified. Refresh this Leave workspace or contact HR before submitting leave.",
+      };
+    }
+
+    if (!ssState.hasPrimaryManagerForLeave) {
+      return {
+        message:
+          "Leave request submission is unavailable because no active Primary Manager is assigned. HR can update your reporting line when a higher reporting position is configured.",
+      };
+    }
+
+    return null;
+  }
+
+  // BEXHR R-14B LIVE REPORTING HIERARCHY REFRESH
+  const SS_REPORTING_HIERARCHY_SYNC_STORAGE_KEY = "bexhrReportingHierarchySync";
+  let ssLeaveHierarchyRefreshInProgress = false;
+  let ssLeaveHierarchyRefreshQueued = false;
+
+  async function refreshSsLeaveReadinessFromHierarchyChange() {
+    if (!ssState.currentUser || !ssState.employeeRecord) return;
+
+    if (ssLeaveHierarchyRefreshInProgress) {
+      ssLeaveHierarchyRefreshQueued = true;
+      return;
+    }
+
+    ssLeaveHierarchyRefreshInProgress = true;
+
+    try {
+      await loadSsLeavePrimaryManagerReadiness();
+    } catch (error) {
+      console.warn("[SS] Leave hierarchy refresh failed:", error);
+    } finally {
+      ssLeaveHierarchyRefreshInProgress = false;
+
+      if (ssLeaveHierarchyRefreshQueued) {
+        ssLeaveHierarchyRefreshQueued = false;
+        void refreshSsLeaveReadinessFromHierarchyChange();
+      }
+    }
+  }
+
+  window.addEventListener("bexhr:reporting-hierarchy-changed", () => {
+    void refreshSsLeaveReadinessFromHierarchyChange();
+  });
+
+  window.addEventListener("storage", (event) => {
+    if (event.key !== SS_REPORTING_HIERARCHY_SYNC_STORAGE_KEY) return;
+    void refreshSsLeaveReadinessFromHierarchyChange();
+  });
+
+  window.addEventListener("focus", () => {
+    void refreshSsLeaveReadinessFromHierarchyChange();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      void refreshSsLeaveReadinessFromHierarchyChange();
+    }
+  });
 
   // -----------------------------------------------------------------------
   // DOM caching
@@ -693,6 +820,7 @@
       // Reload the staff employee record first so HR/Manager Self-Service
       // immediately reflects gender changes after Refresh Balances.
       await loadSsEmployeeRecord();
+      await loadSsLeavePrimaryManagerReadiness();
 
       await loadSsLeaveBalances();
       await loadSsLeaveTypes();
@@ -1781,6 +1909,12 @@ ${isCancelledAudit
   // Leave policy block
   // -----------------------------------------------------------------------
   function getSsLeaveRequestPolicyBlock() {
+    // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+    // Check reporting authority before field-level Leave rules so the reason is
+    // visible even when the Request Leave form is still empty.
+    const primaryManagerBlock = getSsLeavePrimaryManagerBlock();
+    if (primaryManagerBlock) return primaryManagerBlock;
+
     const leaveTypeId = ssState.dom.ssLeaveType?.value || "";
     const startDate = ssState.dom.ssStartDate?.value || "";
     const endDate = ssState.dom.ssEndDate?.value || "";
@@ -2001,6 +2135,10 @@ ${isCancelledAudit
     }
 
     calculateSsLeaveDays();
+
+    // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+    // Re-read reporting authority immediately before submit/resubmit.
+    await loadSsLeavePrimaryManagerReadiness();
 
     if (!validateSsLeaveRequestForm()) return;
 
@@ -3423,6 +3561,7 @@ ${isCancelledAudit
 
     await loadSsEmployeeRecord();
     await Promise.all([
+      loadSsLeavePrimaryManagerReadiness(),
       loadSsLeaveTypes(),
       loadSsLeaveBalances(),
       loadSsLeaveRequests(),

@@ -1280,7 +1280,7 @@ function notifyManagerTeamAssignmentChanges(nextTeamMembers = []) {
 // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
 // When the manager returns to the Team workspace, refresh the assignment view.
 // This catches HR reporting-line changes without needing a full page reload.
-async function refreshManagerTeamAssignmentsOnFocus() {
+async function refreshManagerTeamAssignmentsOnFocus(force = false) {
   if (document.hidden) return;
 
   const isTeamWorkspaceVisible =
@@ -1290,7 +1290,7 @@ async function refreshManagerTeamAssignmentsOnFocus() {
   if (!isTeamWorkspaceVisible) return;
 
   const now = Date.now();
-  const minimumRefreshGapMs = 15000;
+  const minimumRefreshGapMs = force ? 0 : 15000;
 
   if (
     state.isTeamAssignmentFocusRefreshInProgress ||
@@ -1309,6 +1309,16 @@ async function refreshManagerTeamAssignmentsOnFocus() {
   } finally {
     state.isTeamAssignmentFocusRefreshInProgress = false;
   }
+}
+
+// BEXHR R-14B LIVE REPORTING HIERARCHY REFRESH
+// Manager team membership is database reporting-line state, so a hierarchy
+// change must refresh the active Team workspace without requiring F5.
+const MANAGER_REPORTING_HIERARCHY_SYNC_STORAGE_KEY = "bexhrReportingHierarchySync";
+
+async function refreshManagerWorkspaceFromHierarchySync() {
+  state.lastTeamAssignmentFocusRefreshAt = 0;
+  await refreshManagerTeamAssignmentsOnFocus(true);
 }
 
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
@@ -1488,13 +1498,22 @@ function bindEvents() {
   // If HR changed reporting lines while the manager was away, the dashboard
   // reloads the assignment list and shows a toast for added/removed employees.
   window.addEventListener("focus", () => {
-    void refreshManagerTeamAssignmentsOnFocus();
+    void refreshManagerWorkspaceFromHierarchySync();
   });
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
-      void refreshManagerTeamAssignmentsOnFocus();
+      void refreshManagerWorkspaceFromHierarchySync();
     }
+  });
+
+  window.addEventListener("storage", (event) => {
+    if (event.key !== MANAGER_REPORTING_HIERARCHY_SYNC_STORAGE_KEY) return;
+    void refreshManagerWorkspaceFromHierarchySync();
+  });
+
+  window.addEventListener("bexhr:reporting-hierarchy-changed", () => {
+    void refreshManagerWorkspaceFromHierarchySync();
   });
 
   state.dom.teamSearchInput?.addEventListener("input", () => {

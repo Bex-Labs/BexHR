@@ -293,6 +293,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // and tenant restriction independently.
     await loadEmployeeReportingManagers();
 
+    // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+    // Leave readiness uses its own narrow RPC so UI and database enforce the
+    // same active-Primary-Manager rule.
+    await loadEmployeeLeavePrimaryManagerReadiness();
+
     // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
     // Load employee-visible correction request status after the employee row
     // has been resolved. This is read-only and does not update HR master data.
@@ -342,6 +347,13 @@ const state = {
   // Loaded leave requests are kept in memory so the Request Leave form
   // can block duplicate/overlapping active requests before insert.
   leaveRequests: [],
+
+  // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+  // Normal manager-approved Leave is available only when this employee has
+  // an active Primary Manager. This is hierarchy-driven, never title-driven.
+  leavePrimaryManagerReadinessStatus: "loading",
+  hasPrimaryManagerForLeave: false,
+
   isPayrollFiguresHidden: false,
   leaveRefreshTimer: null,
   pendingProfileImageFile: null,
@@ -1754,6 +1766,7 @@ function stopLeaveAutoRefresh() {
 
 async function refreshEmployeeLeaveViewsSilently() {
   try {
+    await loadEmployeeLeavePrimaryManagerReadiness();
     await loadEmployeeLeaveRequests();
     await loadEmployeeLeaveBalances();
   } catch (error) {
@@ -2407,6 +2420,132 @@ async function loadEmployeeReportingManagers() {
       "Your reporting managers could not be loaded right now.";
   }
 }
+
+// BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+// This narrow readiness check matches the database submission rule exactly:
+// an active Primary reporting line to an active same-tenant manager employee.
+function setEmployeeLeavePrimaryManagerReadiness(
+  readinessStatus = "ready",
+  hasPrimaryManager = false,
+) {
+  state.leavePrimaryManagerReadinessStatus = readinessStatus;
+  state.hasPrimaryManagerForLeave =
+    readinessStatus === "ready" && hasPrimaryManager === true;
+
+  updateLeaveRequestBlockNotice();
+  updateLeaveSubmitButtonState();
+}
+
+async function loadEmployeeLeavePrimaryManagerReadiness() {
+  setEmployeeLeavePrimaryManagerReadiness("loading", false);
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "get_employee_leave_primary_manager_readiness",
+    );
+
+    if (error) throw error;
+
+    const readiness = Array.isArray(data) ? data[0] : data;
+
+    if (!readiness || !readiness.employee_id) {
+      throw new Error(
+        "The signed-in employee could not be resolved for Leave readiness.",
+      );
+    }
+
+    setEmployeeLeavePrimaryManagerReadiness(
+      "ready",
+      readiness.has_primary_manager === true,
+    );
+
+    return state.hasPrimaryManagerForLeave;
+  } catch (error) {
+    console.warn(
+      "Unable to verify Primary Manager availability for Leave submission:",
+      error,
+    );
+    setEmployeeLeavePrimaryManagerReadiness("error", false);
+    return false;
+  }
+}
+
+function getEmployeeLeavePrimaryManagerBlock() {
+  if (state.leavePrimaryManagerReadinessStatus === "loading") {
+    return {
+      message:
+        "Leave request availability is being checked against your current Primary Manager assignment.",
+    };
+  }
+
+  if (state.leavePrimaryManagerReadinessStatus !== "ready") {
+    return {
+      message:
+        "Your Primary Manager assignment could not be verified. Refresh the page or contact HR before submitting leave.",
+    };
+  }
+
+  if (!state.hasPrimaryManagerForLeave) {
+    return {
+      message:
+        "Leave request submission is unavailable because no active Primary Manager is assigned. HR can update your reporting line when a higher reporting position is configured.",
+    };
+  }
+
+  return null;
+}
+
+// BEXHR R-14B LIVE REPORTING HIERARCHY REFRESH
+// Re-check Leave readiness whenever reporting relationships may have changed.
+// Focus/visibility covers changes made by another user/browser; storage and
+// the custom event make same-browser/same-page updates immediate.
+const EMPLOYEE_REPORTING_HIERARCHY_SYNC_STORAGE_KEY = "bexhrReportingHierarchySync";
+let employeeLeaveHierarchyRefreshInProgress = false;
+let employeeLeaveHierarchyRefreshQueued = false;
+
+async function refreshEmployeeLeaveReadinessFromHierarchyChange() {
+  if (!state.currentUser) return;
+
+  if (employeeLeaveHierarchyRefreshInProgress) {
+    employeeLeaveHierarchyRefreshQueued = true;
+    return;
+  }
+
+  employeeLeaveHierarchyRefreshInProgress = true;
+
+  try {
+    await loadEmployeeLeavePrimaryManagerReadiness();
+  } catch (error) {
+    console.warn("Employee Leave hierarchy refresh failed:", error);
+  } finally {
+    employeeLeaveHierarchyRefreshInProgress = false;
+
+    if (employeeLeaveHierarchyRefreshQueued) {
+      employeeLeaveHierarchyRefreshQueued = false;
+      void refreshEmployeeLeaveReadinessFromHierarchyChange();
+    }
+  }
+}
+
+window.addEventListener("bexhr:reporting-hierarchy-changed", () => {
+  void refreshEmployeeLeaveReadinessFromHierarchyChange();
+});
+
+window.addEventListener("storage", (event) => {
+  if (event.key !== EMPLOYEE_REPORTING_HIERARCHY_SYNC_STORAGE_KEY) return;
+  void refreshEmployeeLeaveReadinessFromHierarchyChange();
+});
+
+window.addEventListener("focus", () => {
+  void refreshEmployeeLeaveReadinessFromHierarchyChange();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    void refreshEmployeeLeaveReadinessFromHierarchyChange();
+  }
+});
 
 
 // EMPLOYEE ASSIGNED MANAGERS VISIBILITY - STEP 1
@@ -4340,6 +4479,11 @@ function doesLeaveRequestTouchYear(request = {}, leaveYear) {
 // 2. Also block duplicate single-application leave types in the same year.
 // Rejected and Returned requests do not block a fresh request.
 function getLeaveRequestPolicyBlock() {
+  // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+  // A normal Pending Approval request requires a real Primary Manager.
+  const primaryManagerBlock = getEmployeeLeavePrimaryManagerBlock();
+  if (primaryManagerBlock) return primaryManagerBlock;
+
   const selectedLeaveType = getSelectedLeaveTypeDetails();
   const leaveYear = getSelectedLeaveRequestYear();
 
@@ -4771,6 +4915,12 @@ async function handleLeaveRequestSubmit() {
   }
 
   calculateLeaveDays();
+
+  // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+  // Re-read the reporting relationship immediately before submission so a
+  // recently assigned/removed Primary Manager is reflected without trusting
+  // stale browser state.
+  await loadEmployeeLeavePrimaryManagerReadiness();
 
   if (!validateLeaveRequestForm()) {
     return;
