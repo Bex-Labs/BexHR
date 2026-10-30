@@ -3609,8 +3609,18 @@
       return "finalisation";
     }
 
+    if (
+      bexPaHasManagerReviewConfigurationError(appraisal)
+    ) {
+      return "finalisation";
+    }
+
     if (selfAppraisal?.status !== "Submitted") {
       return "employee";
+    }
+
+    if (bexPaIsTopLevelReviewRoute(appraisal)) {
+      return "finalisation";
     }
 
     if (managerAppraisal?.status !== "Submitted") {
@@ -3807,8 +3817,21 @@
 
     const selfSubmitted = selfAppraisal?.status === "Submitted";
     const managerSubmitted = managerAppraisal?.status === "Submitted";
+    const requiresManagerReview =
+      bexPaRequiresManagerReview(appraisal);
+    const isTopLevelReview =
+      bexPaIsTopLevelReviewRoute(appraisal);
+    const hasConfigurationError =
+      bexPaHasManagerReviewConfigurationError(appraisal);
     const isFinalised = hrFinalisation?.status === "Finalised";
-    const canFinalise = selfSubmitted && managerSubmitted && !isFinalised;
+    const canFinalise =
+      !hasConfigurationError &&
+      selfSubmitted &&
+      (
+        !requiresManagerReview ||
+        managerSubmitted
+      ) &&
+      !isFinalised;
 
     section.dataset.bexPaHrCanFinalise = String(canFinalise);
     section.dataset.bexPaHrIsFinalised = String(isFinalised);
@@ -3831,37 +3854,77 @@
     const finalisationHeading = document.getElementById(
       "bexPaHrFinalisationHeading",
     );
+    const managerTaskButton = section.querySelector(
+      '[data-bex-pa-hr-review-task="manager"]',
+    );
+
+    if (managerTaskButton) {
+      managerTaskButton.disabled = isTopLevelReview;
+      managerTaskButton.setAttribute(
+        "aria-disabled",
+        String(isTopLevelReview),
+      );
+
+      const managerTaskLabel =
+        managerTaskButton.querySelector("span");
+
+      if (managerTaskLabel) {
+        managerTaskLabel.textContent = isTopLevelReview
+          ? "Manager Appraisal — Not Required"
+          : "Manager Appraisal";
+      }
+    }
 
     if (finalisationEyebrow) {
       finalisationEyebrow.textContent = isFinalised
         ? "Finalisation complete"
-        : "Finalisation readiness";
+        : hasConfigurationError
+          ? "Configuration issue"
+          : "Finalisation readiness";
     }
     if (finalisationHeading) {
       finalisationHeading.textContent = isFinalised
         ? "Appraisal finalised"
-        : "Confirm both submitted reviews before finalising";
+        : hasConfigurationError
+          ? "Resolve appraisal configuration before finalising"
+          : isTopLevelReview
+            ? "Confirm employee submission before finalising"
+            : "Confirm both submitted reviews before finalising";
     }
 
     if (employeeStatus) {
       employeeStatus.textContent = selfSubmitted ? "Submitted" : "Pending";
     }
     if (managerStatus) {
-      managerStatus.textContent = managerSubmitted ? "Submitted" : "Pending";
+      managerStatus.textContent = hasConfigurationError
+        ? "Blocked"
+        : isTopLevelReview
+          ? "Not required"
+          : managerSubmitted
+            ? "Submitted"
+            : "Pending";
     }
     if (hrStatus) {
       hrStatus.textContent = isFinalised
         ? "Finalised"
-        : canFinalise
-          ? "Ready to finalise"
-          : "Waiting";
+        : hasConfigurationError
+          ? "Configuration error"
+          : canFinalise
+            ? "Ready to finalise"
+            : "Waiting";
     }
     if (summary) {
       summary.textContent = isFinalised
         ? "This appraisal is finalised. Employee acknowledgement is the next stage."
-        : canFinalise
-          ? "Employee and Manager appraisals are submitted. Review both sections, then use the existing Finalise Appraisal action."
-          : "Finalisation remains locked until both Employee and Manager appraisals are submitted.";
+        : hasConfigurationError
+          ? bexPaGetManagerReviewConfigurationMessage(appraisal)
+          : canFinalise
+            ? isTopLevelReview
+              ? "The employee self-appraisal is submitted. Manager review is not applicable for this top-level route; HR may now finalise."
+              : "Employee and Manager appraisals are submitted. Review both sections, then use the existing Finalise Appraisal action."
+            : isTopLevelReview
+              ? "Finalisation remains locked until the Employee Self-Appraisal is submitted. Manager review is not required for this route."
+              : "Finalisation remains locked until both Employee and Manager appraisals are submitted.";
     }
 
     const previousAppraisalId = section.dataset.bexPaHrReviewAppraisalId || "";
@@ -3890,6 +3953,15 @@
 
     if (!isSameAppraisal || !task) {
       task = bexPaGetHrReviewDefaultTask(appraisal);
+    }
+
+    if (
+      isTopLevelReview &&
+      task === "manager"
+    ) {
+      task = selfSubmitted
+        ? "finalisation"
+        : "employee";
     }
 
     bexPaSetHrReviewTask(task);
@@ -11651,6 +11723,7 @@
 
         return (
           managedEmployeeIds.includes(appraisal.employeeId) &&
+          bexPaRequiresManagerReview(appraisal) &&
           Boolean(cycle) &&
           Boolean(template) &&
           selfAppraisal?.status === "Submitted"
@@ -11759,6 +11832,86 @@
       : "Not Started";
   }
 
+  const BEX_PA_MANAGER_REVIEW_ROUTES = Object.freeze([
+    "PRIMARY_MANAGER",
+    "TOP_LEVEL",
+    "CONFIGURATION_ERROR",
+  ]);
+
+  function bexPaGetManagerReviewRoute(appraisal) {
+    const route = String(
+      appraisal?.managerReviewRoute || "",
+    )
+      .trim()
+      .toUpperCase();
+
+    return BEX_PA_MANAGER_REVIEW_ROUTES.includes(route)
+      ? route
+      : "PRIMARY_MANAGER";
+  }
+
+  function bexPaRequiresManagerReview(appraisal) {
+    return (
+      bexPaGetManagerReviewRoute(appraisal) ===
+      "PRIMARY_MANAGER"
+    );
+  }
+
+  function bexPaIsTopLevelReviewRoute(appraisal) {
+    return (
+      bexPaGetManagerReviewRoute(appraisal) ===
+      "TOP_LEVEL"
+    );
+  }
+
+  function bexPaHasManagerReviewConfigurationError(appraisal) {
+    return (
+      bexPaGetManagerReviewRoute(appraisal) ===
+      "CONFIGURATION_ERROR"
+    );
+  }
+
+  function bexPaGetManagerReviewRouteReason(appraisal) {
+    return String(
+      appraisal?.managerReviewRouteReason || "",
+    )
+      .trim()
+      .toUpperCase();
+  }
+
+  function bexPaGetManagerReviewConfigurationMessage(appraisal) {
+    const reason =
+      bexPaGetManagerReviewRouteReason(appraisal);
+
+    const messages = {
+      WHOLE_ORGANIZATION_POSITION_NOT_CONFIGURED:
+        "This whole-organization position is not configured in the Organization Position Hierarchy.",
+      WHOLE_ORGANIZATION_POSITION_AMBIGUOUS:
+        "This whole-organization position matches more than one hierarchy configuration.",
+      TOP_LEVEL_POSITION_HAS_PRIMARY_MANAGER:
+        "This position is configured as top level but the employee still has an active Primary Manager.",
+      CONFIGURED_PARENT_REQUIRES_PRIMARY_MANAGER:
+        "This position reports to another configured position, but the employee has no active Primary Manager.",
+      MULTIPLE_ACTIVE_PRIMARY_MANAGERS:
+        "The employee has more than one active Primary Manager.",
+      PRIMARY_MANAGER_INVALID:
+        "The employee's Primary Manager is inactive, missing, or belongs to another company workspace.",
+      PRIMARY_MANAGER_HIERARCHY_INVALID:
+        "The employee's Primary Manager relationship does not satisfy the reporting hierarchy rules.",
+      CONFIGURED_PARENT_POSITION_INVALID:
+        "The configured parent position is no longer a valid active whole-organization position.",
+      PRIMARY_MANAGER_DOES_NOT_OCCUPY_CONFIGURED_PARENT_POSITION:
+        "The employee's Primary Manager does not occupy the position configured as this role's direct parent.",
+      PRIMARY_MANAGER_MISSING:
+        "The employee has no active Primary Manager and is not an explicitly configured top-level position holder.",
+    };
+
+    return (
+      messages[reason] ||
+      "The appraisal review route could not be resolved from the current reporting and position hierarchy configuration."
+    );
+  }
+
   function bexPaGetOperationalAppraisalStatus(
     appraisal,
   ) {
@@ -11810,7 +11963,11 @@
 
     if (
       selfAppraisal?.status === "Submitted" &&
-      managerAppraisal?.status === "Submitted"
+      !bexPaHasManagerReviewConfigurationError(appraisal) &&
+      (
+        !bexPaRequiresManagerReview(appraisal) ||
+        managerAppraisal?.status === "Submitted"
+      )
     ) {
       return "Submitted";
     }
@@ -13670,6 +13827,16 @@
       return "Finalised";
     }
 
+    if (
+      !bexPaIsEmployeeMode() &&
+      bexPaHasManagerReviewConfigurationError(appraisal)
+    ) {
+      return "Configuration Error";
+    }
+
+    const requiresManagerReview =
+      bexPaRequiresManagerReview(appraisal);
+
     if (bexPaIsHrStandardMode()) {
       const parentStatus = String(
         appraisal?.status || "",
@@ -13680,6 +13847,25 @@
         parentStatus === "Acknowledged"
       ) {
         return parentStatus;
+      }
+
+      if (
+        selfAppraisal?.status === "Submitted" &&
+        (
+          !requiresManagerReview ||
+          managerAppraisal?.status === "Submitted"
+        )
+      ) {
+        return "Submitted";
+      }
+
+      if (
+        selfAppraisal?.status === "Submitted" ||
+        managerAppraisal?.status === "Submitted" ||
+        bexPaHasSavedDraft(selfAppraisal) ||
+        bexPaHasSavedDraft(managerAppraisal)
+      ) {
+        return "In Progress";
       }
 
       return parentStatus === "Draft"
@@ -13726,7 +13912,13 @@
     }
 
     if (bexPaIsHrAdminMode()) {
-      if (managerAppraisal?.status === "Submitted") {
+      if (
+        selfAppraisal?.status === "Submitted" &&
+        (
+          !requiresManagerReview ||
+          managerAppraisal?.status === "Submitted"
+        )
+      ) {
         return "Submitted";
       }
 
@@ -13769,6 +13961,13 @@
     const managerSubmitted =
       managerAppraisal?.status === "Submitted";
 
+    const requiresManagerReview =
+      bexPaRequiresManagerReview(appraisal);
+    const isTopLevelReview =
+      bexPaIsTopLevelReviewRoute(appraisal);
+    const hasConfigurationError =
+      bexPaHasManagerReviewConfigurationError(appraisal);
+
     const hrFinalisation =
       bexPaState.hrFinalisations.find(
         (existingFinalisation) =>
@@ -13779,8 +13978,12 @@
       hrFinalisation?.status === "Finalised";
 
     const canFinalise =
+      !hasConfigurationError &&
       selfSubmitted &&
-      managerSubmitted &&
+      (
+        !requiresManagerReview ||
+        managerSubmitted
+      ) &&
       !isFinalised;
 
     bexPaElements.finaliseHrAppraisalButton?.classList.toggle(
@@ -13816,6 +14019,16 @@
       template?.name || "Unknown template",
     ];
 
+    if (isTopLevelReview) {
+      reviewIdentityMetaParts.push(
+        "Manager review: Not required",
+      );
+    } else if (hasConfigurationError) {
+      reviewIdentityMetaParts.push(
+        "Review route: Configuration error",
+      );
+    }
+
     if (isFinalised) {
       reviewIdentityMetaParts.push("Finalised");
 
@@ -13837,13 +14050,22 @@
 
     const missingPrerequisites = [];
 
+    if (hasConfigurationError) {
+      missingPrerequisites.push(
+        bexPaGetManagerReviewConfigurationMessage(appraisal),
+      );
+    }
+
     if (!selfSubmitted) {
       missingPrerequisites.push(
         "Employee Self-Appraisal has not been submitted.",
       );
     }
 
-    if (!managerSubmitted) {
+    if (
+      requiresManagerReview &&
+      !managerSubmitted
+    ) {
       missingPrerequisites.push(
         "Manager Appraisal has not been submitted.",
       );
@@ -13856,9 +14078,13 @@
       bexPaElements.hrAppraisalReviewPrerequisites.classList.remove(
         "d-none",
         "alert-success",
+        "alert-warning",
+        "alert-danger",
       );
       bexPaElements.hrAppraisalReviewPrerequisites.classList.add(
-        "alert-warning",
+        hasConfigurationError
+          ? "alert-danger"
+          : "alert-warning",
       );
     } else if (isFinalised) {
       bexPaElements.hrAppraisalReviewPrerequisites.textContent =
@@ -13867,17 +14093,21 @@
       bexPaElements.hrAppraisalReviewPrerequisites.classList.remove(
         "d-none",
         "alert-warning",
+        "alert-danger",
       );
       bexPaElements.hrAppraisalReviewPrerequisites.classList.add(
         "alert-success",
       );
     } else {
       bexPaElements.hrAppraisalReviewPrerequisites.textContent =
-        "Employee Self-Appraisal and Manager Appraisal have both been submitted.";
+        isTopLevelReview
+          ? "Employee Self-Appraisal has been submitted. Manager Appraisal is not required for this top-level route."
+          : "Employee Self-Appraisal and Manager Appraisal have both been submitted.";
 
       bexPaElements.hrAppraisalReviewPrerequisites.classList.remove(
         "d-none",
         "alert-success",
+        "alert-danger",
       );
       bexPaElements.hrAppraisalReviewPrerequisites.classList.add(
         "alert-warning",
@@ -14176,7 +14406,9 @@
       "h6 fw-bold";
 
     managerHeading.textContent =
-      "Manager Appraisal";
+      isTopLevelReview
+        ? "Manager Appraisal — Not Required"
+        : "Manager Appraisal";
 
     bexPaElements.hrAppraisalReviewManager.appendChild(
       managerHeading,
@@ -14191,12 +14423,27 @@
     const managerReviewDisplayStatus =
       bexPaGetDraftDisplayStatus(managerAppraisal);
 
-    managerStatus.textContent =
-      `Status: ${managerReviewDisplayStatus}${managerSubmitted && managerAppraisal?.submittedAt ? ` | Submitted: ${bexPaFormatTimestamp(managerAppraisal.submittedAt)}` : ""}`;
+    managerStatus.textContent = isTopLevelReview
+      ? "Status: Not applicable — this appraisal is routed directly from employee self-appraisal to HR finalisation."
+      : `Status: ${managerReviewDisplayStatus}${managerSubmitted && managerAppraisal?.submittedAt ? ` | Submitted: ${bexPaFormatTimestamp(managerAppraisal.submittedAt)}` : ""}`;
 
     bexPaElements.hrAppraisalReviewManager.appendChild(
       managerStatus,
     );
+
+    if (isTopLevelReview) {
+      const managerNotRequired =
+        document.createElement("div");
+
+      managerNotRequired.className =
+        "alert alert-info mb-0";
+      managerNotRequired.textContent =
+        "No manager score or manager appraisal is created for this top-level route.";
+
+      bexPaElements.hrAppraisalReviewManager.appendChild(
+        managerNotRequired,
+      );
+    }
 
     if (managerSubmitted) {
       bexPaRenderHrProductivity(template, managerAppraisal);
@@ -14447,9 +14694,15 @@
           existingFinalisation.appraisalId === appraisal.id,
       );
 
+    const requiresManagerReview =
+      bexPaRequiresManagerReview(appraisal);
+
     if (
       selfAppraisal?.status !== "Submitted" ||
-      managerAppraisal?.status !== "Submitted" ||
+      (
+        requiresManagerReview &&
+        managerAppraisal?.status !== "Submitted"
+      ) ||
       hrFinalisation?.status !== "Finalised"
     ) {
       return;
@@ -14781,8 +15034,9 @@
     managerHeading.className =
       "h6 fw-bold";
 
-    managerHeading.textContent =
-      "Manager Appraisal";
+    managerHeading.textContent = requiresManagerReview
+      ? "Manager Appraisal"
+      : "Manager Appraisal — Not Required";
 
     bexPaElements.finalAppraisalManager.appendChild(
       managerHeading,
@@ -14794,14 +15048,19 @@
     managerStatus.className =
       "small text-body-secondary";
 
-    managerStatus.textContent =
-      `Status: Submitted${managerAppraisal.submittedAt ? ` | Submitted: ${bexPaFormatTimestamp(managerAppraisal.submittedAt)}` : ""}`;
+    managerStatus.textContent = requiresManagerReview
+      ? `Status: Submitted${managerAppraisal?.submittedAt ? ` | Submitted: ${bexPaFormatTimestamp(managerAppraisal.submittedAt)}` : ""}`
+      : "Status: Not applicable — top-level appraisal route";
 
     bexPaElements.finalAppraisalManager.appendChild(
       managerStatus,
     );
 
-    goals.forEach((individualGoal) => {
+    const managerGoals = requiresManagerReview
+      ? goals
+      : [];
+
+    managerGoals.forEach((individualGoal) => {
       const managerResponse =
         managerAppraisal.goalResponses?.find(
           (response) =>
@@ -14907,8 +15166,9 @@
     overallCommentLabel.className =
       "fw-semibold mb-1";
 
-    overallCommentLabel.textContent =
-      "Overall Manager Summary";
+    overallCommentLabel.textContent = requiresManagerReview
+      ? "Overall Manager Summary"
+      : "Manager review";
 
     const overallCommentText =
       document.createElement("p");
@@ -14916,9 +15176,10 @@
     overallCommentText.className =
       "small mb-0 text-body-secondary";
 
-    overallCommentText.textContent =
-      managerAppraisal.overallComment ||
-      "Not provided";
+    overallCommentText.textContent = requiresManagerReview
+      ? managerAppraisal?.overallComment ||
+        "Not provided"
+      : "Not applicable. This appraisal was explicitly snapshotted as a top-level route with no manager review or manager productivity score.";
 
     overallComment.append(
       overallCommentLabel,
@@ -15332,12 +15593,28 @@
       );
 
     if (
-      selfAppraisal?.status !== "Submitted" ||
-      managerAppraisal?.status !== "Submitted"
+      bexPaHasManagerReviewConfigurationError(appraisal)
     ) {
       if (bexPaElements.announcement) {
         bexPaElements.announcement.textContent =
-          "Employee and Manager appraisals must both be submitted before HR can finalise the appraisal.";
+          bexPaGetManagerReviewConfigurationMessage(appraisal);
+      }
+
+      return;
+    }
+
+    if (
+      selfAppraisal?.status !== "Submitted" ||
+      (
+        bexPaRequiresManagerReview(appraisal) &&
+        managerAppraisal?.status !== "Submitted"
+      )
+    ) {
+      if (bexPaElements.announcement) {
+        bexPaElements.announcement.textContent =
+          bexPaIsTopLevelReviewRoute(appraisal)
+            ? "Employee Self-Appraisal must be submitted before HR can finalise this top-level appraisal."
+            : "Employee and Manager appraisals must both be submitted before HR can finalise the appraisal.";
       }
 
       return;
