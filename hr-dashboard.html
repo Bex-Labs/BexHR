@@ -1803,6 +1803,81 @@
                   <tbody id="organizationJobTitlesTableBody"></tbody>
                 </table>
               </div>
+
+              <hr class="my-4" />
+
+              <!-- BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+                   This configures position-to-position order only. It does not
+                   create or change employee Primary Manager reporting lines. -->
+              <section id="organizationPositionHierarchySection"
+                aria-labelledby="organizationPositionHierarchyTitle">
+                <div class="mb-3">
+                  <h4 id="organizationPositionHierarchyTitle" class="h6 fw-semibold mb-1">
+                    Organization Position Hierarchy
+                  </h4>
+                  <p class="text-secondary small mb-0">
+                    Set the direct reporting order for active whole-organization positions.
+                    This configures positions, not employee Primary Managers.
+                  </p>
+                </div>
+
+                <form id="organizationPositionHierarchyForm" novalidate>
+                  <div class="row g-3 align-items-end">
+                    <div class="col-md-6 col-xl-5">
+                      <label for="organizationPositionHierarchyJobTitleId" class="form-label fw-semibold">
+                        Position <span class="text-danger">*</span>
+                      </label>
+                      <select id="organizationPositionHierarchyJobTitleId" class="form-select" required>
+                        <option value="">Select whole-organization position</option>
+                      </select>
+                      <div class="form-text">
+                        Only active whole-organization Job Titles are available here.
+                      </div>
+                    </div>
+
+                    <div class="col-md-6 col-xl-5">
+                      <label for="organizationPositionHierarchyParentId" class="form-label fw-semibold">
+                        Reports to <span class="text-danger">*</span>
+                      </label>
+                      <select id="organizationPositionHierarchyParentId" class="form-select" disabled>
+                        <option value="__top_level__">Top level (no parent)</option>
+                      </select>
+                      <div class="form-text">
+                        Parent positions must already be configured. Configure the hierarchy from the top down.
+                      </div>
+                    </div>
+
+                    <div class="col-md-12 col-xl-2">
+                      <button type="submit" id="saveOrganizationPositionHierarchyBtn"
+                        class="btn btn-secondary dashboard-action-btn w-100" disabled>
+                        <i class="bi bi-diagram-3 me-2"></i>
+                        <span id="organizationPositionHierarchySubmitLabel">Save Hierarchy</span>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+
+                <div class="mt-4">
+                  <div id="organizationPositionHierarchyEmptyState" class="alert alert-light border mb-0">
+                    No organization position hierarchy has been configured yet.
+                  </div>
+
+                  <div id="organizationPositionHierarchyTableWrapper" class="table-responsive d-none"
+                    style="max-height: 320px; overflow-y: auto;">
+                    <table class="table align-middle mb-0">
+                      <thead>
+                        <tr>
+                          <th>Position</th>
+                          <th>Reports to</th>
+                          <th>Updated</th>
+                          <th class="text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="organizationPositionHierarchyTableBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
             </div>
 
             <!-- COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C

@@ -1492,6 +1492,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       await deleteOrganizationJobTitleRecord(jobTitleId);
     };
 
+    // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+    // Protected RPC remains the write authority; this is only the table action hook.
+    window.hrDeleteOrganizationPositionHierarchyRecord = async (jobTitleId) => {
+      await deleteOrganizationPositionHierarchyRecord(jobTitleId);
+    };
+
     // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
     // Expose only the HR-side approved leave cancellation modal opener.
     // The backend RPC still enforces HR-only cancellation and balance restoration.
@@ -2984,6 +2990,10 @@ const state = {
   organizationDepartments: [],
   organizationJobTitles: [],
 
+  // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+  // Tenant-scoped whole-organization position ordering loaded under RLS.
+  organizationJobTitleHierarchy: [],
+
   // COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
   // The protected RPC is the source of truth. Standard HR never loads this data.
   companyAdminAuditEvents: [],
@@ -3656,9 +3666,14 @@ function applyHrOrganizationSetupAccessControls() {
     state.dom.organizationJobTitleNotes,
     state.dom.saveOrganizationJobTitleBtn,
     state.dom.cancelOrganizationJobTitleEditBtn,
+
+    state.dom.organizationPositionHierarchyJobTitleId,
+    state.dom.organizationPositionHierarchyParentId,
+    state.dom.saveOrganizationPositionHierarchyBtn,
   ];
 
   setHrControlsDisabled(controls, !canMaintain);
+  updateOrganizationPositionHierarchySaveButtonState();
 
   document
     .querySelectorAll(
@@ -3667,6 +3682,7 @@ function applyHrOrganizationSetupAccessControls() {
         '[onclick^="window.hrDeleteOrganizationDepartmentRecord"]',
         '[onclick^="window.hrEditOrganizationJobTitleRecord"]',
         '[onclick^="window.hrDeleteOrganizationJobTitleRecord"]',
+        '[onclick^="window.hrDeleteOrganizationPositionHierarchyRecord"]',
       ].join(","),
     )
     .forEach((button) => {
@@ -5686,6 +5702,16 @@ function cacheDomElements() {
     organizationJobTitlesEmptyState: document.getElementById("organizationJobTitlesEmptyState"),
     organizationJobTitlesTableWrapper: document.getElementById("organizationJobTitlesTableWrapper"),
     organizationJobTitlesTableBody: document.getElementById("organizationJobTitlesTableBody"),
+
+    // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+    organizationPositionHierarchyForm: document.getElementById("organizationPositionHierarchyForm"),
+    organizationPositionHierarchyJobTitleId: document.getElementById("organizationPositionHierarchyJobTitleId"),
+    organizationPositionHierarchyParentId: document.getElementById("organizationPositionHierarchyParentId"),
+    saveOrganizationPositionHierarchyBtn: document.getElementById("saveOrganizationPositionHierarchyBtn"),
+    organizationPositionHierarchySubmitLabel: document.getElementById("organizationPositionHierarchySubmitLabel"),
+    organizationPositionHierarchyEmptyState: document.getElementById("organizationPositionHierarchyEmptyState"),
+    organizationPositionHierarchyTableWrapper: document.getElementById("organizationPositionHierarchyTableWrapper"),
+    organizationPositionHierarchyTableBody: document.getElementById("organizationPositionHierarchyTableBody"),
 
     // COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
     companyAdminAuditHistorySection: document.getElementById(
@@ -11764,6 +11790,22 @@ function bindEvents() {
 
   syncOrganizationJobTitleScopeControls();
   updateOrganizationJobTitleSaveButtonState();
+
+  // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+  state.dom.organizationPositionHierarchyForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await handleOrganizationPositionHierarchySave();
+  });
+
+  state.dom.organizationPositionHierarchyJobTitleId?.addEventListener("change", () => {
+    syncOrganizationPositionHierarchyFormFromSelection();
+  });
+
+  state.dom.organizationPositionHierarchyParentId?.addEventListener("change", () => {
+    updateOrganizationPositionHierarchySaveButtonState();
+  });
+
+  updateOrganizationPositionHierarchySaveButtonState();
 
   state.dom.employeeDocumentsInput?.addEventListener("change", (event) => {
     addPendingFiles(event.target.files);
@@ -29191,7 +29233,7 @@ async function refreshOrganizationHrSetupValues() {
   try {
     const supabase = getSupabaseClient();
 
-    const [departmentsResponse, jobTitlesResponse] = await Promise.all([
+    const [departmentsResponse, jobTitlesResponse, hierarchyResponse] = await Promise.all([
       supabase
         .from("organization_departments")
         .select("*")
@@ -29201,10 +29243,16 @@ async function refreshOrganizationHrSetupValues() {
         .from("organization_job_titles")
         .select("*")
         .order("job_title", { ascending: true }),
+
+      supabase
+        .from("organization_job_title_hierarchy")
+        .select("*")
+        .order("created_at", { ascending: true }),
     ]);
 
     if (departmentsResponse.error) throw departmentsResponse.error;
     if (jobTitlesResponse.error) throw jobTitlesResponse.error;
+    if (hierarchyResponse.error) throw hierarchyResponse.error;
 
     state.organizationDepartments = Array.isArray(departmentsResponse.data)
       ? departmentsResponse.data
@@ -29212,6 +29260,10 @@ async function refreshOrganizationHrSetupValues() {
 
     state.organizationJobTitles = Array.isArray(jobTitlesResponse.data)
       ? jobTitlesResponse.data
+      : [];
+
+    state.organizationJobTitleHierarchy = Array.isArray(hierarchyResponse.data)
+      ? hierarchyResponse.data
       : [];
 
     // ORGANIZATION HR SETUP VALUES - STEP 4A
@@ -29230,6 +29282,9 @@ async function refreshOrganizationHrSetupValues() {
     // This is read-only for now; save/edit comes after this is confirmed stable.
     renderOrganizationJobTitlesTable();
 
+    // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+    renderOrganizationPositionHierarchy();
+
     // ORGANIZATION HR SETUP VALUES - STEP 5A
     // Keep the Create/Edit Employee Department and Job Title dropdowns aligned
     // with the latest Manage Organization setup records.
@@ -29247,6 +29302,7 @@ async function refreshOrganizationHrSetupValues() {
 
     state.organizationDepartments = [];
     state.organizationJobTitles = [];
+    state.organizationJobTitleHierarchy = [];
 
     showPageAlert(
       "danger",
@@ -30618,8 +30674,461 @@ function renderOrganizationJobTitlesTable() {
   });
 }
 
+// BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+// This UI manages position-to-position ordering only. Employee Primary Manager
+// reporting lines, Leave and Performance Appraisal routing are not modified here.
+const ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE = "__top_level__";
+
+function getActiveWholeOrganizationJobTitles() {
+  return (state.organizationJobTitles || [])
+    .filter((jobTitle) => {
+      const isWholeOrganization = !String(jobTitle.department_id || "").trim();
+      const isActive = String(jobTitle.status || "")
+        .trim()
+        .toLowerCase() === "active";
+
+      return isWholeOrganization && isActive;
+    })
+    .sort((a, b) =>
+      String(a.job_title || "").localeCompare(String(b.job_title || "")),
+    );
+}
+
+function getOrganizationJobTitleRecordById(jobTitleId) {
+  const targetId = String(jobTitleId || "").trim();
+  if (!targetId) return null;
+
+  return (state.organizationJobTitles || []).find(
+    (jobTitle) => String(jobTitle.id || "").trim() === targetId,
+  ) || null;
+}
+
+function getOrganizationPositionHierarchyRecord(jobTitleId) {
+  const targetId = String(jobTitleId || "").trim();
+  if (!targetId) return null;
+
+  return (state.organizationJobTitleHierarchy || []).find(
+    (record) => String(record.job_title_id || "").trim() === targetId,
+  ) || null;
+}
+
+function getOrganizationPositionHierarchyDescendantIds(jobTitleId) {
+  const rootId = String(jobTitleId || "").trim();
+  const descendants = new Set();
+  if (!rootId) return descendants;
+
+  const queue = [rootId];
+
+  while (queue.length) {
+    const parentId = queue.shift();
+
+    (state.organizationJobTitleHierarchy || []).forEach((record) => {
+      const recordParentId = String(record.reports_to_job_title_id || "").trim();
+      const childId = String(record.job_title_id || "").trim();
+
+      if (
+        childId &&
+        recordParentId === parentId &&
+        !descendants.has(childId)
+      ) {
+        descendants.add(childId);
+        queue.push(childId);
+      }
+    });
+  }
+
+  return descendants;
+}
+
+function getOrganizationPositionHierarchyDepth(jobTitleId) {
+  let depth = 0;
+  let currentId = String(jobTitleId || "").trim();
+  const visited = new Set();
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const record = getOrganizationPositionHierarchyRecord(currentId);
+    const parentId = String(record?.reports_to_job_title_id || "").trim();
+
+    if (!parentId) break;
+
+    depth += 1;
+    currentId = parentId;
+  }
+
+  return depth;
+}
+
+function populateOrganizationPositionHierarchyJobTitleOptions() {
+  const select = state.dom.organizationPositionHierarchyJobTitleId;
+  if (!select) return;
+
+  const previousValue = String(select.value || "").trim();
+  const jobTitles = getActiveWholeOrganizationJobTitles();
+
+  select.innerHTML = [
+    '<option value="">Select whole-organization position</option>',
+    ...jobTitles.map(
+      (jobTitle) =>
+        `<option value="${escapeHtml(jobTitle.id)}">${escapeHtml(jobTitle.job_title || "Unnamed position")}</option>`,
+    ),
+  ].join("");
+
+  if (
+    previousValue &&
+    jobTitles.some((jobTitle) => String(jobTitle.id) === previousValue)
+  ) {
+    select.value = previousValue;
+  }
+}
+
+function populateOrganizationPositionHierarchyParentOptions() {
+  const jobTitleSelect = state.dom.organizationPositionHierarchyJobTitleId;
+  const parentSelect = state.dom.organizationPositionHierarchyParentId;
+  if (!parentSelect) return;
+
+  const jobTitleId = String(jobTitleSelect?.value || "").trim();
+  const currentRecord = getOrganizationPositionHierarchyRecord(jobTitleId);
+  const currentParentId = String(
+    currentRecord?.reports_to_job_title_id || "",
+  ).trim();
+
+  const configuredIds = new Set(
+    (state.organizationJobTitleHierarchy || [])
+      .map((record) => String(record.job_title_id || "").trim())
+      .filter(Boolean),
+  );
+
+  const descendantIds = getOrganizationPositionHierarchyDescendantIds(jobTitleId);
+
+  const parentCandidates = getActiveWholeOrganizationJobTitles().filter((jobTitle) => {
+    const candidateId = String(jobTitle.id || "").trim();
+
+    return Boolean(
+      candidateId &&
+      candidateId !== jobTitleId &&
+      configuredIds.has(candidateId) &&
+      !descendantIds.has(candidateId),
+    );
+  });
+
+  parentSelect.innerHTML = [
+    `<option value="${ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE}">Top level (no parent)</option>`,
+    ...parentCandidates.map(
+      (jobTitle) =>
+        `<option value="${escapeHtml(jobTitle.id)}">${escapeHtml(jobTitle.job_title || "Unnamed position")}</option>`,
+    ),
+  ].join("");
+
+  const desiredValue = currentRecord
+    ? currentParentId || ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE
+    : ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE;
+
+  const desiredOptionExists = Array.from(parentSelect.options).some(
+    (option) => option.value === desiredValue,
+  );
+
+  parentSelect.value = desiredOptionExists
+    ? desiredValue
+    : ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE;
+}
+
+function syncOrganizationPositionHierarchyFormFromSelection() {
+  populateOrganizationPositionHierarchyParentOptions();
+  updateOrganizationPositionHierarchySaveButtonState();
+}
+
+function updateOrganizationPositionHierarchySaveButtonState() {
+  const jobTitleSelect = state.dom.organizationPositionHierarchyJobTitleId;
+  const parentSelect = state.dom.organizationPositionHierarchyParentId;
+  const button = state.dom.saveOrganizationPositionHierarchyBtn;
+  const canMaintain = canCurrentUserMaintainOrganizationSetupData();
+  const jobTitleId = String(jobTitleSelect?.value || "").trim();
+  const parentValue = String(parentSelect?.value || "").trim();
+
+  if (jobTitleSelect) {
+    jobTitleSelect.disabled = !canMaintain;
+  }
+
+  if (parentSelect) {
+    parentSelect.disabled = !canMaintain || !jobTitleId;
+  }
+
+  if (!button) return;
+
+  if (button.dataset.isLoading === "true") {
+    button.disabled = true;
+    return;
+  }
+
+  const isTopLevel =
+    parentValue === ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE;
+
+  const validConfiguredParent = Boolean(
+    parentValue &&
+    !isTopLevel &&
+    parentValue !== jobTitleId &&
+    getOrganizationPositionHierarchyRecord(parentValue) &&
+    !getOrganizationPositionHierarchyDescendantIds(jobTitleId).has(parentValue),
+  );
+
+  setPrimaryActionButtonReadyState(
+    button,
+    canMaintain &&
+    Boolean(jobTitleId) &&
+    (isTopLevel || validConfiguredParent),
+  );
+}
+
+function resetOrganizationPositionHierarchyForm() {
+  if (state.dom.organizationPositionHierarchyJobTitleId) {
+    state.dom.organizationPositionHierarchyJobTitleId.value = "";
+  }
+
+  populateOrganizationPositionHierarchyParentOptions();
+  updateOrganizationPositionHierarchySaveButtonState();
+}
+
+function renderOrganizationPositionHierarchy() {
+  populateOrganizationPositionHierarchyJobTitleOptions();
+  populateOrganizationPositionHierarchyParentOptions();
+
+  const tbody = state.dom.organizationPositionHierarchyTableBody;
+  if (!tbody) {
+    updateOrganizationPositionHierarchySaveButtonState();
+    return;
+  }
+
+  const records = [...(state.organizationJobTitleHierarchy || [])].sort((a, b) => {
+    const depthDifference =
+      getOrganizationPositionHierarchyDepth(a.job_title_id) -
+      getOrganizationPositionHierarchyDepth(b.job_title_id);
+
+    if (depthDifference !== 0) return depthDifference;
+
+    const aTitle = getOrganizationJobTitleRecordById(a.job_title_id)?.job_title || "";
+    const bTitle = getOrganizationJobTitleRecordById(b.job_title_id)?.job_title || "";
+    return String(aTitle).localeCompare(String(bTitle));
+  });
+
+  tbody.innerHTML = "";
+
+  if (!records.length) {
+    state.dom.organizationPositionHierarchyEmptyState?.classList.remove("d-none");
+    state.dom.organizationPositionHierarchyTableWrapper?.classList.add("d-none");
+    updateOrganizationPositionHierarchySaveButtonState();
+    return;
+  }
+
+  state.dom.organizationPositionHierarchyEmptyState?.classList.add("d-none");
+  state.dom.organizationPositionHierarchyTableWrapper?.classList.remove("d-none");
+
+  records.forEach((record) => {
+    const jobTitleId = String(record.job_title_id || "").trim();
+    const parentId = String(record.reports_to_job_title_id || "").trim();
+    const jobTitle = getOrganizationJobTitleRecordById(jobTitleId);
+    const parentTitle = parentId
+      ? getOrganizationJobTitleRecordById(parentId)?.job_title || "Unavailable position"
+      : "Top level";
+    const safeJobTitleId = jobTitleId.replaceAll("'", "\\'");
+    const row = document.createElement("tr");
+
+    row.innerHTML = [
+      "<td><div class=\"fw-semibold\">" +
+        escapeHtml(jobTitle?.job_title || "Unavailable position") +
+        "</div></td>",
+      "<td>" + escapeHtml(parentTitle) + "</td>",
+      "<td class=\"text-nowrap\">" +
+        formatDate(record.updated_at || record.created_at) +
+        "</td>",
+      "<td class=\"text-center\">",
+      "<button type=\"button\" class=\"btn btn-sm btn-outline-danger\" " +
+        "title=\"Remove hierarchy configuration\" aria-label=\"Remove hierarchy configuration\" " +
+        "onclick=\"window.hrDeleteOrganizationPositionHierarchyRecord('" +
+        safeJobTitleId +
+        "')\">",
+      "<i class=\"bi bi-trash\"></i>",
+      "</button>",
+      "</td>",
+    ].join("");
+
+    tbody.appendChild(row);
+  });
+
+  updateOrganizationPositionHierarchySaveButtonState();
+}
+
+function setOrganizationPositionHierarchySaveLoading(isLoading) {
+  const button = state.dom.saveOrganizationPositionHierarchyBtn;
+  if (!button) return;
+
+  button.dataset.isLoading = isLoading ? "true" : "false";
+  button.disabled = true;
+
+  if (isLoading) {
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Saving...
+    `;
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+  }
+
+  delete button.dataset.isLoading;
+  updateOrganizationPositionHierarchySaveButtonState();
+}
+
+async function handleOrganizationPositionHierarchySave() {
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Organization Position Hierarchy");
+    return;
+  }
+
+  const jobTitleId = String(
+    state.dom.organizationPositionHierarchyJobTitleId?.value || "",
+  ).trim();
+  const parentValue = String(
+    state.dom.organizationPositionHierarchyParentId?.value || "",
+  ).trim();
+
+  if (!jobTitleId) {
+    showPageAlert("warning", "Select a whole-organization position before saving.");
+    return;
+  }
+
+  const parentId =
+    parentValue === ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE
+      ? null
+      : parentValue || null;
+
+  const jobTitle = getOrganizationJobTitleRecordById(jobTitleId);
+  const parentTitle = parentId
+    ? getOrganizationJobTitleRecordById(parentId)
+    : null;
+
+  try {
+    clearPageAlert();
+    setOrganizationPositionHierarchySaveLoading(true);
+
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc(
+      "hr_tenant_admin_save_organization_job_title_hierarchy",
+      {
+        p_job_title_id: jobTitleId,
+        p_reports_to_job_title_id: parentId,
+      },
+    );
+
+    if (error) throw error;
+
+    await refreshOrganizationHrSetupValues();
+    resetOrganizationPositionHierarchyForm();
+
+    const relationshipMessage = parentTitle
+      ? `<strong>${escapeHtml(jobTitle?.job_title || "Position")}</strong> now reports to <strong>${escapeHtml(parentTitle.job_title || "Position")}</strong>.`
+      : `<strong>${escapeHtml(jobTitle?.job_title || "Position")}</strong> is now configured as a top-level position.`;
+
+    showPageAlert("success", relationshipMessage);
+    showDashboardToast(
+      "success",
+      "Position Hierarchy Saved",
+      relationshipMessage,
+    );
+  } catch (error) {
+    console.error("Error saving organization position hierarchy:", error);
+
+    const message = String(
+      error.message || "Organization position hierarchy could not be saved.",
+    );
+    const isHierarchyRule =
+      String(error.code || "") === "23514" ||
+      String(error.code || "") === "23503" ||
+      message.includes("BEXHR_POSITION_HIERARCHY_");
+
+    showPageAlert(isHierarchyRule ? "warning" : "danger", escapeHtml(message));
+    showDashboardToast(
+      isHierarchyRule ? "warning" : "danger",
+      isHierarchyRule ? "Hierarchy Rule Blocked" : "Hierarchy Save Failed",
+      escapeHtml(message),
+    );
+  } finally {
+    setOrganizationPositionHierarchySaveLoading(false);
+    applyHrOrganizationSetupAccessControls();
+  }
+}
+
+async function deleteOrganizationPositionHierarchyRecord(jobTitleId) {
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Organization Position Hierarchy");
+    return;
+  }
+
+  const record = getOrganizationPositionHierarchyRecord(jobTitleId);
+  if (!record) {
+    showPageAlert("warning", "The selected hierarchy position could not be found.");
+    return;
+  }
+
+  const jobTitle = getOrganizationJobTitleRecordById(record.job_title_id);
+  const jobTitleName = String(jobTitle?.job_title || "Position").trim();
+  const confirmed = window.confirm(
+    `Remove the hierarchy configuration for "${jobTitleName}"? Child positions must be reassigned or removed first.`,
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc(
+      "hr_tenant_admin_delete_organization_job_title_hierarchy",
+      { p_job_title_id: record.job_title_id },
+    );
+
+    if (error) throw error;
+
+    await refreshOrganizationHrSetupValues();
+    resetOrganizationPositionHierarchyForm();
+
+    const successMessage =
+      `Hierarchy configuration for <strong>${escapeHtml(jobTitleName)}</strong> was removed successfully.`;
+
+    showPageAlert("success", successMessage);
+    showDashboardToast(
+      "success",
+      "Hierarchy Configuration Removed",
+      successMessage,
+    );
+  } catch (error) {
+    console.error("Error deleting organization position hierarchy:", error);
+
+    const message = String(
+      error.message || "Organization position hierarchy could not be removed.",
+    );
+    const isInUse =
+      String(error.code || "") === "23503" ||
+      message.includes("child positions");
+
+    showPageAlert(isInUse ? "warning" : "danger", escapeHtml(message));
+    showDashboardToast(
+      isInUse ? "warning" : "danger",
+      isInUse ? "Hierarchy Position Still In Use" : "Hierarchy Remove Failed",
+      escapeHtml(message),
+    );
+  } finally {
+    applyHrOrganizationSetupAccessControls();
+  }
+}
 // ORGANIZATION HR SETUP VALUES - STEP 4B-4
 // Validate required Job Title fields before saving.
+
 function validateOrganizationJobTitleForm() {
   let isValid = true;
   let firstInvalidField = null;
