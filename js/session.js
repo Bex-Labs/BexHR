@@ -22,6 +22,15 @@
     let activityListenersAttached = false;
     let authListenerAttached = false;
 
+  // BEXHR AUTH TOKEN RECOVERY
+  // One refresh request at a time prevents concurrent browser reads from
+  // trying to rotate the same refresh token independently.
+  let sessionRefreshPromise = null;
+  let sessionRecoveryListenersAttached = false;
+
+  const SESSION_REFRESH_LEEWAY_MS =
+    60 * 1000;
+
   function getSupabaseClient() {
     // Single agreed global client name for the whole app
     if (!window.supabaseClient) {
@@ -31,18 +40,162 @@
     return window.supabaseClient;
   }
 
+  function isSessionNearExpiry(
+    session = null,
+    leewayMs = SESSION_REFRESH_LEEWAY_MS,
+  ) {
+    const expiresAt =
+      Number(session?.expires_at || 0) * 1000;
+
+    if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
+      return false;
+    }
+
+    return expiresAt - Date.now() <= leewayMs;
+  }
+
+  async function refreshAuthSessionSingleFlight() {
+    if (sessionRefreshPromise) {
+      return sessionRefreshPromise;
+    }
+
+    const supabase = getSupabaseClient();
+
+    if (!supabase?.auth?.refreshSession) {
+      return null;
+    }
+
+    sessionRefreshPromise = (async () => {
+      try {
+        const { data, error } =
+          await supabase.auth.refreshSession();
+
+        if (error) {
+          console.warn(
+            "BexHR session refresh failed:",
+            error.message || error,
+          );
+          return null;
+        }
+
+        return data?.session || null;
+      } catch (error) {
+        console.warn(
+          "BexHR session refresh failed:",
+          error,
+        );
+        return null;
+      }
+    })();
+
+    try {
+      return await sessionRefreshPromise;
+    } finally {
+      sessionRefreshPromise = null;
+    }
+  }
+
   async function getSession() {
     const supabase = getSupabaseClient();
     if (!supabase) return null;
 
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } =
+      await supabase.auth.getSession();
+
+    let session =
+      data?.session || null;
 
     if (error) {
-      console.error("Error getting session:", error.message);
+      console.warn(
+        "Session read failed; attempting token recovery:",
+        error.message || error,
+      );
+
+      return await refreshAuthSessionSingleFlight();
+    }
+
+    if (!session) {
       return null;
     }
 
-    return data?.session || null;
+    if (!isSessionNearExpiry(session)) {
+      return session;
+    }
+
+    const refreshed =
+      await refreshAuthSessionSingleFlight();
+
+    if (refreshed) {
+      return refreshed;
+    }
+
+    const expiresAt =
+      Number(session.expires_at || 0) * 1000;
+
+    return expiresAt > Date.now()
+      ? session
+      : null;
+  }
+
+  function isJwtExpiredAuthError(error = null) {
+    const message = String(
+      error?.message ||
+      error?.error_description ||
+      error ||
+      "",
+    )
+      .trim()
+      .toLowerCase();
+
+    return (
+      message.includes("jwt expired") ||
+      message.includes("jwt has expired")
+    );
+  }
+
+  // READ-ONLY recovery helper.
+  // The operation may run twice only when its first result explicitly reports
+  // an expired JWT. Never use this helper for mutations.
+  async function runWithFreshSessionRead(operation) {
+    if (typeof operation !== "function") {
+      throw new TypeError(
+        "runWithFreshSessionRead requires a read operation.",
+      );
+    }
+
+    await getSession();
+
+    let result;
+
+    try {
+      result = await operation();
+    } catch (error) {
+      if (!isJwtExpiredAuthError(error)) {
+        throw error;
+      }
+
+      const refreshed =
+        await refreshAuthSessionSingleFlight();
+
+      if (!refreshed) {
+        throw error;
+      }
+
+      return await operation();
+    }
+
+    if (!isJwtExpiredAuthError(result?.error)) {
+      return result;
+    }
+
+    const refreshed =
+      await refreshAuthSessionSingleFlight();
+
+    if (!refreshed) {
+      return result;
+    }
+
+    return await operation();
   }
 
   async function getUser() {
@@ -799,7 +952,50 @@ function getCurrentWorkspaceKey() {
     return result;
   }
 
+  function attachSessionRecoveryListeners() {
+    if (sessionRecoveryListenersAttached) {
+      return;
+    }
+
+    const recover = () => {
+      if (
+        typeof document !== "undefined" &&
+        document.hidden
+      ) {
+        return;
+      }
+
+      Promise.resolve(
+        getSession(),
+      ).catch((error) => {
+        console.warn(
+          "Foreground session recovery failed:",
+          error,
+        );
+      });
+    };
+
+    document.addEventListener(
+      "visibilitychange",
+      recover,
+    );
+
+    window.addEventListener(
+      "focus",
+      recover,
+    );
+
+    window.addEventListener(
+      "online",
+      recover,
+    );
+
+    sessionRecoveryListenersAttached = true;
+  }
+
   function attachAuthStateListener() {
+    attachSessionRecoveryListeners();
+
     if (authListenerAttached) return;
 
     const supabase = getSupabaseClient();
@@ -820,6 +1016,7 @@ function getCurrentWorkspaceKey() {
 
   window.SessionManager = {
     getSession,
+    runWithFreshSessionRead,
     getUser,
     getProfile,
     requireAuth,

@@ -1190,6 +1190,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // =========================================================
     await refreshEmployeeWorkspace();
 
+    // BEXHR PHASE 4.5B - COMPENSATION GOVERNANCE ENFORCEMENT
+    // Load the tenant's fail-closed employee governance classification before
+    // any salary, allowance, deduction, override, or payroll maintenance starts.
+    await refreshEmployeeCompensationGovernance();
+
     // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
     // Load employee-submitted correction requests after employees are loaded,
     // so the queue can resolve employee names from state.employees.
@@ -3039,6 +3044,15 @@ const state = {
   payrollRecords: [],
   filteredPayrollRecords: [],
 
+  // BEXHR PHASE 4.5B - COMPENSATION GOVERNANCE ENFORCEMENT
+  // Tenant-scoped governance resolution is loaded from the protected Phase 4.5A RPC.
+  // Standard employees keep the existing HR/Payroll write path. Restricted employees
+  // may execute only an exact independently approved change, enforced again in PostgreSQL.
+  compensationGovernanceByEmployeeId: new Map(),
+  compensationGovernanceLoadError: null,
+  currentUserIsCompensationGovernanceAuthority: false,
+  pendingCompensationGovernanceApproval: null,
+
   // HR SAVE/EDIT BEHAVIOUR - PAYROLL RECORDS STEP 5
   // Tracks payroll records just submitted/updated in the current browser session
   // so they can be shown first after refresh.
@@ -4289,6 +4303,410 @@ function getSupabaseClient() {
   }
   return window.supabaseClient;
 }
+
+// BEXHR PHASE 4.5B - COMPENSATION GOVERNANCE ENFORCEMENT
+// Browser code is an operational UX layer only. PostgreSQL remains authoritative:
+// restricted compensation changes require an exact approval created by a different
+// active governance authority, and CONFIGURATION_ERROR always fails closed.
+async function refreshEmployeeCompensationGovernance() {
+  const supabase = getSupabaseClient();
+
+  state.compensationGovernanceByEmployeeId = new Map();
+  state.compensationGovernanceLoadError = null;
+  state.currentUserIsCompensationGovernanceAuthority = false;
+
+  const { data, error } = await supabase.rpc(
+    "hr_get_employee_compensation_governance",
+  );
+
+  if (error) {
+    state.compensationGovernanceLoadError = error;
+    console.error("Compensation governance could not be loaded:", error);
+    return false;
+  }
+
+  (Array.isArray(data) ? data : []).forEach((row) => {
+    const employeeId = String(row?.employee_id || "").trim();
+    if (!employeeId) return;
+
+    const governance = {
+      employeeId,
+      control: String(
+        row?.compensation_control || "CONFIGURATION_ERROR",
+      ).trim().toUpperCase(),
+      reason: String(row?.governance_reason || "UNRESOLVED").trim(),
+      positionId: String(row?.governance_position_id || "").trim() || null,
+      currentUserIsGovernanceAuthority:
+        row?.current_user_is_governance_authority === true,
+    };
+
+    state.compensationGovernanceByEmployeeId.set(employeeId, governance);
+
+    if (governance.currentUserIsGovernanceAuthority) {
+      state.currentUserIsCompensationGovernanceAuthority = true;
+    }
+  });
+
+  return true;
+}
+
+function getEmployeeCompensationGovernance(employeeId = "") {
+  const normalizedEmployeeId = String(employeeId || "").trim();
+
+  if (!normalizedEmployeeId) {
+    return {
+      employeeId: "",
+      control: "CONFIGURATION_ERROR",
+      reason: "EMPLOYEE_NOT_RESOLVED",
+      positionId: null,
+      currentUserIsGovernanceAuthority:
+        state.currentUserIsCompensationGovernanceAuthority === true,
+    };
+  }
+
+  const governance = state.compensationGovernanceByEmployeeId.get(
+    normalizedEmployeeId,
+  );
+
+  if (governance) return governance;
+
+  return {
+    employeeId: normalizedEmployeeId,
+    control: "CONFIGURATION_ERROR",
+    reason: state.compensationGovernanceLoadError
+      ? "GOVERNANCE_STATE_NOT_LOADED"
+      : "EMPLOYEE_GOVERNANCE_NOT_RESOLVED",
+    positionId: null,
+    currentUserIsGovernanceAuthority:
+      state.currentUserIsCompensationGovernanceAuthority === true,
+  };
+}
+
+function getPayrollMasterEmployeeIdForGovernance(payrollMasterRecordId = "") {
+  const masterId = String(payrollMasterRecordId || "").trim();
+  if (!masterId) return "";
+
+  const master = (Array.isArray(state.payrollMasterRecords)
+    ? state.payrollMasterRecords
+    : []
+  ).find((record) => String(record?.id || "").trim() === masterId);
+
+  return String(master?.employee_id || master?.employees?.id || "").trim();
+}
+
+function buildCompensationGovernanceChangeContext({
+  targetType = "",
+  operation = "INSERT",
+  targetRecordId = null,
+  payload = {},
+  employeeId = "",
+  label = "Compensation change",
+} = {}) {
+  const normalizedTargetType = String(targetType || "").trim().toUpperCase();
+  const normalizedOperation = String(operation || "INSERT").trim().toUpperCase();
+  const safePayload = payload && typeof payload === "object" ? payload : {};
+
+  let resolvedEmployeeId = String(
+    employeeId || safePayload.employee_id || "",
+  ).trim();
+
+  if (!resolvedEmployeeId) {
+    resolvedEmployeeId = getPayrollMasterEmployeeIdForGovernance(
+      safePayload.payroll_master_record_id,
+    );
+  }
+
+  return {
+    employeeId: resolvedEmployeeId,
+    targetType: normalizedTargetType,
+    operation: normalizedOperation,
+    targetRecordId: String(targetRecordId || "").trim() || null,
+    payload: safePayload,
+    label: String(label || "Compensation change").trim(),
+    governance: getEmployeeCompensationGovernance(resolvedEmployeeId),
+  };
+}
+
+function preflightCompensationGovernanceChange(context = null) {
+  const governance = context?.governance;
+
+  if (!context || !governance) {
+    showPageAlert(
+      "danger",
+      "Compensation governance could not be resolved for this change. No compensation data was changed.",
+    );
+    return false;
+  }
+
+  if (governance.control === "CONFIGURATION_ERROR") {
+    showPageAlert(
+      "danger",
+      `Compensation governance is not fully configured for this employee (<strong>${escapeHtml(
+        governance.reason || "UNRESOLVED",
+      )}</strong>). The change was blocked until Company Administration resolves the governance configuration.`,
+    );
+
+    showDashboardToast(
+      "danger",
+      "Compensation change blocked",
+      "Governance configuration must be resolved before compensation can be changed.",
+    );
+
+    return false;
+  }
+
+  if (!["STANDARD_HR", "GOVERNANCE_RESTRICTED"].includes(governance.control)) {
+    showPageAlert(
+      "danger",
+      "Compensation governance returned an unsupported control state. The change was blocked.",
+    );
+    return false;
+  }
+
+  return true;
+}
+
+function preflightCompensationGovernanceChanges(contexts = []) {
+  return (Array.isArray(contexts) ? contexts : []).every((context) =>
+    preflightCompensationGovernanceChange(context),
+  );
+}
+
+function getCompensationGovernanceErrorMessage(error) {
+  return String(error?.message || error || "").trim();
+}
+
+function isCompensationGovernanceError(error) {
+  return getCompensationGovernanceErrorMessage(error).includes("BEXHR_GOVERNANCE_");
+}
+
+function buildGovernanceApprovalReference(context = {}, index = 0) {
+  const employee = (Array.isArray(state.employees) ? state.employees : []).find(
+    (record) =>
+      String(record?.id || "").trim() === String(context.employeeId || "").trim(),
+  );
+
+  const employeeToken = String(
+    employee?.employee_number || context.employeeId || "EMPLOYEE",
+  )
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .slice(-24);
+
+  const targetToken = String(context.targetType || "COMP")
+    .replace(/^PAYROLL_/, "")
+    .replace(/[^A-Z0-9]+/g, "-")
+    .slice(0, 24);
+
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[-:TZ.]/g, "")
+    .slice(0, 14);
+
+  return `GOV-${targetToken}-${employeeToken}-${timestamp}-${index + 1}`;
+}
+
+function showRestrictedCompensationGovernanceMessage(contexts = []) {
+  const restrictedContexts = (Array.isArray(contexts) ? contexts : [contexts])
+    .filter(Boolean)
+    .filter(
+      (context) => context?.governance?.control === "GOVERNANCE_RESTRICTED",
+    );
+
+  state.pendingCompensationGovernanceApproval = restrictedContexts;
+
+  const count = restrictedContexts.length || 1;
+  const requestAction = restrictedContexts.length
+    ? `
+      <div class="mt-3">
+        <button
+          class="btn btn-sm btn-outline-primary"
+          id="requestPendingCompensationGovernanceBtn"
+          type="button"
+          onclick="window.hrRequestPendingCompensationGovernanceChange()"
+        >
+          <i class="bi bi-send-check me-2" aria-hidden="true"></i>
+          Request independent approval
+        </button>
+      </div>
+    `
+    : "";
+
+  showPageAlert(
+    "warning",
+    `${
+      count > 1
+        ? `${count} restricted payroll changes require`
+        : "This restricted compensation change requires"
+    } exact independent governance approval before HR/Payroll can execute it. No compensation data was changed. Submit the exact proposed values for independent review, then repeat the same save after approval.${requestAction}`,
+  );
+
+  showDashboardToast(
+    "warning",
+    "Independent approval required",
+    "Restricted compensation was not changed.",
+  );
+}
+
+function handleCompensationGovernanceWriteFailure(error, contexts = []) {
+  if (!isCompensationGovernanceError(error)) return false;
+
+  const message = getCompensationGovernanceErrorMessage(error);
+  const contextList = (Array.isArray(contexts) ? contexts : [contexts]).filter(Boolean);
+
+  if (message.includes("BEXHR_GOVERNANCE_RESTRICTED")) {
+    showRestrictedCompensationGovernanceMessage(contextList);
+    return true;
+  }
+
+  state.pendingCompensationGovernanceApproval = null;
+
+  if (message.includes("BEXHR_GOVERNANCE_CONFIGURATION_ERROR")) {
+    showPageAlert(
+      "danger",
+      "Compensation governance is unresolved for this employee. The database blocked the change until Company Administration fixes the governance configuration.",
+    );
+    showDashboardToast(
+      "danger",
+      "Governance configuration required",
+      "No compensation data was changed.",
+    );
+    return true;
+  }
+
+  if (message.includes("BEXHR_GOVERNANCE_EXECUTION_ROLE_REQUIRED")) {
+    showPageAlert(
+      "warning",
+      "This restricted compensation change has governance controls. Only an active HR/Payroll user may execute an independently approved change.",
+    );
+    return true;
+  }
+
+  if (message.includes("BEXHR_GOVERNANCE_APPROVAL_ALREADY_USED")) {
+    showPageAlert(
+      "warning",
+      "The matching governance approval has already been consumed. A fresh independent approval is required before retrying this compensation change.",
+    );
+    return true;
+  }
+
+  if (message.includes("BEXHR_GOVERNANCE_TENANT_MISMATCH")) {
+    showPageAlert(
+      "danger",
+      "The compensation change does not belong to the signed-in company workspace and was blocked.",
+    );
+    return true;
+  }
+
+  showPageAlert(
+    "danger",
+    "The compensation governance control blocked this change. No compensation data was changed.",
+  );
+  return true;
+}
+
+async function requestPendingCompensationGovernanceChange() {
+  const pending = Array.isArray(state.pendingCompensationGovernanceApproval)
+    ? state.pendingCompensationGovernanceApproval.filter(Boolean)
+    : [];
+
+  if (!pending.length) {
+    showPageAlert(
+      "warning",
+      "There is no pending restricted compensation change to submit for approval.",
+    );
+    return;
+  }
+
+  const button = document.getElementById("requestPendingCompensationGovernanceBtn");
+  const originalHtml = button?.innerHTML || "";
+
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Submitting request...
+    `;
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+    let requestedCount = 0;
+    let alreadyRequestedCount = 0;
+    let alreadyApprovedCount = 0;
+
+    for (let index = 0; index < pending.length; index += 1) {
+      const context = pending[index];
+      const { data, error } = await supabase.rpc(
+        "request_compensation_governance_approval",
+        {
+          p_employee_id: context.employeeId,
+          p_target_type: context.targetType,
+          p_operation: context.operation,
+          p_target_record_id: context.targetRecordId,
+          p_payload: context.payload,
+          p_request_reference: buildGovernanceApprovalReference(context, index),
+          p_notes: `Requested from BexHR for ${context.label}.`,
+        },
+      );
+
+      if (error) throw error;
+
+      const status = String(data?.status || "").trim().toUpperCase();
+
+      if (status === "APPROVED") {
+        alreadyApprovedCount += 1;
+      } else if (status === "REQUESTED") {
+        if (data?.createdNew === true) {
+          requestedCount += 1;
+        } else {
+          alreadyRequestedCount += 1;
+        }
+      }
+    }
+
+    state.pendingCompensationGovernanceApproval = null;
+
+    const summaryParts = [];
+    if (requestedCount) summaryParts.push(`${requestedCount} request(s) queued`);
+    if (alreadyRequestedCount) summaryParts.push(`${alreadyRequestedCount} already pending`);
+    if (alreadyApprovedCount) summaryParts.push(`${alreadyApprovedCount} already approved`);
+
+    showPageAlert(
+      alreadyApprovedCount && !requestedCount && !alreadyRequestedCount
+        ? "success"
+        : "info",
+      `${summaryParts.join("; ") || "The restricted change was submitted for independent review"}. ${
+        alreadyApprovedCount
+          ? "Repeat the exact save to execute any already-approved values."
+          : "An independent governance authority must approve the exact values before HR/Payroll can execute them."
+      }`,
+    );
+
+    showDashboardToast(
+      "info",
+      "Governance request recorded",
+      "The restricted values remain unchanged until independent approval and HR/Payroll execution.",
+    );
+  } catch (error) {
+    console.error("Error requesting compensation governance approval:", error);
+
+    showPageAlert(
+      "danger",
+      error?.message ||
+        "The governance approval request could not be recorded. No compensation data was changed.",
+    );
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = originalHtml;
+    }
+  }
+}
+
+window.hrRequestPendingCompensationGovernanceChange = async () => {
+  await requestPendingCompensationGovernanceChange();
+};
 
 // HRP-80 - TENANT DATA SEGMENTATION - STEP 7C
 // Read the logged-in user's validated tenant context from local storage.
@@ -8855,6 +9273,23 @@ async function handlePayrollOtherDeductionSave() {
 
   const startedAt = Date.now();
   const payload = buildPayrollOtherDeductionPayload();
+  const editingId = String(
+    state.currentEditingPayrollOtherDeduction?.id ||
+    state.dom.editingPayrollOtherDeductionId?.value ||
+    "",
+  ).trim();
+
+  const governanceContext = buildCompensationGovernanceChangeContext({
+    targetType: "PAYROLL_OTHER_DEDUCTION",
+    operation: editingId ? "UPDATE" : "INSERT",
+    targetRecordId: editingId || null,
+    payload,
+    label: "Other Deduction",
+  });
+
+  if (!preflightCompensationGovernanceChange(governanceContext)) {
+    return;
+  }
 
   try {
     setPayrollOtherDeductionSaveLoading(true);
@@ -8866,12 +9301,6 @@ async function handlePayrollOtherDeductionSave() {
     // Use the same form for create and update.
     // Create mode inserts a new deduction setup.
     // Edit mode updates the existing setup row and does not change created_by.
-    const editingId = String(
-      state.currentEditingPayrollOtherDeduction?.id ||
-      state.dom.editingPayrollOtherDeductionId?.value ||
-      "",
-    ).trim();
-
     let data;
     let error;
 
@@ -8952,6 +9381,10 @@ async function handlePayrollOtherDeductionSave() {
     }, 250);
   } catch (error) {
     console.error("Error saving other deduction:", error);
+
+    if (handleCompensationGovernanceWriteFailure(error, governanceContext)) {
+      return;
+    }
 
     const message = String(error.message || "").toLowerCase();
 
@@ -10285,6 +10718,23 @@ async function handlePayrollEmployeeOverrideSave() {
 
   const startedAt = Date.now();
   const payload = buildPayrollEmployeeOverridePayload();
+  const editingId = String(
+    state.currentEditingPayrollEmployeeOverride?.id ||
+    state.dom.editingPayrollEmployeeOverrideId?.value ||
+    "",
+  ).trim();
+
+  const governanceContext = buildCompensationGovernanceChangeContext({
+    targetType: "PAYROLL_EMPLOYEE_OVERRIDE",
+    operation: editingId ? "UPDATE" : "INSERT",
+    targetRecordId: editingId || null,
+    payload,
+    label: "Employee Payroll Override",
+  });
+
+  if (!preflightCompensationGovernanceChange(governanceContext)) {
+    return;
+  }
 
   try {
     setPayrollEmployeeOverrideSaveLoading(true);
@@ -10296,12 +10746,6 @@ async function handlePayrollEmployeeOverrideSave() {
     // Use the same form for create and update.
     // Create mode inserts a new override.
     // Edit mode updates the existing override and keeps created_by unchanged.
-    const editingId = String(
-      state.currentEditingPayrollEmployeeOverride?.id ||
-      state.dom.editingPayrollEmployeeOverrideId?.value ||
-      "",
-    ).trim();
-
     let data;
     let error;
 
@@ -10387,6 +10831,10 @@ async function handlePayrollEmployeeOverrideSave() {
     }, 250);
   } catch (error) {
     console.error("Error saving employee payroll override:", error);
+
+    if (handleCompensationGovernanceWriteFailure(error, governanceContext)) {
+      return;
+    }
 
     const message = String(error.message || "").toLowerCase();
 
@@ -20744,6 +21192,18 @@ async function handlePayrollMasterSave() {
   // A deliberate "Create New Version" workflow can be added separately later.
   const payload = buildPayrollMasterPayload(isEditMode);
 
+  const governanceContext = buildCompensationGovernanceChangeContext({
+    targetType: "PAYROLL_MASTER_RECORD",
+    operation: isEditMode ? "UPDATE" : "INSERT",
+    targetRecordId: editingId || null,
+    payload,
+    label: "Employee Salary Setup",
+  });
+
+  if (!preflightCompensationGovernanceChange(governanceContext)) {
+    return;
+  }
+
   try {
     setPayrollMasterSaveLoading(true, isEditMode);
 
@@ -20800,6 +21260,10 @@ async function handlePayrollMasterSave() {
     }, 250);
   } catch (error) {
     console.error("Error saving payroll master record:", error);
+
+    if (handleCompensationGovernanceWriteFailure(error, governanceContext)) {
+      return;
+    }
 
     // Surface unique index conflicts in business-friendly language.
     if (
@@ -22024,22 +22488,31 @@ async function handlePayrollStatutorySave() {
   }
 
   const startedAt = Date.now();
+  const editingId = String(
+    state.currentEditingPayrollStatutory?.id ||
+    state.dom.editingPayrollStatutoryId?.value ||
+    "",
+  ).trim();
+  const isEditMode = Boolean(editingId);
+  const payload = buildPayrollStatutoryPayload(isEditMode);
+
+  const governanceContext = buildCompensationGovernanceChangeContext({
+    targetType: "PAYROLL_STATUTORY_DEDUCTION",
+    operation: isEditMode ? "UPDATE" : "INSERT",
+    targetRecordId: editingId || null,
+    payload,
+    label: "Statutory Deduction",
+  });
+
+  if (!preflightCompensationGovernanceChange(governanceContext)) {
+    return;
+  }
 
   try {
     setPayrollStatutorySaveLoading(true);
     await waitForNextPaint();
 
     const supabase = getSupabaseClient();
-
-    const editingId = String(
-      state.currentEditingPayrollStatutory?.id ||
-      state.dom.editingPayrollStatutoryId?.value ||
-      "",
-    ).trim();
-
-    const isEditMode = Boolean(editingId);
-    const payload = buildPayrollStatutoryPayload(isEditMode);
-
     let error = null;
 
     if (isEditMode) {
@@ -22100,6 +22573,10 @@ async function handlePayrollStatutorySave() {
     );
   } catch (error) {
     console.error("Error saving statutory deduction:", error);
+
+    if (handleCompensationGovernanceWriteFailure(error, governanceContext)) {
+      return;
+    }
 
     showPageAlert(
       "danger",
@@ -23178,6 +23655,18 @@ async function handlePayrollAllowanceSave() {
   const isEditMode = Boolean(editingId);
   const payload = buildPayrollAllowancePayload(isEditMode);
 
+  const governanceContext = buildCompensationGovernanceChangeContext({
+    targetType: "PAYROLL_ALLOWANCE_COMPONENT",
+    operation: isEditMode ? "UPDATE" : "INSERT",
+    targetRecordId: editingId || null,
+    payload,
+    label: "Allowance Component",
+  });
+
+  if (!preflightCompensationGovernanceChange(governanceContext)) {
+    return;
+  }
+
   try {
     setPayrollAllowanceSaveLoading(true, isEditMode);
 
@@ -23245,6 +23734,10 @@ async function handlePayrollAllowanceSave() {
     }, 250);
   } catch (error) {
     console.error("Error saving allowance component:", error);
+
+    if (handleCompensationGovernanceWriteFailure(error, governanceContext)) {
+      return;
+    }
 
     if (
       String(error.message || "").toLowerCase().includes("uq_payroll_allowance_master_type_effective_date") ||
@@ -26408,7 +26901,6 @@ function getHrPerformanceAppraisalManagerContext(managerScope = null) {
     secondaryEmployees: allEmployees.filter((employee) =>
       secondaryEmployeeIdSet.has(employee.id),
     ),
-    allEmployees,
   };
 }
 
@@ -26449,6 +26941,12 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin", managerScope 
 
     const managerContext =
       getHrPerformanceAppraisalManagerContext(managerScope);
+
+    // HR PA operational visibility is deliberately independent
+    // from Primary/Secondary reporting ownership.
+    const hrOperationalEmployees =
+      getHrPerformanceAppraisalAvailableEmployees();
+
     const availableDepartments = Array.isArray(state.organizationDepartments)
       ? state.organizationDepartments
         .map((department) => ({
@@ -26479,9 +26977,25 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin", managerScope 
 
       availableEmployees:
         mode === "hr-standard"
-          ? managerContext.allEmployees
+          ? hrOperationalEmployees
           : [],
-      hrAvailableEmployees: managerContext.allEmployees,
+
+      // Canonical PA operations scope.
+      // This does NOT mean these employees report to the HR user.
+      hrOperationalEmployees,
+
+      hrOperationalEmployeeIds:
+        hrOperationalEmployees
+          .map((employee) =>
+            String(
+              employee?.id || "",
+            ).trim(),
+          )
+          .filter(Boolean),
+
+      // Compatibility alias for older PA browser sessions.
+      hrAvailableEmployees:
+        hrOperationalEmployees,
       availableDepartments,
       canonicalDepartments:
         Array.isArray(state.organizationDepartments)
@@ -26508,7 +27022,7 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin", managerScope 
     return false;
   }
 
-  const availableEmployees =
+  const hrOperationalEmployees =
     getHrPerformanceAppraisalAvailableEmployees();
   const managerContext =
     getHrPerformanceAppraisalManagerContext(managerScope);
@@ -26550,8 +27064,23 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin", managerScope 
     secondaryEmployeeIds: managerContext.secondaryEmployeeIds,
     secondaryEmployees: managerContext.secondaryEmployees,
 
-    availableEmployees,
-    hrAvailableEmployees: availableEmployees,
+    availableEmployees:
+      hrOperationalEmployees,
+
+    hrOperationalEmployees,
+
+    hrOperationalEmployeeIds:
+      hrOperationalEmployees
+        .map((employee) =>
+          String(
+            employee?.id || "",
+          ).trim(),
+        )
+        .filter(Boolean),
+
+    // Compatibility alias.
+    hrAvailableEmployees:
+      hrOperationalEmployees,
     availableDepartments,
     canonicalDepartments:
       Array.isArray(state.organizationDepartments)
@@ -26662,7 +27191,7 @@ function publishHrPerformanceAppraisalManagerContext(
       state.currentProfile?.hr_access_level || "standard",
     ) !== "tenant_admin" &&
     Boolean(String(state.currentProfile?.tenant_id || "").trim());
-  const hrAvailableEmployees =
+  const hrOperationalEmployees =
     getHrPerformanceAppraisalAvailableEmployees();
   const availableDepartments = Array.isArray(state.organizationDepartments)
     ? state.organizationDepartments
@@ -26696,7 +27225,21 @@ function publishHrPerformanceAppraisalManagerContext(
     secondaryEmployeeIds,
     secondaryEmployees,
 
-    hrAvailableEmployees,
+    hrOperationalEmployees,
+
+    hrOperationalEmployeeIds:
+      hrOperationalEmployees
+        .map((employee) =>
+          String(
+            employee?.id || "",
+          ).trim(),
+        )
+        .filter(Boolean),
+
+    // Compatibility alias.
+    hrAvailableEmployees:
+      hrOperationalEmployees,
+
     availableDepartments,
     canonicalDepartments:
       Array.isArray(state.organizationDepartments)
@@ -26824,6 +27367,74 @@ async function getHrPerformanceAppraisalManagerScope() {
   }
 }
 
+async function isCurrentHrEmployeeExcludedFromActivePaCycle() {
+  const employeeId = String(
+    getCurrentHrEmployeeRecord()?.id || "",
+  ).trim();
+
+  if (!employeeId) {
+    return false;
+  }
+
+  try {
+    const tenantId =
+      getRequiredTenantIdForHrEmployeeData();
+
+    const supabase =
+      getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("pa_cycles")
+      .select("status, payload")
+      .eq("tenant_id", tenantId)
+      .ilike("status", "active");
+
+    if (error) {
+      throw error;
+    }
+
+    const activeCycles =
+      Array.isArray(data) ? data : [];
+
+    if (activeCycles.length === 0) {
+      return false;
+    }
+
+    const participationAwareCycles =
+      activeCycles.filter(
+        (cycle) =>
+          Array.isArray(
+            cycle?.payload
+              ?.participationSnapshot
+              ?.excludedEmployeeIds,
+          ),
+      );
+
+    if (participationAwareCycles.length === 0) {
+      return false;
+    }
+
+    return participationAwareCycles.every(
+      (cycle) =>
+        cycle.payload.participationSnapshot
+          .excludedEmployeeIds
+          .some(
+            (excludedEmployeeId) =>
+              String(
+                excludedEmployeeId || "",
+              ).trim() === employeeId,
+          ),
+    );
+  } catch (error) {
+    console.error(
+      "PA highest-tier participation could not be resolved for the HR chooser:",
+      error,
+    );
+
+    return false;
+  }
+}
+
 async function showHrPerformanceAppraisalChooser() {
   const managerScope =
     await getHrPerformanceAppraisalManagerScope();
@@ -26831,6 +27442,10 @@ async function showHrPerformanceAppraisalChooser() {
   const hasManagerReviewCapability =
     managerScope.primaryEmployeeIds.length > 0 ||
     managerScope.secondaryEmployeeIds.length > 0;
+
+  const employeeExcludedFromActivePaCycle =
+    await isCurrentHrEmployeeExcludedFromActivePaCycle();
+
   const existingChooser = document.getElementById(
     "hrPerformanceAppraisalChooser",
   );
@@ -26951,13 +27566,40 @@ async function showHrPerformanceAppraisalChooser() {
       : "Open the HR appraisal workspace available to your assigned HR responsibilities.",
   });
 
-  actions.append(employeeButton);
+  const availableWorkspaceButtons = [];
+
+  if (!employeeExcludedFromActivePaCycle) {
+    actions.append(employeeButton);
+
+    availableWorkspaceButtons.push(
+      employeeButton,
+    );
+  }
 
   if (hasManagerReviewCapability) {
     actions.append(managerButton);
+
+    availableWorkspaceButtons.push(
+      managerButton,
+    );
   }
 
   actions.append(hrWorkspaceButton);
+
+  availableWorkspaceButtons.push(
+    hrWorkspaceButton,
+  );
+
+  actions.style.gridTemplateColumns =
+    "repeat(auto-fit, minmax(240px, 1fr))";
+
+  actions.style.maxWidth =
+    availableWorkspaceButtons.length === 2
+      ? "720px"
+      : "100%";
+
+  actions.style.marginInline = "auto";
+
   body.append(actions);
 
   const footer = document.createElement("footer");
@@ -27076,6 +27718,13 @@ async function showHrPerformanceAppraisalChooser() {
     closeChooser();
   };
 
+  if (
+    availableWorkspaceButtons.length === 1
+  ) {
+    availableWorkspaceButtons[0].click();
+    return;
+  }
+
   document.addEventListener(
     "keydown",
     handleKeydown,
@@ -27085,7 +27734,9 @@ async function showHrPerformanceAppraisalChooser() {
   document.body?.classList.add("hr-operating-guide-open");
 
   window.requestAnimationFrame(() => {
-    employeeButton.focus({ preventScroll: true });
+    actions
+      .querySelector("button")
+      ?.focus({ preventScroll: true });
   });
 }
 async function ensureHrPerformanceAppraisalDepartmentsLoaded() {
@@ -27520,12 +28171,31 @@ function renderHrModernOverview() {
     return !["completed", "rejected", "cancelled", "closed"].includes(status);
   });
 
-  const missingInformationEmployees = activeEmployees.filter((employee) => {
-    return !String(employee.employee_number || "").trim() ||
-      !String(employee.department || "").trim() ||
-      !String(employee.job_title || "").trim() ||
-      !String(employee.work_email || "").trim();
-  });
+  const missingInformationEmployees =
+    activeEmployees.filter((employee) => {
+      const hasOrganizationPlacement =
+        isHrWholeOrganizationEmployee(
+          employee,
+        ) ||
+        Boolean(
+          String(
+            employee.department || "",
+          ).trim(),
+        );
+
+      return (
+        !String(
+          employee.employee_number || "",
+        ).trim() ||
+        !hasOrganizationPlacement ||
+        !String(
+          employee.job_title || "",
+        ).trim() ||
+        !String(
+          employee.work_email || "",
+        ).trim()
+      );
+    });
 
   // HR OVERVIEW PAYROLL READINESS - CURRENT SALARY SETUP FIX
   // An employee is payroll-ready only when the salary setup is:
@@ -27630,7 +28300,7 @@ function renderHrModernOverview() {
           tone: "warning",
           icon: "bi-person-exclamation",
           title: `${missingInformationEmployees.length} incomplete employee record${missingInformationEmployees.length === 1 ? "" : "s"}`,
-          detail: "Complete employee number, department, job title, or work email information.",
+          detail: "Complete employee number, organizational placement, job title, or work email information.",
           target: "hrTabEmployeesBtn",
         }
         : null,
@@ -27731,24 +28401,82 @@ function renderHrModernOverview() {
     const departments = new Map();
 
     employees.forEach((employee) => {
-      const department = String(employee.department || "Unassigned").trim() || "Unassigned";
-      const current = departments.get(department) || { total: 0, active: 0, ready: 0 };
+      const rawDepartment =
+        String(
+          employee.department || "",
+        ).trim();
+
+      const department =
+        isHrWholeOrganizationEmployee(
+          employee,
+        )
+          ? "Whole organization"
+          : rawDepartment ||
+            "Unassigned";
+
+      const current =
+        departments.get(
+          department,
+        ) || {
+          total: 0,
+          active: 0,
+          ready: 0,
+        };
 
       current.total += 1;
 
-      if (isHrOverviewEmployeeActive(employee)) {
+      if (
+        isHrOverviewEmployeeActive(
+          employee,
+        )
+      ) {
         current.active += 1;
-        if (activePayrollMasterEmployeeIds.has(String(employee.id || "").trim())) {
+
+        if (
+          activePayrollMasterEmployeeIds.has(
+            String(
+              employee.id || "",
+            ).trim(),
+          )
+        ) {
           current.ready += 1;
         }
       }
 
-      departments.set(department, current);
+      departments.set(
+        department,
+        current,
+      );
     });
 
-    const departmentRows = Array.from(departments.entries())
-      .sort((left, right) => right[1].total - left[1].total)
-      .slice(0, 6);
+    const departmentRows =
+      Array.from(
+        departments.entries(),
+      )
+        .sort((left, right) => {
+          if (
+            left[0] === "Unassigned" &&
+            right[0] !== "Unassigned"
+          ) {
+            return 1;
+          }
+
+          if (
+            right[0] === "Unassigned" &&
+            left[0] !== "Unassigned"
+          ) {
+            return -1;
+          }
+
+          return (
+            right[1].total -
+              left[1].total ||
+            left[0].localeCompare(
+              right[0],
+            )
+          );
+        })
+        .slice(0, 6);
 
     state.dom.hrOverviewDepartmentList.innerHTML = departmentRows.length
       ? departmentRows.map(([department, counts]) => {
@@ -27756,10 +28484,17 @@ function renderHrModernOverview() {
           ? Math.round((counts.ready / counts.active) * 100)
           : 0;
 
+        const departmentMark =
+          department === "Whole organization"
+            ? "WO"
+            : department
+              .slice(0, 2)
+              .toUpperCase();
+
         return `
             <div class="hr-overview-department-row">
               <div class="hr-overview-department-main">
-                <span class="hr-overview-department-mark">${escapeHtml(department.slice(0, 2).toUpperCase())}</span>
+                <span class="hr-overview-department-mark">${escapeHtml(departmentMark)}</span>
                 <span>
                   <strong>${escapeHtml(department)}</strong>
                   <small>${counts.total} employee${counts.total === 1 ? "" : "s"}</small>
@@ -28284,27 +29019,71 @@ function getSelectedEmployeeDepartmentValue() {
 }
 
 function isHrWholeOrganizationJobTitleValue(jobTitleValue = "", tenantId = "") {
-  const normalizedTitle = normalizeText(jobTitleValue);
-  const tenantKey = String(tenantId || "").trim();
-
-  if (!normalizedTitle) return false;
-
-  return (state.organizationJobTitles || []).some((record) => {
-    const recordTenantId = String(record?.tenant_id || "").trim();
-    const departmentId = String(record?.department_id || "").trim();
-
-    return (
-      !departmentId &&
-      normalizeText(record?.job_title || "") === normalizedTitle &&
-      (!tenantKey || !recordTenantId || recordTenantId === tenantKey)
+  const normalizedTitle =
+    normalizeText(
+      jobTitleValue,
     );
-  });
+
+  const tenantKey =
+    String(
+      tenantId || "",
+    ).trim();
+
+  if (!normalizedTitle) {
+    return false;
+  }
+
+  const matchingTitles =
+    (state.organizationJobTitles || [])
+      .filter((record) => {
+        const recordTenantId =
+          String(
+            record?.tenant_id || "",
+          ).trim();
+
+        const status =
+          normalizeText(
+            record?.status || "active",
+          );
+
+        return (
+          normalizeText(
+            record?.job_title || "",
+          ) === normalizedTitle &&
+          status === "active" &&
+          (
+            !tenantKey ||
+            !recordTenantId ||
+            recordTenantId === tenantKey
+          )
+        );
+      });
+
+  const wholeOrganizationTitles =
+    matchingTitles.filter(
+      (record) =>
+        !String(
+          record?.department_id || "",
+        ).trim(),
+    );
+
+  const departmentTitles =
+    matchingTitles.filter(
+      (record) =>
+        Boolean(
+          String(
+            record?.department_id || "",
+          ).trim(),
+        ),
+    );
+
+  return (
+    wholeOrganizationTitles.length === 1 &&
+    departmentTitles.length === 0
+  );
 }
 
 function isHrWholeOrganizationEmployee(employee = {}) {
-  const department = String(employee?.department || "").trim();
-  if (department) return false;
-
   return isHrWholeOrganizationJobTitleValue(
     employee?.job_title || "",
     employee?.tenant_id || "",
@@ -28312,12 +29091,17 @@ function isHrWholeOrganizationEmployee(employee = {}) {
 }
 
 function getEmployeeDepartmentSelectionValue(employee = {}) {
-  const department = String(employee?.department || "").trim();
-  if (department) return department;
+  if (
+    isHrWholeOrganizationEmployee(
+      employee,
+    )
+  ) {
+    return HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE;
+  }
 
-  return isHrWholeOrganizationEmployee(employee)
-    ? HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE
-    : "";
+  return String(
+    employee?.department || "",
+  ).trim();
 }
 
 function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartment = "") {
@@ -29774,13 +30558,23 @@ async function refreshCompanyAdminAuditHistory({
   try {
     const supabase = getSupabaseClient();
 
-    const { data, error } = await supabase.rpc(
-      "list_administrative_audit_events",
-      {
-        p_limit: 100,
-        p_offset: 0,
-      },
-    );
+    const readAuditHistory = () =>
+      supabase.rpc(
+        "list_administrative_audit_events",
+        {
+          p_limit: 100,
+          p_offset: 0,
+        },
+      );
+
+    const { data, error } =
+      window.SessionManager
+        ?.runWithFreshSessionRead
+        ? await window.SessionManager
+          .runWithFreshSessionRead(
+            readAuditHistory,
+          )
+        : await readAuditHistory();
 
     if (error) throw error;
 
@@ -45998,6 +46792,8 @@ async function handleBatchPayrollSubmit() {
     return;
   }
 
+  let batchGovernanceContexts = [];
+
   try {
     setBatchPayrollSubmitLoading(true);
 
@@ -46009,6 +46805,20 @@ async function handleBatchPayrollSubmit() {
     const batchPayload = preparedRows.map((preparedRow) =>
       buildBatchPayrollRecordPayload(preparedRow, payrollBatchReference),
     );
+
+    batchGovernanceContexts = batchPayload.map((row) =>
+      buildCompensationGovernanceChangeContext({
+        targetType: "PAYROLL_RECORD",
+        operation: "INSERT",
+        payload: row,
+        employeeId: row.employee_id,
+        label: "Batch Payroll Record",
+      }),
+    );
+
+    if (!preflightCompensationGovernanceChanges(batchGovernanceContexts)) {
+      return;
+    }
 
     const supabase = getSupabaseClient();
 
@@ -46059,6 +46869,11 @@ async function handleBatchPayrollSubmit() {
     scrollToPayrollRecordsAfterSubmit();
   } catch (error) {
     console.error("Error submitting batch payroll:", error);
+
+    if (handleCompensationGovernanceWriteFailure(error, batchGovernanceContexts)) {
+      return;
+    }
+
     showPageAlert(
       "danger",
       error.message ||
@@ -46127,6 +46942,8 @@ async function handlePayrollSave() {
   }
 
   let payrollPayload = null;
+  let payrollGovernanceContext = null;
+  let payrollGovernanceContexts = [];
 
   try {
     setPayrollSaveLoading(true, isEditMode);
@@ -46162,6 +46979,20 @@ async function handlePayrollSave() {
         ...payrollPayload,
         employee_id: employeeId,
       }));
+
+      payrollGovernanceContexts = batchPayload.map((row) =>
+        buildCompensationGovernanceChangeContext({
+          targetType: "PAYROLL_RECORD",
+          operation: "INSERT",
+          payload: row,
+          employeeId: row.employee_id,
+          label: "Payroll Record",
+        }),
+      );
+
+      if (!preflightCompensationGovernanceChanges(payrollGovernanceContexts)) {
+        return;
+      }
 
       response = await supabase
         .from("payroll_records")
@@ -46215,6 +47046,19 @@ async function handlePayrollSave() {
       // After batch submit, move HR to Payroll Records to confirm created records.
       scrollToPayrollRecordsAfterSubmit();
 
+      return;
+    }
+
+    payrollGovernanceContext = buildCompensationGovernanceChangeContext({
+      targetType: "PAYROLL_RECORD",
+      operation: isEditMode ? "UPDATE" : "INSERT",
+      targetRecordId: editingId || null,
+      payload: payrollPayload,
+      employeeId: payrollPayload.employee_id,
+      label: "Payroll Record",
+    });
+
+    if (!preflightCompensationGovernanceChange(payrollGovernanceContext)) {
       return;
     }
 
@@ -46272,6 +47116,20 @@ async function handlePayrollSave() {
     scrollToPayrollRecordsAfterSubmit();
   } catch (error) {
     console.error("Error saving payroll record:", error);
+
+    const governanceFailureContexts = payrollGovernanceContexts.length
+      ? payrollGovernanceContexts
+      : payrollGovernanceContext;
+
+    if (
+      handleCompensationGovernanceWriteFailure(
+        error,
+        governanceFailureContexts,
+      )
+    ) {
+      return;
+    }
+
     showPageAlert(
       "danger",
       error.message ||

@@ -1793,7 +1793,76 @@ function ensureManagerPerformanceAppraisalChooserStyles() {
   document.head.appendChild(style);
 }
 
-function showManagerPerformanceAppraisalChooser() {
+async function isCurrentManagerExcludedFromActivePaCycle() {
+  const employeeId = String(
+    state.currentManagerEmployeeRecord?.id || "",
+  ).trim();
+
+  const tenantId = String(
+    state.currentProfile?.tenant_id || "",
+  ).trim();
+
+  if (!employeeId || !tenantId) {
+    return false;
+  }
+
+  try {
+    const supabase =
+      getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("pa_cycles")
+      .select("status, payload")
+      .eq("tenant_id", tenantId)
+      .ilike("status", "active");
+
+    if (error) {
+      throw error;
+    }
+
+    const activeCycles =
+      Array.isArray(data) ? data : [];
+
+    if (activeCycles.length === 0) {
+      return false;
+    }
+
+    const participationAwareCycles =
+      activeCycles.filter(
+        (cycle) =>
+          Array.isArray(
+            cycle?.payload
+              ?.participationSnapshot
+              ?.excludedEmployeeIds,
+          ),
+      );
+
+    if (participationAwareCycles.length === 0) {
+      return false;
+    }
+
+    return participationAwareCycles.every(
+      (cycle) =>
+        cycle.payload.participationSnapshot
+          .excludedEmployeeIds
+          .some(
+            (excludedEmployeeId) =>
+              String(
+                excludedEmployeeId || "",
+              ).trim() === employeeId,
+          ),
+    );
+  } catch (error) {
+    console.error(
+      "PA highest-tier participation could not be resolved for the Manager chooser:",
+      error,
+    );
+
+    return false;
+  }
+}
+
+async function showManagerPerformanceAppraisalChooser() {
   const existingChooser = document.getElementById(
     "managerPerformanceAppraisalChooser",
   );
@@ -1801,6 +1870,9 @@ function showManagerPerformanceAppraisalChooser() {
   if (existingChooser) {
     existingChooser.remove();
   }
+
+  const employeeExcludedFromActivePaCycle =
+    await isCurrentManagerExcludedFromActivePaCycle();
 
   ensureManagerPerformanceAppraisalChooserStyles();
 
@@ -1927,13 +1999,50 @@ function showManagerPerformanceAppraisalChooser() {
   document.addEventListener("keydown", handleKeydown);
 
   header.append(icon, headingCopy, closeButton);
-  workspaceGrid.append(employeeButton, managerButton);
+
+  const availableWorkspaceButtons = [];
+
+  if (!employeeExcludedFromActivePaCycle) {
+    workspaceGrid.append(employeeButton);
+
+    availableWorkspaceButtons.push(
+      employeeButton,
+    );
+  }
+
+  workspaceGrid.append(managerButton);
+
+  availableWorkspaceButtons.push(
+    managerButton,
+  );
+
+  workspaceGrid.style.gridTemplateColumns =
+    "repeat(auto-fit, minmax(240px, 1fr))";
+
+  workspaceGrid.style.maxWidth =
+    availableWorkspaceButtons.length === 2
+      ? "720px"
+      : "100%";
+
+  workspaceGrid.style.marginInline =
+    "auto";
+
   footer.append(footerNote, footerCloseButton);
   dialog.append(header, workspaceGrid, footer);
   overlay.append(dialog);
+
+  if (
+    availableWorkspaceButtons.length === 1
+  ) {
+    availableWorkspaceButtons[0].click();
+    return;
+  }
+
   document.body.append(overlay);
 
-  employeeButton.focus({ preventScroll: true });
+  workspaceGrid
+    .querySelector("button")
+    ?.focus({ preventScroll: true });
 }
 
 async function openManagerPerformanceAppraisal(
@@ -1944,7 +2053,7 @@ async function openManagerPerformanceAppraisal(
   }
 
   if (mode === "auto") {
-    showManagerPerformanceAppraisalChooser();
+    await showManagerPerformanceAppraisalChooser();
     return;
   }
 
@@ -4328,6 +4437,13 @@ function publishManagerPerformanceAppraisalContext(
     source: "bexhr",
     sourceDashboard: "manager-dashboard",
     managerDisplayName: String(state.currentProfile?.full_name || "Current manager"),
+
+    managerJobTitle: String(
+      state.currentManagerEmployeeRecord?.job_title ||
+      state.currentManagerEmployeeRecord?.position ||
+      "",
+    ).trim(),
+
     issuedAt: new Date().toISOString(),
     persona: isEmployeeMode
       ? "employee"
