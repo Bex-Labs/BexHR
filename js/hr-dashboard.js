@@ -1189,12 +1189,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Initialise allowance workspace as part of HR payroll load.
     // =========================================================
     await refreshEmployeeWorkspace();
-
-    // BEXHR PHASE 4.5B - COMPENSATION GOVERNANCE ENFORCEMENT
-    // Load the tenant's fail-closed employee governance classification before
-    // any salary, allowance, deduction, override, or payroll maintenance starts.
-    await refreshEmployeeCompensationGovernance();
-
     // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
     // Load employee-submitted correction requests after employees are loaded,
     // so the queue can resolve employee names from state.employees.
@@ -3043,16 +3037,6 @@ const state = {
 
   payrollRecords: [],
   filteredPayrollRecords: [],
-
-  // BEXHR PHASE 4.5B - COMPENSATION GOVERNANCE ENFORCEMENT
-  // Tenant-scoped governance resolution is loaded from the protected Phase 4.5A RPC.
-  // Standard employees keep the existing HR/Payroll write path. Restricted employees
-  // may execute only an exact independently approved change, enforced again in PostgreSQL.
-  compensationGovernanceByEmployeeId: new Map(),
-  compensationGovernanceLoadError: null,
-  currentUserIsCompensationGovernanceAuthority: false,
-  pendingCompensationGovernanceApproval: null,
-
   // HR SAVE/EDIT BEHAVIOUR - PAYROLL RECORDS STEP 5
   // Tracks payroll records just submitted/updated in the current browser session
   // so they can be shown first after refresh.
@@ -4303,410 +4287,6 @@ function getSupabaseClient() {
   }
   return window.supabaseClient;
 }
-
-// BEXHR PHASE 4.5B - COMPENSATION GOVERNANCE ENFORCEMENT
-// Browser code is an operational UX layer only. PostgreSQL remains authoritative:
-// restricted compensation changes require an exact approval created by a different
-// active governance authority, and CONFIGURATION_ERROR always fails closed.
-async function refreshEmployeeCompensationGovernance() {
-  const supabase = getSupabaseClient();
-
-  state.compensationGovernanceByEmployeeId = new Map();
-  state.compensationGovernanceLoadError = null;
-  state.currentUserIsCompensationGovernanceAuthority = false;
-
-  const { data, error } = await supabase.rpc(
-    "hr_get_employee_compensation_governance",
-  );
-
-  if (error) {
-    state.compensationGovernanceLoadError = error;
-    console.error("Compensation governance could not be loaded:", error);
-    return false;
-  }
-
-  (Array.isArray(data) ? data : []).forEach((row) => {
-    const employeeId = String(row?.employee_id || "").trim();
-    if (!employeeId) return;
-
-    const governance = {
-      employeeId,
-      control: String(
-        row?.compensation_control || "CONFIGURATION_ERROR",
-      ).trim().toUpperCase(),
-      reason: String(row?.governance_reason || "UNRESOLVED").trim(),
-      positionId: String(row?.governance_position_id || "").trim() || null,
-      currentUserIsGovernanceAuthority:
-        row?.current_user_is_governance_authority === true,
-    };
-
-    state.compensationGovernanceByEmployeeId.set(employeeId, governance);
-
-    if (governance.currentUserIsGovernanceAuthority) {
-      state.currentUserIsCompensationGovernanceAuthority = true;
-    }
-  });
-
-  return true;
-}
-
-function getEmployeeCompensationGovernance(employeeId = "") {
-  const normalizedEmployeeId = String(employeeId || "").trim();
-
-  if (!normalizedEmployeeId) {
-    return {
-      employeeId: "",
-      control: "CONFIGURATION_ERROR",
-      reason: "EMPLOYEE_NOT_RESOLVED",
-      positionId: null,
-      currentUserIsGovernanceAuthority:
-        state.currentUserIsCompensationGovernanceAuthority === true,
-    };
-  }
-
-  const governance = state.compensationGovernanceByEmployeeId.get(
-    normalizedEmployeeId,
-  );
-
-  if (governance) return governance;
-
-  return {
-    employeeId: normalizedEmployeeId,
-    control: "CONFIGURATION_ERROR",
-    reason: state.compensationGovernanceLoadError
-      ? "GOVERNANCE_STATE_NOT_LOADED"
-      : "EMPLOYEE_GOVERNANCE_NOT_RESOLVED",
-    positionId: null,
-    currentUserIsGovernanceAuthority:
-      state.currentUserIsCompensationGovernanceAuthority === true,
-  };
-}
-
-function getPayrollMasterEmployeeIdForGovernance(payrollMasterRecordId = "") {
-  const masterId = String(payrollMasterRecordId || "").trim();
-  if (!masterId) return "";
-
-  const master = (Array.isArray(state.payrollMasterRecords)
-    ? state.payrollMasterRecords
-    : []
-  ).find((record) => String(record?.id || "").trim() === masterId);
-
-  return String(master?.employee_id || master?.employees?.id || "").trim();
-}
-
-function buildCompensationGovernanceChangeContext({
-  targetType = "",
-  operation = "INSERT",
-  targetRecordId = null,
-  payload = {},
-  employeeId = "",
-  label = "Compensation change",
-} = {}) {
-  const normalizedTargetType = String(targetType || "").trim().toUpperCase();
-  const normalizedOperation = String(operation || "INSERT").trim().toUpperCase();
-  const safePayload = payload && typeof payload === "object" ? payload : {};
-
-  let resolvedEmployeeId = String(
-    employeeId || safePayload.employee_id || "",
-  ).trim();
-
-  if (!resolvedEmployeeId) {
-    resolvedEmployeeId = getPayrollMasterEmployeeIdForGovernance(
-      safePayload.payroll_master_record_id,
-    );
-  }
-
-  return {
-    employeeId: resolvedEmployeeId,
-    targetType: normalizedTargetType,
-    operation: normalizedOperation,
-    targetRecordId: String(targetRecordId || "").trim() || null,
-    payload: safePayload,
-    label: String(label || "Compensation change").trim(),
-    governance: getEmployeeCompensationGovernance(resolvedEmployeeId),
-  };
-}
-
-function preflightCompensationGovernanceChange(context = null) {
-  const governance = context?.governance;
-
-  if (!context || !governance) {
-    showPageAlert(
-      "danger",
-      "Compensation governance could not be resolved for this change. No compensation data was changed.",
-    );
-    return false;
-  }
-
-  if (governance.control === "CONFIGURATION_ERROR") {
-    showPageAlert(
-      "danger",
-      `Compensation governance is not fully configured for this employee (<strong>${escapeHtml(
-        governance.reason || "UNRESOLVED",
-      )}</strong>). The change was blocked until Company Administration resolves the governance configuration.`,
-    );
-
-    showDashboardToast(
-      "danger",
-      "Compensation change blocked",
-      "Governance configuration must be resolved before compensation can be changed.",
-    );
-
-    return false;
-  }
-
-  if (!["STANDARD_HR", "GOVERNANCE_RESTRICTED"].includes(governance.control)) {
-    showPageAlert(
-      "danger",
-      "Compensation governance returned an unsupported control state. The change was blocked.",
-    );
-    return false;
-  }
-
-  return true;
-}
-
-function preflightCompensationGovernanceChanges(contexts = []) {
-  return (Array.isArray(contexts) ? contexts : []).every((context) =>
-    preflightCompensationGovernanceChange(context),
-  );
-}
-
-function getCompensationGovernanceErrorMessage(error) {
-  return String(error?.message || error || "").trim();
-}
-
-function isCompensationGovernanceError(error) {
-  return getCompensationGovernanceErrorMessage(error).includes("BEXHR_GOVERNANCE_");
-}
-
-function buildGovernanceApprovalReference(context = {}, index = 0) {
-  const employee = (Array.isArray(state.employees) ? state.employees : []).find(
-    (record) =>
-      String(record?.id || "").trim() === String(context.employeeId || "").trim(),
-  );
-
-  const employeeToken = String(
-    employee?.employee_number || context.employeeId || "EMPLOYEE",
-  )
-    .trim()
-    .replace(/[^A-Za-z0-9_-]+/g, "-")
-    .slice(-24);
-
-  const targetToken = String(context.targetType || "COMP")
-    .replace(/^PAYROLL_/, "")
-    .replace(/[^A-Z0-9]+/g, "-")
-    .slice(0, 24);
-
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[-:TZ.]/g, "")
-    .slice(0, 14);
-
-  return `GOV-${targetToken}-${employeeToken}-${timestamp}-${index + 1}`;
-}
-
-function showRestrictedCompensationGovernanceMessage(contexts = []) {
-  const restrictedContexts = (Array.isArray(contexts) ? contexts : [contexts])
-    .filter(Boolean)
-    .filter(
-      (context) => context?.governance?.control === "GOVERNANCE_RESTRICTED",
-    );
-
-  state.pendingCompensationGovernanceApproval = restrictedContexts;
-
-  const count = restrictedContexts.length || 1;
-  const requestAction = restrictedContexts.length
-    ? `
-      <div class="mt-3">
-        <button
-          class="btn btn-sm btn-outline-primary"
-          id="requestPendingCompensationGovernanceBtn"
-          type="button"
-          onclick="window.hrRequestPendingCompensationGovernanceChange()"
-        >
-          <i class="bi bi-send-check me-2" aria-hidden="true"></i>
-          Request independent approval
-        </button>
-      </div>
-    `
-    : "";
-
-  showPageAlert(
-    "warning",
-    `${
-      count > 1
-        ? `${count} restricted payroll changes require`
-        : "This restricted compensation change requires"
-    } exact independent governance approval before HR/Payroll can execute it. No compensation data was changed. Submit the exact proposed values for independent review, then repeat the same save after approval.${requestAction}`,
-  );
-
-  showDashboardToast(
-    "warning",
-    "Independent approval required",
-    "Restricted compensation was not changed.",
-  );
-}
-
-function handleCompensationGovernanceWriteFailure(error, contexts = []) {
-  if (!isCompensationGovernanceError(error)) return false;
-
-  const message = getCompensationGovernanceErrorMessage(error);
-  const contextList = (Array.isArray(contexts) ? contexts : [contexts]).filter(Boolean);
-
-  if (message.includes("BEXHR_GOVERNANCE_RESTRICTED")) {
-    showRestrictedCompensationGovernanceMessage(contextList);
-    return true;
-  }
-
-  state.pendingCompensationGovernanceApproval = null;
-
-  if (message.includes("BEXHR_GOVERNANCE_CONFIGURATION_ERROR")) {
-    showPageAlert(
-      "danger",
-      "Compensation governance is unresolved for this employee. The database blocked the change until Company Administration fixes the governance configuration.",
-    );
-    showDashboardToast(
-      "danger",
-      "Governance configuration required",
-      "No compensation data was changed.",
-    );
-    return true;
-  }
-
-  if (message.includes("BEXHR_GOVERNANCE_EXECUTION_ROLE_REQUIRED")) {
-    showPageAlert(
-      "warning",
-      "This restricted compensation change has governance controls. Only an active HR/Payroll user may execute an independently approved change.",
-    );
-    return true;
-  }
-
-  if (message.includes("BEXHR_GOVERNANCE_APPROVAL_ALREADY_USED")) {
-    showPageAlert(
-      "warning",
-      "The matching governance approval has already been consumed. A fresh independent approval is required before retrying this compensation change.",
-    );
-    return true;
-  }
-
-  if (message.includes("BEXHR_GOVERNANCE_TENANT_MISMATCH")) {
-    showPageAlert(
-      "danger",
-      "The compensation change does not belong to the signed-in company workspace and was blocked.",
-    );
-    return true;
-  }
-
-  showPageAlert(
-    "danger",
-    "The compensation governance control blocked this change. No compensation data was changed.",
-  );
-  return true;
-}
-
-async function requestPendingCompensationGovernanceChange() {
-  const pending = Array.isArray(state.pendingCompensationGovernanceApproval)
-    ? state.pendingCompensationGovernanceApproval.filter(Boolean)
-    : [];
-
-  if (!pending.length) {
-    showPageAlert(
-      "warning",
-      "There is no pending restricted compensation change to submit for approval.",
-    );
-    return;
-  }
-
-  const button = document.getElementById("requestPendingCompensationGovernanceBtn");
-  const originalHtml = button?.innerHTML || "";
-
-  if (button) {
-    button.disabled = true;
-    button.innerHTML = `
-      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-      Submitting request...
-    `;
-  }
-
-  try {
-    const supabase = getSupabaseClient();
-    let requestedCount = 0;
-    let alreadyRequestedCount = 0;
-    let alreadyApprovedCount = 0;
-
-    for (let index = 0; index < pending.length; index += 1) {
-      const context = pending[index];
-      const { data, error } = await supabase.rpc(
-        "request_compensation_governance_approval",
-        {
-          p_employee_id: context.employeeId,
-          p_target_type: context.targetType,
-          p_operation: context.operation,
-          p_target_record_id: context.targetRecordId,
-          p_payload: context.payload,
-          p_request_reference: buildGovernanceApprovalReference(context, index),
-          p_notes: `Requested from BexHR for ${context.label}.`,
-        },
-      );
-
-      if (error) throw error;
-
-      const status = String(data?.status || "").trim().toUpperCase();
-
-      if (status === "APPROVED") {
-        alreadyApprovedCount += 1;
-      } else if (status === "REQUESTED") {
-        if (data?.createdNew === true) {
-          requestedCount += 1;
-        } else {
-          alreadyRequestedCount += 1;
-        }
-      }
-    }
-
-    state.pendingCompensationGovernanceApproval = null;
-
-    const summaryParts = [];
-    if (requestedCount) summaryParts.push(`${requestedCount} request(s) queued`);
-    if (alreadyRequestedCount) summaryParts.push(`${alreadyRequestedCount} already pending`);
-    if (alreadyApprovedCount) summaryParts.push(`${alreadyApprovedCount} already approved`);
-
-    showPageAlert(
-      alreadyApprovedCount && !requestedCount && !alreadyRequestedCount
-        ? "success"
-        : "info",
-      `${summaryParts.join("; ") || "The restricted change was submitted for independent review"}. ${
-        alreadyApprovedCount
-          ? "Repeat the exact save to execute any already-approved values."
-          : "An independent governance authority must approve the exact values before HR/Payroll can execute them."
-      }`,
-    );
-
-    showDashboardToast(
-      "info",
-      "Governance request recorded",
-      "The restricted values remain unchanged until independent approval and HR/Payroll execution.",
-    );
-  } catch (error) {
-    console.error("Error requesting compensation governance approval:", error);
-
-    showPageAlert(
-      "danger",
-      error?.message ||
-        "The governance approval request could not be recorded. No compensation data was changed.",
-    );
-  } finally {
-    if (button) {
-      button.disabled = false;
-      button.innerHTML = originalHtml;
-    }
-  }
-}
-
-window.hrRequestPendingCompensationGovernanceChange = async () => {
-  await requestPendingCompensationGovernanceChange();
-};
 
 // HRP-80 - TENANT DATA SEGMENTATION - STEP 7C
 // Read the logged-in user's validated tenant context from local storage.
@@ -9279,18 +8859,6 @@ async function handlePayrollOtherDeductionSave() {
     "",
   ).trim();
 
-  const governanceContext = buildCompensationGovernanceChangeContext({
-    targetType: "PAYROLL_OTHER_DEDUCTION",
-    operation: editingId ? "UPDATE" : "INSERT",
-    targetRecordId: editingId || null,
-    payload,
-    label: "Other Deduction",
-  });
-
-  if (!preflightCompensationGovernanceChange(governanceContext)) {
-    return;
-  }
-
   try {
     setPayrollOtherDeductionSaveLoading(true);
     await waitForNextPaint();
@@ -9381,10 +8949,6 @@ async function handlePayrollOtherDeductionSave() {
     }, 250);
   } catch (error) {
     console.error("Error saving other deduction:", error);
-
-    if (handleCompensationGovernanceWriteFailure(error, governanceContext)) {
-      return;
-    }
 
     const message = String(error.message || "").toLowerCase();
 
@@ -10724,18 +10288,6 @@ async function handlePayrollEmployeeOverrideSave() {
     "",
   ).trim();
 
-  const governanceContext = buildCompensationGovernanceChangeContext({
-    targetType: "PAYROLL_EMPLOYEE_OVERRIDE",
-    operation: editingId ? "UPDATE" : "INSERT",
-    targetRecordId: editingId || null,
-    payload,
-    label: "Employee Payroll Override",
-  });
-
-  if (!preflightCompensationGovernanceChange(governanceContext)) {
-    return;
-  }
-
   try {
     setPayrollEmployeeOverrideSaveLoading(true);
     await waitForNextPaint();
@@ -10831,10 +10383,6 @@ async function handlePayrollEmployeeOverrideSave() {
     }, 250);
   } catch (error) {
     console.error("Error saving employee payroll override:", error);
-
-    if (handleCompensationGovernanceWriteFailure(error, governanceContext)) {
-      return;
-    }
 
     const message = String(error.message || "").toLowerCase();
 
@@ -21192,18 +20740,6 @@ async function handlePayrollMasterSave() {
   // A deliberate "Create New Version" workflow can be added separately later.
   const payload = buildPayrollMasterPayload(isEditMode);
 
-  const governanceContext = buildCompensationGovernanceChangeContext({
-    targetType: "PAYROLL_MASTER_RECORD",
-    operation: isEditMode ? "UPDATE" : "INSERT",
-    targetRecordId: editingId || null,
-    payload,
-    label: "Employee Salary Setup",
-  });
-
-  if (!preflightCompensationGovernanceChange(governanceContext)) {
-    return;
-  }
-
   try {
     setPayrollMasterSaveLoading(true, isEditMode);
 
@@ -21260,10 +20796,6 @@ async function handlePayrollMasterSave() {
     }, 250);
   } catch (error) {
     console.error("Error saving payroll master record:", error);
-
-    if (handleCompensationGovernanceWriteFailure(error, governanceContext)) {
-      return;
-    }
 
     // Surface unique index conflicts in business-friendly language.
     if (
@@ -22496,18 +22028,6 @@ async function handlePayrollStatutorySave() {
   const isEditMode = Boolean(editingId);
   const payload = buildPayrollStatutoryPayload(isEditMode);
 
-  const governanceContext = buildCompensationGovernanceChangeContext({
-    targetType: "PAYROLL_STATUTORY_DEDUCTION",
-    operation: isEditMode ? "UPDATE" : "INSERT",
-    targetRecordId: editingId || null,
-    payload,
-    label: "Statutory Deduction",
-  });
-
-  if (!preflightCompensationGovernanceChange(governanceContext)) {
-    return;
-  }
-
   try {
     setPayrollStatutorySaveLoading(true);
     await waitForNextPaint();
@@ -22573,10 +22093,6 @@ async function handlePayrollStatutorySave() {
     );
   } catch (error) {
     console.error("Error saving statutory deduction:", error);
-
-    if (handleCompensationGovernanceWriteFailure(error, governanceContext)) {
-      return;
-    }
 
     showPageAlert(
       "danger",
@@ -23655,18 +23171,6 @@ async function handlePayrollAllowanceSave() {
   const isEditMode = Boolean(editingId);
   const payload = buildPayrollAllowancePayload(isEditMode);
 
-  const governanceContext = buildCompensationGovernanceChangeContext({
-    targetType: "PAYROLL_ALLOWANCE_COMPONENT",
-    operation: isEditMode ? "UPDATE" : "INSERT",
-    targetRecordId: editingId || null,
-    payload,
-    label: "Allowance Component",
-  });
-
-  if (!preflightCompensationGovernanceChange(governanceContext)) {
-    return;
-  }
-
   try {
     setPayrollAllowanceSaveLoading(true, isEditMode);
 
@@ -23734,10 +23238,6 @@ async function handlePayrollAllowanceSave() {
     }, 250);
   } catch (error) {
     console.error("Error saving allowance component:", error);
-
-    if (handleCompensationGovernanceWriteFailure(error, governanceContext)) {
-      return;
-    }
 
     if (
       String(error.message || "").toLowerCase().includes("uq_payroll_allowance_master_type_effective_date") ||
@@ -46792,8 +46292,6 @@ async function handleBatchPayrollSubmit() {
     return;
   }
 
-  let batchGovernanceContexts = [];
-
   try {
     setBatchPayrollSubmitLoading(true);
 
@@ -46805,20 +46303,6 @@ async function handleBatchPayrollSubmit() {
     const batchPayload = preparedRows.map((preparedRow) =>
       buildBatchPayrollRecordPayload(preparedRow, payrollBatchReference),
     );
-
-    batchGovernanceContexts = batchPayload.map((row) =>
-      buildCompensationGovernanceChangeContext({
-        targetType: "PAYROLL_RECORD",
-        operation: "INSERT",
-        payload: row,
-        employeeId: row.employee_id,
-        label: "Batch Payroll Record",
-      }),
-    );
-
-    if (!preflightCompensationGovernanceChanges(batchGovernanceContexts)) {
-      return;
-    }
 
     const supabase = getSupabaseClient();
 
@@ -46869,10 +46353,6 @@ async function handleBatchPayrollSubmit() {
     scrollToPayrollRecordsAfterSubmit();
   } catch (error) {
     console.error("Error submitting batch payroll:", error);
-
-    if (handleCompensationGovernanceWriteFailure(error, batchGovernanceContexts)) {
-      return;
-    }
 
     showPageAlert(
       "danger",
@@ -46942,9 +46422,6 @@ async function handlePayrollSave() {
   }
 
   let payrollPayload = null;
-  let payrollGovernanceContext = null;
-  let payrollGovernanceContexts = [];
-
   try {
     setPayrollSaveLoading(true, isEditMode);
 
@@ -46979,20 +46456,6 @@ async function handlePayrollSave() {
         ...payrollPayload,
         employee_id: employeeId,
       }));
-
-      payrollGovernanceContexts = batchPayload.map((row) =>
-        buildCompensationGovernanceChangeContext({
-          targetType: "PAYROLL_RECORD",
-          operation: "INSERT",
-          payload: row,
-          employeeId: row.employee_id,
-          label: "Payroll Record",
-        }),
-      );
-
-      if (!preflightCompensationGovernanceChanges(payrollGovernanceContexts)) {
-        return;
-      }
 
       response = await supabase
         .from("payroll_records")
@@ -47046,19 +46509,6 @@ async function handlePayrollSave() {
       // After batch submit, move HR to Payroll Records to confirm created records.
       scrollToPayrollRecordsAfterSubmit();
 
-      return;
-    }
-
-    payrollGovernanceContext = buildCompensationGovernanceChangeContext({
-      targetType: "PAYROLL_RECORD",
-      operation: isEditMode ? "UPDATE" : "INSERT",
-      targetRecordId: editingId || null,
-      payload: payrollPayload,
-      employeeId: payrollPayload.employee_id,
-      label: "Payroll Record",
-    });
-
-    if (!preflightCompensationGovernanceChange(payrollGovernanceContext)) {
       return;
     }
 
@@ -47116,19 +46566,6 @@ async function handlePayrollSave() {
     scrollToPayrollRecordsAfterSubmit();
   } catch (error) {
     console.error("Error saving payroll record:", error);
-
-    const governanceFailureContexts = payrollGovernanceContexts.length
-      ? payrollGovernanceContexts
-      : payrollGovernanceContext;
-
-    if (
-      handleCompensationGovernanceWriteFailure(
-        error,
-        governanceFailureContexts,
-      )
-    ) {
-      return;
-    }
 
     showPageAlert(
       "danger",
