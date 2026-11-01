@@ -1949,9 +1949,9 @@ async function showManagerPerformanceAppraisalChooser() {
 
   const managerButton = createWorkspaceCard({
     mode: "primary-manager",
-    title: "Manager Reviews",
+    title: "Manager PA Workspace",
     description:
-      "Review appraisal work for employees assigned to your primary or secondary reporting scope.",
+      "Open team goals and progress, plus any appraisal reviews specifically assigned to you.",
     iconClass: "bi bi-people",
     extraClass: "manager-pa-chooser-card--manager",
   });
