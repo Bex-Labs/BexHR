@@ -1579,7 +1579,7 @@ const HR_NAVIGATION_TASKS = Object.freeze({
   "review.leave": { workspace: "review", group: "reviews", title: "Leave Decision Oversight", subtitle: "Review recorded manager leave decisions and audit history.", module: "Reviews" },
   "payroll.overview": { workspace: "payroll", group: "payroll", title: "Payroll Overview", subtitle: "Review payroll totals, status, and current processing readiness.", module: "Payroll" },
   "payroll.salary": { workspace: "payroll", group: "payroll", title: "Salary Setup", subtitle: "Maintain employee salary setup records before payroll processing.", module: "Payroll" },
-  "payroll.run": { workspace: "payroll", group: "payroll", title: "Run Payroll", subtitle: "Prepare and finalise payroll using the existing payroll workflow.", module: "Payroll" },
+  "payroll.run": { workspace: "payroll", group: "payroll", title: "Run Payroll", subtitle: "Select employees and a pay period, review BexHR calculations, then finalise payroll.", module: "Payroll" },
   "payroll.records": { workspace: "payroll", group: "payroll", title: "Payroll Records", subtitle: "Review submitted and finalised payroll records.", module: "Payroll" },
   "payroll.delivery": { workspace: "payroll", group: "payroll", title: "Payslips / Delivery", subtitle: "Review payslip delivery status and authorised payroll records.", module: "Payroll" },
   "setup.organization": { workspace: "setup", group: "setup", title: "Organization", subtitle: "Maintain organization details, departments, job titles, and audit context.", module: "Setup" },
@@ -4263,7 +4263,7 @@ function applyPayrollMasterAccessControls() {
         "btn btn-secondary dashboard-action-btn";
       state.dom.savePayrollMasterBtn.innerHTML = `
         <i class="bi bi-lock me-2"></i>
-        <span id="savePayrollMasterBtnText">Payroll Master Read Only</span>
+        <span id="savePayrollMasterBtnText">Salary Setup Read Only</span>
       `;
       state.dom.savePayrollMasterBtnText =
         document.getElementById("savePayrollMasterBtnText");
@@ -8063,7 +8063,7 @@ function populatePayrollOtherDeductionMasterOptions() {
     option.textContent =
       `${fullName}${gradeSegment} — ` +
       `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${record.salary_effective_date || "--"} — ` +
+      `${formatPayrollMasterStartMonth(record.salary_effective_date)} — ` +
       `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
@@ -8984,6 +8984,7 @@ function applyPhase4dPayrollRulesUxCleanup() {
   ensurePhase4MonthPlaceholderStyles();
 
   const monthFields = [
+    state.dom.payrollMasterEffectiveDate,
     state.dom.payrollAllowanceEffectiveDate,
     state.dom.payrollStatutoryEffectiveDate,
     state.dom.payrollOtherDeductionStartDate,
@@ -9506,9 +9507,9 @@ function populatePayrollEmployeeOverrideMasterOptions() {
         ? ` — ${gradeLabel}`
         : "";
 
-    const effectiveDate = String(
+    const startMonth = formatPayrollMasterStartMonth(
       record.salary_effective_date || "",
-    ).trim();
+    );
 
     const versionLabel =
       getPayrollMasterVersionLabel(record);
@@ -9521,7 +9522,7 @@ function populatePayrollEmployeeOverrideMasterOptions() {
     option.textContent =
       `${fullName}${gradeSegment} — ` +
       `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${effectiveDate || "--"} — ${versionLabel}`;
+      `${startMonth || "--"} — ${versionLabel}`;
 
     select.appendChild(option);
   });
@@ -20425,11 +20426,9 @@ async function loadPayrollGradeLevels() {
   const supabase = getSupabaseClient();
   const tenantId = getRequiredTenantIdForHrEmployeeData();
 
-  // ALPATECH TENANT-SPECIFIC RULES - STEP 3
-  // Payroll Grade / Level records must be tenant-aware.
-  // First load grades owned by the active company/tenant. This makes ALPATECH
-  // see only its ALPATECH grade structure without affecting Pinehearst, BEX,
-  // or any future company workspace.
+  // Phase 3R-B / locked Phase 2 tenant rule:
+  // Staff Levels are company-owned configuration. Never fall back to global
+  // legacy levels because that leaks one structure into another tenant.
   const tenantGradeQuery = await supabase
     .from("payroll_grade_levels")
     .select("id, tenant_id, grade_code, grade_name, grade_description, salary_band_min, salary_band_max, status")
@@ -20440,77 +20439,193 @@ async function loadPayrollGradeLevels() {
   if (tenantGradeQuery.error) {
     throw new Error(
       tenantGradeQuery.error.message ||
-      "Tenant payroll grade levels could not be loaded.",
+      "Tenant staff levels could not be loaded.",
     );
   }
 
-  const tenantGrades = Array.isArray(tenantGradeQuery.data)
+  state.payrollGradeLevels = Array.isArray(tenantGradeQuery.data)
     ? tenantGradeQuery.data
     : [];
 
-  if (tenantGrades.length) {
-    state.payrollGradeLevels = tenantGrades;
-    populatePayrollGradeLevelOptions();
-    return;
-  }
+  // Phase 3R-D: merge company-owned learned suggestions after tenant levels load.
+  await loadPayrollStaffLevelSuggestions();
 
-  // ALPATECH TENANT-SPECIFIC RULES - STEP 3
-  // Fallback for existing companies that still use legacy/global grade records.
-  // This preserves current behaviour for non-ALPATECH tenants until their own
-  // tenant-owned grade structures are configured.
-  const legacyGradeQuery = await supabase
-    .from("payroll_grade_levels")
-    .select("id, tenant_id, grade_code, grade_name, grade_description, salary_band_min, salary_band_max, status")
-    .is("tenant_id", null)
-    .eq("status", "Active")
-    .order("grade_code", { ascending: true });
+  populatePayrollGradeLevelOptions();
+}
 
-  if (legacyGradeQuery.error) {
+// =========================================================
+// PHASE 3R-D - TENANT STAFF LEVEL SUGGESTION LEARNING
+//
+// Custom Staff Level text is learned only after a successful Salary Setup save.
+// Learned suggestions live in a dedicated tenant-owned table; they never become
+// cross-tenant/global fallbacks and they do not alter payroll_grade_levels.
+// =========================================================
+const PAYROLL_STAFF_LEVEL_SUGGESTIONS_TABLE =
+  "payroll_staff_level_suggestions";
+
+function normalizePayrollStaffLevelSuggestion(value = "") {
+  return normalizeText(String(value || "").trim());
+}
+
+function dedupePayrollStaffLevelLabels(labels = []) {
+  const seen = new Set();
+  const result = [];
+
+  labels.forEach((label) => {
+    const cleanLabel = String(label || "").trim();
+    const key = normalizePayrollStaffLevelSuggestion(cleanLabel);
+    if (!cleanLabel || !key || seen.has(key)) return;
+
+    seen.add(key);
+    result.push(cleanLabel);
+  });
+
+  return result;
+}
+
+function isDefaultPayrollStaffLevelSuggestion(label = "") {
+  const key = normalizePayrollStaffLevelSuggestion(label);
+  return BEXHR_DEFAULT_STAFF_LEVEL_SUGGESTIONS.some(
+    (suggestion) => normalizePayrollStaffLevelSuggestion(suggestion) === key,
+  );
+}
+
+async function loadPayrollStaffLevelSuggestions() {
+  const supabase = getSupabaseClient();
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+
+  const { data, error } = await supabase
+    .from(PAYROLL_STAFF_LEVEL_SUGGESTIONS_TABLE)
+    .select("id, tenant_id, label, created_at")
+    .eq("tenant_id", tenantId)
+    .order("label", { ascending: true });
+
+  if (error) {
+    const code = String(error.code || "").trim();
+    const message = String(error.message || "");
+
+    // Keep Phase 3R-C usable if code is loaded before the migration is applied.
+    // The migration gate below must still be completed before Phase 3R-D closes.
+    if (
+      code === "42P01" ||
+      message.toLowerCase().includes(PAYROLL_STAFF_LEVEL_SUGGESTIONS_TABLE)
+    ) {
+      console.warn(
+        "Phase 3R-D suggestion table is not available yet; using tenant levels + built-in suggestions only.",
+      );
+      state.payrollStaffLevelSuggestions = [];
+      return state.payrollStaffLevelSuggestions;
+    }
+
     throw new Error(
-      legacyGradeQuery.error.message ||
-      "Legacy payroll grade levels could not be loaded.",
+      error.message || "Tenant Staff Level suggestions could not be loaded.",
     );
   }
 
-  state.payrollGradeLevels = Array.isArray(legacyGradeQuery.data)
-    ? legacyGradeQuery.data
-    : [];
+  state.payrollStaffLevelSuggestions = Array.isArray(data) ? data : [];
+  return state.payrollStaffLevelSuggestions;
+}
 
-  populatePayrollGradeLevelOptions();
+async function learnPayrollStaffLevelSuggestion(label = "") {
+  const cleanLabel = String(label || "").trim();
+  if (!cleanLabel) return null;
+
+  // Existing tenant configuration and built-in GL suggestions do not need a
+  // learned row. Only genuinely new custom text is remembered.
+  if (
+    findTenantPayrollGradeLevelByInput(cleanLabel) ||
+    isDefaultPayrollStaffLevelSuggestion(cleanLabel)
+  ) {
+    return null;
+  }
+
+  const normalizedLabel = normalizePayrollStaffLevelSuggestion(cleanLabel);
+  const existingSuggestion = (state.payrollStaffLevelSuggestions || []).find(
+    (suggestion) =>
+      normalizePayrollStaffLevelSuggestion(suggestion?.label) === normalizedLabel,
+  );
+
+  if (existingSuggestion) return existingSuggestion;
+
+  const supabase = getSupabaseClient();
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+  const { data, error } = await supabase
+    .from(PAYROLL_STAFF_LEVEL_SUGGESTIONS_TABLE)
+    .insert([{ tenant_id: tenantId, label: cleanLabel }])
+    .select("id, tenant_id, label, created_at")
+    .maybeSingle();
+
+  if (error) {
+    // Database uniqueness also protects concurrent duplicate saves.
+    if (String(error.code || "") === "23505") {
+      await loadPayrollStaffLevelSuggestions();
+      return (state.payrollStaffLevelSuggestions || []).find(
+        (suggestion) =>
+          normalizePayrollStaffLevelSuggestion(suggestion?.label) === normalizedLabel,
+      ) || null;
+    }
+
+    throw error;
+  }
+
+  if (data) {
+    state.payrollStaffLevelSuggestions = dedupePayrollStaffLevelLabels([
+      ...(state.payrollStaffLevelSuggestions || []).map((suggestion) => suggestion?.label),
+      data.label,
+    ]).map((suggestionLabel) => ({ label: suggestionLabel }));
+  }
+
+  return data || null;
 }
 
 // DESCRIPTION ITEM 3 - STEP 2A-4
 // Populate Payroll Master Data dropdown from active setup records.
 // The dropdown stores the grade id, while the visible label is kept as a
 // snapshot when saving payroll master records.
-function populatePayrollGradeLevelOptions(preferredGradeLevelId = "") {
-  const select = state.dom.payrollMasterGradeLevel;
-  if (!select) return;
+function populatePayrollGradeLevelOptions(
+  preferredGradeLevelId = "",
+  preferredGradeLevelLabel = "",
+) {
+  const input = state.dom.payrollMasterGradeLevel;
+  const datalist = document.getElementById("payrollMasterGradeLevelSuggestions");
+  if (!input || !datalist) return;
 
-  const currentValue = String(preferredGradeLevelId || select.value || "").trim();
+  const tenantLabels = (state.payrollGradeLevels || [])
+    .map((grade) => getPayrollGradeLevelLabel(grade))
+    .filter(Boolean);
 
-  select.innerHTML = `<option value="">Select payroll grade / level</option>`;
+  const learnedLabels = (state.payrollStaffLevelSuggestions || [])
+    .map((suggestion) => String(suggestion?.label || "").trim())
+    .filter(Boolean);
 
-  state.payrollGradeLevels.forEach((grade) => {
-    const label = getPayrollGradeLevelLabel(grade);
+  const suggestionLabels = dedupePayrollStaffLevelLabels([
+    ...tenantLabels,
+    ...learnedLabels,
+    ...BEXHR_DEFAULT_STAFF_LEVEL_SUGGESTIONS,
+  ]);
+
+  datalist.innerHTML = "";
+  suggestionLabels.forEach((label) => {
     const option = document.createElement("option");
-
-    option.value = grade.id;
-    option.textContent = label;
-    option.dataset.gradeLabel = label;
-
-    select.appendChild(option);
+    option.value = label;
+    datalist.appendChild(option);
   });
 
-  if (currentValue) {
-    const stillExists = Array.from(select.options).some(
-      (option) => option.value === currentValue,
-    );
+  const preferredTenantGrade = (state.payrollGradeLevels || []).find(
+    (grade) => String(grade.id || "").trim() === String(preferredGradeLevelId || "").trim(),
+  );
 
-    if (stillExists) {
-      select.value = currentValue;
-    }
-  }
+  const currentValue = String(input.value || "").trim();
+  input.value =
+    getPayrollGradeLevelLabel(preferredTenantGrade || {}) ||
+    String(preferredGradeLevelLabel || "").trim() ||
+    (findTenantPayrollGradeLevelByInput(currentValue)
+      ? getPayrollGradeLevelLabel(findTenantPayrollGradeLevelByInput(currentValue))
+      : currentValue);
+
+  input.placeholder = state.payrollGradeLevels.length
+    ? "Type or choose staff level (optional)"
+    : "Type staff level or choose a suggestion (optional)";
 }
 
 // DESCRIPTION ITEM 3 - STEP 2A-4
@@ -20530,8 +20645,7 @@ async function refreshPayrollMasterWorkspace() {
   // Rebuild employee dropdown from the employee list already loaded for HR.
   populatePayrollMasterEmployeeOptions();
 
-  // DESCRIPTION ITEM 3 - STEP 2A-4
-  // Rebuild Payroll Grade / Level dropdown from controlled setup records.
+  // Phase 3R-C: Staff Level stays editable while tenant-owned levels remain linkable.
   populatePayrollGradeLevelOptions();
 
   // Load payroll master records from the database, then apply client-side search.
@@ -20541,6 +20655,78 @@ async function refreshPayrollMasterWorkspace() {
   // Salary setup create/update/refresh has now replaced the in-memory records.
   // Refresh the visible metrics immediately without a full browser reload.
   renderHrModernOverview();
+}
+
+const BEXHR_PHASE3R_SALARY_SETUP_V1 = true;
+
+function normalizePayrollMasterStartMonth(value = "") {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})-(\d{2})/);
+  if (!match) return "";
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || month < 1 || month > 12) return "";
+
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function payrollMasterStartMonthToEffectiveDate(value = "") {
+  const month = normalizePayrollMasterStartMonth(value);
+  return month ? `${month}-01` : null;
+}
+
+function formatPayrollMasterStartMonth(value = "") {
+  const month = normalizePayrollMasterStartMonth(value);
+  return month ? formatPayrollSetupMonthForDisplay(month) : "--";
+}
+
+function formatPayrollMasterPayBasis(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized || normalized === "monthly") return "Monthly salary";
+  return formatStatusLabel(value || "--");
+}
+
+function getCurrentPayrollMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+const BEXHR_PHASE3RB_SALARY_SETUP_V1 = true;
+const BEXHR_PHASE3RC_SALARY_SETUP_V1 = true;
+
+const BEXHR_DEFAULT_STAFF_LEVEL_SUGGESTIONS = Object.freeze([
+  "GL-01 — Entry / Junior Level",
+  "GL-02 — Officer / Associate Level",
+  "GL-03 — Senior Officer Level",
+  "GL-04 — Lead / Supervisor Level",
+  "GL-05 — Manager Level",
+  "GL-06 — Senior Manager Level",
+  "GL-07 — Executive Level",
+]);
+
+function findTenantPayrollGradeLevelByInput(value = "") {
+  const raw = String(value || "").trim();
+  const key = normalizeText(raw);
+  if (!raw) return null;
+
+  return (state.payrollGradeLevels || []).find((grade) => {
+    return (
+      String(grade.id || "").trim() === raw ||
+      normalizeText(getPayrollGradeLevelLabel(grade)) === key
+    );
+  }) || null;
+}
+
+function getPayrollMasterStaffLevelSelection() {
+  const raw = String(state.dom.payrollMasterGradeLevel?.value || "").trim();
+  if (!raw) return { id: null, label: null };
+
+  const tenantGrade = findTenantPayrollGradeLevelByInput(raw);
+  return {
+    id: tenantGrade?.id || null,
+    label: tenantGrade ? getPayrollGradeLevelLabel(tenantGrade) : raw,
+  };
 }
 
 function clearPayrollMasterValidationState() {
@@ -20568,24 +20754,20 @@ function findPayrollMasterEffectiveDateConflict(
   excludedPayrollMasterId = "",
 ) {
   const employeeKey = String(employeeId || "").trim();
-  const dateKey = String(effectiveDate || "").trim();
+  const monthKey = normalizePayrollMasterStartMonth(effectiveDate);
   const excludedId = String(excludedPayrollMasterId || "").trim();
 
-  if (!employeeKey || !dateKey) return null;
+  if (!employeeKey || !monthKey) return null;
 
-  // PAYROLL MASTER CORRECTION VS VERSIONING - STEP 1
-  // Block duplicate Employee Salary Setup rows for the same employee/effective date,
-  // but allow the currently edited row to keep its own effective date.
+  // Phase 3R: Salary Setup is month-based. Prevent duplicate rows for the
+  // same employee + start month even when legacy rows store another day.
   return (state.payrollMasterRecords || []).find((record) => {
     const recordId = String(record.id || "").trim();
-
-    if (excludedId && recordId === excludedId) {
-      return false;
-    }
+    if (excludedId && recordId === excludedId) return false;
 
     return (
       String(record.employee_id || "").trim() === employeeKey &&
-      String(record.salary_effective_date || "").trim() === dateKey
+      normalizePayrollMasterStartMonth(record.salary_effective_date) === monthKey
     );
   }) || null;
 }
@@ -20594,7 +20776,7 @@ function showPayrollMasterValidationIssues(issues = []) {
   if (!issues.length) return;
 
   const messageHtml = `
-    <div class="fw-semibold mb-2">Payroll Master Data could not be saved.</div>
+    <div class="fw-semibold mb-2">Employee Salary Setup could not be saved.</div>
     <ul class="mb-0 ps-3">
       ${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}
     </ul>
@@ -20622,18 +20804,19 @@ function validatePayrollMasterForm() {
 
   const employeeId = String(state.dom.payrollMasterEmployeeId?.value || "").trim();
   const salaryText = String(state.dom.payrollMasterBasicSalary?.value || "").trim();
-  const effectiveDate = String(state.dom.payrollMasterEffectiveDate?.value || "").trim();
-  const payCycle = String(state.dom.payrollMasterPayCycle?.value || "").trim();
-  const status = String(state.dom.payrollMasterStatus?.value || "").trim();
+  const startMonth = normalizePayrollMasterStartMonth(
+    state.dom.payrollMasterEffectiveDate?.value || "",
+  );
+  const effectiveDate = payrollMasterStartMonthToEffectiveDate(startMonth);
+  const payBasis = String(state.dom.payrollMasterPayCycle?.value || "").trim();
 
   if (!employeeId) {
-    issues.push("Select an employee for the payroll master record.");
+    issues.push("Select an employee for Salary Setup.");
     markPayrollMasterFieldInvalid(state.dom.payrollMasterEmployeeId);
     firstInvalidField ||= state.dom.payrollMasterEmployeeId;
   }
 
   const salaryValue = Number(salaryText);
-
   if (!salaryText) {
     issues.push("Enter the agreed monthly gross salary.");
     markPayrollMasterFieldInvalid(state.dom.payrollMasterBasicSalary);
@@ -20644,43 +20827,32 @@ function validatePayrollMasterForm() {
     firstInvalidField ||= state.dom.payrollMasterBasicSalary;
   }
 
-  if (!effectiveDate) {
-    issues.push("Select the salary effective date.");
-    markPayrollMasterFieldInvalid(state.dom.payrollMasterEffectiveDate);
-    firstInvalidField ||= state.dom.payrollMasterEffectiveDate;
-  } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
-    issues.push("Salary effective date is not valid.");
+  if (!startMonth || !effectiveDate) {
+    issues.push("Select the month this salary setup starts from.");
     markPayrollMasterFieldInvalid(state.dom.payrollMasterEffectiveDate);
     firstInvalidField ||= state.dom.payrollMasterEffectiveDate;
   }
 
-  if (!payCycle) {
-    issues.push("Select the pay cycle.");
+  if (!payBasis) {
+    issues.push("Select the pay basis.");
     markPayrollMasterFieldInvalid(state.dom.payrollMasterPayCycle);
     firstInvalidField ||= state.dom.payrollMasterPayCycle;
-  } else if (payCycle !== "Monthly") {
-    issues.push("Only Monthly pay cycle is currently supported.");
+  } else if (payBasis !== "Monthly") {
+    issues.push("Only Monthly salary pay basis is currently supported.");
     markPayrollMasterFieldInvalid(state.dom.payrollMasterPayCycle);
     firstInvalidField ||= state.dom.payrollMasterPayCycle;
-  }
-
-  if (!status) {
-    issues.push("Select the payroll status.");
-    markPayrollMasterFieldInvalid(state.dom.payrollMasterStatus);
-    firstInvalidField ||= state.dom.payrollMasterStatus;
   }
 
   const editingId = String(state.dom.editingPayrollMasterId?.value || "").trim();
-
   const conflict = findPayrollMasterEffectiveDateConflict(
     employeeId,
-    effectiveDate,
+    effectiveDate || startMonth,
     editingId,
   );
 
   if (conflict) {
     issues.push(
-      `A Payroll Master record already exists for this employee on ${formatDate(effectiveDate)}.`,
+      `A Salary Setup already exists for this employee for ${formatPayrollMasterStartMonth(effectiveDate || startMonth)}.`,
     );
     markPayrollMasterFieldInvalid(state.dom.payrollMasterEmployeeId);
     markPayrollMasterFieldInvalid(state.dom.payrollMasterEffectiveDate);
@@ -20689,11 +20861,7 @@ function validatePayrollMasterForm() {
 
   if (issues.length) {
     showPayrollMasterValidationIssues(issues);
-
-    if (firstInvalidField?.focus) {
-      firstInvalidField.focus();
-    }
-
+    if (firstInvalidField?.focus) firstInvalidField.focus();
     return false;
   }
 
@@ -20701,40 +20869,33 @@ function validatePayrollMasterForm() {
 }
 
 function buildPayrollMasterPayload(isEditMode = false) {
-  // DESCRIPTION ITEM 3 - STEP 2A-4
-  // Save both the connected grade id and a readable text snapshot.
-  // The id provides the real relationship; the text keeps records readable
-  // if a grade label changes later.
-  const selectedGradeOption =
-    state.dom.payrollMasterGradeLevel?.selectedOptions?.[0] || null;
+  const staffLevelSelection = getPayrollMasterStaffLevelSelection();
 
-  const selectedGradeLevelId =
-    String(state.dom.payrollMasterGradeLevel?.value || "").trim();
+  const startMonth = normalizePayrollMasterStartMonth(
+    state.dom.payrollMasterEffectiveDate?.value || "",
+  );
 
-  const selectedGradeLevelLabel =
-    String(selectedGradeOption?.dataset?.gradeLabel || "").trim();
+  const preservedLegacyStatus = isEditMode
+    ? String(
+      state.currentEditingPayrollMaster?.payroll_status ||
+      state.dom.payrollMasterStatus?.value ||
+      "Active",
+    ).trim() || "Active"
+    : "Active";
 
   const payload = {
     employee_id: String(state.dom.payrollMasterEmployeeId?.value || "").trim(),
-
-    // DESCRIPTION ITEM 3 - STEP 2B DUPLICATE CLEANUP
-    // Keep only one payroll_grade_level assignment.
-    // payroll_grade_level_id stores the real connected dropdown id.
-    // payroll_grade_level stores the readable label snapshot, not the id.
-    payroll_grade_level_id: selectedGradeLevelId || null,
-    payroll_grade_level: selectedGradeLevelLabel || null,
-
+    payroll_grade_level_id: staffLevelSelection.id,
+    payroll_grade_level: staffLevelSelection.label,
     basic_salary: Number(state.dom.payrollMasterBasicSalary?.value || 0),
-    salary_effective_date: state.dom.payrollMasterEffectiveDate?.value || null,
-    pay_cycle: String(state.dom.payrollMasterPayCycle?.value || "").trim(),
-    payroll_status: String(state.dom.payrollMasterStatus?.value || "Active").trim(),
+    // Existing storage remains date-based for compatibility; normal UX is month-based.
+    salary_effective_date: payrollMasterStartMonthToEffectiveDate(startMonth),
+    pay_cycle: String(state.dom.payrollMasterPayCycle?.value || "Monthly").trim() || "Monthly",
+    payroll_status: preservedLegacyStatus,
     notes: String(state.dom.payrollMasterNotes?.value || "").trim() || null,
-
-    // Always update the modifier on save.
     updated_by: state.currentUser?.id || null,
   };
 
-  // Only stamp created_by when creating a new record.
   if (!isEditMode) {
     payload.created_by = state.currentUser?.id || null;
   }
@@ -20755,7 +20916,7 @@ function setPayrollMasterSaveLoading(isLoading, isEditMode = false) {
 
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-${isEditMode ? "Saving New Version..." : "Saving Salary Setup..."}
+${isEditMode ? "Updating Salary Setup..." : "Saving Salary Setup..."}
     `;
   } else if (button.dataset.originalHtml) {
     button.innerHTML = button.dataset.originalHtml;
@@ -20814,16 +20975,32 @@ async function handlePayrollMasterSave() {
       throw response.error;
     }
 
+    // Phase 3R-D: only a successfully saved Salary Setup can teach a new
+    // tenant-owned suggestion. Suggestion-learning failure must never roll back
+    // or misreport the salary save that has already succeeded.
+    const savedStaffLevelLabel = String(
+      state.dom.payrollMasterGradeLevel?.value || "",
+    ).trim();
+
+    try {
+      await learnPayrollStaffLevelSuggestion(savedStaffLevelLabel);
+    } catch (suggestionError) {
+      console.warn(
+        "Salary Setup saved, but its custom Staff Level suggestion could not be learned:",
+        suggestionError,
+      );
+    }
+
     await refreshPayrollMasterWorkspace();
 
     showPageAlert(
       "success",
       isEditMode
-        ? `Employee Salary Setup was corrected successfully for effective date <strong>${escapeHtml(
-          payload.salary_effective_date,
+        ? `Employee Salary Setup was updated successfully from <strong>${escapeHtml(
+          formatPayrollMasterStartMonth(payload.salary_effective_date),
         )}</strong>.`
-        : `Employee Salary Setup was created successfully for effective date <strong>${escapeHtml(
-          payload.salary_effective_date,
+        : `Employee Salary Setup was created successfully from <strong>${escapeHtml(
+          formatPayrollMasterStartMonth(payload.salary_effective_date),
         )}</strong>.`,
     );
 
@@ -20853,7 +21030,7 @@ async function handlePayrollMasterSave() {
     ) {
       showPageAlert(
         "warning",
-        "An Employee Salary Setup already exists for this employee on the selected salary effective date.",
+        "An Employee Salary Setup already exists for this employee in the selected start month.",
       );
 
       // DESCRIPTION ITEM 6 - STEP 6A
@@ -20862,7 +21039,7 @@ async function handlePayrollMasterSave() {
       showDashboardToast(
         "warning",
         "Duplicate Employee Salary Setup",
-        "This employee already has an Employee Salary Setup for the selected effective date. Use a different effective date for the new version.",
+        "This employee already has an Employee Salary Setup for the selected start month. Choose a different month or edit the existing setup.",
       );
 
       return;
@@ -20892,6 +21069,11 @@ function resetPayrollMasterForm() {
 
   state.dom.payrollMasterCreateForm.reset();
   state.currentEditingPayrollMaster = null;
+  if (state.dom.payrollMasterEffectiveDate) {
+    state.dom.payrollMasterEffectiveDate.dispatchEvent(
+      new Event("input", { bubbles: true }),
+    );
+  }
 
   // DESCRIPTION ITEM 3 - STEP 2A-2
   // Include Payroll Grade / Level in reset cleanup.
@@ -21036,24 +21218,23 @@ function renderPayrollMasterRecords(records) {
     </div>
   </td>
 
-  <td class="text-nowrap" data-label="Grade / Level">
+  <td class="text-nowrap" data-label="Staff Level">
     <!-- DESCRIPTION ITEM 3 - STEP 2A-2
          Show the saved Payroll Grade / Level so HR can confirm
          which deduction rule group this payroll master record belongs to. -->
 ${escapeHtml(getPayrollMasterGradeDisplay(record))}
   </td>
 
-  <td class="text-nowrap" data-label="Salary">
+  <td class="text-nowrap" data-label="Monthly Gross Salary">
     ${formatCurrency(record.basic_salary, "NGN")}
   </td>
 
-  <td class="text-nowrap" data-label="Effective">${formatDate(record.salary_effective_date)}</td>
+  <td class="text-nowrap" data-label="Starts From">${escapeHtml(formatPayrollMasterStartMonth(record.salary_effective_date))}</td>
 
-  <td data-label="Cycle">${escapeHtml(record.pay_cycle || "--")}</td>
+  <td data-label="Pay Basis">${escapeHtml(formatPayrollMasterPayBasis(record.pay_cycle))}</td>
 
-<td class="bexhr-status-cell" data-label="Status">
+<td class="bexhr-status-cell" data-label="Lifecycle">
         <div class="bexhr-status-stack">
-          ${renderBexhrStatusPill(formatStatusLabel(record.payroll_status))}
           ${renderBexhrStatusPill(getPayrollMasterVersionLabel(record))}
         </div>
       </td>
@@ -21072,8 +21253,8 @@ ${escapeHtml(getPayrollMasterGradeDisplay(record))}
         <button
           type="button"
           class="btn btn-sm btn-outline-primary"
-          title="Create new payroll master version"
-          aria-label="Create new payroll master version"
+          title="Edit salary setup"
+          aria-label="Edit salary setup"
           onclick="window.hrEditPayrollMasterRecord('${String(record.id).replaceAll("'", "\\'")}')"
         >
           <i class="bi bi-pencil-square"></i>
@@ -21126,7 +21307,10 @@ function startPayrollMasterEdit(payrollMasterId) {
   // Edit mode selects the connected grade id, not the old text value.
   // This keeps Payroll Master Data properly linked to payroll_grade_levels.
   if (state.dom.payrollMasterGradeLevel) {
-    populatePayrollGradeLevelOptions(record.payroll_grade_level_id || "");
+    populatePayrollGradeLevelOptions(
+      record.payroll_grade_level_id || "",
+      record.payroll_grade_level || "",
+    );
   }
 
   if (state.dom.payrollMasterBasicSalary) {
@@ -21134,11 +21318,15 @@ function startPayrollMasterEdit(payrollMasterId) {
   }
 
   if (state.dom.payrollMasterEffectiveDate) {
-    state.dom.payrollMasterEffectiveDate.value = record.salary_effective_date || "";
+    const startMonth = normalizePayrollMasterStartMonth(record.salary_effective_date);
+    state.dom.payrollMasterEffectiveDate.value = startMonth;
+    state.dom.payrollMasterEffectiveDate.dispatchEvent(
+      new Event("input", { bubbles: true }),
+    );
   }
 
   if (state.dom.payrollMasterPayCycle) {
-    state.dom.payrollMasterPayCycle.value = record.pay_cycle || "";
+    state.dom.payrollMasterPayCycle.value = record.pay_cycle || "Monthly";
   }
 
   if (state.dom.payrollMasterStatus) {
@@ -21227,6 +21415,7 @@ function getBexhrStatusPresentation(status = "") {
     "required before submit",
     "returned",
     "scheduled",
+    "upcoming",
   ]);
 
   const dangerStates = new Set([
@@ -21267,6 +21456,8 @@ function getBexhrStatusPresentation(status = "") {
     rejected: "bi-x-circle-fill",
     returned: "bi-arrow-return-left",
     scheduled: "bi-calendar-event-fill",
+    upcoming: "bi-calendar-event-fill",
+    previous: "bi-clock-history",
     sent: "bi-envelope-check-fill",
   };
 
@@ -21300,60 +21491,45 @@ function renderBexhrStatusPill(status = "") {
 
 function getPayrollMasterVersionLabel(record = {}) {
   const employeeId = String(record.employee_id || "").trim();
-  const effectiveDate = String(
+  const startMonth = normalizePayrollMasterStartMonth(
     record.salary_effective_date || "",
-  ).trim();
+  );
+  const status = String(record.payroll_status || "").trim().toLowerCase();
 
-  const status = String(record.payroll_status || "")
-    .trim()
-    .toLowerCase();
-
-  if (status !== "active") {
-    return "Inactive";
+  // Phase 3R normal UX derives only Current / Upcoming / Previous.
+  // Legacy non-active rows remain preserved in storage but are not treated as current.
+  if (!employeeId || !startMonth || status !== "active") {
+    return "Previous";
   }
 
-  if (!employeeId || !effectiveDate) {
-    return "Historical";
+  const currentMonth = getCurrentPayrollMonthKey();
+  if (startMonth > currentMonth) {
+    return "Upcoming";
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-
-  if (effectiveDate > today) {
-    return "Scheduled";
-  }
-
-  const latestEffectiveActiveDate = (state.payrollMasterRecords || [])
+  const latestActiveStartMonth = (state.payrollMasterRecords || [])
     .filter((item) => {
-      const itemEmployeeId = String(
-        item.employee_id || "",
-      ).trim();
-
-      const itemStatus = String(
-        item.payroll_status || "",
-      )
-        .trim()
-        .toLowerCase();
-
-      const itemEffectiveDate = String(
+      const itemEmployeeId = String(item.employee_id || "").trim();
+      const itemStatus = String(item.payroll_status || "").trim().toLowerCase();
+      const itemStartMonth = normalizePayrollMasterStartMonth(
         item.salary_effective_date || "",
-      ).trim();
+      );
 
       return (
         itemEmployeeId === employeeId &&
         itemStatus === "active" &&
-        itemEffectiveDate &&
-        itemEffectiveDate <= today
+        itemStartMonth &&
+        itemStartMonth <= currentMonth
       );
     })
-    .map((item) =>
-      String(item.salary_effective_date || "").trim(),
-    )
+    .map((item) => normalizePayrollMasterStartMonth(item.salary_effective_date))
+    .filter(Boolean)
     .sort()
     .at(-1) || "";
 
-  return effectiveDate === latestEffectiveActiveDate
+  return startMonth === latestActiveStartMonth
     ? "Current"
-    : "Historical";
+    : "Previous";
 }
 
 // =========================================================
@@ -21408,7 +21584,7 @@ function populatePayrollAllowanceMasterOptions() {
     option.textContent =
       `${fullName}${gradeSegment} — ` +
       `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${record.salary_effective_date || "--"} — ` +
+      `${formatPayrollMasterStartMonth(record.salary_effective_date)} — ` +
       `${getPayrollMasterVersionLabel(record)}`;
     select.appendChild(option);
   });
@@ -21485,7 +21661,7 @@ function populatePayrollStatutoryMasterOptions() {
     option.textContent =
       `${fullName}${gradeSegment} — ` +
       `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${record.salary_effective_date || "--"} — ` +
+      `${formatPayrollMasterStartMonth(record.salary_effective_date)} — ` +
       `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
@@ -22720,11 +22896,9 @@ function applyPayrollMasterSearch() {
         record.basic_salary,
         formatCurrency(record.basic_salary, "NGN"),
 
-        record.salary_effective_date,
-        formatDate(record.salary_effective_date),
-
-        record.pay_cycle,
-        record.payroll_status,
+        formatPayrollMasterStartMonth(record.salary_effective_date),
+        formatPayrollMasterPayBasis(record.pay_cycle),
+        getPayrollMasterVersionLabel(record),
 
         record.updated_at,
         formatDate(record.updated_at || record.created_at),
@@ -22854,31 +23028,22 @@ function getPayrollMasterRecordEffectiveDateValidationIssue(
   childSetupLabel = "setup",
 ) {
   const masterId = String(payrollMasterRecordId || "").trim();
-  const effectiveDate = String(childEffectiveDate || "").trim();
+  const childStartMonth = normalizePayrollMasterStartMonth(childEffectiveDate);
 
-  if (!masterId || !effectiveDate) return "";
+  if (!masterId || !childStartMonth) return "";
 
   const payrollMaster = getPayrollMasterRecordById(masterId);
-
   if (!payrollMaster) {
     return "The selected Employee Salary Setup record could not be found. Refresh the page and try again.";
   }
 
-  const masterEffectiveTime = new Date(
+  const masterStartMonth = normalizePayrollMasterStartMonth(
     payrollMaster.salary_effective_date || "",
-  ).getTime();
+  );
+  if (!masterStartMonth) return "";
 
-  const childEffectiveTime = new Date(effectiveDate).getTime();
-
-  if (
-    !Number.isFinite(masterEffectiveTime) ||
-    !Number.isFinite(childEffectiveTime)
-  ) {
-    return "";
-  }
-
-  if (childEffectiveTime < masterEffectiveTime) {
-    return `This ${childSetupLabel} starts before the selected Employee Salary Setup. Select the matching salary setup record for ${formatDate(effectiveDate)}.`;
+  if (childStartMonth < masterStartMonth) {
+    return `This ${childSetupLabel} starts before the selected Employee Salary Setup. Choose a start month from ${formatPayrollMasterStartMonth(payrollMaster.salary_effective_date)} onward.`;
   }
 
   return "";
@@ -23525,7 +23690,7 @@ function renderPayrollAllowanceRecords(records) {
     const allowanceStatus = formatStatusLabel(
       record.allowance_status || "Inactive",
     );
-    const masterEffectiveDate = formatDate(
+    const masterStartMonth = formatPayrollMasterStartMonth(
       record.payroll_master_effective_date,
     );
     const allowanceStartMonth = formatPayrollAllowanceStartMonth(record.effective_date);
@@ -23552,7 +23717,7 @@ function renderPayrollAllowanceRecords(records) {
 
                 <span class="hr-allowance-record-context">
                   <i class="bi bi-calendar2-check" aria-hidden="true"></i>
-                  Payroll profile effective ${escapeHtml(masterEffectiveDate)}
+                  Salary setup from ${escapeHtml(masterStartMonth)}
                 </span>
               </div>
             </div>
@@ -26266,7 +26431,7 @@ ${!isActiveEmployee
 
   ${activePayrollMaster?.salary_effective_date
         ? `<div class="text-secondary small mt-1 text-nowrap">
-          Effective ${formatDate(activePayrollMaster.salary_effective_date)}
+          Starts ${escapeHtml(formatPayrollMasterStartMonth(activePayrollMaster.salary_effective_date))}
         </div>`
         : ""
       }
@@ -33316,17 +33481,15 @@ function setCreatePayrollBatchModeUi() {
 function setCreatePayrollManualModeUi() {
   state.dom.payrollCreateForm?.classList.remove("d-none");
   setPayrollRecordToolbarForManualMode();
+  setPhase6PayrollCompatibilityVisibility(false);
 
-  // PAYROLL WORKFLOW UX REPAIR - STEP 5D
-  // Manual mode is now single-employee payroll finalisation.
-  // Do not revert the card back to old "Create Payroll Record" wording.
   if (state.dom.payrollFormTitle) {
-    state.dom.payrollFormTitle.textContent = "Finalise Payroll & Payslips";
+    state.dom.payrollFormTitle.textContent = "Run Payroll";
   }
 
   if (state.dom.payrollFormSubtext) {
     state.dom.payrollFormSubtext.textContent =
-      "Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.";
+      "Choose one employee or all active employees, select the pay period, review BexHR calculations, then finalise.";
   }
 
   if (state.dom.payrollFormModeBadge) {
@@ -34153,11 +34316,23 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
   const incrementAmount = 0;
   const newBaseSalary = baseSalary;
 
-  const basicPay = newBaseSalary * 0.5;
-  const housingAllowance = newBaseSalary * 0.1;
-  const transportAllowance = newBaseSalary * 0.1;
-  const utilityAllowance = newBaseSalary * 0.1;
-  const otherAllowance = (newBaseSalary * 0.2) + adjustmentAmounts.otherEarning;
+  const usesAlpatechStructuredSplit = isCurrentTenantAlpatechWorkspace();
+
+  const basicPay = usesAlpatechStructuredSplit
+    ? newBaseSalary * 0.5
+    : newBaseSalary;
+  const housingAllowance = usesAlpatechStructuredSplit
+    ? newBaseSalary * 0.1
+    : 0;
+  const transportAllowance = usesAlpatechStructuredSplit
+    ? newBaseSalary * 0.1
+    : 0;
+  const utilityAllowance = usesAlpatechStructuredSplit
+    ? newBaseSalary * 0.1
+    : 0;
+  const otherAllowance =
+    (usesAlpatechStructuredSplit ? newBaseSalary * 0.2 : 0) +
+    adjustmentAmounts.otherEarning;
 
   const bonus = Number(extras.bonus || 0) + adjustmentAmounts.bonus;
   const overtime = Number(extras.overtime || 0) + adjustmentAmounts.overtime;
@@ -34353,11 +34528,11 @@ function buildBatchPayrollRecordPayload(preparedRow, payrollReference = "") {
     merit_increment: preparedRow.merit_increment ?? null,
     new_base_salary: preparedRow.regular_new_base_salary,
 
-    basic_percent: 0.5,
-    housing_percent: 0.1,
-    transport_percent: 0.1,
-    utility_percent: 0.1,
-    other_allowance_percent: 0.2,
+    basic_percent: isCurrentTenantAlpatechWorkspace() ? 0.5 : null,
+    housing_percent: isCurrentTenantAlpatechWorkspace() ? 0.1 : null,
+    transport_percent: isCurrentTenantAlpatechWorkspace() ? 0.1 : null,
+    utility_percent: isCurrentTenantAlpatechWorkspace() ? 0.1 : null,
+    other_allowance_percent: isCurrentTenantAlpatechWorkspace() ? 0.2 : null,
 
     base_salary: preparedRow.base_salary,
     basic_pay: preparedRow.basic_pay,
@@ -40640,30 +40815,20 @@ function updatePayrollMasterSaveButtonState() {
     setPrimaryActionButtonReadyState(state.dom.savePayrollMasterBtn, false);
     return;
   }
-  // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-  // Grade removed from Payroll Master readiness.
-  // Payroll Master can save when employee, salary, effective date,
-  // pay cycle, and status are complete.
+
   const hasEmployee = Boolean(String(state.dom.payrollMasterEmployeeId?.value || "").trim());
   const hasSalary = Boolean(String(state.dom.payrollMasterBasicSalary?.value || "").trim());
-  const hasEffectiveDate = Boolean(String(state.dom.payrollMasterEffectiveDate?.value || "").trim());
-  const hasPayCycle = Boolean(String(state.dom.payrollMasterPayCycle?.value || "").trim());
-  const hasStatus = Boolean(String(state.dom.payrollMasterStatus?.value || "").trim());
+  const hasStartMonth = Boolean(
+    normalizePayrollMasterStartMonth(state.dom.payrollMasterEffectiveDate?.value || ""),
+  );
+  const hasPayBasis = String(state.dom.payrollMasterPayCycle?.value || "").trim() === "Monthly";
 
   const salaryValue = Number(state.dom.payrollMasterBasicSalary?.value || 0);
-  // DESCRIPTION ITEM 8 - STEP 8A
-  // Payroll Master salary setup must be a real positive salary value.
-  // Zero salary is not valid for an active monthly payroll master record.
   const salaryIsValid = Number.isFinite(salaryValue) && salaryValue > 0;
 
   setPrimaryActionButtonReadyState(
     state.dom.savePayrollMasterBtn,
-    hasEmployee &&
-    hasSalary &&
-    salaryIsValid &&
-    hasEffectiveDate &&
-    hasPayCycle &&
-    hasStatus,
+    hasEmployee && hasSalary && salaryIsValid && hasStartMonth && hasPayBasis,
   );
 }
 
@@ -43245,6 +43410,8 @@ function populatePayrollFormFromEmployeeMaster(employeeId) {
   const effectivePayrollProfile =
     getEffectivePayrollMasterRecordForEmployeeAtDate(employeeKey, payrollDate);
 
+  clearPhase6CreateDerivedPayrollFields();
+
   if (state.dom.payrollBaseSalary) {
     state.dom.payrollBaseSalary.value =
       effectivePayrollProfile?.basic_salary ?? "";
@@ -43310,6 +43477,7 @@ function resetPayrollForm() {
 
   state.dom.payrollCreateForm.reset();
   state.currentEditingPayroll = null;
+  setPhase6PayrollCompatibilityVisibility(false);
 
   // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - FINAL CLEANUP
   // Explicitly clear payroll form fields after create/update so the form
@@ -43388,12 +43556,12 @@ function resetPayrollForm() {
   }
 
   if (state.dom.payrollFormTitle) {
-    state.dom.payrollFormTitle.textContent = "Create Payroll Record";
+    state.dom.payrollFormTitle.textContent = "Run Payroll";
   }
 
   if (state.dom.payrollFormSubtext) {
     state.dom.payrollFormSubtext.textContent =
-      "Enter payroll details for an employee. Core monetary fields use NGN.";
+      "Choose an employee and pay period, review the BexHR calculation, then finalise.";
   }
 
   if (state.dom.payrollFormModeBadge) {
@@ -43411,7 +43579,7 @@ function resetPayrollForm() {
     // Keep the default payroll action aligned with the new story wording.
     state.dom.savePayrollBtn.innerHTML = `
     <i class="bi bi-send-check me-2"></i>
-    <span id="savePayrollBtnText">Finalise Single Employee</span>
+    <span id="savePayrollBtnText">Finalise Payroll</span>
   `;
     state.dom.savePayrollBtnText = document.getElementById("savePayrollBtnText");
   }
@@ -44210,6 +44378,7 @@ async function startPayrollEdit(payrollId) {
   }
 
   state.currentEditingPayroll = payrollRecord;
+  setPhase6PayrollCompatibilityVisibility(true);
 
   if (state.dom.editingPayrollId) state.dom.editingPayrollId.value = payrollRecord.id || "";
   if (state.dom.payrollEmployeeId) state.dom.payrollEmployeeId.value = payrollRecord.employee_id || "";
@@ -45893,7 +46062,9 @@ function calculateCurrentVisibleBhtForPension() {
 // - Employer Pension must not be assumed unless active Statutory Deduction setup exists.
 // - Employer Pension is a company cost and still must not reduce employee Net Pay.
 function refreshRegularPayrollBaselineDeductionsFromCurrentValues() {
-  if (!isAlpatechRegularSelected()) {
+  // PAYE remains a Regular payroll calculation for every tenant.
+  // Only the Alpatech earnings split is tenant-specific.
+  if (getSelectedPayrollModel() !== "REGULAR") {
     return;
   }
 
@@ -46131,10 +46302,15 @@ function updatePayrollModelUi(source = "group") {
   }
 
   const isRegular = getSelectedPayrollModel() === "REGULAR";
+  const isEditMode = Boolean(
+    String(state.dom.editingPayrollId?.value || state.currentEditingPayroll?.id || "").trim(),
+  );
 
+  // BEXHR PHASE 6: technical earnings/deduction fields stay hidden during
+  // normal Run Payroll. Historical Edit Payroll Record can still reveal them.
   state.dom.alpatechRegularRev2Section?.classList.toggle(
     "d-none",
-    !isRegular,
+    !isRegular || !isEditMode,
   );
 
   syncPayrollCalculatedFieldLockState();
@@ -46143,7 +46319,10 @@ function updatePayrollModelUi(source = "group") {
 }
 
 function isAlpatechRegularSelected() {
-  return getSelectedPayrollModel() === "REGULAR";
+  return (
+    isCurrentTenantAlpatechWorkspace() &&
+    getSelectedPayrollModel() === "REGULAR"
+  );
 }
 
 function percentInputToDecimal(value, fallbackPercent = 0) {
@@ -46316,7 +46495,7 @@ function updatePayrollPayeTaxNote() {
   const grossPay = calculatePayrollGrossPay();
 
   const shouldShowExemptionNote =
-    isAlpatechRegularSelected() &&
+    getSelectedPayrollModel() === "REGULAR" &&
     Number.isFinite(payeValue) &&
     payeValue === 0 &&
     grossPay > 0;
@@ -46384,6 +46563,156 @@ function applyAlpatechRegularRev2DerivedFields() {
   );
 }
 
+
+// BEXHR PHASE 6 - SIMPLIFIED RUN PAYROLL
+// Compatibility controls remain available to historical Edit Payroll Record,
+// but normal create mode shows only business inputs and a calculated preview.
+function setPhase6PayrollCompatibilityVisibility(isVisible = false) {
+  document
+    .querySelectorAll(".phase6-payroll-compat-field, .phase6-payroll-reference")
+    .forEach((element) => {
+      element.classList.toggle("d-none", !isVisible);
+    });
+}
+
+function renderPhase6RunPayrollPreview() {
+  const hasEmployee = Boolean(
+    String(state.dom.payrollEmployeeId?.value || "").trim(),
+  );
+
+  const setMoney = (elementId, field) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    if (!hasEmployee) {
+      element.textContent = "--";
+      return;
+    }
+
+    const amount = Number(field?.value || 0);
+    element.textContent = Number.isFinite(amount)
+      ? formatCurrency(amount, "NGN")
+      : "--";
+  };
+
+  setMoney("phase6PreviewMonthlyGross", state.dom.payrollBaseSalary);
+  setMoney("phase6PreviewGrossPay", state.dom.payrollGrossPay);
+  setMoney("phase6PreviewPaye", state.dom.payrollPayeTax);
+  setMoney("phase6PreviewTotalDeductions", state.dom.payrollTotalDeductions);
+  setMoney("phase6PreviewNetPay", state.dom.payrollNetPay);
+}
+
+function clearPhase6CreateDerivedPayrollFields() {
+  if (String(state.dom.editingPayrollId?.value || "").trim()) return;
+
+  [
+    state.dom.payrollBasicPay,
+    state.dom.payrollHousingAllowance,
+    state.dom.payrollTransportAllowance,
+    state.dom.payrollUtilityAllowance,
+    state.dom.payrollMedicalAllowance,
+    state.dom.payrollOtherAllowance,
+    state.dom.payrollBonus,
+    state.dom.payrollOvertime,
+    state.dom.payrollLogisticsAllowance,
+    state.dom.payrollDataAirtimeAllowance,
+    state.dom.payrollGrossPay,
+    state.dom.payrollPayeTax,
+    state.dom.payrollWhtTax,
+    state.dom.payrollEmployeePension,
+    state.dom.payrollEmployerPension,
+    state.dom.payrollOtherDeductions,
+    state.dom.payrollTotalDeductions,
+    state.dom.payrollNetPay,
+  ].forEach((field) => setNumericFieldValue(field, 0));
+
+  if (state.dom.payrollOtherDeductions) {
+    state.dom.payrollOtherDeductions.dataset.systemOtherDeductionAmount = "0";
+  }
+}
+
+function applyGenericTenantGrossPayDerivedFields() {
+  if (
+    isCurrentTenantAlpatechWorkspace() ||
+    getSelectedPayrollModel() !== "REGULAR"
+  ) {
+    return;
+  }
+
+  const monthlyGrossSalary = toNullableNumber(
+    state.dom.payrollBaseSalary?.value,
+  );
+
+  // Generic tenants use the agreed Monthly Gross Salary directly instead of
+  // inheriting Alpatech's 50/10/10/10/20 structure.
+  setNumericFieldValue(state.dom.payrollBasicPay, monthlyGrossSalary);
+  setNumericFieldValue(state.dom.payrollHousingAllowance, 0);
+  setNumericFieldValue(state.dom.payrollTransportAllowance, 0);
+  setNumericFieldValue(state.dom.payrollUtilityAllowance, 0);
+  setNumericFieldValue(state.dom.payrollOtherAllowance, 0);
+  setNumericFieldValue(state.dom.regularBht, monthlyGrossSalary);
+
+  const activePayrollMaster = getCurrentManualPayrollMasterForOverride();
+  const payrollDate = getCurrentPayrollCalculationDate();
+  const allowances = getActiveManualPayrollAllowanceComponentsForMaster(
+    activePayrollMaster?.id || "",
+    payrollDate,
+  );
+
+  const setExtra = (field, amount) => {
+    setNumericFieldValue(field, Number(amount || 0));
+  };
+
+  setExtra(state.dom.payrollMedicalAllowance, allowances.medicalAllowance);
+  setExtra(state.dom.payrollBonus, allowances.bonus);
+  setExtra(state.dom.payrollOvertime, allowances.overtime);
+  setExtra(state.dom.payrollLogisticsAllowance, allowances.logisticsAllowance);
+  setExtra(state.dom.payrollDataAirtimeAllowance, allowances.dataAirtimeAllowance);
+}
+
+function getNextPhase6PayrollCycle(payCycle = "") {
+  const match = String(payCycle || "").trim().match(
+    /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})$/,
+  );
+
+  if (!match) return "";
+
+  const months = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+
+  const monthIndex = months.indexOf(match[1]);
+  const year = Number(match[2]);
+  if (monthIndex < 0 || !Number.isFinite(year)) return "";
+
+  const nextDate = new Date(year, monthIndex + 1, 1);
+  return months[nextDate.getMonth()] + " " + nextDate.getFullYear();
+}
+
+function advancePhase6RunPayrollPeriod(completedPayCycle = "") {
+  const nextPayCycle = getNextPhase6PayrollCycle(completedPayCycle);
+  if (!nextPayCycle) return;
+
+  const applyIfAvailable = (select) => {
+    if (!select) return false;
+    const exists = Array.from(select.options || []).some(
+      (option) => option.value === nextPayCycle,
+    );
+    if (!exists) return false;
+    select.value = nextPayCycle;
+    return true;
+  };
+
+  if (applyIfAvailable(state.dom.payrollPayCycle)) {
+    updatePayDateFromPayCycle();
+  }
+
+  if (applyIfAvailable(state.dom.batchPayrollPayCycle)) {
+    updateBatchPayDateFromPayCycle();
+  }
+}
+
 function recalculatePayrollFormTotals() {
   // PAYROLL WORKFLOW UX REPAIR - STEP 7
   // Single Employee Finalisation calculation order:
@@ -46413,17 +46742,17 @@ function recalculatePayrollFormTotals() {
   if (isAlpatechRegularSelected()) {
     applyAlpatechRegularRev2DerivedFields();
 
-    // PAYROLL WORKFLOW UX REPAIR - STEP 6
-    // Pull active earning setup rows into the form before final statutory
-    // and net pay calculations are performed.
-    // Do not replace a finalised historical snapshot with current allowance setup.
+    // Preserve Alpatech allowance-component behaviour inside the tenant fence.
     if (!isFinalisedCorrection) {
       applyActivePayrollAllowanceComponentsToPayrollForm();
     }
-
-    // PAYROLL WORKFLOW UX REPAIR - STEP 7
-    // Recalculate baseline PAYE and pensions after setup allowances are present.
-    // Phase 5: earnings are applied after setup, immediately before the final baseline/statutory pass.
+  } else if (
+    !isFinalisedCorrection &&
+    getSelectedPayrollModel() === "REGULAR"
+  ) {
+    // Generic tenants use Monthly Gross Salary directly; they do not inherit
+    // the Alpatech 50/10/10/10/20 calculation structure.
+    applyGenericTenantGrossPayDerivedFields();
   }
 
   // DESCRIPTION ITEM 4 - STEP 5 FIX
@@ -46461,6 +46790,7 @@ function recalculatePayrollFormTotals() {
 
   updatePayrollPayeTaxNote();
   syncPayrollCalculationValidity();
+  renderPhase6RunPayrollPreview();
   updatePayrollSubmitButtonState();
 }
 
@@ -46728,6 +47058,7 @@ function renderPayrollStructurePreview() {
 function buildRegularPayrollModelFields() {
   const regularPayrollStructureMetadata =
     getRegularPayrollStructureMetadata();
+  const usesAlpatechStructuredSplit = isCurrentTenantAlpatechWorkspace();
 
   return {
     payroll_model: "REGULAR",
@@ -46747,26 +47078,21 @@ function buildRegularPayrollModelFields() {
 
     new_base_salary: toNullableNumber(state.dom.regularNewBaseSalary?.value),
 
-    basic_percent: percentInputToDecimal(
-      state.dom.regularBasicPercent?.value,
-      50,
-    ),
-    housing_percent: percentInputToDecimal(
-      state.dom.regularHousingPercent?.value,
-      10,
-    ),
-    transport_percent: percentInputToDecimal(
-      state.dom.regularTransportPercent?.value,
-      10,
-    ),
-    utility_percent: percentInputToDecimal(
-      state.dom.regularUtilityPercent?.value,
-      10,
-    ),
-    other_allowance_percent: percentInputToDecimal(
-      state.dom.regularOtherAllowancePercent?.value,
-      20,
-    ),
+    basic_percent: usesAlpatechStructuredSplit
+      ? percentInputToDecimal(state.dom.regularBasicPercent?.value, 50)
+      : null,
+    housing_percent: usesAlpatechStructuredSplit
+      ? percentInputToDecimal(state.dom.regularHousingPercent?.value, 10)
+      : null,
+    transport_percent: usesAlpatechStructuredSplit
+      ? percentInputToDecimal(state.dom.regularTransportPercent?.value, 10)
+      : null,
+    utility_percent: usesAlpatechStructuredSplit
+      ? percentInputToDecimal(state.dom.regularUtilityPercent?.value, 10)
+      : null,
+    other_allowance_percent: usesAlpatechStructuredSplit
+      ? percentInputToDecimal(state.dom.regularOtherAllowancePercent?.value, 20)
+      : null,
 
     bht: toNullableNumber(state.dom.regularBht?.value),
     monthly_salary_plus_logistics: toNullableNumber(
@@ -46801,6 +47127,13 @@ function buildContractorPayrollModelFields() {
 }
 
 function buildPayrollPayload() {
+  const isEditMode = Boolean(
+    String(state.dom.editingPayrollId?.value || state.currentEditingPayroll?.id || "").trim(),
+  );
+  const shouldFinalise = isEditMode
+    ? Boolean(state.dom.payrollIsFinalised?.checked)
+    : true;
+
   const normalizedEmployeeGroup = normalizePayrollGroupForPayload(
     state.dom.payrollEmployeeGroup?.value || "",
   );
@@ -46872,10 +47205,11 @@ function buildPayrollPayload() {
     ...payrollModelFields,
 
     // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - STEP 2
-    // A submitted payroll should be stored as a completed/finalised payroll entry.
-    // Keep "Authorised" because this is the current valid status used by the app,
-    // while final completion is represented by is_finalised = true below.
-    status: "Authorised",
+    // Normal Run Payroll derives the workflow state. Historical Edit Payroll
+    // Record keeps compatibility with an already-saved status.
+    status: isEditMode
+      ? String(state.dom.payrollStatus?.value || "Authorised").trim() || "Authorised"
+      : "Authorised",
     // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1E
     // Save the generated or preserved payroll ID on the payroll record.
     payroll_reference: manualPayrollReference,
@@ -46931,7 +47265,7 @@ function buildPayrollPayload() {
     // Respect the Mark as Finalised checkbox.
     // Bank details no longer control payroll finalisation; they only affect
     // payment readiness and later bank/payment export checks.
-    is_finalised: Boolean(state.dom.payrollIsFinalised?.checked),
+    is_finalised: shouldFinalise,
     // DESCRIPTION ITEM 5 - STEP 5C
     // Keep manual payroll notes, but append a final override audit snapshot
     // when an active employee-specific override affected this payroll record.
@@ -46940,10 +47274,10 @@ function buildPayrollPayload() {
       employeeOverrideAuditSummary,
     ),
     processed_by: state.currentUser?.id || null,
-    approved_by: Boolean(state.dom.payrollIsFinalised?.checked)
+    approved_by: shouldFinalise
       ? state.currentUser?.id || null
       : null,
-    approved_at: Boolean(state.dom.payrollIsFinalised?.checked)
+    approved_at: shouldFinalise
       ? new Date().toISOString()
       : null,
   };
@@ -47175,6 +47509,7 @@ async function handleBatchPayrollSubmit() {
 
     syncSelectAllEmployeesForPayrollCheckbox();
     resetPayrollForm();
+    advancePhase6RunPayrollPeriod(payCycle);
 
     scrollToPayrollRecordsAfterSubmit();
   } catch (error) {
@@ -47250,6 +47585,30 @@ async function handlePayrollSave() {
   let payrollPayload = null;
   try {
     setPayrollSaveLoading(true, isEditMode);
+
+    // BEXHR PHASE 6: block accidental duplicate single-employee payroll for
+    // the same employee + pay period before a new record is inserted.
+    if (!isEditMode && selectedSingleEmployeeId) {
+      const selectedPayCycle = String(
+        state.dom.payrollPayCycle?.value || "",
+      ).trim();
+
+      const existingSinglePeriodRecords =
+        await getExistingBatchPayrollRecordsForPeriod(
+          selectedPayCycle,
+          [selectedSingleEmployeeId],
+        );
+
+      if (existingSinglePeriodRecords.length) {
+        const message = `Payroll already exists for this employee for <strong>${escapeHtml(
+          selectedPayCycle,
+        )}</strong>. Review the existing Payroll Record or choose the next pay period.`;
+
+        showPageAlert("warning", message);
+        showDashboardToast("warning", "Duplicate payroll blocked", message);
+        return;
+      }
+    }
 
     payrollPayload = buildPayrollPayload();
 
@@ -47414,7 +47773,12 @@ async function handlePayrollSave() {
         : "The payroll record was created successfully.",
     );
 
+    const completedPayCycle = String(payrollPayload.pay_cycle || "").trim();
     resetPayrollForm();
+
+    if (!isEditMode) {
+      advancePhase6RunPayrollPeriod(completedPayCycle);
+    }
 
     // SUBMIT PAYROLL - DESCRIPTION ITEM 2 - SCROLL FIX FINAL
     // After successful single payroll submit/update, move HR to Payroll Records.
@@ -47843,8 +48207,8 @@ function initHrSelfServiceOnFirstOpen(preferredSection = getPreferredHrSelfServi
     const employeeName = employeeLines[0] || "Employee";
     const gradeLevel = String(gradeCell.innerText || "--").trim();
     const salary = String(salaryCell.innerText || "--").trim();
-    const effectiveDate = String(effectiveCell.innerText || "--").trim();
-    const payCycle = String(cycleCell.innerText || "--").trim();
+    const startMonth = String(effectiveCell.innerText || "--").trim();
+    const payBasis = String(cycleCell.innerText || "--").trim();
     const updatedDate = String(updatedCell.innerText || "--").trim();
 
     const statusContent = document.createElement("div");
@@ -47893,9 +48257,9 @@ function initHrSelfServiceOnFirstOpen(preferredSection = getPreferredHrSelfServi
 
     const details = document.createElement("div");
     details.className = "hr-salary-record-details";
-    details.appendChild(createDetail("Salary", salary));
-    details.appendChild(createDetail("Effective date", effectiveDate));
-    details.appendChild(createDetail("Pay cycle", payCycle));
+    details.appendChild(createDetail("Monthly Gross Salary", salary));
+    details.appendChild(createDetail("Starts From", startMonth));
+    details.appendChild(createDetail("Pay Basis", payBasis));
     details.appendChild(createDetail("Last updated", updatedDate));
 
     article.appendChild(header);

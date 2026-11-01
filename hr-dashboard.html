@@ -4465,8 +4465,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                 </h2>
 
                 <p class="section-subtext mb-0">
-                  Set up each employee's monthly salary, pay cycle,
-                  effective date, and payroll status before running payroll.
+                  Set each employee's staff level, pay basis, monthly gross salary, and starting month.
                 </p>
               </div>
             </div>
@@ -4523,17 +4522,23 @@ Disable browser address autofill popup on HR employee address fields. -->
                      payroll master records continue to work safely. -->
                 <div class="col-md-6 col-xl-4">
                   <label for="payrollMasterGradeLevel" class="form-label fw-semibold">
-                    Payroll Grade / Level
+                    Staff Level
                   </label>
                   <!-- DESCRIPTION ITEM 3 - STEP 2A-4
      Payroll Grade / Level is now a controlled setup value.
      Keep the existing id so current JavaScript references remain stable,
      but change the field from free text to a connected dropdown. -->
-                  <select id="payrollMasterGradeLevel" class="form-select">
-                    <option value="">Select payroll grade / level</option>
-                  </select>
+                  <input
+                    type="text"
+                    id="payrollMasterGradeLevel"
+                    class="form-control"
+                    list="payrollMasterGradeLevelSuggestions"
+                    placeholder="Type or choose staff level (optional)"
+                    autocomplete="off"
+                  />
+                  <datalist id="payrollMasterGradeLevelSuggestions"></datalist>
                   <div class="form-text">
-                    Optional controlled payroll classification used for statutory deduction rule inheritance.
+                    Optional. Type your company staff level or choose a suggestion. Leave blank if your company does not use staff levels.
                   </div>
                 </div>
 
@@ -4557,24 +4562,25 @@ Disable browser address autofill popup on HR employee address fields. -->
 
                 <div class="col-md-6 col-xl-4">
                   <label for="payrollMasterEffectiveDate" class="form-label fw-semibold">
-                    Salary Effective Date <span class="text-danger">*</span>
+                    Starts From <span class="text-danger">*</span>
                   </label>
-                  <input type="date" id="payrollMasterEffectiveDate" class="form-control" required />
+                  <input type="month" id="payrollMasterEffectiveDate" class="form-control" required />
+                  <div class="form-text">Choose the month this salary setup begins. No exact day is required.</div>
                 </div>
 
                 <div class="col-md-6 col-xl-4">
                   <label for="payrollMasterPayCycle" class="form-label fw-semibold">
-                    Pay Cycle <span class="text-danger">*</span>
+                    Pay Basis <span class="text-danger">*</span>
                   </label>
                   <select id="payrollMasterPayCycle" class="form-select" required>
-                    <option value="">Select pay cycle</option>
-                    <option value="Monthly">Monthly</option>
+                    <option value="">Select pay basis</option>
+                    <option value="Monthly">Monthly salary</option>
                     <!-- <option value="Bi-Weekly">Bi-Weekly</option> -->
                     <!-- <option value="Weekly">Weekly</option> -->
                   </select>
                 </div>
 
-                <div class="col-md-6 col-xl-4">
+                <div class="col-md-6 col-xl-4 d-none" aria-hidden="true">
                   <label for="payrollMasterStatus" class="form-label fw-semibold">
                     Payroll Status <span class="text-danger">*</span>
                   </label>
@@ -4611,7 +4617,7 @@ Disable browser address autofill popup on HR employee address fields. -->
               <div>
                 <h3 class="h5 mb-1">Employee Salary Setup Records</h3>
                 <p class="section-subtext mb-0">
-                  Review and maintain employee salary setup records by effective date.
+                  Review salary setup by starting month. BexHR derives Current, Upcoming, and Previous states.
                 </p>
               </div>
 
@@ -4620,7 +4626,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                   Search salary setup
                 </label>
                 <input type="text" id="payrollMasterSearchInput" class="form-control"
-                  placeholder="Search by employee, salary, pay cycle, status..." />
+                  placeholder="Search by employee, staff level, salary, pay basis, or start month..." />
               </div>
             </div>
 
@@ -4643,11 +4649,11 @@ Disable browser address autofill popup on HR employee address fields. -->
                        because statutory deductions can inherit rules from payroll grade/level. -->
                   <tr>
                     <th>Employee</th>
-                    <th>Grade / Level</th>
-                    <th>Salary</th>
-                    <th>Effective</th>
-                    <th>Cycle</th>
-                    <th>Status</th>
+                    <th>Staff Level</th>
+                    <th>Monthly Gross Salary</th>
+                    <th>Starts From</th>
+                    <th>Pay Basis</th>
+                    <th>Lifecycle</th>
                     <th>Updated</th>
                     <th class="text-center">Action</th>
                   </tr>
@@ -5540,10 +5546,9 @@ Disable browser address autofill popup on HR employee address fields. -->
 
               <div class="hr-card-heading-copy">
                 <span class="hr-payroll-section-kicker">Payroll processing</span>
-                <h2 class="section-heading h4 mb-1" id="payrollFormTitle">Finalise Payroll &amp; Payslips</h2>
+                <h2 class="section-heading h4 mb-1" id="payrollFormTitle">Run Payroll</h2>
                 <p class="section-subtext mb-0" id="payrollFormSubtext">
-                  Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are
-                  sent separately after payroll records are finalised.
+                  Choose one employee or all active employees, select the pay period, review the calculated payroll, then finalise.
                 </p>
               </div>
             </div>
@@ -5650,8 +5655,7 @@ Disable browser address autofill popup on HR employee address fields. -->
      This is the all-active employee review area before batch finalisation. -->
                   <div class="fw-bold">Finalise All Active Employees</div>
                   <div class="small text-secondary">
-                    Review active employees, salary setup readiness, payroll period, and pay date before finalising
-                    payroll records.
+                    Review active employees, salary setup readiness, and the payroll period before finalising payroll records.
                   </div>
                 </div>
 
@@ -5674,7 +5678,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                   <div>
                     <div class="fw-bold">Batch Payroll Period</div>
                     <div class="small text-secondary">
-                      Choose the payroll month and payment date for this selected employee batch.
+                      Choose the payroll month. BexHR derives the payment date as the last day of that month.
                     </div>
                   </div>
 
@@ -5687,7 +5691,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                 </div>
 
                 <div class="row g-3">
-                  <div class="col-12 col-lg-6">
+                  <div class="col-12">
                     <label for="batchPayrollPayCycle" class="form-label fw-semibold">
                       Pay Period <span class="text-danger">*</span>
                     </label>
@@ -5699,7 +5703,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                     </div>
                   </div>
 
-                  <div class="col-12 col-lg-6">
+                  <div class="col-12 col-lg-6 d-none" aria-hidden="true">
                     <label for="batchPayrollPayDate" class="form-label fw-semibold">
                       Pay Date <span class="text-danger">*</span>
                     </label>
@@ -5825,7 +5829,7 @@ Disable browser address autofill popup on HR employee address fields. -->
        This makes it clear payroll is consuming employee data from HR,
        not maintaining a separate employee record. -->
                   <div id="payrollSelectedEmployeeReference"
-                    class="border rounded-4 p-3 p-lg-4 bg-light-subtle hr-payroll-subpanel hr-payroll-employee-reference">
+                    class="border rounded-4 p-3 p-lg-4 bg-light-subtle hr-payroll-subpanel hr-payroll-employee-reference phase6-payroll-reference d-none">
                     <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
                       <div>
                         <h3 class="h6 fw-bold mb-1">Selected Employee Reference</h3>
@@ -5944,7 +5948,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                      Submit Payroll and auto-fill the month-end pay date. -->
                 <div class="col-md-6 col-xl-4">
                   <label for="payrollPayCycle" class="form-label fw-semibold">
-                    Pay Cycle <span class="text-danger">*</span>
+                    Pay Period <span class="text-danger">*</span>
                   </label>
                   <select id="payrollPayCycle" class="form-select" required>
                     <option value="">Select pay cycle</option>
@@ -5952,7 +5956,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                   <div class="invalid-feedback">Pay cycle is required.</div>
                 </div>
 
-                <div class="col-md-6 col-xl-4">
+                <div class="col-md-6 col-xl-4 phase6-payroll-compat-field d-none">
                   <label for="payrollPayDate" class="form-label fw-semibold">
                     Pay Date <span class="text-danger">*</span>
                   </label>
@@ -5964,7 +5968,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                      Restore payroll model controls.
                      HR must be able to choose Regular or Contract before the form
                      decides which fields should be calculated or manually editable. -->
-                <div class="col-md-6 col-xl-4">
+                <div class="col-md-6 col-xl-4 phase6-payroll-compat-field d-none">
                   <label for="payrollEmployeeGroup" class="form-label fw-semibold">
                     Employee Group
                   </label>
@@ -5982,7 +5986,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                   </div>
                 </div>
 
-                <div class="col-md-6 col-xl-4">
+                <div class="col-md-6 col-xl-4 phase6-payroll-compat-field d-none">
                   <label for="payrollModel" class="form-label fw-semibold">
                     Payroll Model
                   </label>
@@ -5997,7 +6001,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                   </div>
                 </div>
 
-                <div class="col-md-6 col-xl-4">
+                <div class="col-md-6 col-xl-4 phase6-payroll-compat-field d-none">
                   <label for="payrollStatus" class="form-label fw-semibold">
                     Status
                   </label>
@@ -6012,7 +6016,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                      Compact read-only preview of the payroll rule selected by
                      Employee Group / Payroll Model. This helps HR understand
                      what will be calculated without making the form too heavy. -->
-                <div class="col-12">
+                <div class="col-12 phase6-payroll-compat-field d-none">
                   <div id="payrollStructurePreviewPanel" class="border rounded-4 p-3 bg-light-subtle">
                     <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-2">
                       <div>
@@ -6035,6 +6039,47 @@ Disable browser address autofill popup on HR employee address fields. -->
                       <span class="badge rounded-pill text-bg-light border text-dark">
                         No payroll structure selected
                       </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- BEXHR PHASE 6 - SIMPLIFIED RUN PAYROLL PREVIEW -->
+                <div id="phase6PayrollPreviewPanel" class="col-12">
+                  <div class="border rounded-4 p-3 p-lg-4 bg-light-subtle">
+                    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-2 mb-3">
+                      <div>
+                        <div class="fw-bold">Payroll Preview</div>
+                        <div class="small text-secondary">
+                          BexHR derives the payment date, payroll model, status, deductions, and finalisation state.
+                        </div>
+                      </div>
+                      <span class="bexhr-status-pill bexhr-status-pill--success">
+                        <i class="bi bi-calculator" aria-hidden="true"></i>
+                        <span>Calculated by BexHR</span>
+                      </span>
+                    </div>
+
+                    <div class="row g-3">
+                      <div class="col-12 col-md-6 col-xl">
+                        <div class="small text-secondary mb-1">Monthly Gross Salary</div>
+                        <div class="fw-bold" id="phase6PreviewMonthlyGross">--</div>
+                      </div>
+                      <div class="col-12 col-md-6 col-xl">
+                        <div class="small text-secondary mb-1">Gross Pay</div>
+                        <div class="fw-bold" id="phase6PreviewGrossPay">--</div>
+                      </div>
+                      <div class="col-12 col-md-6 col-xl">
+                        <div class="small text-secondary mb-1">PAYE</div>
+                        <div class="fw-bold" id="phase6PreviewPaye">--</div>
+                      </div>
+                      <div class="col-12 col-md-6 col-xl">
+                        <div class="small text-secondary mb-1">Total Deductions</div>
+                        <div class="fw-bold" id="phase6PreviewTotalDeductions">--</div>
+                      </div>
+                      <div class="col-12 col-md-6 col-xl">
+                        <div class="small text-secondary mb-1">Net Pay</div>
+                        <div class="fw-bold" id="phase6PreviewNetPay">--</div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -6230,16 +6275,15 @@ Disable browser address autofill popup on HR employee address fields. -->
 
 
 
-                  <div class="col-12">
-                    <div class="d-flex flex-wrap gap-2 pt-2">
-                      <!-- SUBMIT PAYROLL - DESCRIPTION ITEM 1 - STEP 1
-     Rename the existing payroll form action so the UI matches the new
-     Submit Payroll story while keeping the current save behaviour intact. -->
-                      <button type="submit" id="savePayrollBtn" class="btn btn-primary dashboard-action-btn">
-                        <i class="bi bi-send-check me-2"></i>
-                        <span id="savePayrollBtnText">Finalise Single Employee</span>
-                      </button>
-                    </div>
+                </div>
+
+                <!-- BEXHR PHASE 6 - FINALISE ACTION OUTSIDE TECHNICAL DETAILS -->
+                <div class="col-12">
+                  <div class="d-flex flex-wrap gap-2 pt-2">
+                    <button type="submit" id="savePayrollBtn" class="btn btn-primary dashboard-action-btn">
+                      <i class="bi bi-send-check me-2"></i>
+                      <span id="savePayrollBtnText">Finalise Payroll</span>
+                    </button>
                   </div>
                 </div>
             </form>
