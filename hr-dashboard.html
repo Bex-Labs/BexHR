@@ -3746,7 +3746,7 @@ Disable browser address autofill popup on HR employee address fields. -->
      Payroll salary setup now lives in Payroll.
      Setup keeps rules/configuration only. -->
                 <div class="summary-tile-label">Payroll Rules</div>
-                <div class="summary-tile-value h6 mb-0">Allowances &amp; overrides</div>
+                <div class="summary-tile-value h6 mb-0">Allowances &amp; adjustments</div>
               </div>
             </div>
 
@@ -6265,7 +6265,16 @@ Disable browser address autofill popup on HR employee address fields. -->
                     <label for="payrollCurrency" class="form-label fw-semibold">Currency</label>
                     <input type="text" id="payrollCurrency" class="form-control" value="NGN" />
 
-                    <div class="form-check form-switch mt-3">
+                    <!-- BEXHR PHASE 6 - normal Run Payroll derives finalisation.
+
+
+                         Keep this compatibility switch hidden in create mode; historical Edit Payroll Record
+
+
+                         reveals it through setPhase6PayrollCompatibilityVisibility(true). -->
+
+
+                    <div class="form-check form-switch mt-3 phase6-payroll-compat-field d-none">
                       <input class="form-check-input" type="checkbox" id="payrollIsFinalised" checked />
                       <label class="form-check-label fw-semibold" for="payrollIsFinalised">
                         Mark as Finalised

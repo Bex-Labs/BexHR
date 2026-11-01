@@ -176,7 +176,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const payrollSetupHeader = createSetupWorkspaceGroupHeader(
         "setupPayrollGroupHeader",
         "Payroll Rules & Deductions",
-        "Maintain allowance components, statutory deductions, other deductions, and employee-specific payroll overrides.",
+        "Maintain allowance components, statutory deductions, other deductions, and employee-specific payroll adjustments.",
         "bi bi-sliders",
       );
 
@@ -760,7 +760,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           },
           {
             key: "overrides",
-            label: "Employee Overrides",
+            label: "Payroll Adjustments",
             iconClass: "bi bi-person-gear",
             card: overrideCard,
           },
@@ -3950,7 +3950,7 @@ function applyHrPayrollSetupAccessControls() {
   if (state.dom.savePayrollEmployeeOverrideBtn) {
     state.dom.savePayrollEmployeeOverrideBtn.innerHTML = `
       <i class="bi bi-lock me-2"></i>
-      <span id="savePayrollEmployeeOverrideBtnText">Employee Overrides Read Only</span>
+      <span id="savePayrollEmployeeOverrideBtnText">Payroll Adjustments Read Only</span>
     `;
     state.dom.savePayrollEmployeeOverrideBtnText =
       document.getElementById("savePayrollEmployeeOverrideBtnText");
@@ -9731,7 +9731,7 @@ function showPayrollEmployeeOverrideValidationIssues(issues = []) {
   if (!issues.length) return;
 
   const messageHtml = `
-    <div class="fw-semibold mb-2">Employee Payroll Override could not be saved.</div>
+    <div class="fw-semibold mb-2">Payroll Adjustment could not be saved.</div>
     <ul class="mb-0 ps-3">
       ${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}
     </ul>
@@ -9741,8 +9741,8 @@ function showPayrollEmployeeOverrideValidationIssues(issues = []) {
 
   showDashboardToast(
     "warning",
-    "Employee override validation failed",
-    issues[0] || "Please correct the highlighted Employee Override fields.",
+    "Payroll adjustment validation failed",
+    issues[0] || "Please correct the highlighted Payroll Adjustment fields.",
   );
 }
 
@@ -25831,6 +25831,9 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     overtime,
     logisticsAllowance,
     dataAirtimeAllowance,
+    oneOffBonus: adjustmentAmounts.bonus,
+    oneOffOvertime: adjustmentAmounts.overtime,
+    oneOffOtherAllowance: adjustmentAmounts.otherEarning,
 
     bht,
     grossPay,
@@ -25862,6 +25865,12 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     source: "csv",
     employee_override_applied: adjustmentAmounts.totalCount > 0,
     employee_override_audit_summary: employeeOverrideAuditSummary,
+    tax_one_off_bonus: adjustmentAmounts.bonus,
+    tax_one_off_overtime: adjustmentAmounts.overtime,
+    tax_one_off_other_allowance: adjustmentAmounts.otherEarning,
+    tax_relief_pension: statutoryTotals.employeePension,
+    tax_relief_nhf: statutoryTotals.nhfContribution,
+    tax_relief_health: statutoryTotals.healthContribution,
 
     base_salary: baseSalary,
     // BATCH PAYROLL CSV IMPORT - STEP 5C
@@ -33976,6 +33985,12 @@ function calculateBatchStatutoryDeductionAmount(record = {}, context = {}) {
       overtime: context.overtime,
       logisticsAllowance: context.logisticsAllowance,
       dataAirtimeAllowance: context.dataAirtimeAllowance,
+      oneOffBonus: context.oneOffBonus,
+      oneOffOvertime: context.oneOffOvertime,
+      oneOffOtherAllowance: context.oneOffOtherAllowance,
+      monthlyPensionContribution: context.monthlyPensionContribution,
+      monthlyNhfContribution: context.monthlyNhfContribution,
+      monthlyHealthContribution: context.monthlyHealthContribution,
     });
   }
 
@@ -34211,21 +34226,23 @@ function calculateBatchStatutoryDeductionTotals(context = {}) {
     context.payrollDate,
   );
 
-  let payeTax = 0;
   let employeePension = 0;
   let employerPension = 0;
+  let nhfContribution = 0;
+  let healthContribution = 0;
   let otherDeductions = 0;
+
+  const healthReliefTypes = new Set(["NHIS", "NHIA", "HEALTH", "HEALTH_INSURANCE"]);
+  const payeRecord = activeDeductions.find(
+    (record) => String(record.deduction_type || "").trim() === "PAYE",
+  ) || null;
 
   activeDeductions.forEach((record) => {
     const type = String(record.deduction_type || "").trim();
+    if (!type || type === "PAYE") return;
+
     const amount = calculateBatchStatutoryDeductionAmount(record, context);
-
     if (!Number.isFinite(amount) || amount < 0) return;
-
-    if (type === "PAYE") {
-      payeTax = amount;
-      return;
-    }
 
     if (type === "EMPLOYEE_PENSION") {
       employeePension = amount;
@@ -34237,29 +34254,60 @@ function calculateBatchStatutoryDeductionTotals(context = {}) {
       return;
     }
 
-    // NHF and future statutory deductions without a dedicated payroll field
-    // are grouped under Other Deductions, same as manual payroll.
+    if (type === "NHF") {
+      nhfContribution = amount;
+      otherDeductions += amount;
+      return;
+    }
+
+    if (healthReliefTypes.has(type)) {
+      healthContribution += amount;
+      otherDeductions += amount;
+      return;
+    }
+
     otherDeductions += amount;
   });
 
-  const whtTax = 0;
+  const payeContext = {
+    ...context,
+    monthlyPensionContribution: employeePension,
+    monthlyNhfContribution: nhfContribution,
+    monthlyHealthContribution: healthContribution,
+  };
 
-  // DESCRIPTION ITEM 4 - STEP 5
-  // Add active non-statutory Other Deductions into the same batch deduction
-  // total used by Run Payroll and Batch Payroll CSV import.
-  // This keeps manual payroll, Run Payroll, and CSV import aligned.
+  let payeTax = calculateNta2025MonthlyPayeTaxFromComponents({
+    basicPay: context.basicPay,
+    housingAllowance: context.housingAllowance,
+    transportAllowance: context.transportAllowance,
+    utilityAllowance: context.utilityAllowance,
+    otherAllowance: context.otherAllowance,
+    medicalAllowance: context.medicalAllowance,
+    bonus: context.bonus,
+    overtime: context.overtime,
+    logisticsAllowance: context.logisticsAllowance,
+    dataAirtimeAllowance: context.dataAirtimeAllowance,
+    oneOffBonus: context.oneOffBonus,
+    oneOffOvertime: context.oneOffOvertime,
+    oneOffOtherAllowance: context.oneOffOtherAllowance,
+    monthlyPensionContribution: employeePension,
+    monthlyNhfContribution: nhfContribution,
+    monthlyHealthContribution: healthContribution,
+  });
+
+  if (payeRecord) {
+    payeTax = calculateBatchStatutoryDeductionAmount(payeRecord, payeContext);
+  }
+
+  const whtTax = 0;
   const configuredOtherDeductions =
     calculateActivePayrollOtherDeductionTotalForMaster(
       context.payrollMasterRecordId,
       context.payrollDate,
     );
-
-  const combinedOtherDeductions =
-    otherDeductions + configuredOtherDeductions;
-
+  const combinedOtherDeductions = otherDeductions + configuredOtherDeductions;
   const totalDeductions =
     payeTax + whtTax + employeePension + combinedOtherDeductions;
-
   const netPay = Number(context.grossPay || 0) - totalDeductions;
 
   return {
@@ -34267,6 +34315,8 @@ function calculateBatchStatutoryDeductionTotals(context = {}) {
     whtTax,
     employeePension,
     employerPension,
+    nhfContribution,
+    healthContribution,
     otherDeductions: combinedOtherDeductions,
     totalDeductions,
     netPay,
@@ -34373,6 +34423,9 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
     overtime,
     logisticsAllowance,
     dataAirtimeAllowance,
+    oneOffBonus: adjustmentAmounts.bonus,
+    oneOffOvertime: adjustmentAmounts.overtime,
+    oneOffOtherAllowance: adjustmentAmounts.otherEarning,
 
     bht,
     grossPay,
@@ -34394,6 +34447,12 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
     payroll_model: "REGULAR",
     employee_override_applied: adjustmentAmounts.totalCount > 0,
     employee_override_audit_summary: employeeOverrideAuditSummary,
+    tax_one_off_bonus: adjustmentAmounts.bonus,
+    tax_one_off_overtime: adjustmentAmounts.overtime,
+    tax_one_off_other_allowance: adjustmentAmounts.otherEarning,
+    tax_relief_pension: statutoryTotals.employeePension,
+    tax_relief_nhf: statutoryTotals.nhfContribution,
+    tax_relief_health: statutoryTotals.healthContribution,
 
     base_salary: baseSalary,
     regular_increment_percent: 0,
@@ -34587,6 +34646,13 @@ function buildBatchPayrollRecordPayload(preparedRow, payrollReference = "") {
       overtime: preparedRow.overtime,
       logisticsAllowance: preparedRow.logistics_allowance,
       dataAirtimeAllowance: preparedRow.data_airtime_allowance,
+      oneOffBonus: preparedRow.tax_one_off_bonus || 0,
+      oneOffOvertime: preparedRow.tax_one_off_overtime || 0,
+      oneOffOtherAllowance: preparedRow.tax_one_off_other_allowance || 0,
+      monthlyPensionContribution:
+        preparedRow.tax_relief_pension ?? preparedRow.employee_pension ?? 0,
+      monthlyNhfContribution: preparedRow.tax_relief_nhf || 0,
+      monthlyHealthContribution: preparedRow.tax_relief_health || 0,
       grossPay: preparedRow.gross_pay,
       employeePension: preparedRow.employee_pension,
       payeTax: preparedRow.paye_tax,
@@ -44719,69 +44785,101 @@ function calculateNta2025MonthlyPayeTaxFromComponents({
   overtime = 0,
   logisticsAllowance = 0,
   dataAirtimeAllowance = 0,
+  oneOffBonus = 0,
+  oneOffOvertime = 0,
+  oneOffOtherAllowance = 0,
+  monthlyPensionContribution = 0,
+  monthlyNhfContribution = 0,
+  monthlyHealthContribution = 0,
   annualRentPaid = 0,
   returnDetails = false,
 } = {}) {
-  const monthlyBasic = Number(basicPay || 0);
-  const monthlyHousing = Number(housingAllowance || 0);
-  const monthlyTransport = Number(transportAllowance || 0);
+  const toNonNegative = (value) => {
+    const numericValue = Number(value || 0);
+    return Number.isFinite(numericValue) ? Math.max(0, numericValue) : 0;
+  };
 
-  const monthlyGross =
+  const monthlyBasic = toNonNegative(basicPay);
+  const monthlyHousing = toNonNegative(housingAllowance);
+  const monthlyTransport = toNonNegative(transportAllowance);
+  const monthlyUtility = toNonNegative(utilityAllowance);
+  const monthlyOtherAllowance = toNonNegative(otherAllowance);
+  const monthlyMedical = toNonNegative(medicalAllowance);
+  const monthlyBonus = toNonNegative(bonus);
+  const monthlyOvertime = toNonNegative(overtime);
+  const monthlyLogistics = toNonNegative(logisticsAllowance);
+  const monthlyDataAirtime = toNonNegative(dataAirtimeAllowance);
+
+  const currentOneOffBonus = Math.min(monthlyBonus, toNonNegative(oneOffBonus));
+  const currentOneOffOvertime = Math.min(monthlyOvertime, toNonNegative(oneOffOvertime));
+  const currentOneOffOtherAllowance = Math.min(
+    monthlyOtherAllowance,
+    toNonNegative(oneOffOtherAllowance),
+  );
+
+  const monthlyRecurringGross =
     monthlyBasic +
     monthlyHousing +
     monthlyTransport +
-    Number(utilityAllowance || 0) +
-    Number(otherAllowance || 0) +
-    Number(medicalAllowance || 0) +
-    Number(bonus || 0) +
-    Number(overtime || 0) +
-    Number(logisticsAllowance || 0) +
-    Number(dataAirtimeAllowance || 0);
+    monthlyUtility +
+    Math.max(0, monthlyOtherAllowance - currentOneOffOtherAllowance) +
+    monthlyMedical +
+    Math.max(0, monthlyBonus - currentOneOffBonus) +
+    Math.max(0, monthlyOvertime - currentOneOffOvertime) +
+    monthlyLogistics +
+    monthlyDataAirtime;
 
-  const annualGross = monthlyGross * 12;
+  const currentPeriodOneOffGross =
+    currentOneOffBonus + currentOneOffOvertime + currentOneOffOtherAllowance;
+  const monthlyGross = monthlyRecurringGross + currentPeriodOneOffGross;
+  const annualRecurringGross = monthlyRecurringGross * 12;
+  const annualGross = annualRecurringGross + currentPeriodOneOffGross;
 
-  // PAYROLL TAX DEDUCTION CALCULATION - STEP 1
-  // TaxCalc model:
-  // Pension = 8% of Basic + Housing + Transport.
-  // NHF = 2.5% of Basic.
-  // NHIS = 5% of Basic.
-  const annualPension =
-    (monthlyBasic + monthlyHousing + monthlyTransport) * 12 * 0.08;
-
-  const annualNhf = monthlyBasic * 12 * 0.025;
-  const annualNhis = monthlyBasic * 12 * 0.05;
-
+  const annualPension = toNonNegative(monthlyPensionContribution) * 12;
+  const annualNhf = toNonNegative(monthlyNhfContribution) * 12;
+  const annualHealth = toNonNegative(monthlyHealthContribution) * 12;
   const annualRentRelief =
-    Number(annualRentPaid || 0) > 0
-      ? Math.min(Number(annualRentPaid || 0) * 0.2, 500000)
+    toNonNegative(annualRentPaid) > 0
+      ? Math.min(toNonNegative(annualRentPaid) * 0.2, 500000)
       : 0;
 
-  const annualChargeableIncome = Math.max(
+  const annualEligibleDeductions =
+    annualPension + annualNhf + annualHealth + annualRentRelief;
+  const annualRecurringChargeableIncome = Math.max(
     0,
-    annualGross - annualPension - annualNhf - annualNhis - annualRentRelief,
+    annualRecurringGross - annualEligibleDeductions,
   );
+  const annualChargeableIncome =
+    annualRecurringChargeableIncome + currentPeriodOneOffGross;
 
+  const annualBasePayeTax = calculateAnnualPayeFromBands(
+    annualRecurringChargeableIncome,
+  );
   const annualPayeTax = calculateAnnualPayeFromBands(annualChargeableIncome);
-  const monthlyPayeTax = annualPayeTax / 12;
+  const currentPeriodOneOffPayeTax = Math.max(
+    0,
+    annualPayeTax - annualBasePayeTax,
+  );
+  const monthlyPayeTax =
+    annualBasePayeTax / 12 + currentPeriodOneOffPayeTax;
 
-  // PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B2
-  // Normal payroll callers still receive the exact same numeric monthly PAYE.
-  // Snapshot creation can request the already-calculated intermediate values
-  // so the historical record explains how that PAYE amount was produced.
   if (returnDetails) {
-    const annualEligibleDeductions =
-      annualPension + annualNhf + annualNhis + annualRentRelief;
-
     return {
       monthlyGross,
+      monthlyRecurringGross,
+      currentPeriodOneOffGross,
+      annualRecurringGross,
       annualGross,
       annualPension,
       annualNhf,
-      annualNhis,
+      annualHealth,
       annualRentRelief,
       annualEligibleDeductions,
+      annualRecurringChargeableIncome,
       annualChargeableIncome,
+      annualBasePayeTax,
       annualPayeTax,
+      currentPeriodOneOffPayeTax,
       monthlyPayeTax,
     };
   }
@@ -44797,7 +44895,7 @@ function calculateNta2025MonthlyPayeTaxFromComponents({
 // null until Phase 2C can derive them from complete, ordered payroll history.
 // It also does not backfill old payroll rows.
 // =========================================================
-const PAYROLL_TAX_RULE_VERSION = "NTA_2025_2026_V1";
+const PAYROLL_TAX_RULE_VERSION = "NTA_2025_2026_V2_ACTUAL_RELIEFS_ONE_OFF";
 
 function roundPayrollTaxSnapshotAmount(value) {
   const numericValue = Number(value || 0);
@@ -44821,6 +44919,12 @@ function buildPayrollTaxSnapshotFieldsFromPayrollValues({
   dataAirtimeAllowance = 0,
   grossPay = 0,
   employeePension = 0,
+  oneOffBonus = 0,
+  oneOffOvertime = 0,
+  oneOffOtherAllowance = 0,
+  monthlyPensionContribution = null,
+  monthlyNhfContribution = 0,
+  monthlyHealthContribution = 0,
   payeTax = 0,
 } = {}) {
   const normalizedPayrollModel = String(payrollModel || "")
@@ -44838,6 +44942,11 @@ function buildPayrollTaxSnapshotFieldsFromPayrollValues({
     };
   }
 
+  const resolvedMonthlyPensionContribution =
+    monthlyPensionContribution === null || monthlyPensionContribution === undefined
+      ? roundPayrollTaxSnapshotAmount(employeePension)
+      : roundPayrollTaxSnapshotAmount(monthlyPensionContribution);
+
   const components = {
     basicPay: roundPayrollTaxSnapshotAmount(basicPay),
     housingAllowance: roundPayrollTaxSnapshotAmount(housingAllowance),
@@ -44849,11 +44958,14 @@ function buildPayrollTaxSnapshotFieldsFromPayrollValues({
     overtime: roundPayrollTaxSnapshotAmount(overtime),
     logisticsAllowance: roundPayrollTaxSnapshotAmount(logisticsAllowance),
     dataAirtimeAllowance: roundPayrollTaxSnapshotAmount(dataAirtimeAllowance),
+    oneOffBonus: roundPayrollTaxSnapshotAmount(oneOffBonus),
+    oneOffOvertime: roundPayrollTaxSnapshotAmount(oneOffOvertime),
+    oneOffOtherAllowance: roundPayrollTaxSnapshotAmount(oneOffOtherAllowance),
+    monthlyPensionContribution: resolvedMonthlyPensionContribution,
+    monthlyNhfContribution: roundPayrollTaxSnapshotAmount(monthlyNhfContribution),
+    monthlyHealthContribution: roundPayrollTaxSnapshotAmount(monthlyHealthContribution),
   };
 
-  // PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B2
-  // Ask the existing PAYE helper for the exact intermediate values it already
-  // used. This avoids a second/duplicated tax formula inside the snapshot path.
   const taxDetails = calculateNta2025MonthlyPayeTaxFromComponents({
     ...components,
     annualRentPaid: 0,
@@ -44866,9 +44978,9 @@ function buildPayrollTaxSnapshotFieldsFromPayrollValues({
   return {
     tax_rule_version: PAYROLL_TAX_RULE_VERSION,
     tax_calculation_snapshot: {
-      snapshot_version: 2,
+      snapshot_version: 3,
       tax_rule_version: PAYROLL_TAX_RULE_VERSION,
-      calculation_basis: "MONTHLY_ANNUALISED_CURRENT_PERIOD",
+      calculation_basis: "ANNUALISED_RECURRING_PLUS_CURRENT_ONE_OFF_ACTUAL_RELIEFS",
       pay_date: payDate || null,
       payroll_model: normalizedPayrollModel,
       earnings: {
@@ -44882,32 +44994,48 @@ function buildPayrollTaxSnapshotFieldsFromPayrollValues({
         overtime: components.overtime,
         logistics_allowance: components.logisticsAllowance,
         data_airtime_allowance: components.dataAirtimeAllowance,
+        one_off_bonus: components.oneOffBonus,
+        one_off_overtime: components.oneOffOvertime,
+        one_off_other_allowance: components.oneOffOtherAllowance,
       },
       gross_emoluments: roundPayrollTaxSnapshotAmount(grossPay),
       actual_saved_employee_pension: roundPayrollTaxSnapshotAmount(employeePension),
       tax_calculation_basis: {
-        monthly_gross_emoluments: roundPayrollTaxSnapshotAmount(
-          taxDetails?.monthlyGross,
+        monthly_gross_emoluments: roundPayrollTaxSnapshotAmount(taxDetails?.monthlyGross),
+        monthly_recurring_gross_emoluments: roundPayrollTaxSnapshotAmount(
+          taxDetails?.monthlyRecurringGross,
         ),
-        annual_gross_emoluments: roundPayrollTaxSnapshotAmount(
-          taxDetails?.annualGross,
+        current_period_one_off_taxable_emoluments: roundPayrollTaxSnapshotAmount(
+          taxDetails?.currentPeriodOneOffGross,
         ),
+        annual_recurring_gross_emoluments: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualRecurringGross,
+        ),
+        annual_gross_emoluments: roundPayrollTaxSnapshotAmount(taxDetails?.annualGross),
         annual_reliefs_used: {
           pension: roundPayrollTaxSnapshotAmount(taxDetails?.annualPension),
           nhf: roundPayrollTaxSnapshotAmount(taxDetails?.annualNhf),
-          nhis: roundPayrollTaxSnapshotAmount(taxDetails?.annualNhis),
-          rent_relief: roundPayrollTaxSnapshotAmount(
-            taxDetails?.annualRentRelief,
-          ),
+          health: roundPayrollTaxSnapshotAmount(taxDetails?.annualHealth),
+          rent_relief: roundPayrollTaxSnapshotAmount(taxDetails?.annualRentRelief),
         },
+        monthly_eligible_deductions: roundPayrollTaxSnapshotAmount(
+          Number(taxDetails?.annualEligibleDeductions || 0) / 12,
+        ),
         annual_eligible_deductions: roundPayrollTaxSnapshotAmount(
           taxDetails?.annualEligibleDeductions,
+        ),
+        annual_recurring_chargeable_income: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualRecurringChargeableIncome,
         ),
         annual_chargeable_income: roundPayrollTaxSnapshotAmount(
           taxDetails?.annualChargeableIncome,
         ),
-        annual_calculated_tax: roundPayrollTaxSnapshotAmount(
-          taxDetails?.annualPayeTax,
+        annual_base_calculated_tax: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualBasePayeTax,
+        ),
+        annual_calculated_tax: roundPayrollTaxSnapshotAmount(taxDetails?.annualPayeTax),
+        current_period_one_off_tax: roundPayrollTaxSnapshotAmount(
+          taxDetails?.currentPeriodOneOffPayeTax,
         ),
         monthly_calculated_tax: roundPayrollTaxSnapshotAmount(
           taxDetails?.monthlyPayeTax,
@@ -44923,8 +45051,8 @@ function buildPayrollTaxSnapshotFieldsFromPayrollValues({
       assumptions: {
         annual_rent_paid: 0,
         rent_relief_input_available: false,
-        relief_values_are_tax_calculation_inputs: true,
-        actual_saved_employee_pension_is_recorded_separately: true,
+        actual_relief_contributions_only: true,
+        one_off_earnings_annualised: false,
         ytd_calculation_deferred_to_phase_2c: true,
       },
     },
@@ -44952,12 +45080,44 @@ function getPayrollTaxSnapshotVersion(snapshot = null) {
 }
 
 function getPayrollTaxSnapshotMonthlyEligibleDeductions(snapshot = null) {
+  const explicitMonthlyEligible = Number(
+    snapshot?.tax_calculation_basis?.monthly_eligible_deductions,
+  );
+  if (Number.isFinite(explicitMonthlyEligible)) {
+    return roundPayrollTaxSnapshotAmount(explicitMonthlyEligible);
+  }
+
   const annualEligible = Number(
     snapshot?.tax_calculation_basis?.annual_eligible_deductions || 0,
   );
-
   return Number.isFinite(annualEligible)
     ? roundPayrollTaxSnapshotAmount(annualEligible / 12)
+    : 0;
+}
+
+function getPayrollTaxSnapshotMonthlyRecurringGross(snapshot = null) {
+  const explicitRecurring = Number(
+    snapshot?.tax_calculation_basis?.monthly_recurring_gross_emoluments,
+  );
+  if (Number.isFinite(explicitRecurring)) {
+    return roundPayrollTaxSnapshotAmount(explicitRecurring);
+  }
+
+  const monthlyGross = Number(
+    snapshot?.tax_calculation_basis?.monthly_gross_emoluments || 0,
+  );
+  const oneOff = getPayrollTaxSnapshotCurrentPeriodOneOffTaxable(snapshot);
+  return Number.isFinite(monthlyGross)
+    ? roundPayrollTaxSnapshotAmount(Math.max(0, monthlyGross - oneOff))
+    : 0;
+}
+
+function getPayrollTaxSnapshotCurrentPeriodOneOffTaxable(snapshot = null) {
+  const explicitOneOff = Number(
+    snapshot?.tax_calculation_basis?.current_period_one_off_taxable_emoluments || 0,
+  );
+  return Number.isFinite(explicitOneOff)
+    ? roundPayrollTaxSnapshotAmount(Math.max(0, explicitOneOff))
     : 0;
 }
 
@@ -44969,7 +45129,7 @@ function calculatePayrollYtdShadowFromHistory({
 
   if (
     String(currentPayload.tax_rule_version || "") !== PAYROLL_TAX_RULE_VERSION ||
-    getPayrollTaxSnapshotVersion(currentSnapshot) < 2
+    getPayrollTaxSnapshotVersion(currentSnapshot) < 3
   ) {
     return {
       status: "DEFERRED_CURRENT_SNAPSHOT_INCOMPLETE",
@@ -44977,14 +45137,9 @@ function calculatePayrollYtdShadowFromHistory({
     };
   }
 
-  // PAYROLL TAX YTD ENGINE - PHASE 2C-B
-  // Do not override a current-period PAYE value that was intentionally
-  // changed by statutory setup, employee override, or another manual rule.
-  // Activated YTD is only allowed to replace the normal baseline PAYE.
   const currentPayeAdjustment = Number(
     currentSnapshot?.paye_adjustment_from_baseline || 0,
   );
-
   if (
     Number.isFinite(currentPayeAdjustment) &&
     Math.abs(currentPayeAdjustment) > 0.009
@@ -44998,10 +45153,9 @@ function calculatePayrollYtdShadowFromHistory({
   const incompletePriorRow = priorRows.find((row) => {
     return (
       String(row.tax_rule_version || "") !== PAYROLL_TAX_RULE_VERSION ||
-      getPayrollTaxSnapshotVersion(row.tax_calculation_snapshot) < 2
+      getPayrollTaxSnapshotVersion(row.tax_calculation_snapshot) < 3
     );
   });
-
   if (incompletePriorRow) {
     return {
       status: "DEFERRED_INCOMPLETE_PRIOR_HISTORY",
@@ -45013,24 +45167,17 @@ function calculatePayrollYtdShadowFromHistory({
   const priorWithUnexpectedAdjustment = priorRows.find((row) => {
     const snapshot = row.tax_calculation_snapshot || null;
     const adjustment = Number(snapshot?.paye_adjustment_from_baseline || 0);
-
     if (!Number.isFinite(adjustment) || Math.abs(adjustment) <= 0.009) {
       return false;
     }
 
-    // PAYROLL TAX YTD ENGINE - PHASE 2C-B
-    // A nonzero adjustment is expected on a prior row when it was created by
-    // the verified YTD engine itself. Other PAYE overrides remain a reason to
-    // defer because their tax treatment cannot be inferred safely.
     const ytdCalculation = snapshot?.ytd_calculation || null;
     const isVerifiedAppliedYtd =
       ytdCalculation?.paye_applied_to_payroll === true &&
       String(ytdCalculation?.status || "") === "READY_APPLIED" &&
       String(ytdCalculation?.phase || "") === "2C_B_ACTIVE";
-
     return !isVerifiedAppliedYtd;
   });
-
   if (priorWithUnexpectedAdjustment) {
     return {
       status: "DEFERRED_PRIOR_PAYE_ADJUSTMENT",
@@ -45039,53 +45186,72 @@ function calculatePayrollYtdShadowFromHistory({
     };
   }
 
-  const currentGross = roundPayrollTaxSnapshotAmount(
-    currentSnapshot?.tax_calculation_basis?.monthly_gross_emoluments ??
-      currentPayload.gross_pay,
+  const currentRecurringGross = getPayrollTaxSnapshotMonthlyRecurringGross(
+    currentSnapshot,
+  );
+  const currentOneOff = getPayrollTaxSnapshotCurrentPeriodOneOffTaxable(
+    currentSnapshot,
   );
   const currentEligible = getPayrollTaxSnapshotMonthlyEligibleDeductions(
     currentSnapshot,
   );
 
-  const priorGross = priorRows.reduce((total, row) => {
-    const value = Number(
-      row.tax_calculation_snapshot?.tax_calculation_basis
-        ?.monthly_gross_emoluments ?? row.gross_pay ?? 0,
+  const priorRecurringGross = priorRows.reduce((total, row) => {
+    return total + getPayrollTaxSnapshotMonthlyRecurringGross(
+      row.tax_calculation_snapshot,
     );
-    return total + (Number.isFinite(value) ? value : 0);
   }, 0);
-
+  const priorOneOff = priorRows.reduce((total, row) => {
+    return total + getPayrollTaxSnapshotCurrentPeriodOneOffTaxable(
+      row.tax_calculation_snapshot,
+    );
+  }, 0);
   const priorEligible = priorRows.reduce((total, row) => {
-    return (
-      total +
-      getPayrollTaxSnapshotMonthlyEligibleDeductions(
-        row.tax_calculation_snapshot,
-      )
+    return total + getPayrollTaxSnapshotMonthlyEligibleDeductions(
+      row.tax_calculation_snapshot,
     );
   }, 0);
-
   const priorTaxWithheld = priorRows.reduce((total, row) => {
     const value = Number(row.paye_tax || 0);
     return total + (Number.isFinite(value) ? value : 0);
   }, 0);
 
   const periodCount = priorRows.length + 1;
-  const ytdGross = roundPayrollTaxSnapshotAmount(priorGross + currentGross);
+  const ytdRecurringGross = roundPayrollTaxSnapshotAmount(
+    priorRecurringGross + currentRecurringGross,
+  );
+  const cumulativeOneOffTaxable = roundPayrollTaxSnapshotAmount(
+    priorOneOff + currentOneOff,
+  );
+  const ytdGross = roundPayrollTaxSnapshotAmount(
+    ytdRecurringGross + cumulativeOneOffTaxable,
+  );
   const ytdEligible = roundPayrollTaxSnapshotAmount(
     priorEligible + currentEligible,
   );
   const ytdTaxable = roundPayrollTaxSnapshotAmount(
     Math.max(0, ytdGross - ytdEligible),
   );
-
-  const annualisedTaxable = roundPayrollTaxSnapshotAmount(
-    periodCount > 0 ? (ytdTaxable / periodCount) * 12 : 0,
+  const ytdRecurringTaxable = roundPayrollTaxSnapshotAmount(
+    Math.max(0, ytdRecurringGross - ytdEligible),
   );
-  const annualisedTax = roundPayrollTaxSnapshotAmount(
-    calculateAnnualPayeFromBands(annualisedTaxable),
+
+  const annualisedRecurringTaxable = roundPayrollTaxSnapshotAmount(
+    periodCount > 0 ? (ytdRecurringTaxable / periodCount) * 12 : 0,
+  );
+  const annualBaseTax = roundPayrollTaxSnapshotAmount(
+    calculateAnnualPayeFromBands(annualisedRecurringTaxable),
+  );
+  const annualTaxWithOneOff = roundPayrollTaxSnapshotAmount(
+    calculateAnnualPayeFromBands(
+      annualisedRecurringTaxable + cumulativeOneOffTaxable,
+    ),
+  );
+  const cumulativeOneOffTax = roundPayrollTaxSnapshotAmount(
+    Math.max(0, annualTaxWithOneOff - annualBaseTax),
   );
   const ytdCumulativeTax = roundPayrollTaxSnapshotAmount(
-    (annualisedTax * periodCount) / 12,
+    (annualBaseTax * periodCount) / 12 + cumulativeOneOffTax,
   );
 
   const currentPeriodTaxBeforeFloor = roundPayrollTaxSnapshotAmount(
@@ -45110,8 +45276,12 @@ function calculatePayrollYtdShadowFromHistory({
       period_count: periodCount,
       prior_period_count: priorRows.length,
       prior_tax_withheld: roundPayrollTaxSnapshotAmount(priorTaxWithheld),
-      annualised_taxable_emoluments: annualisedTaxable,
-      annualised_calculated_tax: annualisedTax,
+      ytd_recurring_gross_emoluments: ytdRecurringGross,
+      cumulative_one_off_taxable_emoluments: cumulativeOneOffTaxable,
+      annualised_recurring_taxable_emoluments: annualisedRecurringTaxable,
+      annualised_calculated_tax: annualBaseTax,
+      annual_tax_with_one_off: annualTaxWithOneOff,
+      cumulative_one_off_tax: cumulativeOneOffTax,
       cumulative_tax_through_current_period: ytdCumulativeTax,
       current_period_tax_before_floor: currentPeriodTaxBeforeFloor,
       shadow_current_period_paye: shadowCurrentPeriodPaye,
@@ -45408,15 +45578,14 @@ function getStatutoryDeductionBaseAmount(deductionType = "") {
   const type = String(deductionType || "").trim();
 
   if (type === "EMPLOYEE_PENSION" || type === "EMPLOYER_PENSION") {
-    // PAYROLL WORKFLOW UX REPAIR - STEP 7B
-    // Pension setup should calculate from the final visible BHT after salary
-    // setup and allowance components have been applied, not from an earlier
-    // pre-setup Regular structure snapshot.
     return calculateCurrentVisibleBhtForPension();
   }
 
   if (type === "NHF") {
-    return calculateRegularBasicPay();
+    return getPayrollAmountForTaxCalculation(
+      state.dom.payrollBasicPay,
+      calculateRegularBasicPay(),
+    );
   }
 
   return calculatePayrollGrossPay();
@@ -45447,22 +45616,15 @@ function calculateStatutoryDeductionAmount(record = {}) {
   }
 
   if (type === "EMPLOYEE_PENSION") {
-    // PAYROLL WORKFLOW UX REPAIR - STEP 7B
-    // Rule-based Employee Pension applies only when HR created an active
-    // statutory pension setup row. It uses 8% of final visible BHT.
     return calculateCurrentVisibleBhtForPension() * 0.08;
   }
 
   if (type === "EMPLOYER_PENSION") {
-    // PAYROLL WORKFLOW UX REPAIR - STEP 7B
-    // Rule-based Employer Pension applies only when HR created an active
-    // statutory employer pension setup row. It uses 10% of final visible BHT.
-    // This remains employer cost and is excluded from employee Net Pay.
     return calculateCurrentVisibleBhtForPension() * 0.1;
   }
 
   if (type === "NHF") {
-    return calculateRegularBasicPay() * 0.025;
+    return getStatutoryDeductionBaseAmount("NHF") * 0.025;
   }
 
   return 0;
@@ -46437,7 +46599,33 @@ function getPayrollAmountForTaxCalculation(field, fallbackAmount = 0) {
 // PAYE must be calculated from the final visible earning values on the
 // Single Employee Finalisation form, not only from the original percentage
 // split. This keeps tax aligned after Allowance Components are pulled from Setup.
+function getCurrentPayrollActualTaxReliefContributions() {
+  const totals = {
+    employeePension: 0,
+    nhf: 0,
+    health: 0,
+  };
+  const healthReliefTypes = new Set(["NHIS", "NHIA", "HEALTH", "HEALTH_INSURANCE"]);
+
+  getActiveStatutoryDeductionsForCurrentPayroll().forEach((record) => {
+    const type = String(record.deduction_type || "").trim();
+    if (!type || type === "PAYE" || type === "EMPLOYER_PENSION") return;
+
+    const amount = calculateStatutoryDeductionAmount(record);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    if (type === "EMPLOYEE_PENSION") totals.employeePension = amount;
+    if (type === "NHF") totals.nhf = amount;
+    if (healthReliefTypes.has(type)) totals.health += amount;
+  });
+
+  return totals;
+}
+
 function calculateRegularPayeTax() {
+  const adjustmentAmounts = getCurrentPayrollAdjustmentAmounts();
+  const reliefContributions = getCurrentPayrollActualTaxReliefContributions();
+
   return calculateNta2025MonthlyPayeTaxFromComponents({
     basicPay: getPayrollAmountForTaxCalculation(
       state.dom.payrollBasicPay,
@@ -46464,6 +46652,12 @@ function calculateRegularPayeTax() {
     overtime: toNullableNumber(state.dom.payrollOvertime?.value),
     logisticsAllowance: toNullableNumber(state.dom.payrollLogisticsAllowance?.value),
     dataAirtimeAllowance: toNullableNumber(state.dom.payrollDataAirtimeAllowance?.value),
+    oneOffBonus: adjustmentAmounts.bonus,
+    oneOffOvertime: adjustmentAmounts.overtime,
+    oneOffOtherAllowance: adjustmentAmounts.otherEarning,
+    monthlyPensionContribution: reliefContributions.employeePension,
+    monthlyNhfContribution: reliefContributions.nhf,
+    monthlyHealthContribution: reliefContributions.health,
   });
 }
 
@@ -47160,6 +47354,9 @@ function buildPayrollPayload() {
 
   const employeeOverrideAuditSummary =
     getManualPayrollEmployeeOverrideAuditSummary();
+  const manualAdjustmentAmounts = getCurrentPayrollAdjustmentAmounts();
+  const manualTaxReliefContributions =
+    getCurrentPayrollActualTaxReliefContributions();
   // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1D
   // Manual payroll also needs a payroll ID.
   // Preserve an existing reference during edit; otherwise generate a new one.
@@ -47253,6 +47450,12 @@ function buildPayrollPayload() {
       overtime: toNullableNumber(state.dom.payrollOvertime?.value),
       logisticsAllowance: toNullableNumber(state.dom.payrollLogisticsAllowance?.value),
       dataAirtimeAllowance: toNullableNumber(state.dom.payrollDataAirtimeAllowance?.value),
+      oneOffBonus: manualAdjustmentAmounts.bonus,
+      oneOffOvertime: manualAdjustmentAmounts.overtime,
+      oneOffOtherAllowance: manualAdjustmentAmounts.otherEarning,
+      monthlyPensionContribution: manualTaxReliefContributions.employeePension,
+      monthlyNhfContribution: manualTaxReliefContributions.nhf,
+      monthlyHealthContribution: manualTaxReliefContributions.health,
       grossPay: toNullableNumber(state.dom.payrollGrossPay?.value),
       employeePension: toNullableNumber(state.dom.payrollEmployeePension?.value),
       payeTax: toNullableNumber(state.dom.payrollPayeTax?.value),
