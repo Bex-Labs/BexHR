@@ -34235,6 +34235,27 @@ function buildBatchPayrollRecordPayload(preparedRow, payrollReference = "") {
     total_deductions: preparedRow.total_deductions,
     net_pay: preparedRow.net_pay,
 
+    // PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B
+    // Run Payroll and CSV import share this payload builder, so one snapshot
+    // attachment covers both finalisation routes.
+    ...buildPayrollTaxSnapshotFieldsFromPayrollValues({
+      payrollModel: preparedRow.payroll_model || "REGULAR",
+      payDate: payDate || null,
+      basicPay: preparedRow.basic_pay,
+      housingAllowance: preparedRow.housing_allowance,
+      transportAllowance: preparedRow.transport_allowance,
+      utilityAllowance: preparedRow.utility_allowance,
+      otherAllowance: preparedRow.other_allowance,
+      medicalAllowance: preparedRow.medical_allowance,
+      bonus: preparedRow.bonus,
+      overtime: preparedRow.overtime,
+      logisticsAllowance: preparedRow.logistics_allowance,
+      dataAirtimeAllowance: preparedRow.data_airtime_allowance,
+      grossPay: preparedRow.gross_pay,
+      employeePension: preparedRow.employee_pension,
+      payeTax: preparedRow.paye_tax,
+    }),
+
     currency: "NGN",
     status: "Authorised",
     is_finalised: true,
@@ -44319,11 +44340,14 @@ function setNumericFieldValue(field, value) {
 // These bands are annual bands. The payroll form works monthly,
 // so monthly values are annualised before tax is calculated.
 const NTA_2025_PAYE_BANDS = [
+  // Nigeria Tax Act 2025, Fourth Schedule, effective for 2026 payroll:
+  // first NGN 800,000 @ 0%; next 2.2m @ 15%; next 9m @ 18%;
+  // next 13m @ 21%; next 25m @ 23%; balance above NGN 50m @ 25%.
   { limit: 800000, rate: 0 },
   { limit: 2200000, rate: 0.15 },
   { limit: 9000000, rate: 0.18 },
-  { limit: 12000000, rate: 0.21 },
-  { limit: 16000000, rate: 0.23 },
+  { limit: 13000000, rate: 0.21 },
+  { limit: 25000000, rate: 0.23 },
   { limit: Infinity, rate: 0.25 },
 ];
 
@@ -44363,6 +44387,7 @@ function calculateNta2025MonthlyPayeTaxFromComponents({
   logisticsAllowance = 0,
   dataAirtimeAllowance = 0,
   annualRentPaid = 0,
+  returnDetails = false,
 } = {}) {
   const monthlyBasic = Number(basicPay || 0);
   const monthlyHousing = Number(housingAllowance || 0);
@@ -44404,8 +44429,550 @@ function calculateNta2025MonthlyPayeTaxFromComponents({
   );
 
   const annualPayeTax = calculateAnnualPayeFromBands(annualChargeableIncome);
+  const monthlyPayeTax = annualPayeTax / 12;
 
-  return annualPayeTax / 12;
+  // PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B2
+  // Normal payroll callers still receive the exact same numeric monthly PAYE.
+  // Snapshot creation can request the already-calculated intermediate values
+  // so the historical record explains how that PAYE amount was produced.
+  if (returnDetails) {
+    const annualEligibleDeductions =
+      annualPension + annualNhf + annualNhis + annualRentRelief;
+
+    return {
+      monthlyGross,
+      annualGross,
+      annualPension,
+      annualNhf,
+      annualNhis,
+      annualRentRelief,
+      annualEligibleDeductions,
+      annualChargeableIncome,
+      annualPayeTax,
+      monthlyPayeTax,
+    };
+  }
+
+  return monthlyPayeTax;
+}
+
+// =========================================================
+// PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B
+// 10B-B-R - Preserve the tax facts used when a new Regular payroll record is saved.
+//
+// This phase does NOT calculate cumulative YTD PAYE. The four ytd_* columns stay
+// null until Phase 2C can derive them from complete, ordered payroll history.
+// It also does not backfill old payroll rows.
+// =========================================================
+const PAYROLL_TAX_RULE_VERSION = "NTA_2025_2026_V1";
+
+function roundPayrollTaxSnapshotAmount(value) {
+  const numericValue = Number(value || 0);
+  return Number.isFinite(numericValue)
+    ? Math.round((numericValue + Number.EPSILON) * 100) / 100
+    : 0;
+}
+
+function buildPayrollTaxSnapshotFieldsFromPayrollValues({
+  payrollModel = "",
+  payDate = null,
+  basicPay = 0,
+  housingAllowance = 0,
+  transportAllowance = 0,
+  utilityAllowance = 0,
+  otherAllowance = 0,
+  medicalAllowance = 0,
+  bonus = 0,
+  overtime = 0,
+  logisticsAllowance = 0,
+  dataAirtimeAllowance = 0,
+  grossPay = 0,
+  employeePension = 0,
+  payeTax = 0,
+} = {}) {
+  const normalizedPayrollModel = String(payrollModel || "")
+    .trim()
+    .toUpperCase();
+
+  if (normalizedPayrollModel !== "REGULAR") {
+    return {
+      tax_rule_version: null,
+      tax_calculation_snapshot: null,
+      ytd_gross_emoluments: null,
+      ytd_eligible_deductions: null,
+      ytd_taxable_emoluments: null,
+      ytd_cumulative_tax: null,
+    };
+  }
+
+  const components = {
+    basicPay: roundPayrollTaxSnapshotAmount(basicPay),
+    housingAllowance: roundPayrollTaxSnapshotAmount(housingAllowance),
+    transportAllowance: roundPayrollTaxSnapshotAmount(transportAllowance),
+    utilityAllowance: roundPayrollTaxSnapshotAmount(utilityAllowance),
+    otherAllowance: roundPayrollTaxSnapshotAmount(otherAllowance),
+    medicalAllowance: roundPayrollTaxSnapshotAmount(medicalAllowance),
+    bonus: roundPayrollTaxSnapshotAmount(bonus),
+    overtime: roundPayrollTaxSnapshotAmount(overtime),
+    logisticsAllowance: roundPayrollTaxSnapshotAmount(logisticsAllowance),
+    dataAirtimeAllowance: roundPayrollTaxSnapshotAmount(dataAirtimeAllowance),
+  };
+
+  // PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B2
+  // Ask the existing PAYE helper for the exact intermediate values it already
+  // used. This avoids a second/duplicated tax formula inside the snapshot path.
+  const taxDetails = calculateNta2025MonthlyPayeTaxFromComponents({
+    ...components,
+    annualRentPaid: 0,
+    returnDetails: true,
+  });
+
+  const baselineCalculatedPayeTax = Number(taxDetails?.monthlyPayeTax || 0);
+  const finalSavedPayeTax = roundPayrollTaxSnapshotAmount(payeTax);
+
+  return {
+    tax_rule_version: PAYROLL_TAX_RULE_VERSION,
+    tax_calculation_snapshot: {
+      snapshot_version: 2,
+      tax_rule_version: PAYROLL_TAX_RULE_VERSION,
+      calculation_basis: "MONTHLY_ANNUALISED_CURRENT_PERIOD",
+      pay_date: payDate || null,
+      payroll_model: normalizedPayrollModel,
+      earnings: {
+        basic_pay: components.basicPay,
+        housing_allowance: components.housingAllowance,
+        transport_allowance: components.transportAllowance,
+        utility_allowance: components.utilityAllowance,
+        other_allowance: components.otherAllowance,
+        medical_allowance: components.medicalAllowance,
+        bonus: components.bonus,
+        overtime: components.overtime,
+        logistics_allowance: components.logisticsAllowance,
+        data_airtime_allowance: components.dataAirtimeAllowance,
+      },
+      gross_emoluments: roundPayrollTaxSnapshotAmount(grossPay),
+      actual_saved_employee_pension: roundPayrollTaxSnapshotAmount(employeePension),
+      tax_calculation_basis: {
+        monthly_gross_emoluments: roundPayrollTaxSnapshotAmount(
+          taxDetails?.monthlyGross,
+        ),
+        annual_gross_emoluments: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualGross,
+        ),
+        annual_reliefs_used: {
+          pension: roundPayrollTaxSnapshotAmount(taxDetails?.annualPension),
+          nhf: roundPayrollTaxSnapshotAmount(taxDetails?.annualNhf),
+          nhis: roundPayrollTaxSnapshotAmount(taxDetails?.annualNhis),
+          rent_relief: roundPayrollTaxSnapshotAmount(
+            taxDetails?.annualRentRelief,
+          ),
+        },
+        annual_eligible_deductions: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualEligibleDeductions,
+        ),
+        annual_chargeable_income: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualChargeableIncome,
+        ),
+        annual_calculated_tax: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualPayeTax,
+        ),
+        monthly_calculated_tax: roundPayrollTaxSnapshotAmount(
+          taxDetails?.monthlyPayeTax,
+        ),
+      },
+      baseline_calculated_paye_tax: roundPayrollTaxSnapshotAmount(
+        baselineCalculatedPayeTax,
+      ),
+      final_saved_paye_tax: finalSavedPayeTax,
+      paye_adjustment_from_baseline: roundPayrollTaxSnapshotAmount(
+        finalSavedPayeTax - baselineCalculatedPayeTax,
+      ),
+      assumptions: {
+        annual_rent_paid: 0,
+        rent_relief_input_available: false,
+        relief_values_are_tax_calculation_inputs: true,
+        actual_saved_employee_pension_is_recorded_separately: true,
+        ytd_calculation_deferred_to_phase_2c: true,
+      },
+    },
+    ytd_gross_emoluments: null,
+    ytd_eligible_deductions: null,
+    ytd_taxable_emoluments: null,
+    ytd_cumulative_tax: null,
+  };
+}
+
+// =========================================================
+// PAYROLL TAX YTD ENGINE - PHASE 2C-A
+// 10B-C1 - Shadow cumulative YTD PAYE engine.
+//
+// Safety rules:
+// * Do not backfill legacy payroll rows.
+// * Do not trust incomplete in-year history.
+// * Do not change the saved PAYE deduction yet.
+// * Populate YTD fields only when every earlier finalised in-year row has a
+//   complete v2 tax snapshot under the same tax rule.
+// =========================================================
+function getPayrollTaxSnapshotVersion(snapshot = null) {
+  const version = Number(snapshot?.snapshot_version || 0);
+  return Number.isFinite(version) ? version : 0;
+}
+
+function getPayrollTaxSnapshotMonthlyEligibleDeductions(snapshot = null) {
+  const annualEligible = Number(
+    snapshot?.tax_calculation_basis?.annual_eligible_deductions || 0,
+  );
+
+  return Number.isFinite(annualEligible)
+    ? roundPayrollTaxSnapshotAmount(annualEligible / 12)
+    : 0;
+}
+
+function calculatePayrollYtdShadowFromHistory({
+  priorRows = [],
+  currentPayload = {},
+} = {}) {
+  const currentSnapshot = currentPayload.tax_calculation_snapshot || null;
+
+  if (
+    String(currentPayload.tax_rule_version || "") !== PAYROLL_TAX_RULE_VERSION ||
+    getPayrollTaxSnapshotVersion(currentSnapshot) < 2
+  ) {
+    return {
+      status: "DEFERRED_CURRENT_SNAPSHOT_INCOMPLETE",
+      ytdFields: null,
+    };
+  }
+
+  // PAYROLL TAX YTD ENGINE - PHASE 2C-B
+  // Do not override a current-period PAYE value that was intentionally
+  // changed by statutory setup, employee override, or another manual rule.
+  // Activated YTD is only allowed to replace the normal baseline PAYE.
+  const currentPayeAdjustment = Number(
+    currentSnapshot?.paye_adjustment_from_baseline || 0,
+  );
+
+  if (
+    Number.isFinite(currentPayeAdjustment) &&
+    Math.abs(currentPayeAdjustment) > 0.009
+  ) {
+    return {
+      status: "DEFERRED_CURRENT_PAYE_ADJUSTMENT",
+      ytdFields: null,
+    };
+  }
+
+  const incompletePriorRow = priorRows.find((row) => {
+    return (
+      String(row.tax_rule_version || "") !== PAYROLL_TAX_RULE_VERSION ||
+      getPayrollTaxSnapshotVersion(row.tax_calculation_snapshot) < 2
+    );
+  });
+
+  if (incompletePriorRow) {
+    return {
+      status: "DEFERRED_INCOMPLETE_PRIOR_HISTORY",
+      ytdFields: null,
+      incompletePriorRecordId: incompletePriorRow.id || null,
+    };
+  }
+
+  const priorWithUnexpectedAdjustment = priorRows.find((row) => {
+    const snapshot = row.tax_calculation_snapshot || null;
+    const adjustment = Number(snapshot?.paye_adjustment_from_baseline || 0);
+
+    if (!Number.isFinite(adjustment) || Math.abs(adjustment) <= 0.009) {
+      return false;
+    }
+
+    // PAYROLL TAX YTD ENGINE - PHASE 2C-B
+    // A nonzero adjustment is expected on a prior row when it was created by
+    // the verified YTD engine itself. Other PAYE overrides remain a reason to
+    // defer because their tax treatment cannot be inferred safely.
+    const ytdCalculation = snapshot?.ytd_calculation || null;
+    const isVerifiedAppliedYtd =
+      ytdCalculation?.paye_applied_to_payroll === true &&
+      String(ytdCalculation?.status || "") === "READY_APPLIED" &&
+      String(ytdCalculation?.phase || "") === "2C_B_ACTIVE";
+
+    return !isVerifiedAppliedYtd;
+  });
+
+  if (priorWithUnexpectedAdjustment) {
+    return {
+      status: "DEFERRED_PRIOR_PAYE_ADJUSTMENT",
+      ytdFields: null,
+      incompletePriorRecordId: priorWithUnexpectedAdjustment.id || null,
+    };
+  }
+
+  const currentGross = roundPayrollTaxSnapshotAmount(
+    currentSnapshot?.tax_calculation_basis?.monthly_gross_emoluments ??
+      currentPayload.gross_pay,
+  );
+  const currentEligible = getPayrollTaxSnapshotMonthlyEligibleDeductions(
+    currentSnapshot,
+  );
+
+  const priorGross = priorRows.reduce((total, row) => {
+    const value = Number(
+      row.tax_calculation_snapshot?.tax_calculation_basis
+        ?.monthly_gross_emoluments ?? row.gross_pay ?? 0,
+    );
+    return total + (Number.isFinite(value) ? value : 0);
+  }, 0);
+
+  const priorEligible = priorRows.reduce((total, row) => {
+    return (
+      total +
+      getPayrollTaxSnapshotMonthlyEligibleDeductions(
+        row.tax_calculation_snapshot,
+      )
+    );
+  }, 0);
+
+  const priorTaxWithheld = priorRows.reduce((total, row) => {
+    const value = Number(row.paye_tax || 0);
+    return total + (Number.isFinite(value) ? value : 0);
+  }, 0);
+
+  const periodCount = priorRows.length + 1;
+  const ytdGross = roundPayrollTaxSnapshotAmount(priorGross + currentGross);
+  const ytdEligible = roundPayrollTaxSnapshotAmount(
+    priorEligible + currentEligible,
+  );
+  const ytdTaxable = roundPayrollTaxSnapshotAmount(
+    Math.max(0, ytdGross - ytdEligible),
+  );
+
+  const annualisedTaxable = roundPayrollTaxSnapshotAmount(
+    periodCount > 0 ? (ytdTaxable / periodCount) * 12 : 0,
+  );
+  const annualisedTax = roundPayrollTaxSnapshotAmount(
+    calculateAnnualPayeFromBands(annualisedTaxable),
+  );
+  const ytdCumulativeTax = roundPayrollTaxSnapshotAmount(
+    (annualisedTax * periodCount) / 12,
+  );
+
+  const currentPeriodTaxBeforeFloor = roundPayrollTaxSnapshotAmount(
+    ytdCumulativeTax - priorTaxWithheld,
+  );
+  const shadowCurrentPeriodPaye = roundPayrollTaxSnapshotAmount(
+    Math.max(0, currentPeriodTaxBeforeFloor),
+  );
+  const overwithheldCarryForward = roundPayrollTaxSnapshotAmount(
+    Math.max(0, -currentPeriodTaxBeforeFloor),
+  );
+
+  return {
+    status: "READY_SHADOW",
+    ytdFields: {
+      ytd_gross_emoluments: ytdGross,
+      ytd_eligible_deductions: ytdEligible,
+      ytd_taxable_emoluments: ytdTaxable,
+      ytd_cumulative_tax: ytdCumulativeTax,
+    },
+    basis: {
+      period_count: periodCount,
+      prior_period_count: priorRows.length,
+      prior_tax_withheld: roundPayrollTaxSnapshotAmount(priorTaxWithheld),
+      annualised_taxable_emoluments: annualisedTaxable,
+      annualised_calculated_tax: annualisedTax,
+      cumulative_tax_through_current_period: ytdCumulativeTax,
+      current_period_tax_before_floor: currentPeriodTaxBeforeFloor,
+      shadow_current_period_paye: shadowCurrentPeriodPaye,
+      overwithheld_carry_forward: overwithheldCarryForward,
+    },
+  };
+}
+
+// =========================================================
+// PAYROLL TAX YTD ENGINE - PHASE 2C-B
+// 10B-C2 - Activate cumulative YTD PAYE only when the Phase 2C-A safety
+// engine reports complete, trustworthy in-year history.
+//
+// Deferred histories keep their existing current-period PAYE unchanged.
+// =========================================================
+function applyPayrollYtdResultToPayload(payload = {}, ytdResult = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+
+  const isReady =
+    ytdResult?.status === "READY_SHADOW" &&
+    Boolean(ytdResult?.ytdFields) &&
+    Boolean(ytdResult?.basis);
+
+  const existingSnapshot = payload.tax_calculation_snapshot || {};
+  const existingAssumptions = existingSnapshot.assumptions || {};
+
+  if (!isReady) {
+    return {
+      ...payload,
+      tax_calculation_snapshot: {
+        ...existingSnapshot,
+        assumptions: {
+          ...existingAssumptions,
+          ytd_calculation_deferred_to_phase_2c: true,
+          ytd_calculation_deferred: true,
+        },
+        ytd_calculation: {
+          phase: "2C_B_ACTIVE",
+          status: ytdResult?.status || "DEFERRED_UNKNOWN",
+          paye_applied_to_payroll: false,
+          ...(ytdResult?.basis || {}),
+          ...(ytdResult?.incompletePriorRecordId
+            ? { incomplete_prior_record_id: ytdResult.incompletePriorRecordId }
+            : {}),
+        },
+      },
+      ytd_gross_emoluments: null,
+      ytd_eligible_deductions: null,
+      ytd_taxable_emoluments: null,
+      ytd_cumulative_tax: null,
+    };
+  }
+
+  const previousCurrentPeriodPaye = roundPayrollTaxSnapshotAmount(
+    payload.paye_tax,
+  );
+  const appliedCurrentPeriodPaye = roundPayrollTaxSnapshotAmount(
+    ytdResult.basis.shadow_current_period_paye,
+  );
+  const payeChange = roundPayrollTaxSnapshotAmount(
+    appliedCurrentPeriodPaye - previousCurrentPeriodPaye,
+  );
+
+  const previousTotalDeductions = Number(payload.total_deductions || 0);
+  const previousNetPay = Number(payload.net_pay || 0);
+
+  const totalDeductions = roundPayrollTaxSnapshotAmount(
+    (Number.isFinite(previousTotalDeductions) ? previousTotalDeductions : 0) +
+      payeChange,
+  );
+  const netPay = roundPayrollTaxSnapshotAmount(
+    (Number.isFinite(previousNetPay) ? previousNetPay : 0) - payeChange,
+  );
+
+  const baselineCalculatedPayeTax = roundPayrollTaxSnapshotAmount(
+    existingSnapshot.baseline_calculated_paye_tax ?? previousCurrentPeriodPaye,
+  );
+
+  const logisticsAllowance = Number(payload.logistics_allowance || 0);
+  const dataAirtimeAllowance = Number(payload.data_airtime_allowance || 0);
+  const monthlySalaryPlusLogistics =
+    Number.isFinite(logisticsAllowance) && logisticsAllowance > 0
+      ? roundPayrollTaxSnapshotAmount(
+        Math.max(
+          0,
+          netPay -
+            (Number.isFinite(dataAirtimeAllowance) ? dataAirtimeAllowance : 0),
+        ),
+      )
+      : payload.monthly_salary_plus_logistics ?? null;
+
+  return {
+    ...payload,
+    ...ytdResult.ytdFields,
+    paye_tax: appliedCurrentPeriodPaye,
+    total_deductions: totalDeductions,
+    net_pay: netPay,
+    monthly_salary_plus_logistics: monthlySalaryPlusLogistics,
+    tax_calculation_snapshot: {
+      ...existingSnapshot,
+      final_saved_paye_tax: appliedCurrentPeriodPaye,
+      paye_adjustment_from_baseline: roundPayrollTaxSnapshotAmount(
+        appliedCurrentPeriodPaye - baselineCalculatedPayeTax,
+      ),
+      assumptions: {
+        ...existingAssumptions,
+        ytd_calculation_deferred_to_phase_2c: false,
+        ytd_calculation_deferred: false,
+      },
+      ytd_calculation: {
+        phase: "2C_B_ACTIVE",
+        status: "READY_APPLIED",
+        engine_status: ytdResult.status,
+        paye_applied_to_payroll: true,
+        ...ytdResult.basis,
+        previous_current_period_paye: previousCurrentPeriodPaye,
+        applied_current_period_paye: appliedCurrentPeriodPaye,
+        paye_change_from_pre_ytd_payload: payeChange,
+      },
+    },
+  };
+}
+
+async function applyPayrollYtdToNewPayload(payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+
+  const employeeId = String(payload.employee_id || "").trim();
+  const payDate = String(payload.pay_date || "").trim();
+  const payrollModel = String(payload.payroll_model || "")
+    .trim()
+    .toUpperCase();
+
+  // =========================================================
+  // PAYROLL TAX YTD ISOLATION - PHASE 3
+  // 10B-D1 - Extend the existing HRP-80 payroll tenant boundary to
+  // cumulative YTD history. Every payroll payload must belong to an employee
+  // in the current company workspace before any history is read or written.
+  // =========================================================
+  const currentTenantEmployeeIds = getCurrentTenantEmployeeIdSet();
+  if (!employeeId || !currentTenantEmployeeIds.has(employeeId)) {
+    throw new Error(
+      "Payroll YTD tenant safety: selected employee is outside the current company workspace.",
+    );
+  }
+
+  if (
+    !employeeId ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(payDate) ||
+    payrollModel !== "REGULAR" ||
+    payload.is_finalised !== true ||
+    String(payload.tax_rule_version || "") !== PAYROLL_TAX_RULE_VERSION ||
+    getPayrollTaxSnapshotVersion(payload.tax_calculation_snapshot) < 2
+  ) {
+    return payload;
+  }
+
+  const taxYear = Number(payDate.slice(0, 4));
+  const yearStart = String(taxYear) + "-01-01";
+
+  const supabase = getSupabaseClient();
+  const response = await supabase
+    .from("payroll_records")
+    .select(
+      "id,employee_id,pay_date,gross_pay,paye_tax,is_finalised,tax_rule_version,tax_calculation_snapshot,ytd_gross_emoluments,ytd_eligible_deductions,ytd_taxable_emoluments,ytd_cumulative_tax",
+    )
+    .eq("employee_id", employeeId)
+    .eq("is_finalised", true)
+    .gte("pay_date", yearStart)
+    .lt("pay_date", payDate)
+    .order("pay_date", { ascending: true });
+
+  if (response.error) {
+    throw new Error(
+      "Could not load prior payroll tax history: " + response.error.message,
+    );
+  }
+
+  const priorRows = Array.isArray(response.data) ? response.data : [];
+  const crossStaffRow = priorRows.find((row) => {
+    return String(row?.employee_id || "").trim() !== employeeId;
+  });
+
+  if (crossStaffRow) {
+    throw new Error(
+      "Payroll YTD staff safety: prior payroll history returned a different employee.",
+    );
+  }
+
+  const ytdResult = calculatePayrollYtdShadowFromHistory({
+    priorRows,
+    currentPayload: payload,
+  });
+
+  return applyPayrollYtdResultToPayload(payload, ytdResult);
 }
 
 function calculatePayrollGrossPay() {
@@ -46105,6 +46672,27 @@ function buildPayrollPayload() {
     total_deductions: toNullableNumber(state.dom.payrollTotalDeductions?.value),
     net_pay: toNullableNumber(state.dom.payrollNetPay?.value),
 
+    // PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B
+    // Snapshot the final visible Regular payroll values after setup, statutory
+    // deductions, and employee overrides have already been applied.
+    ...buildPayrollTaxSnapshotFieldsFromPayrollValues({
+      payrollModel: getSelectedPayrollModel(),
+      payDate: String(state.dom.payrollPayDate?.value || "").trim() || null,
+      basicPay: toNullableNumber(state.dom.payrollBasicPay?.value),
+      housingAllowance: toNullableNumber(state.dom.payrollHousingAllowance?.value),
+      transportAllowance: toNullableNumber(state.dom.payrollTransportAllowance?.value),
+      utilityAllowance: toNullableNumber(state.dom.payrollUtilityAllowance?.value),
+      otherAllowance: toNullableNumber(state.dom.payrollOtherAllowance?.value),
+      medicalAllowance: toNullableNumber(state.dom.payrollMedicalAllowance?.value),
+      bonus: toNullableNumber(state.dom.payrollBonus?.value),
+      overtime: toNullableNumber(state.dom.payrollOvertime?.value),
+      logisticsAllowance: toNullableNumber(state.dom.payrollLogisticsAllowance?.value),
+      dataAirtimeAllowance: toNullableNumber(state.dom.payrollDataAirtimeAllowance?.value),
+      grossPay: toNullableNumber(state.dom.payrollGrossPay?.value),
+      employeePension: toNullableNumber(state.dom.payrollEmployeePension?.value),
+      payeTax: toNullableNumber(state.dom.payrollPayeTax?.value),
+    }),
+
     currency:
       String(state.dom.payrollCurrency?.value || "NGN").trim().toUpperCase() ||
       "NGN",
@@ -46300,8 +46888,15 @@ async function handleBatchPayrollSubmit() {
     // records created together can be traced as one payroll run.
     const payrollBatchReference = buildDatestampedPayrollReference("PAY");
 
-    const batchPayload = preparedRows.map((preparedRow) =>
+    const baseBatchPayload = preparedRows.map((preparedRow) =>
       buildBatchPayrollRecordPayload(preparedRow, payrollBatchReference),
+    );
+
+    // PAYROLL TAX YTD ENGINE - PHASE 2C-A
+    // Shadow-calculate cumulative YTD per employee before the existing insert.
+    // PAYE itself is intentionally unchanged until Phase 2C-B is verified.
+    const batchPayload = await Promise.all(
+      baseBatchPayload.map((payload) => applyPayrollYtdToNewPayload(payload)),
     );
 
     const supabase = getSupabaseClient();
@@ -46427,6 +47022,27 @@ async function handlePayrollSave() {
 
     payrollPayload = buildPayrollPayload();
 
+    // PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B
+    // Phase 2B never invents tax history for an older edited payroll row.
+    // Preserve whatever tax-history fields the record already had. Newly
+    // created rows receive the snapshot from buildPayrollPayload().
+    if (isEditMode) {
+      const existingPayrollRecord = state.currentEditingPayroll || {};
+
+      payrollPayload.tax_rule_version =
+        existingPayrollRecord.tax_rule_version ?? null;
+      payrollPayload.tax_calculation_snapshot =
+        existingPayrollRecord.tax_calculation_snapshot ?? null;
+      payrollPayload.ytd_gross_emoluments =
+        existingPayrollRecord.ytd_gross_emoluments ?? null;
+      payrollPayload.ytd_eligible_deductions =
+        existingPayrollRecord.ytd_eligible_deductions ?? null;
+      payrollPayload.ytd_taxable_emoluments =
+        existingPayrollRecord.ytd_taxable_emoluments ?? null;
+      payrollPayload.ytd_cumulative_tax =
+        existingPayrollRecord.ytd_cumulative_tax ?? null;
+    }
+
     // PAYROLL FINALISATION CORRECTION - STEP 2B
     // Mark corrected finalised payroll records without creating a duplicate row.
     if (isFinalisedCorrection) {
@@ -46452,10 +47068,15 @@ async function handlePayrollSave() {
     // before the save starts, so finalisation readiness can be checked first.
 
     if (isBatchPayrollSubmission) {
-      const batchPayload = selectedBatchEmployeeIds.map((employeeId) => ({
+      const baseBatchPayload = selectedBatchEmployeeIds.map((employeeId) => ({
         ...payrollPayload,
         employee_id: employeeId,
       }));
+
+      // PAYROLL TAX YTD ENGINE - PHASE 2C-A
+      const batchPayload = await Promise.all(
+        baseBatchPayload.map((payload) => applyPayrollYtdToNewPayload(payload)),
+      );
 
       response = await supabase
         .from("payroll_records")
@@ -46520,6 +47141,9 @@ async function handlePayrollSave() {
         .select("*")
         .maybeSingle();
     } else {
+      // PAYROLL TAX YTD ENGINE - PHASE 2C-A
+      payrollPayload = await applyPayrollYtdToNewPayload(payrollPayload);
+
       response = await supabase
         .from("payroll_records")
         .insert([payrollPayload])
