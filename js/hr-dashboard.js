@@ -8171,6 +8171,7 @@ function showPayrollOtherDeductionValidationIssues(issues = []) {
 }
 
 function validatePayrollOtherDeductionForm() {
+  configurePayrollOtherDeductionPhase4Ui();
   clearPayrollOtherDeductionValidationState();
 
   const issues = [];
@@ -8189,8 +8190,10 @@ function validatePayrollOtherDeductionForm() {
     String(state.dom.payrollOtherDeductionAmount?.value || "").trim();
   const durationText =
     String(state.dom.payrollOtherDeductionDurationMonths?.value || "").trim();
-  const startDate =
-    String(state.dom.payrollOtherDeductionStartDate?.value || "").trim();
+  const startMonth = normalizePayrollDeductionStartMonth(
+    state.dom.payrollOtherDeductionStartDate?.value || "",
+  );
+  const startDate = payrollDeductionStartMonthToDate(startMonth);
   const status =
     String(state.dom.payrollOtherDeductionStatus?.value || "").trim();
 
@@ -8231,19 +8234,13 @@ function validatePayrollOtherDeductionForm() {
   }
 
   if (!startDate) {
-    issues.push("Select the deduction start date.");
+    issues.push("Select the deduction start month.");
     markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionStartDate);
     firstInvalidField ||= state.dom.payrollOtherDeductionStartDate;
   } else if (Number.isNaN(new Date(startDate).getTime())) {
-    issues.push("Deduction start date is not valid.");
+    issues.push("deduction start month is not valid.");
     markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionStartDate);
     firstInvalidField ||= state.dom.payrollOtherDeductionStartDate;
-  }
-
-  if (!status) {
-    issues.push("Select the deduction status.");
-    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionStatus);
-    firstInvalidField ||= state.dom.payrollOtherDeductionStatus;
   }
 
   const conflict = findPayrollOtherDeductionStartDateConflict({
@@ -8291,13 +8288,14 @@ function buildPayrollOtherDeductionPayload() {
       Number(state.dom.payrollOtherDeductionDurationMonths?.value || 0),
 
     start_date:
-      state.dom.payrollOtherDeductionStartDate?.value || null,
+      payrollDeductionStartMonthToDate(
+        state.dom.payrollOtherDeductionStartDate?.value || "",
+      ) || null,
 
     reference_number:
       String(state.dom.payrollOtherDeductionReferenceNumber?.value || "").trim() || null,
 
-    status:
-      String(state.dom.payrollOtherDeductionStatus?.value || "Active").trim(),
+    status: "Active", // Phase 4 lifecycle is derived from Start Month + Duration.
 
     notes:
       String(state.dom.payrollOtherDeductionNotes?.value || "").trim() || null,
@@ -8625,7 +8623,7 @@ function startPayrollOtherDeductionEdit(otherDeductionId) {
   }
 
   if (state.dom.payrollOtherDeductionStartDate) {
-    state.dom.payrollOtherDeductionStartDate.value = record.start_date || "";
+    state.dom.payrollOtherDeductionStartDate.value = normalizePayrollDeductionStartMonth(record.start_date);
   }
 
   if (state.dom.payrollOtherDeductionReferenceNumber) {
@@ -8677,7 +8675,354 @@ function exitPayrollOtherDeductionEditMode() {
 // HR DEDUCTION RECORDS MODERN CARDS - v1.0.1
 // Non-statutory deduction presentation only. Search, create/edit, Supabase,
 // tenant filtering, payroll calculation, status, and permission logic remain unchanged.
+// =========================================================
+// BEXHR PHASE 4C - DEDUCTIONS SIMPLIFICATION
+// Locked principle: HR enters business facts; BexHR derives technical state.
+// Recurring Other Deductions use Amount + Start Month + Duration.
+// Statutory deductions use BexHR-owned rule defaults; manual method/value/status
+// controls remain in the DOM only for backward-compatible storage/edit plumbing.
+// =========================================================
+function normalizePayrollDeductionStartMonth(value = "") {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+  if (!match) return "";
+
+  const month = Number(match[2]);
+  if (!Number.isInteger(month) || month < 1 || month > 12) return "";
+
+  return match[1] + "-" + match[2];
+}
+
+function payrollDeductionStartMonthToDate(value = "") {
+  const month = normalizePayrollDeductionStartMonth(value);
+  return month ? month + "-01" : "";
+}
+
+function formatPayrollDeductionStartMonth(value = "") {
+  const monthValue = normalizePayrollDeductionStartMonth(value);
+  if (!monthValue) return "—";
+
+  const [year, month] = monthValue.split("-");
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+
+  return monthNames[Number(month) - 1] + " " + year;
+}
+
+function setPayrollDeductionPhase4Label(field, text) {
+  if (!field?.id || typeof document === "undefined") return;
+
+  const label = document.querySelector('label[for="' + field.id + '"]');
+  if (!label) return;
+
+  label.textContent = text;
+  if (field.required) {
+    const marker = document.createElement("span");
+    marker.className = "text-danger";
+    marker.textContent = " *";
+    label.appendChild(marker);
+  }
+}
+
+function hidePayrollDeductionPhase4Control(field) {
+  if (!field) return;
+
+  field.required = false;
+  field.hidden = true;
+
+  const label = field.id && typeof document !== "undefined"
+    ? document.querySelector('label[for="' + field.id + '"]')
+    : null;
+  if (label) label.hidden = true;
+
+  const wrapper = field.closest?.(
+    ".col-12, .col-md-6, .col-md-4, .col-lg-6, .col-lg-4, .mb-3, .form-group",
+  );
+  if (wrapper) wrapper.classList.add("d-none");
+}
+
+function configurePayrollOtherDeductionPhase4Ui() {
+  const startMonthField = state.dom.payrollOtherDeductionStartDate;
+  const statusField = state.dom.payrollOtherDeductionStatus;
+
+  if (startMonthField) {
+    const existingMonth = normalizePayrollDeductionStartMonth(startMonthField.value);
+    startMonthField.type = "month";
+    if (existingMonth) startMonthField.value = existingMonth;
+    setPayrollDeductionPhase4Label(startMonthField, "Start Month");
+  }
+
+  if (statusField) {
+    statusField.value = "Active";
+    hidePayrollDeductionPhase4Control(statusField);
+  }
+}
+
+function configurePayrollStatutoryPhase4Ui() {
+  const startMonthField = state.dom.payrollStatutoryEffectiveDate;
+  const statusField = state.dom.payrollStatutoryStatus;
+  const methodField = state.dom.payrollStatutoryCalculationMethod;
+  const valueField = state.dom.payrollStatutoryDeductionValue;
+  const deductionType = String(
+    state.dom.payrollStatutoryDeductionType?.value || "",
+  ).trim();
+  const setup = getDefaultStatutoryDeductionSetup(deductionType);
+
+  if (startMonthField) {
+    const existingMonth = normalizePayrollDeductionStartMonth(startMonthField.value);
+    startMonthField.type = "month";
+    if (existingMonth) startMonthField.value = existingMonth;
+    setPayrollDeductionPhase4Label(startMonthField, "Start Month");
+  }
+
+  if (methodField) methodField.value = setup.method;
+  if (valueField) valueField.value = setup.value;
+  if (statusField) statusField.value = "Active";
+
+  hidePayrollDeductionPhase4Control(methodField);
+  hidePayrollDeductionPhase4Control(valueField);
+  hidePayrollDeductionPhase4Control(statusField);
+}
+
+function getPayrollOtherDeductionLifecycle(record = {}, referenceDateValue = "") {
+  const reference = String(referenceDateValue || "").trim() ||
+    new Date().toISOString().slice(0, 10);
+  const referenceMonth = getPayrollMonthIndexFromDateValue(reference);
+  const startMonth = getPayrollMonthIndexFromDateValue(record.start_date);
+  const durationMonths = Number(record.duration_months || 0);
+
+  if (referenceMonth === null || startMonth === null ||
+      !Number.isInteger(durationMonths) || durationMonths < 1) {
+    return "Unknown";
+  }
+
+  if (referenceMonth < startMonth) return "Upcoming";
+  if (referenceMonth >= startMonth + durationMonths) return "Completed";
+  return "Current";
+}
+
+function getPayrollStatutoryLifecycle(record = {}, referenceDateValue = "") {
+  const reference = String(referenceDateValue || "").trim() ||
+    new Date().toISOString().slice(0, 10);
+  const referenceMonth = getPayrollMonthIndexFromDateValue(reference);
+  const startMonth = getPayrollMonthIndexFromDateValue(record.effective_date);
+
+  if (referenceMonth === null || startMonth === null) return "Unknown";
+  return referenceMonth < startMonth ? "Upcoming" : "Current";
+}
+
+// PHASE 4D PAYROLL RULES UX CLEANUP
+// Keep business inputs simple while preserving historical storage fields.
+function formatPayrollSetupMonthForDisplay(value = "") {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})-(\d{2})/);
+  if (!match) return raw || "--";
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || month < 1 || month > 12) return raw;
+
+  return new Intl.DateTimeFormat("en", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+function ensurePhase4MonthPlaceholderStyles() {
+  if (document.getElementById("bexhrPhase4MonthPlaceholderStyles")) return;
+
+  const style = document.createElement("style");
+  style.id = "bexhrPhase4MonthPlaceholderStyles";
+  style.textContent = `
+    .bexhr-phase4-month-control {
+      position: relative;
+    }
+
+    .bexhr-phase4-month-input {
+      position: relative;
+      z-index: 2;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .bexhr-phase4-month-display {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.375rem 0.75rem;
+      background: var(--bs-body-bg, #fff);
+      border: var(--bs-border-width, 1px) solid var(--bs-border-color, #dee2e6);
+      border-radius: var(--bs-border-radius, 0.375rem);
+      color: var(--bs-body-color, #212529);
+      pointer-events: none;
+    }
+
+    .bexhr-phase4-month-display.is-empty {
+      color: var(--bs-secondary-color, #6c757d);
+    }
+
+    .bexhr-phase4-month-control:focus-within .bexhr-phase4-month-display {
+      border-color: var(--bs-primary-border-subtle, #86b7fe);
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+
+    .bexhr-phase4-month-display-icon {
+      flex: 0 0 auto;
+      color: var(--bs-body-color, #212529);
+    }
+  `;
+  document.head.appendChild(style);
+}
+function decoratePhase4StartMonthField(field) {
+  if (!field) return false;
+
+  field.type = "month";
+  field.required = true;
+  field.classList.add("bexhr-phase4-month-input");
+
+  let wrapper = field.parentElement?.classList.contains("bexhr-phase4-month-control")
+    ? field.parentElement
+    : null;
+
+  if (!wrapper) {
+    const parent = field.parentNode;
+    if (!parent) return false;
+
+    wrapper = document.createElement("div");
+    wrapper.className = "bexhr-phase4-month-control";
+    parent.insertBefore(wrapper, field);
+    wrapper.appendChild(field);
+  }
+
+  let display = wrapper.querySelector(".bexhr-phase4-month-display");
+
+  if (!display) {
+    wrapper.querySelector(".bexhr-phase4-month-placeholder")?.remove();
+
+    display = document.createElement("div");
+    display.className = "bexhr-phase4-month-display is-empty";
+    display.setAttribute("aria-hidden", "true");
+
+    const displayText = document.createElement("span");
+    displayText.className = "bexhr-phase4-month-display-text";
+    displayText.textContent = "Select start month";
+
+    const displayIcon = document.createElement("i");
+    displayIcon.className = "bi bi-calendar3 bexhr-phase4-month-display-icon";
+    displayIcon.setAttribute("aria-hidden", "true");
+
+    display.appendChild(displayText);
+    display.appendChild(displayIcon);
+    wrapper.appendChild(display);
+  }
+
+  const syncDisplay = () => {
+    const displayText = display.querySelector(".bexhr-phase4-month-display-text");
+    if (!displayText) return;
+
+    const value = String(field.value || "").trim();
+    const isEmpty = !value;
+
+    display.classList.toggle("is-empty", isEmpty);
+    displayText.textContent = isEmpty
+      ? "Select start month"
+      : formatPayrollSetupMonthForDisplay(value);
+  };
+
+  if (field.dataset.phase4dMonthDisplayBound !== "true") {
+    field.dataset.phase4dMonthDisplayBound = "true";
+    field.addEventListener("input", syncDisplay);
+    field.addEventListener("change", syncDisplay);
+
+    field.addEventListener("click", () => {
+      if (typeof field.showPicker === "function") {
+        try {
+          field.showPicker();
+        } catch (error) {
+          // Browser still retains its normal native-picker behaviour.
+        }
+      }
+    });
+
+    field.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === " ") && typeof field.showPicker === "function") {
+        event.preventDefault();
+        try {
+          field.showPicker();
+        } catch (error) {
+          // Browser still retains its normal native-picker behaviour.
+        }
+      }
+    });
+  }
+
+  syncDisplay();
+  return true;
+}
+function hidePhase4TechnicalFormField(field) {
+  if (!field) return false;
+
+  const container =
+    field.closest(".col-12, .col-md-6, .col-md-4, .mb-3, .form-group") ||
+    field.parentElement;
+
+  if (!container) return false;
+  container.classList.add("d-none");
+  container.dataset.phase4dHiddenTechnicalField = "true";
+  field.tabIndex = -1;
+  return true;
+}
+
+function applyPhase4dPayrollRulesUxCleanup() {
+  ensurePhase4MonthPlaceholderStyles();
+
+  const monthFields = [
+    state.dom.payrollAllowanceEffectiveDate,
+    state.dom.payrollStatutoryEffectiveDate,
+    state.dom.payrollOtherDeductionStartDate,
+  ];
+
+  const decoratedCount = monthFields.filter((field) =>
+    decoratePhase4StartMonthField(field),
+  ).length;
+
+  hidePhase4TechnicalFormField(state.dom.payrollOtherDeductionReferenceNumber);
+
+  if (state.dom.payrollStatutoryConfigSource) {
+    if (!String(state.dom.payrollStatutoryConfigSource.value || "").trim()) {
+      state.dom.payrollStatutoryConfigSource.value = "EMPLOYEE";
+    }
+    hidePhase4TechnicalFormField(state.dom.payrollStatutoryConfigSource);
+  }
+
+  return decoratedCount === monthFields.length;
+}
+
+function schedulePhase4dPayrollRulesUxCleanup(attempt = 0) {
+  const applied = applyPhase4dPayrollRulesUxCleanup();
+  if (!applied && attempt < 30) {
+    setTimeout(() => schedulePhase4dPayrollRulesUxCleanup(attempt + 1), 100);
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener(
+    "DOMContentLoaded",
+    () => schedulePhase4dPayrollRulesUxCleanup(),
+    { once: true },
+  );
+} else {
+  schedulePhase4dPayrollRulesUxCleanup();
+}
 function renderPayrollOtherDeductionRecords(records = []) {
+  configurePayrollOtherDeductionPhase4Ui();
   const tbody = state.dom.payrollOtherDeductionRecordsTableBody;
   if (!tbody) return;
 
@@ -8709,7 +9054,6 @@ function renderPayrollOtherDeductionRecords(records = []) {
     const totalAmount =
       record.total_deduction_amount ??
       Number(record.deduction_amount || 0) * durationMonths;
-    const referenceNumber = String(record.reference_number || "").trim();
     const notes = String(record.notes || "").trim();
 
     const row = document.createElement("tr");
@@ -8739,7 +9083,7 @@ function renderPayrollOtherDeductionRecords(records = []) {
             </div>
 
             <div class="hr-deduction-record-header-actions">
-              ${renderBexhrStatusPill(formatStatusLabel(record.status))}
+              ${renderBexhrStatusPill(getPayrollOtherDeductionLifecycle(record))}
 
               <button
                 type="button"
@@ -8775,29 +9119,12 @@ function renderPayrollOtherDeductionRecords(records = []) {
             </div>
 
             <div class="hr-deduction-record-detail">
-              <span class="hr-deduction-record-label">Start date</span>
-              <strong>${escapeHtml(formatDate(record.start_date))}</strong>
+              <span class="hr-deduction-record-label">Start month</span>
+              <strong>${escapeHtml(formatPayrollDeductionStartMonth(record.start_date))}</strong>
             </div>
 
-            <div class="hr-deduction-record-detail">
-              <span class="hr-deduction-record-label">Last updated</span>
-              <strong>${escapeHtml(formatDate(record.updated_at || record.created_at))}</strong>
-            </div>
-          </div>
 
-          ${referenceNumber || notes ? `
-            <footer class="hr-deduction-record-footer hr-deduction-record-footer--split">
-              ${referenceNumber ? `
-                <div class="hr-deduction-record-footer-item">
-                  <span class="hr-deduction-record-footer-icon" aria-hidden="true">
-                    <i class="bi bi-hash"></i>
-                  </span>
-                  <div>
-                    <span class="hr-deduction-record-label">Reference</span>
-                    <p>${escapeHtml(referenceNumber)}</p>
-                  </div>
                 </div>
-              ` : ""}
 
               ${notes ? `
                 <div class="hr-deduction-record-footer-item">
@@ -8811,7 +9138,6 @@ function renderPayrollOtherDeductionRecords(records = []) {
                 </div>
               ` : ""}
             </footer>
-          ` : ""}
         </article>
       </td>
     `;
@@ -8964,7 +9290,7 @@ async function handlePayrollOtherDeductionSave() {
       showDashboardToast(
         "warning",
         "Duplicate other deduction",
-        "This employee already has the same deduction type starting on that date.",
+        "This employee already has the same deduction type starting in that month.",
       );
 
       return;
@@ -21604,6 +21930,7 @@ function showPayrollStatutoryValidationIssues(issues = []) {
 // Validate fields before saving and focus the first invalid field.
 // This mirrors existing HR/payroll form behaviour without adding edit logic yet.
 function validatePayrollStatutoryForm() {
+  configurePayrollStatutoryPhase4Ui();
   clearPayrollStatutoryValidationState();
 
   const issues = [];
@@ -21614,12 +21941,13 @@ function validatePayrollStatutoryForm() {
     String(state.dom.payrollStatutoryMasterRecordId?.value || "").trim();
   const deductionType =
     String(state.dom.payrollStatutoryDeductionType?.value || "").trim();
-  const method =
-    String(state.dom.payrollStatutoryCalculationMethod?.value || "").trim();
-  const deductionValueText =
-    String(state.dom.payrollStatutoryDeductionValue?.value || "").trim();
-  const effectiveDate =
-    String(state.dom.payrollStatutoryEffectiveDate?.value || "").trim();
+  const statutorySetup = getDefaultStatutoryDeductionSetup(deductionType);
+  const method = statutorySetup.method;
+  const deductionValueText = String(statutorySetup.value || "").trim();
+  const statutoryStartMonth = normalizePayrollDeductionStartMonth(
+    state.dom.payrollStatutoryEffectiveDate?.value || "",
+  );
+  const effectiveDate = payrollDeductionStartMonthToDate(statutoryStartMonth);
   const configSource =
     String(state.dom.payrollStatutoryConfigSource?.value || "").trim();
   const gradeSnapshot =
@@ -21660,11 +21988,11 @@ function validatePayrollStatutoryForm() {
   }
 
   if (!effectiveDate) {
-    issues.push("Select the statutory deduction effective date.");
+    issues.push("Select the statutory deduction start month.");
     markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryEffectiveDate);
     firstInvalidField ||= state.dom.payrollStatutoryEffectiveDate;
   } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
-    issues.push("Statutory deduction effective date is not valid.");
+    issues.push("statutory deduction start month is not valid.");
     markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryEffectiveDate);
     firstInvalidField ||= state.dom.payrollStatutoryEffectiveDate;
   }
@@ -21680,12 +22008,6 @@ function validatePayrollStatutoryForm() {
     markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryMasterRecordId);
     markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryGradeLevelDisplay);
     firstInvalidField ||= state.dom.payrollStatutoryMasterRecordId;
-  }
-
-  if (!status) {
-    issues.push("Select the statutory deduction status.");
-    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryStatus);
-    firstInvalidField ||= state.dom.payrollStatutoryStatus;
   }
 
   const payrollMasterEffectiveDateIssue =
@@ -21738,23 +22060,29 @@ function validatePayrollStatutoryForm() {
 // Rule Based deductions intentionally save null deduction_value because the
 // value will be calculated from configured statutory rules later.
 function buildPayrollStatutoryPayload(isEditMode = false) {
-  const method = String(state.dom.payrollStatutoryCalculationMethod?.value || "").trim();
+  const deductionType = String(
+    state.dom.payrollStatutoryDeductionType?.value || "",
+  ).trim();
+  const statutorySetup = getDefaultStatutoryDeductionSetup(deductionType);
+  const method = statutorySetup.method;
   const isRuleBased = method === "RULE_BASED";
 
   return {
     payroll_master_record_id:
       String(state.dom.payrollStatutoryMasterRecordId?.value || "").trim(),
 
-    deduction_type:
-      String(state.dom.payrollStatutoryDeductionType?.value || "").trim(),
+    deduction_type: deductionType,
 
     calculation_method: method,
 
     deduction_value: isRuleBased
       ? null
-      : Number(state.dom.payrollStatutoryDeductionValue?.value || 0),
+      : Number(statutorySetup.value || 0),
 
-    effective_date: state.dom.payrollStatutoryEffectiveDate?.value || null,
+    effective_date:
+      payrollDeductionStartMonthToDate(
+        state.dom.payrollStatutoryEffectiveDate?.value || "",
+      ) || null,
 
     configuration_source:
       String(state.dom.payrollStatutoryConfigSource?.value || "").trim(),
@@ -21765,8 +22093,7 @@ function buildPayrollStatutoryPayload(isEditMode = false) {
     payroll_grade_level_snapshot:
       String(state.dom.payrollStatutoryGradeLevelSnapshot?.value || "").trim() || null,
 
-    status:
-      String(state.dom.payrollStatutoryStatus?.value || "Active").trim(),
+    status: "Active", // Phase 4 lifecycle is system-derived.
 
     notes:
       String(state.dom.payrollStatutoryNotes?.value || "").trim() || null,
@@ -21945,7 +22272,7 @@ function startPayrollStatutoryEdit(statutoryDeductionId) {
   }
 
   if (state.dom.payrollStatutoryEffectiveDate) {
-    state.dom.payrollStatutoryEffectiveDate.value = record.effective_date || "";
+    state.dom.payrollStatutoryEffectiveDate.value = normalizePayrollDeductionStartMonth(record.effective_date);
   }
 
   if (state.dom.payrollStatutoryConfigSource) {
@@ -22371,6 +22698,7 @@ function applyPayrollStatutorySearch() {
 // Statutory deduction presentation only. Search, create/edit, Supabase,
 // tenant filtering, payroll calculation, status, and permission logic remain unchanged.
 function renderPayrollStatutoryRecords(records = []) {
+  configurePayrollStatutoryPhase4Ui();
   const tbody = state.dom.payrollStatutoryRecordsTableBody;
   if (!tbody) return;
 
@@ -22426,7 +22754,7 @@ function renderPayrollStatutoryRecords(records = []) {
             </div>
 
             <div class="hr-deduction-record-header-actions">
-              ${renderBexhrStatusPill(formatStatusLabel(record.status))}
+              ${renderBexhrStatusPill(getPayrollStatutoryLifecycle(record))}
 
               <button
                 type="button"
@@ -22457,14 +22785,11 @@ function renderPayrollStatutoryRecords(records = []) {
             </div>
 
             <div class="hr-deduction-record-detail">
-              <span class="hr-deduction-record-label">Effective date</span>
-              <strong>${escapeHtml(formatDate(record.effective_date))}</strong>
+              <span class="hr-deduction-record-label">Start month</span>
+              <strong>${escapeHtml(formatPayrollDeductionStartMonth(record.effective_date))}</strong>
             </div>
 
-            <div class="hr-deduction-record-detail">
-              <span class="hr-deduction-record-label">Configuration source</span>
-              <strong>${escapeHtml(formatPayrollStatutoryConfigSource(record.configuration_source))}</strong>
-            </div>
+
 
             <div class="hr-deduction-record-detail">
               <span class="hr-deduction-record-label">Last updated</span>
@@ -22544,6 +22869,7 @@ function syncPayrollStatutoryDefaultFromDeductionType() {
 
   syncPayrollStatutoryCalculationMethodUi();
   updatePayrollStatutorySaveButtonState();
+  configurePayrollStatutoryPhase4Ui();
 }
 
 // DESCRIPTION ITEM 3 - STEP 2A-5
@@ -22835,6 +23161,103 @@ function getPayrollMasterRecordEffectiveDateValidationIssue(
   return "";
 }
 
+// =========================================================
+// BEXHR PHASE 4B-R - ALLOWANCE SIMPLIFICATION
+// Locked principle: HR enters business facts; BexHR derives lifecycle state.
+// Existing DB columns remain for historical compatibility, but the live UX uses
+// Additional Allowance Type + Amount + Start Month only.
+// =========================================================
+function normalizePayrollAllowanceStartMonth(value = "") {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+  if (!match) return "";
+
+  const month = Number(match[2]);
+  if (!Number.isInteger(month) || month < 1 || month > 12) return "";
+
+  return match[1] + "-" + match[2];
+}
+
+function payrollAllowanceStartMonthToEffectiveDate(value = "") {
+  const startMonth = normalizePayrollAllowanceStartMonth(value);
+  return startMonth ? startMonth + "-01" : "";
+}
+
+function formatPayrollAllowanceStartMonth(value = "") {
+  const startMonth = normalizePayrollAllowanceStartMonth(value);
+  if (!startMonth) return "—";
+
+  const [year, month] = startMonth.split("-");
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+
+  return monthNames[Number(month) - 1] + " " + year;
+}
+
+function isPayrollStructuralAllowanceType(value = "", label = "") {
+  const normalized = (String(value || "") + " " + String(label || ""))
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ");
+
+  return ["basic","housing","transport","utility"].some((token) => {
+    return normalized.split(/\s+/).includes(token);
+  });
+}
+
+function setPayrollAllowancePhase4Label(field, text) {
+  if (!field?.id || typeof document === "undefined") return;
+
+  const label = document.querySelector('label[for="' + field.id + '"]');
+  if (!label) return;
+
+  label.textContent = text;
+  if (field.required) {
+    const marker = document.createElement("span");
+    marker.className = "text-danger";
+    marker.textContent = " *";
+    label.appendChild(marker);
+  }
+}
+
+function configurePayrollAllowancePhase4Ui() {
+  const typeField = state.dom.payrollAllowanceType;
+  const startMonthField = state.dom.payrollAllowanceEffectiveDate;
+  const statusField = state.dom.payrollAllowanceStatus;
+
+  if (typeField) {
+    Array.from(typeField.options || []).forEach((option) => {
+      if (isPayrollStructuralAllowanceType(option.value, option.textContent)) {
+        option.remove();
+      }
+    });
+    setPayrollAllowancePhase4Label(typeField, "Additional Allowance Type");
+  }
+
+  if (startMonthField) {
+    startMonthField.type = "month";
+    setPayrollAllowancePhase4Label(startMonthField, "Start Month");
+  }
+
+  if (statusField) {
+    statusField.required = false;
+    statusField.value = "Active";
+    statusField.hidden = true;
+
+    const statusLabel = statusField.id
+      ? document.querySelector('label[for="' + statusField.id + '"]')
+      : null;
+    if (statusLabel) statusLabel.hidden = true;
+
+    const statusWrapper = statusField.closest(
+      ".col-md-6, .col-md-4, .col-lg-6, .col-lg-4, .mb-3, .form-group",
+    );
+    if (statusWrapper) statusWrapper.classList.add("d-none");
+  }
+}
+
 function findPayrollAllowanceEffectiveDateConflict({
   payrollMasterRecordId = "",
   allowanceType = "",
@@ -23008,10 +23431,10 @@ function validatePayrollAllowanceForm() {
     String(state.dom.payrollAllowanceType?.value || "").trim();
   const amountText =
     String(state.dom.payrollAllowanceAmount?.value || "").trim();
-  const effectiveDate =
-    String(state.dom.payrollAllowanceEffectiveDate?.value || "").trim();
-  const status =
-    String(state.dom.payrollAllowanceStatus?.value || "").trim();
+  const startMonth = normalizePayrollAllowanceStartMonth(
+    state.dom.payrollAllowanceEffectiveDate?.value || "",
+  );
+  const effectiveDate = payrollAllowanceStartMonthToEffectiveDate(startMonth);
 
   if (!payrollMasterRecordId) {
     issues.push("Select the Payroll Master record for this allowance.");
@@ -23043,21 +23466,24 @@ function validatePayrollAllowanceForm() {
     firstInvalidField ||= state.dom.payrollAllowanceAmount;
   }
 
+  if (isPayrollStructuralAllowanceType(allowanceType, allowanceType)) {
+    issues.push(
+      "Basic, Housing, Transport and Utility are salary-structure components, not additional allowances.",
+    );
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceType);
+    firstInvalidField ||= state.dom.payrollAllowanceType;
+  }
+
   if (!effectiveDate) {
-    issues.push("Select the allowance effective date.");
+    issues.push("Select the allowance start month.");
     markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceEffectiveDate);
     firstInvalidField ||= state.dom.payrollAllowanceEffectiveDate;
   } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
-    issues.push("Allowance effective date is not valid.");
+    issues.push("Allowance start month is not valid.");
     markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceEffectiveDate);
     firstInvalidField ||= state.dom.payrollAllowanceEffectiveDate;
   }
 
-  if (!status) {
-    issues.push("Select the allowance status.");
-    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceStatus);
-    firstInvalidField ||= state.dom.payrollAllowanceStatus;
-  }
 
   const payrollMasterEffectiveDateIssue =
     getPayrollMasterRecordEffectiveDateValidationIssue(
@@ -23110,10 +23536,12 @@ function buildPayrollAllowancePayload(isEditMode = false) {
     ).trim(),
     allowance_type: String(state.dom.payrollAllowanceType?.value || "").trim(),
     allowance_amount: Number(state.dom.payrollAllowanceAmount?.value || 0),
-    effective_date: state.dom.payrollAllowanceEffectiveDate?.value || null,
-    allowance_status: String(
-      state.dom.payrollAllowanceStatus?.value || "Active",
-    ).trim(),
+    effective_date:
+      payrollAllowanceStartMonthToEffectiveDate(
+        state.dom.payrollAllowanceEffectiveDate?.value || "",
+      ) || null,
+    // Phase 4 keeps the legacy column for compatibility; HR no longer manages it.
+    allowance_status: "Active",
     notes: String(state.dom.payrollAllowanceNotes?.value || "").trim() || null,
 
     // Always stamp the updater.
@@ -23377,7 +23805,7 @@ function renderPayrollAllowanceRecords(records) {
     const masterEffectiveDate = formatDate(
       record.payroll_master_effective_date,
     );
-    const allowanceEffectiveDate = formatDate(record.effective_date);
+    const allowanceStartMonth = formatPayrollAllowanceStartMonth(record.effective_date);
     const updatedDate = formatDate(record.updated_at || record.created_at);
     const notes = String(record.notes || "").trim();
     const safeRecordId = String(record.id || "").replaceAll("'", "\\'");
@@ -23434,8 +23862,8 @@ function renderPayrollAllowanceRecords(records) {
             </div>
 
             <div class="hr-allowance-record-detail">
-              <span class="hr-allowance-record-detail-label">Effective date</span>
-              <strong>${escapeHtml(allowanceEffectiveDate)}</strong>
+              <span class="hr-allowance-record-detail-label">Start month</span>
+              <strong>${escapeHtml(allowanceStartMonth)}</strong>
             </div>
 
             <div class="hr-allowance-record-detail">
@@ -23595,7 +24023,7 @@ function startPayrollAllowanceEdit(allowanceId) {
   }
 
   if (state.dom.payrollAllowanceEffectiveDate) {
-    state.dom.payrollAllowanceEffectiveDate.value = record.effective_date || "";
+    state.dom.payrollAllowanceEffectiveDate.value = normalizePayrollAllowanceStartMonth(record.effective_date);
   }
 
   if (state.dom.payrollAllowanceStatus) {
@@ -33728,8 +34156,10 @@ function getPayrollMonthIndexFromDateValue(dateValue = "") {
 }
 
 function isPayrollOtherDeductionActiveForDate(record = {}, payrollDateValue = "") {
-  const status = normalizeText(record.status || "");
-  if (status !== "active") return false;
+  // Legacy compatibility only: do not resurrect an explicitly disabled historical row.
+  // Phase 4 no longer exposes status as an HR-controlled lifecycle field.
+  const legacyStatus = normalizeText(record.status || "active");
+  if (legacyStatus && legacyStatus !== "active") return false;
 
   const deductionAmount = Number(record.deduction_amount || 0);
   if (!Number.isFinite(deductionAmount) || deductionAmount <= 0) return false;
@@ -40510,11 +40940,14 @@ function updatePayrollMasterSaveButtonState() {
 // Allowance Components button state.
 // Required fields match validatePayrollAllowanceForm().
 function updatePayrollAllowanceSaveButtonState() {
-  const hasMasterRecord = Boolean(String(state.dom.payrollAllowanceMasterRecordId?.value || "").trim());
+  configurePayrollAllowancePhase4Ui();
+
+  const hasMasterRecord =
+    Boolean(String(state.dom.payrollAllowanceMasterRecordId?.value || "").trim());
   const hasType = Boolean(String(state.dom.payrollAllowanceType?.value || "").trim());
   const hasAmount = Boolean(String(state.dom.payrollAllowanceAmount?.value || "").trim());
   const hasEffectiveDate = Boolean(String(state.dom.payrollAllowanceEffectiveDate?.value || "").trim());
-  const hasStatus = Boolean(String(state.dom.payrollAllowanceStatus?.value || "").trim());
+  const hasStatus = true; // Phase 4 lifecycle state is derived by BexHR.
 
   const amountValue = Number(state.dom.payrollAllowanceAmount?.value || 0);
   // DESCRIPTION ITEM 8 - STEP 8B
