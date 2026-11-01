@@ -5481,31 +5481,31 @@ Disable browser address autofill popup on HR employee address fields. -->
                       <i class="bi bi-search"></i>
                     </span>
                     <input type="text" id="payrollEmployeeOverrideSearchInput" class="form-control"
-                      placeholder="Search by employee, element, method, status..." />
+                      placeholder="Search by employee, adjustment type, reason, pay period..." />
                   </div>
                 </div>
               </div>
             </div>
 
             <div id="payrollEmployeeOverrideRecordsEmptyState" class="text-center text-secondary py-4">
-              No employee override records found yet.
+              No payroll adjustment records found yet.
             </div>
 
             <!-- HR SETUP INNER SCROLL - STEP 1G-1
-                 Employee Payroll Override Records are exception records and
+                 Payroll Adjustment Records are one-period adjustment records and
                  must stay reviewable without stretching the whole Setup page. -->
             <div id="payrollEmployeeOverrideRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
               style="max-height: 420px; overflow: auto; overscroll-behavior: contain;">
               <table class="table align-middle mb-0">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                   <tr>
-                    <th>Master Ref</th>
-                    <th>Category</th>
-                    <th>Element</th>
-                    <th>Method</th>
-                    <th>Override</th>
-                    <th>Effective</th>
-                    <th>Status</th>
+                    <th>Employee</th>
+                    <th>Adjustment Type</th>
+                    <th>Amount</th>
+                    <th>Pay Period</th>
+                    <th>Reason</th>
+                    <th>Record Type</th>
+                    <th>Lifecycle</th>
                     <th>Updated</th>
                     <th class="text-center">Action</th>
                   </tr>
@@ -5514,7 +5514,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                 <tbody id="payrollEmployeeOverrideRecordsTableBody">
                   <tr>
                     <td colspan="9" class="text-center text-secondary py-4">
-                      Employee override records will load here.
+                      Payroll adjustment records will load here.
                     </td>
                   </tr>
                 </tbody>

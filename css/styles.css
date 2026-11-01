@@ -9045,7 +9045,7 @@ body.alpatech-workspace .hr-create-employee-card .hr-employee-form-chip--info {
 }
 
 #hrSetupSection section:has(#payrollEmployeeOverrideCardCollapse) > .card-body > :first-child .section-heading::before {
-  content: "Exception governance";
+  content: "One-off payroll";
 }
 
 #hrSetupSection section:has(#bankDirectoryCardCollapse) > .card-body > :first-child .section-heading::before {
@@ -9654,14 +9654,14 @@ body.alpatech-workspace .hr-create-employee-card .hr-employee-form-chip--info {
   #payrollOtherDeductionRecordsTableWrapper td:nth-child(8)::before { content: "Updated"; }
   #payrollOtherDeductionRecordsTableWrapper td:nth-child(9)::before { content: "Action"; }
 
-  /* Employee override records */
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(1)::before { content: "Salary setup"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(2)::before { content: "Category"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(3)::before { content: "Element"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(4)::before { content: "Method"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(5)::before { content: "Override"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(6)::before { content: "Effective"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(7)::before { content: "Status"; }
+  /* Payroll adjustment records */
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(1)::before { content: "Employee"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(2)::before { content: "Adjustment Type"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(3)::before { content: "Amount"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(4)::before { content: "Pay Period"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(5)::before { content: "Reason"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(6)::before { content: "Record Type"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(7)::before { content: "Lifecycle"; }
   #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(8)::before { content: "Updated"; }
   #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(9)::before { content: "Action"; }
 
@@ -22364,7 +22364,10 @@ body.bexhr-hr-visual-refresh
 
 body.bexhr-hr-visual-refresh
   #payrollEmployeeOverrideRecordsTableWrapper
-  .hr-override-record-cell::before {
+  .hr-override-record-cell::before,
+body.bexhr-hr-visual-refresh
+  #payrollEmployeeOverrideRecordsTableWrapper
+  .hr-deduction-record-cell::before {
   display: none !important;
   content: none !important;
 }
@@ -33080,4 +33083,37 @@ body.bexhr-employee-visual-refresh
   .hr-performance-appraisal-option-grid:has(> .hr-performance-appraisal-option-card:nth-child(2):last-child) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* PHASE 5E PAYROLL ADJUSTMENT RECORD LAYOUT
+   Phase 5 records render with the shared deduction-card classes.
+   Force the row/cell to fill the Payroll Adjustments records wrapper
+   so a single adjustment card does not collapse to content width.
+   Presentation only; no payroll or data behaviour changes.
+   ========================================================= */
+body.bexhr-hr-visual-refresh
+  #payrollEmployeeOverrideRecordsTableWrapper
+  .hr-deduction-record-row,
+body.bexhr-hr-visual-refresh
+  #payrollEmployeeOverrideRecordsTableWrapper
+  .hr-deduction-record-cell {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+body.bexhr-hr-visual-refresh
+  #payrollEmployeeOverrideRecordsTableWrapper
+  .hr-deduction-record-cell {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+body.bexhr-hr-visual-refresh
+  #payrollEmployeeOverrideRecordsTableWrapper
+  .hr-deduction-record-card {
+  width: 100% !important;
+  max-width: none !important;
 }
