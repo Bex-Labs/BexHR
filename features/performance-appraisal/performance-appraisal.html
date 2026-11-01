@@ -45,6 +45,23 @@
             pointer-events: auto;
         }
     </style>
+
+    <style id="bexPaImmediateButtonFeedbackStyle">
+        button,
+        [role="button"] {
+            transition:
+                transform 80ms ease,
+                opacity 80ms ease,
+                filter 80ms ease;
+        }
+
+        button.bex-pa-action-pressed:not(:disabled),
+        [role="button"].bex-pa-action-pressed:not([aria-disabled="true"]) {
+            transform: translateY(1px) scale(0.99);
+            opacity: 0.88;
+            filter: brightness(0.97);
+        }
+    </style>
 </head>
 
 <body class="bex-pa-page bg-body-tertiary">
@@ -1054,16 +1071,6 @@
                                                 <input class="form-control" id="bexPaOrganisationGoalTarget" type="text"
                                                     maxlength="150" placeholder="e.g. Increase to 90%" required />
                                             </div>
-
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaOrganisationGoalOwner">
-                                                    Responsible owner
-                                                </label>
-
-                                                <select class="form-select" id="bexPaOrganisationGoalOwner" required><option value="">Select a configured position</option></select>
-                                                <p class="form-text" id="bexPaPositionOwnerNote"></p>
-                                            </div>
-
                                             <div class="col-12 col-md-6">
                                                 <label class="form-label fw-semibold" for="bexPaOrganisationGoalStatus">
                                                     Status
@@ -1187,16 +1194,6 @@
                                                 <input class="form-control" id="bexPaDeliverableTarget" type="text"
                                                     maxlength="150" placeholder="e.g. Under 2 hours" required />
                                             </div>
-
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaDeliverableOwner">
-                                                    Responsible owner
-                                                </label>
-
-                                                <input class="form-control" id="bexPaDeliverableOwner" type="text"
-                                                    maxlength="120" placeholder="e.g. Customer Support Lead" required />
-                                            </div>
-
                                             <div class="col-12 col-md-6">
                                                 <label class="form-label fw-semibold" for="bexPaDeliverableStatus">
                                                     Status
@@ -1327,16 +1324,6 @@
                                                 <input class="form-control" id="bexPaDepartmentGoalTarget" type="text"
                                                     maxlength="150" placeholder="e.g. Under 24 hours" required />
                                             </div>
-
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaDepartmentGoalOwner">
-                                                    Responsible owner
-                                                </label>
-
-                                                <input class="form-control" id="bexPaDepartmentGoalOwner" type="text"
-                                                    maxlength="120" placeholder="e.g. HR Operations Lead" required />
-                                            </div>
-
                                             <div class="col-12 col-md-6">
                                                 <label class="form-label fw-semibold" for="bexPaDepartmentGoalStatus">
                                                     Status

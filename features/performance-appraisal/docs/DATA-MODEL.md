@@ -69,7 +69,6 @@ Required information:
 - Description
 - Performance metric or KPI
 - Target
-- Responsible owner
 - Start date
 - Due date
 - Status
@@ -84,7 +83,6 @@ Required information:
 - Organisation goal ID
 - Title
 - Expected result
-- Responsible owner
 - Due date
 - Status
 
@@ -104,7 +102,6 @@ Required information:
 - Description
 - Performance metric or KPI
 - Target
-- Responsible manager ID
 - Start date
 - Due date
 - Status
@@ -305,4 +302,8 @@ Appraisal Cycle
 - HR rating changes and reopened appraisals require a reason.
 - Closed appraisals remain read-only.
 - Existing BexHR employee records must not be edited or duplicated.
+- Historical goal payloads may retain previously saved owner text, but current goal creation does not require a separate Responsible owner field. Goal authority comes from PA role and reporting rules.
+- A company may keep many Draft and Completed appraisal cycles, but a new activation is blocked while another cycle is Active. Existing legacy/test multi-Active records are preserved until HR deliberately completes or clears them.
+- New goal dates default from their nearest parent: Organisation Goal from Appraisal Cycle, Deliverable and Department Goal from Organisation Goal, and Individual Goal from a linked Department Goal or the active cycle when no department goal is linked. Existing saved dates are preserved when editing.
+- A configured top-level employee is a valid hierarchy root, but is not presented as a manager-assigned Individual Goal recipient because no Primary Manager is required for that position.
 - Important appraisal changes must remain available in the audit history.
