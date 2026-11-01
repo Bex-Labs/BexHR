@@ -9339,52 +9339,53 @@ function redirectToPayrollEmployeeOverrideRecordsAfterSave() {
   );
 }
 
+
+const BEXHR_PHASE5_ADJUSTMENT_MARKER = "BEXHR_PHASE5_ADJUSTMENT_V1";
+const BEXHR_PHASE5_ADJUSTMENT_ELEMENTS = new Set([
+  "BONUS",
+  "OVERTIME",
+  "OTHER_ALLOWANCE",
+  "OTHER",
+]);
+
+function isPayrollEmployeeAdjustmentRecord(record = {}) {
+  return (
+    String(record.notes || "").trim() === BEXHR_PHASE5_ADJUSTMENT_MARKER &&
+    BEXHR_PHASE5_ADJUSTMENT_ELEMENTS.has(String(record.override_element || "").trim()) &&
+    String(record.override_method || "").trim() === "FIXED_AMOUNT"
+  );
+}
+
+function getPayrollEmployeeAdjustmentCategory(element = "") {
+  const normalized = String(element || "").trim();
+  return normalized === "OTHER" ? "OTHER_DEDUCTION" : "EARNING";
+}
+
 function formatPayrollEmployeeOverrideCategory(value = "") {
   const labels = {
-    EARNING: "Earning",
-    STATUTORY_DEDUCTION: "Statutory Deduction",
-    OTHER_DEDUCTION: "Other Deduction",
-    PAYROLL_RULE: "Payroll Rule",
-    PAYROLL_STRUCTURE: "Payroll Structure",
+    EARNING: "Earning Adjustment",
+    OTHER_DEDUCTION: "Deduction Adjustment",
   };
 
-  return labels[value] || formatStatusLabel(value || "--");
+  return labels[value] || "Legacy Override";
 }
+
 
 function formatPayrollEmployeeOverrideElement(value = "") {
   const labels = {
-    BASIC_SALARY: "Basic Salary",
-    HOUSING_ALLOWANCE: "Housing Allowance",
-    TRANSPORT_ALLOWANCE: "Transport Allowance",
-    UTILITY_ALLOWANCE: "Utility Allowance",
-    MEDICAL_ALLOWANCE: "Medical Allowance",
-    OTHER_ALLOWANCE: "Other Allowance",
     BONUS: "Bonus",
     OVERTIME: "Overtime",
-    PAYE: "PAYE",
-    WHT: "WHT",
-    EMPLOYEE_PENSION: "Employee Pension",
-    EMPLOYER_PENSION: "Employer Pension",
-    NHF: "NHF",
-    UNION_DUES: "Union Dues",
-    COOPERATIVE: "Cooperative",
-    SALARY_ADVANCE: "Salary Advance",
-    GRADE_LEVEL_RULE: "Grade / Level Rule",
-    OTHER: "Other",
+    OTHER_ALLOWANCE: "Other Earning",
+    OTHER: "Other Deduction",
   };
 
   return labels[value] || formatStatusLabel(value || "--");
 }
 
-function formatPayrollEmployeeOverrideMethod(value = "") {
-  const labels = {
-    FIXED_AMOUNT: "Fixed Amount",
-    PERCENTAGE: "Percentage",
-    RULE_REPLACEMENT: "Rule Replacement",
-    EXEMPTION: "Exemption",
-  };
 
-  return labels[value] || formatStatusLabel(value || "--");
+function formatPayrollEmployeeOverrideMethod(value = "") {
+  if (String(value || "").trim() === "FIXED_AMOUNT") return "Amount";
+  return formatStatusLabel(value || "--");
 }
 
 function getPayrollEmployeeOverrideMasterContext(record = {}) {
@@ -9439,59 +9440,31 @@ const PAYROLL_EMPLOYEE_OVERRIDE_ELEMENTS_BY_CATEGORY = Object.freeze({
   ],
 });
 
-function populatePayrollEmployeeOverrideElementOptions(
-  preferredValue = "",
-  { preserveLegacyValue = false } = {},
-) {
+
+function populatePayrollEmployeeOverrideElementOptions(selectedValue = "") {
   const select = state.dom.payrollEmployeeOverrideElement;
   if (!select) return;
 
-  const category = String(
-    state.dom.payrollEmployeeOverrideCategory?.value || "",
-  ).trim();
-
-  const options =
-    PAYROLL_EMPLOYEE_OVERRIDE_ELEMENTS_BY_CATEGORY[category] || [];
+  const currentValue = String(selectedValue || select.value || "").trim();
+  const options = [
+    ["", "Select adjustment type"],
+    ["BONUS", "Bonus"],
+    ["OVERTIME", "Overtime"],
+    ["OTHER_ALLOWANCE", "Other Earning"],
+    ["OTHER", "Other Deduction"],
+  ];
 
   select.innerHTML = "";
-
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = category
-    ? "Select payroll element"
-    : "Select a category first";
-
-  select.appendChild(placeholder);
-
-  options.forEach(({ value, label }) => {
+  options.forEach(([value, label]) => {
     const option = document.createElement("option");
     option.value = value;
     option.textContent = label;
     select.appendChild(option);
   });
 
-  const savedValue = String(preferredValue || "").trim();
-
-  if (
-    preserveLegacyValue &&
-    savedValue &&
-    !options.some((option) => option.value === savedValue)
-  ) {
-    const legacyOption = document.createElement("option");
-    legacyOption.value = savedValue;
-    legacyOption.textContent = `${formatPayrollEmployeeOverrideElement(savedValue)} (historical)`;
-    select.appendChild(legacyOption);
-  }
-
-  select.value = savedValue;
-  select.disabled = !category;
-
-  updatePayrollEmployeeOverrideSaveButtonState();
+  select.value = BEXHR_PHASE5_ADJUSTMENT_ELEMENTS.has(currentValue) ? currentValue : "";
 }
 
-// EMPLOYEE OVERRIDE PAYROLL MASTER VERSION CLARITY
-// Keep every effective-dated Payroll Master version available for audit and
-// historical maintenance, while using the shared version-status calculation.
 function populatePayrollEmployeeOverrideMasterOptions() {
   const select = state.dom.payrollEmployeeOverrideMasterRecordId;
   if (!select) return;
@@ -9613,10 +9586,88 @@ function isPayrollEmployeeOverrideFormReadyForSubmit() {
   return hasRequiredFields && valueIsValid && dateRangeIsValid;
 }
 
+
+
+// PHASE 5B CONTROL WIRING
+// The Pay Period field uses the Phase 4 transparent native month input, so it
+// needs its own picker bridge and display synchronisation.
+function syncPayrollAdjustmentPayPeriodDisplay() {
+  const field = state.dom.payrollEmployeeOverrideEffectiveDate;
+  const wrapper = field?.closest?.(".bexhr-phase4-month-control");
+  const display = wrapper?.querySelector?.(".bexhr-phase4-month-display");
+  const displayText = display?.querySelector?.(".bexhr-phase4-month-display-text");
+  if (!field || !display || !displayText) return;
+
+  const value = String(field.value || "").trim();
+  display.classList.toggle("is-empty", !value);
+  displayText.textContent = value
+    ? formatPayrollSetupMonthForDisplay(value)
+    : "Select pay period";
+}
+
+function bindPayrollAdjustmentPayPeriodControl() {
+  const field = state.dom.payrollEmployeeOverrideEffectiveDate;
+  if (!field) return;
+
+  if (field.dataset.phase5PayPeriodBound !== "true") {
+    field.dataset.phase5PayPeriodBound = "true";
+
+    const sync = () => {
+      syncPayrollAdjustmentPayPeriodDisplay();
+      updatePayrollEmployeeOverrideSaveButtonState();
+    };
+
+    field.addEventListener("input", sync);
+    field.addEventListener("change", sync);
+
+    field.addEventListener("click", () => {
+      if (typeof field.showPicker === "function") {
+        try {
+          field.showPicker();
+        } catch (error) {
+          // Native browser click behaviour remains available as fallback.
+        }
+      }
+    });
+
+    field.addEventListener("keydown", (event) => {
+      if (
+        (event.key === "Enter" || event.key === " ") &&
+        typeof field.showPicker === "function"
+      ) {
+        event.preventDefault();
+        try {
+          field.showPicker();
+        } catch (error) {
+          // Native keyboard behaviour remains available as fallback.
+        }
+      }
+    });
+  }
+
+  syncPayrollAdjustmentPayPeriodDisplay();
+}
+
 function updatePayrollEmployeeOverrideSaveButtonState() {
-  setPrimaryActionButtonReadyState(
-    state.dom.savePayrollEmployeeOverrideBtn,
-    isPayrollEmployeeOverrideFormReadyForSubmit(),
+  syncPayrollAdjustmentPayPeriodDisplay();
+
+  const button = state.dom.savePayrollEmployeeOverrideBtn;
+  if (!button) return;
+
+  const hasEmployee = Boolean(
+    String(state.dom.payrollEmployeeOverrideMasterRecordId?.value || "").trim(),
+  );
+  const adjustmentType = String(state.dom.payrollEmployeeOverrideElement?.value || "").trim();
+  const amount = Number(state.dom.payrollEmployeeOverrideValue?.value || 0);
+  const payPeriod = String(state.dom.payrollEmployeeOverrideEffectiveDate?.value || "").trim();
+  const reason = String(state.dom.payrollEmployeeOverrideReason?.value || "").trim();
+
+  button.disabled = !(
+    hasEmployee &&
+    BEXHR_PHASE5_ADJUSTMENT_ELEMENTS.has(adjustmentType) &&
+    Number.isFinite(amount) && amount > 0 &&
+    /^\d{4}-\d{2}$/.test(payPeriod) &&
+    reason
   );
 }
 
@@ -9694,234 +9745,106 @@ function showPayrollEmployeeOverrideValidationIssues(issues = []) {
   );
 }
 
+
 function validatePayrollEmployeeOverrideForm() {
   clearPayrollEmployeeOverrideValidationState();
 
   const issues = [];
   let firstInvalidField = null;
 
-  const editingId =
-    String(state.currentEditingPayrollEmployeeOverride?.id ||
-      state.dom.editingPayrollEmployeeOverrideId?.value ||
-      "").trim();
-
   const payrollMasterRecordId =
     String(state.dom.payrollEmployeeOverrideMasterRecordId?.value || "").trim();
-  const overrideCategory =
-    String(state.dom.payrollEmployeeOverrideCategory?.value || "").trim();
-  const overrideElement =
+  const adjustmentType =
     String(state.dom.payrollEmployeeOverrideElement?.value || "").trim();
-  const method =
-    String(state.dom.payrollEmployeeOverrideMethod?.value || "").trim();
-  const originalValueText =
-    String(state.dom.payrollEmployeeOverrideOriginalValue?.value || "").trim();
-  const overrideValueText =
+  const amountText =
     String(state.dom.payrollEmployeeOverrideValue?.value || "").trim();
-  const effectiveDate =
+  const payPeriod =
     String(state.dom.payrollEmployeeOverrideEffectiveDate?.value || "").trim();
-  const endDate =
-    String(state.dom.payrollEmployeeOverrideEndDate?.value || "").trim();
-  const status =
-    String(state.dom.payrollEmployeeOverrideStatus?.value || "").trim();
-  const ruleSnapshot =
-    String(state.dom.payrollEmployeeOverrideRuleSnapshot?.value || "").trim();
-  const approvalReference =
-    String(state.dom.payrollEmployeeOverrideApprovalReference?.value || "").trim();
   const reason =
     String(state.dom.payrollEmployeeOverrideReason?.value || "").trim();
 
   if (!payrollMasterRecordId) {
-    issues.push("Select the Payroll Master record for this override.");
+    issues.push("Select the employee for this adjustment.");
     markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideMasterRecordId);
     firstInvalidField ||= state.dom.payrollEmployeeOverrideMasterRecordId;
   }
 
-  if (!overrideCategory) {
-    issues.push("Select the override category.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideCategory);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideCategory;
-  }
-
-  if (!overrideElement) {
-    issues.push("Select the payroll element being overridden.");
+  if (!BEXHR_PHASE5_ADJUSTMENT_ELEMENTS.has(adjustmentType)) {
+    issues.push("Select a valid adjustment type.");
     markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideElement);
     firstInvalidField ||= state.dom.payrollEmployeeOverrideElement;
   }
 
-  if (!method) {
-    issues.push("Select the override method.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideMethod);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideMethod;
+  const amount = Number(amountText);
+  if (!amountText || !Number.isFinite(amount) || amount <= 0) {
+    issues.push("Adjustment amount must be greater than zero.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
   }
 
-  if (originalValueText) {
-    const originalValue = Number(originalValueText);
-
-    if (!Number.isFinite(originalValue) || originalValue < 0) {
-      issues.push("Original value snapshot must be zero or greater.");
-      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideOriginalValue);
-      firstInvalidField ||= state.dom.payrollEmployeeOverrideOriginalValue;
-    }
-  }
-
-  if (method === "FIXED_AMOUNT") {
-    const overrideValue = Number(overrideValueText);
-
-    if (!overrideValueText) {
-      issues.push("Enter the fixed override amount.");
-      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
-      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
-    } else if (!Number.isFinite(overrideValue) || overrideValue <= 0) {
-      issues.push("Fixed override amount must be greater than zero.");
-      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
-      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
-    }
-  }
-
-  if (method === "PERCENTAGE") {
-    const overrideValue = Number(overrideValueText);
-
-    if (!overrideValueText) {
-      issues.push("Enter the percentage override value.");
-      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
-      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
-    } else if (!Number.isFinite(overrideValue) || overrideValue <= 0 || overrideValue > 100) {
-      issues.push("Percentage override must be greater than zero and not more than 100.");
-      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
-      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
-    }
-  }
-
-  if (method === "RULE_REPLACEMENT" && !ruleSnapshot) {
-    issues.push("Rule Replacement requires a rule snapshot or replacement rule note.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideRuleSnapshot);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideRuleSnapshot;
-  }
-
-  if (!effectiveDate) {
-    issues.push("Select the override effective date.");
+  if (!/^\d{4}-\d{2}$/.test(payPeriod)) {
+    issues.push("Select the payroll month for this adjustment.");
     markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEffectiveDate);
     firstInvalidField ||= state.dom.payrollEmployeeOverrideEffectiveDate;
-  } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
-    issues.push("Override effective date is not valid.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEffectiveDate);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideEffectiveDate;
-  }
-
-  if (
-    effectiveDate &&
-    endDate &&
-    new Date(endDate).getTime() < new Date(effectiveDate).getTime()
-  ) {
-    issues.push("Override end date cannot be before the effective date.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEndDate);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideEndDate;
-  }
-
-  if (!approvalReference) {
-    issues.push("Enter the HR/payroll approval reference for this employee override.");
-    markPayrollEmployeeOverrideFieldInvalid(
-      state.dom.payrollEmployeeOverrideApprovalReference,
-    );
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideApprovalReference;
-  }
-
-  if (!status) {
-    issues.push("Select the override status.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideStatus);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideStatus;
   }
 
   if (!reason) {
-    issues.push("Enter the reason for this employee-specific override.");
+    issues.push("Enter the reason for this adjustment.");
     markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideReason);
     firstInvalidField ||= state.dom.payrollEmployeeOverrideReason;
   }
 
-  const conflict = findPayrollEmployeeOverrideEffectiveDateConflict({
-    payrollMasterRecordId,
-    overrideCategory,
-    overrideElement,
-    effectiveDate,
-    editingId,
-  });
-
-  if (conflict) {
-    issues.push(
-      `An employee override already exists for this Payroll Master, category, element, and ${formatDate(effectiveDate)}.`,
-    );
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideMasterRecordId);
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideCategory);
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideElement);
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEffectiveDate);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideEffectiveDate;
-  }
-
   if (issues.length) {
-    showPayrollEmployeeOverrideValidationIssues(issues);
-
-    if (firstInvalidField?.focus) {
-      firstInvalidField.focus();
-    }
-
+    showPageAlert("warning", issues.join("<br>"));
+    firstInvalidField?.focus();
     return false;
   }
 
   return true;
 }
 
+
+function getPayrollAdjustmentPeriodBounds(payPeriod = "") {
+  const value = String(payPeriod || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(value)) return { startDate: null, endDate: null };
+
+  const [yearText, monthText] = value.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  return {
+    startDate: `${value}-01`,
+    endDate: `${value}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
 function buildPayrollEmployeeOverridePayload() {
   const selectedMasterOption =
     state.dom.payrollEmployeeOverrideMasterRecordId?.selectedOptions?.[0] || null;
-
-  const method = String(state.dom.payrollEmployeeOverrideMethod?.value || "").trim();
-  const overrideValue = String(state.dom.payrollEmployeeOverrideValue?.value || "").trim();
-  const originalValue = String(state.dom.payrollEmployeeOverrideOriginalValue?.value || "").trim();
+  const adjustmentType =
+    String(state.dom.payrollEmployeeOverrideElement?.value || "").trim();
+  const payPeriod =
+    String(state.dom.payrollEmployeeOverrideEffectiveDate?.value || "").trim();
+  const period = getPayrollAdjustmentPeriodBounds(payPeriod);
 
   return {
     payroll_master_record_id:
       String(state.dom.payrollEmployeeOverrideMasterRecordId?.value || "").trim(),
-
     employee_id:
       String(selectedMasterOption?.dataset?.employeeId || "").trim() || null,
-
-    override_category:
-      String(state.dom.payrollEmployeeOverrideCategory?.value || "").trim(),
-
-    override_element:
-      String(state.dom.payrollEmployeeOverrideElement?.value || "").trim(),
-
-    override_method: method,
-
-    original_value_snapshot:
-      originalValue === "" ? null : Number(originalValue),
-
-    override_value:
-      method === "RULE_REPLACEMENT" || method === "EXEMPTION" || overrideValue === ""
-        ? null
-        : Number(overrideValue),
-
-    override_rule_snapshot:
-      String(state.dom.payrollEmployeeOverrideRuleSnapshot?.value || "").trim() || null,
-
-    effective_date:
-      state.dom.payrollEmployeeOverrideEffectiveDate?.value || null,
-
-    end_date:
-      state.dom.payrollEmployeeOverrideEndDate?.value || null,
-
-    approval_reference:
-      String(state.dom.payrollEmployeeOverrideApprovalReference?.value || "").trim() || null,
-
-    reason:
-      String(state.dom.payrollEmployeeOverrideReason?.value || "").trim(),
-
-    notes:
-      String(state.dom.payrollEmployeeOverrideNotes?.value || "").trim() || null,
-
-    status:
-      String(state.dom.payrollEmployeeOverrideStatus?.value || "Active").trim(),
-
+    override_category: getPayrollEmployeeAdjustmentCategory(adjustmentType),
+    override_element: adjustmentType,
+    override_method: "FIXED_AMOUNT",
+    original_value_snapshot: null,
+    override_value: Number(state.dom.payrollEmployeeOverrideValue?.value || 0),
+    override_rule_snapshot: null,
+    effective_date: period.startDate,
+    end_date: period.endDate,
+    approval_reference: null,
+    reason: String(state.dom.payrollEmployeeOverrideReason?.value || "").trim(),
+    notes: BEXHR_PHASE5_ADJUSTMENT_MARKER,
+    status: "Active",
     created_by: state.currentUser?.id || null,
     updated_by: state.currentUser?.id || null,
   };
@@ -9939,7 +9862,7 @@ function setPayrollEmployeeOverrideSaveLoading(isLoading) {
     button.disabled = true;
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-      Saving Employee Override...
+      Saving Adjustment...
     `;
     return;
   }
@@ -9986,6 +9909,7 @@ function syncPayrollEmployeeOverrideRuleSnapshotVisibility({
   }
 }
 
+
 function resetPayrollEmployeeOverrideForm() {
   state.currentEditingPayrollEmployeeOverride = null;
 
@@ -9995,47 +9919,31 @@ function resetPayrollEmployeeOverrideForm() {
 
   [
     state.dom.payrollEmployeeOverrideMasterRecordId,
-    state.dom.payrollEmployeeOverrideCategory,
     state.dom.payrollEmployeeOverrideElement,
-    state.dom.payrollEmployeeOverrideMethod,
-    state.dom.payrollEmployeeOverrideOriginalValue,
     state.dom.payrollEmployeeOverrideValue,
     state.dom.payrollEmployeeOverrideEffectiveDate,
-    state.dom.payrollEmployeeOverrideEndDate,
-    state.dom.payrollEmployeeOverrideApprovalReference,
-    state.dom.payrollEmployeeOverrideRuleSnapshot,
     state.dom.payrollEmployeeOverrideReason,
   ].forEach((field) => {
-    if (field) {
-      field.value = "";
-      field.classList.remove("is-invalid");
-    }
+    if (!field) return;
+    field.value = "";
+    field.classList.remove("is-invalid");
   });
 
-  // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3A
-  // Reset the Payroll Element dropdown to its safe create-mode state.
-  // No category means no element may be selected yet.
+  if (state.dom.payrollEmployeeOverrideCategory) state.dom.payrollEmployeeOverrideCategory.value = "";
+  if (state.dom.payrollEmployeeOverrideMethod) state.dom.payrollEmployeeOverrideMethod.value = "FIXED_AMOUNT";
+  if (state.dom.payrollEmployeeOverrideOriginalValue) state.dom.payrollEmployeeOverrideOriginalValue.value = "";
+  if (state.dom.payrollEmployeeOverrideEndDate) state.dom.payrollEmployeeOverrideEndDate.value = "";
+  if (state.dom.payrollEmployeeOverrideStatus) state.dom.payrollEmployeeOverrideStatus.value = "Active";
+  if (state.dom.payrollEmployeeOverrideApprovalReference) state.dom.payrollEmployeeOverrideApprovalReference.value = "";
+  if (state.dom.payrollEmployeeOverrideRuleSnapshot) state.dom.payrollEmployeeOverrideRuleSnapshot.value = "";
+  if (state.dom.payrollEmployeeOverrideNotes) state.dom.payrollEmployeeOverrideNotes.value = BEXHR_PHASE5_ADJUSTMENT_MARKER;
+
   populatePayrollEmployeeOverrideElementOptions();
 
-  syncPayrollEmployeeOverrideRuleSnapshotVisibility({
-    clearWhenHidden: true,
-  });
-
-  if (state.dom.payrollEmployeeOverrideStatus) {
-    state.dom.payrollEmployeeOverrideStatus.value = "Active";
-    state.dom.payrollEmployeeOverrideStatus.classList.remove("is-invalid");
-  }
-
-  if (state.dom.cancelPayrollEmployeeOverrideEditBtn) {
-    state.dom.cancelPayrollEmployeeOverrideEditBtn.classList.add("d-none");
-  }
+  state.dom.cancelPayrollEmployeeOverrideEditBtn?.classList.add("d-none");
 
   if (state.dom.savePayrollEmployeeOverrideBtn) {
-    state.dom.savePayrollEmployeeOverrideBtn.innerHTML = `
-      <i class="bi bi-save me-2"></i>
-      <span id="savePayrollEmployeeOverrideBtnText">Create Employee Override</span>
-    `;
-
+    state.dom.savePayrollEmployeeOverrideBtn.innerHTML =       '<i class="bi bi-save me-2"></i><span id="savePayrollEmployeeOverrideBtnText">Create Adjustment</span>';
     state.dom.savePayrollEmployeeOverrideBtnText =
       document.getElementById("savePayrollEmployeeOverrideBtnText");
   }
@@ -10066,7 +9974,7 @@ function renderPayrollEmployeeOverrideRecordsLoadingState() {
   state.dom.payrollEmployeeOverrideRecordsTableBody.innerHTML = `
     <tr>
       <td colspan="9" class="text-center text-secondary py-4">
-        Loading employee override records.
+        Loading payroll adjustments.
       </td>
     </tr>
   `;
@@ -10167,9 +10075,17 @@ async function loadPayrollEmployeeOverrides() {
   }
 }
 
+
 async function refreshPayrollEmployeeOverrideWorkspace() {
   renderPayrollEmployeeOverrideRecordsLoadingState();
+
+  // PHASE 5B CONTROL WIRING
+  // Employee options already refresh here. Initialise the two new Phase 5
+  // business controls at the same lifecycle point so they are ready on first load.
   populatePayrollEmployeeOverrideMasterOptions();
+  populatePayrollEmployeeOverrideElementOptions();
+  bindPayrollAdjustmentPayPeriodControl();
+
   await loadPayrollEmployeeOverrides();
 }
 
@@ -10178,28 +10094,18 @@ function applyPayrollEmployeeOverrideSearch() {
     state.dom.payrollEmployeeOverrideSearchInput?.value || "",
   );
 
-  let rows = [...state.payrollEmployeeOverrides];
+  let rows = (state.payrollEmployeeOverrides || []).filter(isPayrollEmployeeAdjustmentRecord);
 
   if (searchTerm) {
     rows = rows.filter((record) => {
       const masterContext = getPayrollEmployeeOverrideMasterContext(record);
-
       const searchableText = [
         masterContext.fullName,
         masterContext.workEmail,
-        masterContext.gradeLabel,
-        formatPayrollEmployeeOverrideCategory(record.override_category),
         formatPayrollEmployeeOverrideElement(record.override_element),
-        formatPayrollEmployeeOverrideMethod(record.override_method),
-        record.original_value_snapshot,
-        record.override_value,
-        record.override_rule_snapshot,
-        record.approval_reference,
         record.reason,
-        record.status,
-      ]
-        .join(" ")
-        .toLowerCase();
+        record.effective_date,
+      ].map(normalizeText).join(" ");
 
       return searchableText.includes(searchTerm);
     });
@@ -10397,13 +10303,15 @@ function exitPayrollEmployeeOverrideEditMode() {
 // Presentation-only replacement for the legacy nine-column override table.
 // Search, sorting, tenant filtering, create/edit/save behaviour, approval trace,
 // payroll calculations, Supabase operations, and role restrictions are preserved.
+
 function renderPayrollEmployeeOverrideRecords(records = []) {
   const tbody = state.dom.payrollEmployeeOverrideRecordsTableBody;
   if (!tbody) return;
 
+  const adjustmentRecords = (records || []).filter(isPayrollEmployeeAdjustmentRecord);
   tbody.innerHTML = "";
 
-  if (!records.length) {
+  if (!adjustmentRecords.length) {
     state.dom.payrollEmployeeOverrideRecordsEmptyState?.classList.remove("d-none");
     state.dom.payrollEmployeeOverrideRecordsTableWrapper?.classList.add("d-none");
     return;
@@ -10412,169 +10320,33 @@ function renderPayrollEmployeeOverrideRecords(records = []) {
   state.dom.payrollEmployeeOverrideRecordsEmptyState?.classList.add("d-none");
   state.dom.payrollEmployeeOverrideRecordsTableWrapper?.classList.remove("d-none");
 
-  const recordsToRender = sortPayrollEmployeeOverrideRecordsByLatestActivity(records);
-
-  recordsToRender.forEach((record) => {
+  sortPayrollEmployeeOverrideRecordsByLatestActivity(adjustmentRecords).forEach((record) => {
     const masterContext = getPayrollEmployeeOverrideMasterContext(record);
+    const amount = Number(record.override_value || 0);
+    const payPeriod = String(record.effective_date || "").slice(0, 7);
+    const payPeriodLabel = /^\d{4}-\d{2}$/.test(payPeriod)
+      ? new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" })
+        .format(new Date(`${payPeriod}-01T00:00:00Z`))
+      : "--";
+
     const row = document.createElement("tr");
-
-    const employeeName = String(masterContext.fullName || "Unknown Employee").trim();
-    const gradeLabel = String(masterContext.gradeLabel || "").trim();
-    const masterEffectiveDate = formatDate(masterContext.masterEffectiveDate);
-    const categoryLabel = formatPayrollEmployeeOverrideCategory(record.override_category);
-    const elementLabel = formatPayrollEmployeeOverrideElement(record.override_element);
-    const methodLabel = formatPayrollEmployeeOverrideMethod(record.override_method);
-    const overrideValue = formatPayrollEmployeeOverrideValue(record);
-    const originalValue =
-      record.original_value_snapshot === null ||
-        record.original_value_snapshot === undefined ||
-        String(record.original_value_snapshot).trim() === ""
-        ? "--"
-        : String(record.original_value_snapshot).trim();
-    const effectiveDate = formatDate(record.effective_date);
-    const endDate = record.end_date ? formatDate(record.end_date) : "Open-ended";
-    const updatedDate = formatDate(record.updated_at || record.created_at);
-    const approvalReference = String(record.approval_reference || "").trim();
-    const reason = String(record.reason || "").trim();
-    const notes = String(record.notes || "").trim();
-
-    const initials = employeeName
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part.charAt(0).toUpperCase())
-      .join("") || "EM";
-
-    const supportingContext = [
-      gradeLabel
-        ? `<span class="hr-override-context-pill"><i class="bi bi-diagram-3" aria-hidden="true"></i>${escapeHtml(gradeLabel)}</span>`
-        : "",
-      masterEffectiveDate && masterEffectiveDate !== "--"
-        ? `<span class="hr-override-context-pill"><i class="bi bi-calendar-check" aria-hidden="true"></i>Salary setup ${escapeHtml(masterEffectiveDate)}</span>`
-        : "",
-    ].filter(Boolean).join("");
-
-    const auditItems = [
-      approvalReference
-        ? `
-          <div class="hr-override-audit-item">
-            <span class="hr-override-audit-icon" aria-hidden="true">
-              <i class="bi bi-shield-check"></i>
-            </span>
-            <div>
-              <span class="hr-override-label">Approval reference</span>
-              <strong>${escapeHtml(approvalReference)}</strong>
-            </div>
-          </div>
-        `
-        : "",
-      reason
-        ? `
-          <div class="hr-override-audit-item">
-            <span class="hr-override-audit-icon" aria-hidden="true">
-              <i class="bi bi-chat-left-text"></i>
-            </span>
-            <div>
-              <span class="hr-override-label">Reason</span>
-              <strong>${escapeHtml(reason)}</strong>
-            </div>
-          </div>
-        `
-        : "",
-      notes
-        ? `
-          <div class="hr-override-audit-item">
-            <span class="hr-override-audit-icon" aria-hidden="true">
-              <i class="bi bi-journal-text"></i>
-            </span>
-            <div>
-              <span class="hr-override-label">Notes</span>
-              <strong>${escapeHtml(notes)}</strong>
-            </div>
-          </div>
-        `
-        : "",
-    ].filter(Boolean).join("");
-
-    row.className = "hr-override-record-row";
-
-    row.innerHTML = `
-      <td colspan="9" class="hr-override-record-cell">
-        <article class="hr-override-record-card">
-          <header class="hr-override-record-header">
-            <div class="hr-override-employee">
-              <span class="hr-override-avatar" aria-hidden="true">
-                ${escapeHtml(initials)}
-              </span>
-
-              <div class="hr-override-employee-copy">
-                <strong class="hr-override-employee-name">
-                  ${escapeHtml(employeeName)}
-                </strong>
-
-                ${supportingContext
-        ? `<div class="hr-override-context">${supportingContext}</div>`
-        : ""}
-              </div>
-            </div>
-
-            <div class="hr-override-header-actions">
-              <div class="hr-override-status">
-                ${renderBexhrStatusPill(formatStatusLabel(record.status))}
-              </div>
-
-              <button
-                type="button"
-                class="btn btn-sm btn-outline-primary hr-override-edit-btn"
-                title="Edit employee override"
-                aria-label="Edit override for ${escapeHtml(employeeName)}"
-                onclick="window.hrEditPayrollEmployeeOverrideRecord('${escapeHtml(record.id)}')"
-              >
-                <i class="bi bi-pencil-square" aria-hidden="true"></i>
-              </button>
-            </div>
-          </header>
-
-          <div class="hr-override-detail-band">
-            <div class="hr-override-detail hr-override-detail--element">
-              <span class="hr-override-label">Payroll element</span>
-              <strong>${escapeHtml(elementLabel)}</strong>
-              <span>${escapeHtml(categoryLabel)}</span>
-            </div>
-
-            <div class="hr-override-detail">
-              <span class="hr-override-label">Override method</span>
-              <strong>${escapeHtml(methodLabel)}</strong>
-            </div>
-
-            <div class="hr-override-detail hr-override-detail--value">
-              <span class="hr-override-label">Override value</span>
-              <strong>${escapeHtml(overrideValue)}</strong>
-              <span>Original: ${escapeHtml(originalValue)}</span>
-            </div>
-
-            <div class="hr-override-detail">
-              <span class="hr-override-label">Effective period</span>
-              <strong>${escapeHtml(effectiveDate)}</strong>
-              <span>Ends: ${escapeHtml(endDate)}</span>
-            </div>
-
-            <div class="hr-override-detail">
-              <span class="hr-override-label">Last updated</span>
-              <strong>${escapeHtml(updatedDate)}</strong>
-            </div>
-          </div>
-
-          ${auditItems
-        ? `<footer class="hr-override-audit">${auditItems}</footer>`
-        : ""}
-        </article>
-      </td>
-    `;
-
+    row.className = "hr-deduction-record-row";
+    row.innerHTML =       '<td colspan="9" class="hr-deduction-record-cell">' +
+      '<article class="hr-deduction-record-card">' +
+      '<header class="hr-deduction-record-header">' +
+      '<div><strong class="hr-deduction-record-name">' + escapeHtml(masterContext.fullName || "Unknown Employee") + '</strong></div>' +
+      '</header>' +
+      '<div class="hr-deduction-record-details">' +
+      '<div class="hr-deduction-record-detail"><span class="hr-deduction-record-label">Adjustment</span><strong>' + escapeHtml(formatPayrollEmployeeOverrideElement(record.override_element)) + '</strong></div>' +
+      '<div class="hr-deduction-record-detail hr-deduction-record-detail--accent"><span class="hr-deduction-record-label">Amount</span><strong>' + formatCurrency(amount, "NGN") + '</strong></div>' +
+      '<div class="hr-deduction-record-detail"><span class="hr-deduction-record-label">Pay Period</span><strong>' + escapeHtml(payPeriodLabel) + '</strong></div>' +
+      '</div>' +
+      (record.reason ? '<footer class="hr-deduction-record-footer"><div><span class="hr-deduction-record-label">Reason</span><p>' + escapeHtml(record.reason) + '</p></div></footer>' : '') +
+      '</article></td>';
     tbody.appendChild(row);
   });
 }
+
 async function handlePayrollEmployeeOverrideRecordsRefresh() {
   const button = state.dom.refreshPayrollEmployeeOverrideRecordsBtn;
   const startedAt = Date.now();
@@ -10595,7 +10367,7 @@ async function handlePayrollEmployeeOverrideSave() {
   // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
   // Auditor, QA, and custom HR-routed roles may review Employee Overrides only.
   if (!canCurrentUserMaintainPayrollSetupData()) {
-    showHrPayrollSetupAccessDeniedMessage("Employee Payroll Overrides");
+    showHrPayrollSetupAccessDeniedMessage("Payroll Adjustments");
     return;
   }
 
@@ -10689,17 +10461,17 @@ async function handlePayrollEmployeeOverrideSave() {
 
     showPageAlert(
       "success",
-      `Employee payroll override was ${wasEditing ? "updated" : "created"} successfully from <strong>${escapeHtml(
+      `Payroll adjustment was ${wasEditing ? "updated" : "created"} successfully from <strong>${escapeHtml(
         payload.effective_date,
       )}</strong>.`,
     );
 
     showDashboardToast(
       "success",
-      wasEditing ? "Employee override updated" : "Employee override created",
+      wasEditing ? "Adjustment updated" : "Adjustment created",
       wasEditing
-        ? "The employee-specific payroll override has been updated and remains traceable."
-        : "The employee-specific payroll override has been saved and is now traceable.",
+        ? "The one-period payroll adjustment has been updated."
+        : "The one-period payroll adjustment has been saved.",
     );
 
     resetPayrollEmployeeOverrideForm();
@@ -10708,7 +10480,7 @@ async function handlePayrollEmployeeOverrideSave() {
       redirectToPayrollEmployeeOverrideRecordsAfterSave();
     }, 250);
   } catch (error) {
-    console.error("Error saving employee payroll override:", error);
+    console.error("Error saving payroll adjustment:", error);
 
     const message = String(error.message || "").toLowerCase();
 
@@ -10723,7 +10495,7 @@ async function handlePayrollEmployeeOverrideSave() {
 
       showDashboardToast(
         "warning",
-        "Duplicate employee override",
+        "Duplicate payroll adjustment",
         "Use a different effective date or maintain the existing override when edit mode is added.",
       );
 
@@ -34411,6 +34183,11 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
     activePayrollMaster.id,
   );
 
+  const adjustmentAmounts = getPayrollEmployeeAdjustmentAmountsForMaster(
+    activePayrollMaster.id,
+    getCurrentBatchPayrollCalculationDate(),
+  );
+
   // BATCH PAYROLL CSV IMPORT - STEP 5C
   // No automatic salary increment. HR should only apply increments through
   // an approved CSV/manual salary review.
@@ -34421,10 +34198,10 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
   const housingAllowance = newBaseSalary * 0.1;
   const transportAllowance = newBaseSalary * 0.1;
   const utilityAllowance = newBaseSalary * 0.1;
-  const otherAllowance = newBaseSalary * 0.2;
+  const otherAllowance = (newBaseSalary * 0.2) + adjustmentAmounts.otherEarning;
 
-  const bonus = extras.bonus;
-  const overtime = extras.overtime;
+  const bonus = Number(extras.bonus || 0) + adjustmentAmounts.bonus;
+  const overtime = Number(extras.overtime || 0) + adjustmentAmounts.overtime;
   const logisticsAllowance = extras.logisticsAllowance;
   const dataAirtimeAllowance = extras.dataAirtimeAllowance;
   const medicalAllowance = extras.medicalAllowance;
@@ -34471,9 +34248,9 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
   const whtTax = statutoryTotals.whtTax;
   const employeePension = statutoryTotals.employeePension;
   const employerPension = statutoryTotals.employerPension;
-  const otherDeductions = statutoryTotals.otherDeductions;
-  const totalDeductions = statutoryTotals.totalDeductions;
-  const netPay = statutoryTotals.netPay;
+  const otherDeductions = statutoryTotals.otherDeductions + adjustmentAmounts.otherDeduction;
+  const totalDeductions = statutoryTotals.totalDeductions + adjustmentAmounts.otherDeduction;
+  const netPay = grossPay - totalDeductions;
 
   const preparedRow = {
     employee_id: employee.id,
@@ -34481,7 +34258,7 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
     pay_cycle: activePayrollMaster.pay_cycle || "",
     payroll_group: "REGULAR",
     payroll_model: "REGULAR",
-    employee_override_applied: resolvedBaseSalary.overrideApplied,
+    employee_override_applied: adjustmentAmounts.totalCount > 0,
     employee_override_audit_summary: employeeOverrideAuditSummary,
 
     base_salary: baseSalary,
@@ -34518,12 +34295,7 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
 
     currency: "NGN",
   };
-
-  return applyActivePayrollEmployeeOverridesToBatchPreparedRow(
-    preparedRow,
-    activePayrollMaster.id,
-    getCurrentBatchPayrollCalculationDate(),
-  );
+  return preparedRow;
 }
 
 // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1G
@@ -45594,26 +45366,28 @@ function clearPayrollStatutoryDeductionPreviewValues() {
 // Run Payroll batch and CSV import will be checked/wired after this is confirmed.
 // =========================================================
 
+
 function isPayrollEmployeeOverrideActiveForDate(record = {}, payrollDateValue = "") {
-  const status = normalizeText(record.status || "");
-  if (status !== "active") return false;
+  if (!isPayrollEmployeeAdjustmentRecord(record)) return false;
+  if (normalizeText(record.status || "") !== "active") return false;
 
   const payrollDateTime = parsePayrollEffectiveDateToTime(payrollDateValue);
   const effectiveDateTime = parsePayrollEffectiveDateToTime(record.effective_date);
-  const endDateTime = record.end_date
-    ? parsePayrollEffectiveDateToTime(record.end_date)
-    : null;
+  const endDateTime = parsePayrollEffectiveDateToTime(record.end_date);
 
-  if (!Number.isFinite(payrollDateTime) || !Number.isFinite(effectiveDateTime)) {
+  if (
+    !Number.isFinite(payrollDateTime) ||
+    !Number.isFinite(effectiveDateTime) ||
+    !Number.isFinite(endDateTime)
+  ) {
     return false;
   }
 
-  if (payrollDateTime < effectiveDateTime) return false;
-  if (endDateTime !== null && Number.isFinite(endDateTime) && payrollDateTime > endDateTime) {
-    return false;
-  }
+  const startMonth = String(record.effective_date || "").slice(0, 7);
+  const endMonth = String(record.end_date || "").slice(0, 7);
+  if (!startMonth || startMonth !== endMonth) return false;
 
-  return true;
+  return payrollDateTime >= effectiveDateTime && payrollDateTime <= endDateTime;
 }
 
 function getActivePayrollEmployeeOverridesForMaster(
@@ -45644,27 +45418,90 @@ function getActivePayrollEmployeeOverridesForMaster(
     });
 }
 
+
+function getPayrollEmployeeAdjustmentAmountsForMaster(
+  payrollMasterRecordId = "",
+  payrollDateValue = "",
+) {
+  const totals = {
+    bonus: 0,
+    overtime: 0,
+    otherEarning: 0,
+    otherDeduction: 0,
+    totalCount: 0,
+  };
+
+  getActivePayrollEmployeeOverridesForMaster(
+    payrollMasterRecordId,
+    payrollDateValue,
+  ).forEach((record) => {
+    if (!isPayrollEmployeeAdjustmentRecord(record)) return;
+
+    const amount = Number(record.override_value || 0);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    const element = String(record.override_element || "").trim();
+    if (element === "BONUS") totals.bonus += amount;
+    if (element === "OVERTIME") totals.overtime += amount;
+    if (element === "OTHER_ALLOWANCE") totals.otherEarning += amount;
+    if (element === "OTHER") totals.otherDeduction += amount;
+    totals.totalCount += 1;
+  });
+
+  return totals;
+}
+
+function applyPayrollAdjustmentAmountToField(field, amount = 0) {
+  if (!field) return;
+
+  const previousAdjustment = Number(field.dataset.phase5AdjustmentAmount || 0);
+  const currentValue = Number(field.value || 0);
+  const baseline = Number.isFinite(currentValue - previousAdjustment)
+    ? currentValue - previousAdjustment
+    : 0;
+  const nextAmount = Number(amount || 0);
+
+  setNumericFieldValue(field, Math.max(baseline, 0) + (Number.isFinite(nextAmount) ? nextAmount : 0));
+  field.dataset.phase5AdjustmentAmount = String(Number.isFinite(nextAmount) ? nextAmount : 0);
+}
+
+function getCurrentPayrollAdjustmentAmounts() {
+  const employeeId = String(state.dom.payrollEmployeeId?.value || "").trim();
+  const payrollDate = getCurrentPayrollCalculationDate();
+  if (!employeeId) return { bonus: 0, overtime: 0, otherEarning: 0, otherDeduction: 0, totalCount: 0 };
+
+  const payrollMaster = getEffectivePayrollMasterRecordForEmployeeAtDate(
+    employeeId,
+    payrollDate,
+  );
+
+  if (!payrollMaster?.id) return { bonus: 0, overtime: 0, otherEarning: 0, otherDeduction: 0, totalCount: 0 };
+
+  return getPayrollEmployeeAdjustmentAmountsForMaster(payrollMaster.id, payrollDate);
+}
+
+function applyActivePayrollEmployeeEarningAdjustmentsToPayrollForm() {
+  if (isCurrentPayrollFinalisedCorrectionMode()) return;
+  const totals = getCurrentPayrollAdjustmentAmounts();
+  applyPayrollAdjustmentAmountToField(state.dom.payrollBonus, totals.bonus);
+  applyPayrollAdjustmentAmountToField(state.dom.payrollOvertime, totals.overtime);
+  applyPayrollAdjustmentAmountToField(state.dom.payrollOtherAllowance, totals.otherEarning);
+}
+
+function applyActivePayrollEmployeeDeductionAdjustmentsToPayrollForm() {
+  if (isCurrentPayrollFinalisedCorrectionMode()) return;
+  const totals = getCurrentPayrollAdjustmentAmounts();
+  applyPayrollAdjustmentAmountToField(state.dom.payrollOtherDeductions, totals.otherDeduction);
+}
+
 function calculatePayrollEmployeeOverrideValue(record = {}, currentAmount = 0) {
-  const method = String(record.override_method || "").trim();
-  const value = Number(record.override_value || 0);
+  if (!isPayrollEmployeeAdjustmentRecord(record)) return null;
+
+  const amount = Number(record.override_value || 0);
   const current = Number(currentAmount || 0);
 
-  if (method === "EXEMPTION") {
-    return 0;
-  }
-
-  if (method === "FIXED_AMOUNT") {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (method === "PERCENTAGE") {
-    if (!Number.isFinite(value) || !Number.isFinite(current)) return null;
-    return current * (value / 100);
-  }
-
-  // Rule replacement is stored for traceability in this step.
-  // It needs a defined calculation rule before it can safely change payroll values.
-  return null;
+  if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(current)) return null;
+  return current + amount;
 }
 
 function resolveBatchPayrollBaseSalaryWithEmployeeOverride(
@@ -46627,19 +46464,21 @@ function recalculatePayrollFormTotals() {
 
     // PAYROLL WORKFLOW UX REPAIR - STEP 7
     // Recalculate baseline PAYE and pensions after setup allowances are present.
-    refreshRegularPayrollBaselineDeductionsFromCurrentValues();
+    // Phase 5: earnings are applied after setup, immediately before the final baseline/statutory pass.
   }
 
   // DESCRIPTION ITEM 4 - STEP 5 FIX
   // Apply active statutory setup and configured Other Deductions after the
   // baseline calculation. Where statutory records exist, they intentionally
   // override the baseline PAYE / pension values.
+  applyActivePayrollEmployeeEarningAdjustmentsToPayrollForm();
+  refreshRegularPayrollBaselineDeductionsFromCurrentValues();
   applyActivePayrollStatutoryDeductionsToPayrollForm();
 
   // DESCRIPTION ITEM 5 - STEP 5A
   // Employee-specific overrides remain final HR exceptions after standard
   // setup and statutory setup have been applied.
-  applyActivePayrollEmployeeOverridesToPayrollForm();
+  applyActivePayrollEmployeeDeductionAdjustmentsToPayrollForm();
 
   const grossPay = calculatePayrollGrossPay();
   const totalDeductions = calculatePayrollTotalDeductions();

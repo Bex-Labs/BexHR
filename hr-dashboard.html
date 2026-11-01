@@ -5332,7 +5332,7 @@ Disable browser address autofill popup on HR employee address fields. -->
 
       <!-- =========================================================
            DESCRIPTION ITEM 5 - STEP 2
-           Employee Payroll Overrides section shell.
+           Payroll Adjustments section shell.
            This stores employee-specific exceptions to standard grade,
            statutory, allowance, or rule-based payroll setup.
            Save/load logic will be wired after the UI is confirmed.
@@ -5342,10 +5342,9 @@ Disable browser address autofill popup on HR employee address fields. -->
           <div class="mb-4">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
               <div>
-                <h2 class="section-heading h4 mb-1">Advanced Employee Payroll Exceptions</h2>
+                <h2 class="section-heading h4 mb-1">Payroll Adjustments</h2>
                 <p class="section-subtext mb-0">
-                  Controlled employee-specific payroll exceptions used only when a documented HR/payroll approval
-                  exists.
+                  Create one-off employee payroll adjustments that apply to a single pay period.
                 </p>
               </div>
 
@@ -5359,200 +5358,96 @@ Disable browser address autofill popup on HR employee address fields. -->
           </div>
 
           <div id="payrollEmployeeOverrideCardCollapse">
-            <div class="alert alert-warning border d-flex align-items-start gap-3 mx-3 mx-lg-4 mt-3 mb-4" role="alert">
-              <i class="bi bi-shield-exclamation fs-5"></i>
-              <div>
-                <div class="fw-semibold">Advanced exception control</div>
-                <div class="small">
-                  Use this only for approved employee-specific payroll exceptions such as temporary exemptions,
-                  approved corrections, or documented one-off payroll adjustments. Standard salary, allowance,
-                  statutory deduction, and other deduction setup should be maintained in their normal setup sections.
-                </div>
-              </div>
-            </div>
-            <form id="payrollEmployeeOverrideCreateForm" novalidate>
-              <!-- DESCRIPTION ITEM 5 - STEP 2
-                   Hidden id reserved for edit mode in a later step. -->
-              <input type="hidden" id="editingPayrollEmployeeOverrideId" />
 
-              <div class="row g-4">
-                <div class="col-md-6 col-xl-4">
-                  <label for="payrollEmployeeOverrideMasterRecordId" class="form-label fw-semibold">
-                    Payroll Master Record <span class="text-danger">*</span>
-                  </label>
-                  <select id="payrollEmployeeOverrideMasterRecordId" class="form-select" required>
-                    <option value="">Select payroll master record</option>
-                  </select>
-                  <div class="form-text">
-                    Links the override to the employee payroll setup.
-                  </div>
-                </div>
+<form id="payrollEmployeeOverrideCreateForm" novalidate>
+  <input type="hidden" id="editingPayrollEmployeeOverrideId" value="">
+  <input type="hidden" id="payrollEmployeeOverrideCategory" value="">
+  <input type="hidden" id="payrollEmployeeOverrideMethod" value="FIXED_AMOUNT">
+  <input type="hidden" id="payrollEmployeeOverrideOriginalValue" value="">
+  <input type="hidden" id="payrollEmployeeOverrideEndDate" value="">
+  <input type="hidden" id="payrollEmployeeOverrideStatus" value="Active">
+  <input type="hidden" id="payrollEmployeeOverrideApprovalReference" value="">
+  <div id="payrollEmployeeOverrideRuleSnapshotField" class="d-none">
+    <input type="hidden" id="payrollEmployeeOverrideRuleSnapshot" value="">
+  </div>
+  <input type="hidden" id="payrollEmployeeOverrideNotes" value="BEXHR_PHASE5_ADJUSTMENT_V1">
 
-                <div class="col-md-6 col-xl-4">
-                  <label for="payrollEmployeeOverrideCategory" class="form-label fw-semibold">
-                    Override Category <span class="text-danger">*</span>
-                  </label>
-                  <!-- EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 1A
-     Keep only operational categories supported by the payroll form.
-     Payroll rules and payroll structure belong in their normal setup areas. -->
-                  <select id="payrollEmployeeOverrideCategory" class="form-select" required>
-                    <option value="">Select what is changing</option>
-                    <option value="EARNING">Earning</option>
-                    <option value="STATUTORY_DEDUCTION">Statutory Deduction</option>
-                    <option value="OTHER_DEDUCTION">Other Deduction</option>
-                  </select>
+  <div class="row g-3">
+    <div class="col-12 col-lg-6">
+      <label for="payrollEmployeeOverrideMasterRecordId" class="form-label fw-semibold">
+        Employee <span class="text-danger">*</span>
+      </label>
+      <select id="payrollEmployeeOverrideMasterRecordId" class="form-select" required>
+        <option value="">Select employee</option>
+      </select>
+    </div>
 
-                  <div class="form-text">
-                    Earning adds or changes pay. Statutory Deduction changes tax or pension.
-                    Other Deduction covers approved items such as tardiness or salary recovery.
-                  </div>
-                </div>
+    <div class="col-12 col-lg-6">
+      <label for="payrollEmployeeOverrideEffectiveDate" class="form-label fw-semibold">
+        Pay Period <span class="text-danger">*</span>
+      </label>
+      <div class="bexhr-phase4-month-control position-relative">
+        <input type="month"
+          id="payrollEmployeeOverrideEffectiveDate"
+          class="form-control bexhr-phase4-month-input"
+          required>
+        <div class="bexhr-phase4-month-display is-empty" aria-hidden="true">
+          <span class="bexhr-phase4-month-display-text">Select pay period</span>
+          <i class="bi bi-calendar3 bexhr-phase4-month-display-icon" aria-hidden="true"></i>
+        </div>
+      </div>
+      <div class="form-text">This adjustment applies to this payroll month only.</div>
+    </div>
 
-                <div class="col-md-6 col-xl-4">
-                  <label for="payrollEmployeeOverrideElement" class="form-label fw-semibold">
-                    Payroll Element <span class="text-danger">*</span>
-                  </label>
-                  <!-- EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 1B
-     JavaScript now shows only elements relevant to the selected category. -->
-                  <select id="payrollEmployeeOverrideElement" class="form-select" required disabled>
-                    <option value="">Select a category first</option>
-                  </select>
+    <div class="col-12 col-lg-4">
+      <label for="payrollEmployeeOverrideElement" class="form-label fw-semibold">
+        Adjustment Type <span class="text-danger">*</span>
+      </label>
+      <select id="payrollEmployeeOverrideElement" class="form-select" required>
+        <option value="">Select adjustment type</option>
+      </select>
+    </div>
 
-                  <div class="form-text">
-                    Select the exact salary, earning, tax, pension, or deduction being changed.
-                  </div>
-                </div>
+    <div class="col-12 col-lg-4">
+      <label for="payrollEmployeeOverrideValue" class="form-label fw-semibold">
+        Amount <span class="text-danger">*</span>
+      </label>
+      <input type="number"
+        id="payrollEmployeeOverrideValue"
+        class="form-control"
+        min="0.01"
+        step="0.01"
+        placeholder="Enter adjustment amount"
+        required>
+    </div>
 
-                <div class="col-md-6 col-xl-4">
-                  <label for="payrollEmployeeOverrideMethod" class="form-label fw-semibold">
-                    Override Method <span class="text-danger">*</span>
-                  </label>
-                  <!-- EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 1C
-     Rule Replacement is removed from new-entry UI because payroll rules
-     should be maintained in their controlled setup sections. -->
-                  <select id="payrollEmployeeOverrideMethod" class="form-select" required>
-                    <option value="">Select how it should change</option>
-                    <option value="FIXED_AMOUNT">Fixed Amount</option>
-                    <option value="PERCENTAGE">Percentage</option>
-                    <option value="EXEMPTION">Exemption</option>
-                  </select>
+    <div class="col-12 col-lg-4">
+      <label for="payrollEmployeeOverrideReason" class="form-label fw-semibold">
+        Reason <span class="text-danger">*</span>
+      </label>
+      <textarea id="payrollEmployeeOverrideReason"
+        class="form-control"
+        rows="2"
+        placeholder="Why is this one-period adjustment needed?"
+        required></textarea>
+    </div>
+  </div>
 
-                  <div class="form-text">
-                    Fixed Amount uses an exact value. Percentage adjusts the current value.
-                    Exemption temporarily stops the selected item from applying.
-                  </div>
-                </div>
+  <div class="d-flex flex-wrap gap-2 mt-4">
+    <button type="submit" id="savePayrollEmployeeOverrideBtn" class="btn btn-primary" disabled>
+      <i class="bi bi-save me-2"></i>
+      <span id="savePayrollEmployeeOverrideBtnText">Create Adjustment</span>
+    </button>
 
-                <div class="col-md-6 col-xl-4">
-                  <label for="payrollEmployeeOverrideOriginalValue" class="form-label fw-semibold">
-                    Original Value Snapshot
-                  </label>
-                  <input type="number" id="payrollEmployeeOverrideOriginalValue" class="form-control" min="0"
-                    step="0.01" placeholder="Example: 5000" />
-                  <div class="form-text">
-                    Standard value before the employee-specific override.
-                  </div>
-                </div>
+    <button type="button" id="cancelPayrollEmployeeOverrideEditBtn" class="btn btn-outline-secondary d-none">
+      Cancel Edit
+    </button>
 
-                <div class="col-md-6 col-xl-4">
-                  <label for="payrollEmployeeOverrideValue" class="form-label fw-semibold">
-                    Override Value
-                  </label>
-                  <input type="number" id="payrollEmployeeOverrideValue" class="form-control" min="0" step="0.01"
-                    placeholder="Example: 7500" />
-                  <div class="form-text">
-                    Required for fixed amount and percentage overrides.
-                  </div>
-                </div>
-
-                <div class="col-md-6 col-xl-4">
-                  <label for="payrollEmployeeOverrideEffectiveDate" class="form-label fw-semibold">
-                    Effective Date <span class="text-danger">*</span>
-                  </label>
-                  <input type="date" id="payrollEmployeeOverrideEffectiveDate" class="form-control" required />
-                </div>
-
-                <div class="col-md-6 col-xl-4">
-                  <label for="payrollEmployeeOverrideEndDate" class="form-label fw-semibold">
-                    End Date
-                  </label>
-                  <input type="date" id="payrollEmployeeOverrideEndDate" class="form-control" />
-                  <div class="form-text">
-                    Leave blank if the override should remain active.
-                  </div>
-                </div>
-
-                <div class="col-md-6 col-xl-4">
-                  <label for="payrollEmployeeOverrideStatus" class="form-label fw-semibold">
-                    Status <span class="text-danger">*</span>
-                  </label>
-                  <select id="payrollEmployeeOverrideStatus" class="form-select" required>
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
-
-                <div class="col-md-6">
-                  <label for="payrollEmployeeOverrideApprovalReference" class="form-label fw-semibold">
-                    Approval Reference <span class="text-danger">*</span>
-                  </label>
-                  <input type="text" id="payrollEmployeeOverrideApprovalReference" class="form-control"
-                    placeholder="Enter HR/payroll approval reference" required />
-                </div>
-
-                <!-- EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 4A
-     Hidden for normal overrides.
-     JavaScript reveals this field only for a historical Rule Replacement record. -->
-                <div id="payrollEmployeeOverrideRuleSnapshotField" class="col-md-6 d-none">
-                  <label for="payrollEmployeeOverrideRuleSnapshot" class="form-label fw-semibold">
-                    Rule Snapshot <span class="text-danger">*</span>
-                  </label>
-
-                  <input type="text" id="payrollEmployeeOverrideRuleSnapshot" class="form-control"
-                    placeholder="Describe the rule being replaced" />
-
-                  <div class="form-text">
-                    Required only for an older Rule Replacement override.
-                  </div>
-                </div>
-
-                <div class="col-12">
-                  <label for="payrollEmployeeOverrideReason" class="form-label fw-semibold">
-                    Reason <span class="text-danger">*</span>
-                  </label>
-                  <textarea id="payrollEmployeeOverrideReason" class="form-control" rows="2"
-                    placeholder="Explain why this employee-specific override is needed" required></textarea>
-                </div>
-
-                <!-- EMPLOYEE BIODATA COMPLETION - STEP 4J
-     Removed the visible Notes field from Employee Payroll Overrides.
-     Reason, Approval Reference, and Rule Snapshot already provide the
-     required HR/payroll audit context, so Notes is unnecessary here. -->
-              </div>
-
-              <div class="d-flex flex-wrap gap-2 mt-4">
-                <button type="submit" id="savePayrollEmployeeOverrideBtn" class="btn btn-secondary dashboard-action-btn"
-                  disabled>
-                  <i class="bi bi-save me-2"></i>
-                  <span id="savePayrollEmployeeOverrideBtnText">Create Employee Override</span>
-                </button>
-
-                <!-- SETUP REGRESSION POLISH - STEP 1C
-     Cancel Edit should use the same red outline pattern
-     as other payroll setup edit-cancel actions. -->
-                <button type="button" id="cancelPayrollEmployeeOverrideEditBtn"
-                  class="btn btn-outline-danger dashboard-action-btn d-none">
-                  <i class="bi bi-x-circle me-2"></i>
-                  Cancel Edit
-                </button>
-
-                <button type="button" id="resetPayrollEmployeeOverrideFormBtn"
-                  class="btn btn-outline-secondary dashboard-action-btn">
-                  <i class="bi bi-arrow-clockwise me-2"></i>
-                  Clear Form
-                </button>
-              </div>
-            </form>
+    <button type="button" id="resetPayrollEmployeeOverrideFormBtn" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-counterclockwise me-2"></i>Clear Form
+    </button>
+  </div>
+</form>
 
             <hr class="my-4" />
 
@@ -5562,9 +5457,9 @@ Disable browser address autofill popup on HR employee address fields. -->
             <div id="payrollEmployeeOverrideRecordsHeader" class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
               <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
                 <div>
-                  <h3 class="h5 mb-1">Employee Override Records</h3>
+                  <h3 class="h5 mb-1">Payroll Adjustment Records</h3>
                   <p class="section-subtext mb-0">
-                    Review employee-specific payroll override records and their approval trace.
+                    Review one-period employee payroll adjustments.
                   </p>
                 </div>
 
@@ -5578,7 +5473,7 @@ Disable browser address autofill popup on HR employee address fields. -->
               <div class="row g-3 align-items-end">
                 <div class="col-12 col-lg-8 col-xl-6">
                   <label for="payrollEmployeeOverrideSearchInput" class="form-label fw-semibold mb-2">
-                    Search employee overrides
+                    Search payroll adjustments
                   </label>
 
                   <div class="input-group">
