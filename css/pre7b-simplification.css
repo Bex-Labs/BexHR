@@ -1,0 +1,223 @@
+/* BexHR PRE-7B — approved minimal profile and one-task leave presentation.
+   Intentional UI retirement only; NEVER changes database grants or PA RPCs. */
+
+/* 1: Employee form — only 4 supported steps, original legacy fields retained
+   in the DOM solely to preserve safe edit/state compatibility. */
+#employeeFormSteps [data-step="3"],
+#employeeFormSteps [data-step="6"],
+#employeeFormSteps [data-step="7"],
+#employeeFormSteps .bexhr-form-step-connector,
+#employeeCreateForm [data-employee-form-section="dependants"],
+#employeeCreateForm [data-employee-form-section="education"],
+#employeeCreateForm [data-employee-form-section="documents"] { display: none !important; }
+#employeeFormSteps { gap: 0.6rem !important; flex-wrap: wrap !important; }
+
+/* Field-level retirement: remove from keyboard flow, screen reader and display.
+   Hidden source elements are still available for historical record hydration. */
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#personalEmail),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#alternativePhoneNumber),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#gender),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#maritalStatus),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#stateOfOrigin),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#localGovernmentArea),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#meansOfIdentification),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#identificationDocumentNumber),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#identificationIssueState),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#employeeIdentityEvidenceInput),
+#employeeCreateForm [data-employee-form-section="address"]:has(#employeePermanentAddressLine1),
+#employeeCreateForm [data-employee-form-section="address"]:has(#employeeCurrentPostalCode) .col-md-6:has(#employeeCurrentPostalCode),
+#employeeCreateForm [data-employee-form-section="next-of-kin"] .col-md-6:has(#employeeNextOfKinEmail),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#hmoProvider),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#hmoPlan),
+#employeeCreateForm .row.g-4 > [class*="col-"]:has(#hmoNumber) { display: none !important; }
+
+/* 2: Review UI retirement, including already-loaded SPA sections. */
+#sidebarReviewBtn, #sidebarReviewsSubnav, #hrTabReviewBtn, #hrReviewSection,
+#hrOverviewOpenReviews, #hrDashboardSection .hr-overview-metric-card.metric-review,
+#hrDashboardSection .hr-overview-check-card.tone-review,
+#bexPaEmployeeAppraisalsNavButton, #bexPaEmployeeAppraisalsSection,
+#bexPaOverviewSection [data-bex-pa-summary="awaiting-hr"],
+#bexPaHrAppraisalReviewSection, #bexPaManagerAppraisalSection,
+#bexPaSelfAppraisalSection, #bexPaFinalAppraisalSection,
+.employee-profile-review-tabs,
+[data-employee-profile-review-panel="personal"],
+.employee-profile-review-panel [class*="col-"]:has(#reviewPersonalEmail),
+.employee-profile-review-panel [class*="col-"]:has(#reviewAlternativePhone) { display: none !important; }
+
+/* R14C: Universal Employee account card, same two-panel structure as HR.
+   The compact four-field detail view and reporting line replace the long HR
+   Profile Summary. Legacy sensitive HR records remain in HR People. */
+#profileSection .employee-profile-details-panel {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+#hrDashboardSection .hr-overview-metric-card.metric-organisation .hr-overview-metric-icon {
+  color: #0c817c;
+  background: #e6f7f4;
+}
+#overviewDepartmentValue {
+  font-size: clamp(1rem, 1.6vw, 1.35rem);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+
+/* R14D: Employee reporting line condensed to names + manager relationship.
+   Presentation only: no changes to reporting assignments or employee access. */
+#profileSection .employee-reporting-compact {
+  min-width: 0;
+  margin-bottom: 0;
+  box-shadow: none;
+}
+#profileSection .employee-reporting-compact__header,
+#profileSection .employee-reporting-compact__title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.75rem;
+}
+#profileSection .employee-reporting-compact__header {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+#profileSection .employee-reporting-compact__readonly {
+  display: inline-flex;
+  position: static;
+  align-self: center;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 0 auto !important;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+#profileSection .employee-reporting-compact__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+  padding: 0.75rem 0.85rem;
+  background: #f8fafc;
+  border: 1px solid #e1e7ed;
+  border-radius: 0.85rem;
+}
+#profileSection .employee-reporting-compact__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+}
+#profileSection .employee-reporting-compact__avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: #eaf5f5;
+  color: #0c817c;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+#profileSection .employee-reporting-compact__name {
+  min-width: 0;
+  font-weight: 650;
+  color: #12243d;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+#profileSection .employee-reporting-compact__role {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+#profileSection .employee-reporting-compact__role--primary {
+  color: #087847;
+  background: #e4f7ee;
+  border: 1px solid #c7e9d6;
+}
+#profileSection .employee-reporting-compact__role--secondary {
+  color: #446078;
+  background: #eff3f7;
+  border: 1px solid #dce5ee;
+}
+@media (min-width: 992px) {
+  #profileSection .employee-profile-layout {
+    align-items: stretch;
+  }
+  #profileSection .employee-profile-layout > .employee-profile-identity-panel,
+  #profileSection .employee-profile-layout > .employee-profile-details-panel {
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+}
+@media (max-width: 575.98px) {
+  #profileSection .employee-reporting-compact__row {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  #profileSection .employee-reporting-compact__role {
+    width: max-content;
+    max-width: 100%;
+  }
+}
+
+/* 3: Request Leave is a standalone document-flow form with ONE primary action.
+   Inline JS toggles form vs history/balances as separate views. */
+#hrSelfServiceSection #ssLeaveRequestForm,
+#managerSelfServiceSection #ssLeaveRequestForm,
+#leaveSection #leaveRequestForm,
+#hrSelfServiceSection .ss-leave-equal-card,
+#managerSelfServiceSection .ss-leave-equal-card,
+#leaveSection .employee-leave-equal-card,
+#hrSelfServiceSection .ss-leave-equal-card > .card-body,
+#managerSelfServiceSection .ss-leave-equal-card > .card-body,
+#leaveSection .employee-leave-equal-card > .card-body {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+#hrSelfServiceSection .ss-leave-equal-card > .card-body,
+#managerSelfServiceSection .ss-leave-equal-card > .card-body,
+#leaveSection .employee-leave-equal-card > .card-body { display: block !important; }
+#hrSelfServiceSection #ssLeaveRequestForm,
+#managerSelfServiceSection #ssLeaveRequestForm,
+#leaveSection #leaveRequestForm {
+  flex: none !important;
+  width: 100% !important;
+  padding-right: 0 !important;
+  overscroll-behavior: auto !important;
+}
+#hrSelfServiceSection #ssLeaveSection[data-ss-leave-view="request"] .ss-leave-focused-column,
+#managerSelfServiceSection #ssLeaveSection[data-ss-leave-view="request"] .ss-leave-focused-column,
+#leaveSection[data-employee-leave-view="request"] .employee-leave-focused-column {
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+#hrSelfServiceSection #ssLeaveRequestForm,
+#managerSelfServiceSection #ssLeaveRequestForm,
+#leaveSection #leaveRequestForm { display: block !important; }
+/* Existing inline `:has(.d-none)` rules hide the form when history is open;
+   override only while the dedicated request view is active. */
+#hrSelfServiceSection #ssLeaveSection[data-ss-leave-view="request"] #ssLeaveRequestForm,
+#managerSelfServiceSection #ssLeaveSection[data-ss-leave-view="request"] #ssLeaveRequestForm,
+#leaveSection[data-employee-leave-view="request"] #leaveRequestForm {
+  display: block !important;
+}
+#hrSelfServiceSection #ssLeaveSection[data-ss-leave-view="history"] #ssLeaveRequestForm,
+#managerSelfServiceSection #ssLeaveSection[data-ss-leave-view="history"] #ssLeaveRequestForm,
+#leaveSection[data-employee-leave-view="history"] #leaveRequestForm {
+  display: none !important;
+}
+/* Avoid redundant step-by-step text beneath a single Submit for Approval. */
+#leaveRequestForm .hr-self-service-workflow-note,
+#ssLeaveRequestForm .hr-self-service-workflow-note { display: none !important; }

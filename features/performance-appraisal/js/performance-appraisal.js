@@ -1445,45 +1445,22 @@
     ).trim();
   }
 
-  function bexPaIsEmployeeExcludedFromActiveCycleSnapshot(
-    cycles,
-    employeeId,
-  ) {
-    const resolvedEmployeeId =
-      String(employeeId || "").trim();
-
-    if (!resolvedEmployeeId) {
-      return false;
-    }
-
-    return (Array.isArray(cycles) ? cycles : [])
-      .some((cycle) => {
-        if (
-          String(cycle?.status || "")
-            .trim()
-            .toLowerCase() !== "active"
-        ) {
-          return false;
-        }
-
-        const participationSnapshot =
-          cycle?.participationSnapshot ||
-          cycle?.payload?.participationSnapshot ||
-          null;
-
-        const excludedEmployeeIds =
-          participationSnapshot?.excludedEmployeeIds;
-
-        return (
-          Array.isArray(excludedEmployeeIds) &&
-          excludedEmployeeIds.some(
-            (excludedEmployeeId) =>
-              String(
-                excludedEmployeeId || "",
-              ).trim() === resolvedEmployeeId,
-          )
-        );
-      });
+  function bexPaIsEmployeeExcludedFromActiveCycleSnapshot(cycles, employeeId) {
+    const resolvedEmployeeId = String(employeeId || "").trim();
+    if (!resolvedEmployeeId) return false;
+    const activeCycles = (Array.isArray(cycles) ? cycles : []).filter((cycle) =>
+      String(cycle?.status || "").trim().toLowerCase() === "active",
+    );
+    if (!activeCycles.length) return false;
+    // Keep parity with HR/Manager choosers for multiple Active cycles.
+    return activeCycles.every((cycle) => {
+      const snapshot = cycle?.participationSnapshot ||
+        cycle?.payload?.participationSnapshot || null;
+      const excludedIds = snapshot?.excludedEmployeeIds;
+      return Array.isArray(excludedIds) && excludedIds.some(
+        (id) => String(id || "").trim() === resolvedEmployeeId,
+      );
+    });
   }
 
   function bexPaIsCurrentEmployeeExcludedFromActiveCycle(
@@ -1629,9 +1606,7 @@
     const resolvedMode = String(mode || "").trim();
 
     if (resolvedMode === "primary-manager") {
-      return bexPaHasManagerReviewVisibilityCapability()
-        ? "Manager Reviews"
-        : "Manager Goals";
+      return "Manager Goals";
     }
 
     return {
@@ -1660,21 +1635,10 @@
     return modes;
   }
 
+  // PRE-7B - Review register is archived in the UI for every persona.
+  // Goals, cycles, templates and all stored appraisal records are preserved.
   function bexPaGetDefaultSectionForMode(mode = bexPaGetActiveMode()) {
-    if (mode === "primary-manager") {
-      return bexPaHasManagerReviewVisibilityCapability()
-        ? "employeeAppraisals"
-        : "goals";
-    }
-
-    if (
-      mode === "employee" ||
-      mode === "hr-standard"
-    ) {
-      return "employeeAppraisals";
-    }
-
-    return "overview";
+    return mode === "hr-admin" ? "overview" : "goals";
   }
 
   function bexPaIsEmployeeMode() {
@@ -2102,6 +2066,17 @@
 
   function bexPaCanManageDepartmentGoal(departmentGoal = null) {
     if (!bexPaIsPrimaryManagerMode()) {
+      return false;
+    }
+
+    // BEXHR_H4_PA_DEPARTMENT_GOAL_SCOPE_V1:
+    // HR Admin / Standard can manage their OWN Primary reports' individual
+    // goals, but the HR management persona must not silently become an editor
+    // of department-level goals merely by supervising one employee there.
+    // Existing Manager-role department goal access remains unchanged here.
+    const context = bexPaGetIntegratedContext();
+    if (context?.hrStandardCapability === true ||
+        context?.hrAdminCapability === true) {
       return false;
     }
 
@@ -2909,9 +2884,9 @@
         iconClass: "bi bi-person-check",
       },
       "primary-manager": {
-        title: "Manager Reviews",
+        title: "Manager Goals",
         description:
-          "Review appraisal work for employees in your permitted reporting scope.",
+          "View goals and progress for employees in your permitted reporting scope.",
         iconClass: "bi bi-people",
       },
       "hr-standard": {
@@ -3275,11 +3250,10 @@
       bexPaCanViewEmployeeAppraisalRegister();
 
     if (bexPaElements.employeeAppraisalsNavButton) {
-      bexPaElements.employeeAppraisalsNavButton.hidden =
-        !canViewAppraisalRegister;
+      bexPaElements.employeeAppraisalsNavButton.hidden = true;
       bexPaElements.employeeAppraisalsNavButton.classList.toggle(
         "d-none",
-        !canViewAppraisalRegister,
+        true,
       );
     }
 
@@ -5448,8 +5422,8 @@
       '[data-bex-pa-summary="employees"] .display-6',
     ),
 
-    awaitingHrSummary: document.querySelector(
-      '[data-bex-pa-summary="awaiting-hr"] .display-6',
+    workflowSummary: document.querySelector(
+      '[data-bex-pa-summary="workflow"] .display-6',
     ),
 
     completedSummary: document.querySelector(
@@ -5506,6 +5480,10 @@
   };
 
   function bexPaShowSection(sectionName) {
+    // PRE-7B - Fail closed on stale remembered/direct Review destinations.
+    if (sectionName === "employeeAppraisals") {
+      sectionName = bexPaGetDefaultSectionForMode();
+    }
     const sectionMap = {
       overview: bexPaElements.overviewSection,
       cycles: bexPaElements.cyclesSection,
@@ -6260,7 +6238,7 @@
       );
 
       bexPaSetOverviewSummaryCard(
-        "awaiting-hr",
+        "workflow",
         {
           label: "In progress",
           value: inProgressCount,
@@ -6340,7 +6318,7 @@
         );
 
         bexPaSetOverviewSummaryCard(
-          "awaiting-hr",
+          "workflow",
           {
             label: "Visible individual goals",
             value: visibleGoals.length,
@@ -6417,10 +6395,10 @@
 
       bexPaSetOverviewHero({
         kicker: "Team performance",
-        title: "Manager Reviews",
+        title: "Manager Progress",
         description:
-          "Review appraisal progress for employees in your reporting scope and focus on submissions ready for manager action.",
-        metricsLabel: "Manager review summary",
+          "Monitor appraisal progress in your authorized reporting scope.",
+        metricsLabel: "Manager performance summary",
       });
 
       bexPaSetOverviewSummaryCard(
@@ -6444,12 +6422,12 @@
       );
 
       bexPaSetOverviewSummaryCard(
-        "awaiting-hr",
+        "workflow",
         {
-          label: "Awaiting manager review",
+          label: "Pending manager assessment",
           value: awaitingManagerReviewCount,
           detail:
-            "Submitted self-appraisals ready for you",
+            "Eligible appraisals awaiting manager completion",
         },
       );
 
@@ -6551,12 +6529,12 @@
       );
 
       bexPaSetOverviewSummaryCard(
-        "awaiting-hr",
+        "workflow",
         {
-          label: "Awaiting HR finalisation",
+          label: "Pending HR finalisation",
           value: awaitingHrCount,
           detail:
-            "Submitted manager reviews in your view",
+            "Submitted appraisals in your view",
         },
       );
 
@@ -6659,12 +6637,12 @@
     );
 
     bexPaSetOverviewSummaryCard(
-      "awaiting-hr",
+      "workflow",
       {
-        label: "Awaiting HR review",
+        label: "Pending HR finalisation",
         value: awaitingHrCount,
         detail:
-          "Appraisals requiring HR attention",
+          "Submitted appraisals awaiting HR action",
       },
     );
 
@@ -9046,6 +9024,7 @@
     currentManagerPositionAmbiguous: false,
     loading: false,
     loaded: false,
+    hierarchyError: false,
     error: "",
   };
 
@@ -9182,6 +9161,10 @@
     bexPaGoalDirectory.positionsError =
       isHrAdminDirectory &&
       results[1].status === "rejected";
+
+    bexPaGoalDirectory.hierarchyError =
+      isHrAdminDirectory &&
+      results[2].status === "rejected";
 
     bexPaGoalDirectory.loaded = true;
     bexPaGoalDirectory.loading = false;
@@ -9595,38 +9578,24 @@
       : "Whole organization";
   }
 
-  function bexPaIsConfiguredTopLevelEmployee(
-    employeeId,
-  ) {
-    const person =
-      bexPaStoryEmployeeIdentity(employeeId);
-
-    const position =
-      bexPaGetWholeOrganizationPosition(
-        person?.jobTitle,
-      );
-
-    if (!position) {
-      return false;
-    }
-
-    const hierarchyRows =
-      (bexPaGoalDirectory.hierarchy || [])
-        .filter(
-          (row) =>
-            String(
-              row?.job_title_id || "",
-            ).trim() ===
-            String(position.id || "").trim(),
-        );
-
-    return (
-      hierarchyRows.length === 1 &&
-      !String(
-        hierarchyRows[0]
-          ?.reports_to_job_title_id || "",
-      ).trim()
-    );
+  // P7B: use the same tenant-scoped structural model as HR and Manager.
+  // This only labels the PA story navigation. The persisted server-snapshotted
+  // managerReviewRoute still decides actual review and finalisation workflow.
+  function bexPaIsConfiguredTopLevelEmployee(employeeId) {
+    const helper = window.BexHRPaPositionRoot;
+    if (typeof helper?.isExplicitRoot !== "function") return false;
+    const person = bexPaStoryEmployeeIdentity(employeeId);
+    const context = bexPaGetIntegratedContext() || {};
+    return helper.isExplicitRoot({
+      tenantId: bexPaPersistence.tenantId,
+      person,
+      positions: bexPaGoalDirectory.positions,
+      links: bexPaGoalDirectory.hierarchy,
+      departments: context.canonicalDepartments || [],
+      loaded: bexPaGoalDirectory.loaded === true,
+      positionsError: bexPaGoalDirectory.positionsError === true,
+      hierarchyError: bexPaGoalDirectory.hierarchyError === true,
+    });
   }
 
   function bexPaFilterGoalRows(rows, filters) {
@@ -17172,7 +17141,9 @@
     );
   }
 
+  // PRE-7B - Review detail route is retired for every persona.
   function bexPaOpenHrAppraisalReview(appraisalId) {
+    return false; // Reversible UI-only guard; no backend/data changes.
     if (!bexPaIsHrAdminMode()) {
       return;
     }
@@ -17802,7 +17773,9 @@
     );
   }
 
+  // PRE-7B - Review detail route is retired for every persona.
   function bexPaOpenFinalAppraisal(appraisalId) {
+    return false; // Reversible UI-only guard; no backend/data changes.
     if (!bexPaIsEmployeeMode()) {
       return;
     }
@@ -18862,7 +18835,9 @@
     });
   }
 
+  // PRE-7B - Review detail route is retired for every persona.
   function bexPaOpenManagerAppraisal(appraisalId) {
+    return false; // Reversible UI-only guard; no backend/data changes.
     const appraisal =
       bexPaGetEligibleManagerAppraisals().find(
         (existingAppraisal) =>
@@ -19472,7 +19447,9 @@
     bexPaClearSelfAppraisalError();
   }
 
+  // PRE-7B - Review detail route is retired for every persona.
   function bexPaOpenSelfAppraisal(appraisalId, options = {}) {
+    return false; // Reversible UI-only guard; no backend/data changes.
     const appraisal =
       bexPaGetEligibleEmployeeAppraisals().find(
         (existingAppraisal) =>
@@ -20246,7 +20223,7 @@
 
       const workspaceByPersona = {
         employee: "My Appraisal",
-        "primary-manager": "Manager Reviews",
+        "primary-manager": "Manager Goals",
         "hr-standard": "HR Standard View",
         "hr-admin": "HR Administration",
       };

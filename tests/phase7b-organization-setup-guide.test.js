@@ -1,0 +1,10 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');
+const {evaluate}=require('../js/bexhr-organization-setup-guide.js');
+test('HR Standard never sees administrator-only setup reminder',()=>{assert.equal(evaluate({canMaintain:false,loaded:true}).show,false)});
+test('unloaded or failed tenant setup data never displays a false reminder',()=>{assert.equal(evaluate({canMaintain:true,loaded:false}).show,false)});
+test('new HR Admin sees setup banner and starts with departments',()=>{const r=evaluate({canMaintain:true,loaded:true});assert.equal(r.show,true);assert.equal(r.firstTime,true);assert.equal(r.stage,'departments')});
+test('departments created: guide continues to titles',()=>{assert.equal(evaluate({canMaintain:true,loaded:true,activeDepartments:1}).stage,'jobTitles')});
+test('titles created: guide continues to reporting structure',()=>{assert.equal(evaluate({canMaintain:true,loaded:true,activeDepartments:1,activeTitles:2}).stage,'reporting')});
+test('missing position links keep guide visible without guessing completion',()=>{const x=evaluate({canMaintain:true,loaded:true,activeDepartments:2,activeTitles:4,activeLinks:3,unconfiguredPositions:1});assert.equal(x.show,true);assert.equal(x.count,2)});
+test('guide disappears from calculated tenant state when setup is complete',()=>{const x=evaluate({canMaintain:true,loaded:true,activeDepartments:2,activeTitles:4,activeLinks:4,unconfiguredPositions:0});assert.equal(x.complete,true);assert.equal(x.show,false)});

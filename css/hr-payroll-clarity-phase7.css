@@ -1,0 +1,67 @@
+/* BexHR Phase 7A9 - payroll guidance only; no calculation or form logic changes. */
+body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-guide {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid #c6e0e1;
+  border-left: 4px solid #0e948e;
+  border-radius: 14px;
+  background: #f3faf9;
+  color: #244354;
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-guide strong {
+  color: #153b4d;
+  font-size: 1rem;
+}
+body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-guide p {
+  margin: 0.35rem 0 0;
+}
+body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin: 0.8rem 0;
+}
+body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-effect {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0.4rem 0.75rem;
+  border-radius: 10px;
+  font-size: 0.93rem;
+  font-weight: 650;
+  white-space: normal;
+}
+body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-effect--add {
+  color: #116448;
+  background: #e7f5ee;
+  border: 1px solid #b8e0ca;
+}
+body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-effect--subtract {
+  color: #922d26;
+  background: #fdf0ee;
+  border: 1px solid #f0beb8;
+}
+body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-type-help,
+body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-allowance-help {
+  margin-top: 0.55rem;
+  color: #39566a;
+  line-height: 1.5;
+  font-size: 0.91rem;
+  overflow-wrap: anywhere;
+}
+body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-save-note {
+  margin-top: 0.7rem;
+  color: #50657a;
+  font-size: 0.9rem;
+}
+@media (max-width: 767.98px) {
+  body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-guide {
+    padding: 0.85rem 0.95rem;
+  }
+  body.bexhr-hr-visual-refresh .bexhr-payroll-clarity-effects {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

@@ -24,159 +24,7 @@
      Presentation only:
      - no leave submission, validation, entitlement, approval, payroll,
        Supabase, reporting-line, tenant, RLS, or Alpatech branding changes. -->
-  <style>
-    #managerSelfServiceSection .employee-leave-history-scroll-area {
-      max-height: none;
-      overflow: visible;
-      padding-right: 0;
-    }
-
-    @media (min-width: 1200px) {
-      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none))>[class*="col-"] {
-        display: flex;
-        align-self: stretch;
-      }
-
-      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) .ss-leave-equal-card {
-        width: 100%;
-        height: clamp(520px, calc(100vh - 150px), 620px) !important;
-        min-height: 520px !important;
-        max-height: 620px !important;
-        overflow: hidden !important;
-      }
-
-      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) .ss-leave-equal-card>.card-body {
-        display: flex;
-        flex-direction: column;
-        height: 100% !important;
-        min-height: 0 !important;
-        overflow: hidden;
-      }
-
-      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) .hr-self-service-card-heading {
-        flex: 0 0 auto;
-      }
-
-      /* Request Leave uses the remaining height below its fixed heading. */
-      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse:not(.d-none)) #ssLeaveRequestForm {
-        flex: 1 1 auto;
-        min-height: 0;
-        overflow-x: hidden;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        padding-right: 0.45rem;
-        scrollbar-width: thin;
-        scrollbar-color:
-          rgba(14, 116, 144, 0.36) rgba(148, 163, 184, 0.1);
-      }
-
-      #managerSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar {
-        width: 8px;
-      }
-
-      #managerSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar-track {
-        border-radius: 999px;
-        background: rgba(148, 163, 184, 0.1);
-      }
-
-      #managerSelfServiceSection #ssLeaveRequestForm::-webkit-scrollbar-thumb {
-        border: 2px solid transparent;
-        border-radius: 999px;
-        background: rgba(14, 116, 144, 0.36);
-        background-clip: padding-box;
-      }
-
-      /* History uses the remaining height below its heading and refresh action. */
-      #managerSelfServiceSection #ssLeaveHistoryCardCollapse:not(.d-none) {
-        display: flex;
-        flex: 1 1 auto;
-        flex-direction: column;
-        min-height: 0;
-        overflow: hidden;
-      }
-
-      #managerSelfServiceSection #ssLeaveHistoryCardCollapse:not(.d-none)>.d-flex {
-        flex: 0 0 auto;
-      }
-
-      #managerSelfServiceSection .employee-leave-history-scroll-area {
-        flex: 1 1 auto;
-        min-height: 0;
-        max-height: none !important;
-        overflow-x: hidden;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        padding-right: 0.45rem;
-      }
-
-      /* MANAGER SYSTEM-WIDE COMPACT LEAVE COLLAPSE - v1.0.3
-   Match the approved Employee collapse behaviour across every Manager tenant.
-
-   When My Leave History is collapsed:
-   - Request Leave also becomes header-only;
-   - both cards return to compact natural height;
-   - neither card stretches the page;
-   - coloured accents remain inside the rounded card boundaries.
-
-   Presentation only:
-   - no leave submission, approval or calculation changes;
-   - no tenant, Alpatech, role, RLS, reporting-line or Supabase changes. */
-      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none)>[class*="col-"] {
-        display: flex;
-        align-self: flex-start;
-      }
-
-      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) .ss-leave-equal-card {
-        width: 100%;
-        height: auto !important;
-        min-height: 0 !important;
-        max-height: none !important;
-
-        /* MANAGER COLLAPSED CARD EDGE CONTAINMENT - v1.0.3
-     Keep the cyan accent and card contents inside rounded boundaries. */
-        overflow: hidden !important;
-      }
-
-      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) .ss-leave-equal-card>.card-body {
-        display: block;
-        height: auto !important;
-        min-height: 0 !important;
-        max-height: none !important;
-        overflow: hidden !important;
-      }
-
-      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) .hr-self-service-card-heading {
-        margin-bottom: 0 !important;
-      }
-
-      /* Hide only the Request Leave form while the paired History card is collapsed.
-   Expanding History automatically restores the form and desktop inner scroll
-   through the existing expanded-state rules above. */
-      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) #ssLeaveRequestForm {
-        display: none !important;
-      }
-
-      /* History content is already hidden by its existing d-none class.
-   Explicit containment prevents the cyan accent from protruding. */
-      #managerSelfServiceSection .ss-leave-main-row:has(#ssLeaveHistoryCardCollapse.d-none) #ssEmployeeLeaveHistoryCard {
-        overflow: hidden !important;
-      }
-
-      @media (max-width: 1199.98px) {
-        #managerSelfServiceSection .ss-leave-equal-card {
-          height: auto !important;
-          min-height: 0 !important;
-          max-height: none !important;
-        }
-
-        #managerSelfServiceSection #ssLeaveRequestForm,
-        #managerSelfServiceSection .employee-leave-history-scroll-area {
-          max-height: none !important;
-          overflow: visible;
-        }
-      }
-    }
-  </style>
+  <!-- PRE-7B: former paired-card inner-scroll rules retired; see shared stylesheet. -->
 
   <!-- BEXHR UNIVERSAL FAVICON SET - v1.0.0 -->
   <link rel="icon" type="image/svg+xml" href="assets/favicon/favicon.svg?v=20260731" />
@@ -225,6 +73,8 @@
       visibility: visible !important;
     }
   </style>
+  <!-- PRE-7B: reversible UI simplification; existing business data is preserved. -->
+  <link rel="stylesheet" href="css/pre7b-simplification.css?v=1" />
 </head>
 
 <body class="dashboard-page bexhr-has-sidebar bexhr-manager-visual-refresh manager-workspace-booting" aria-busy="true">
@@ -2259,7 +2109,7 @@
             <article class="manager-guide-workspace-card manager-guide-workspace-card--performance">
               <span class="manager-guide-workspace-icon" aria-hidden="true"><i class="bi bi-clipboard2-check"></i></span>
               <h3 id="managerGuidePerformanceTitle">Performance Appraisal</h3>
-              <p>Open My Appraisal or Manager Reviews from the appraisal workspace chooser without changing your current Manager authority.</p>
+              <p>Open authorized performance goals and progress from the appraisal workspace.</p>
               <button type="button" class="manager-guide-card-link" data-manager-guide-target="performance">Open workspace
                 <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
             </article>
@@ -2392,7 +2242,12 @@
   <script src="js/app.js"></script>
   <script src="js/session.js"></script>
   <script src="js/employee-self-service.js"></script>
+  <script src="js/bexhr-organization-hierarchy.js"></script>
+  <script src="js/bexhr-manager-organization-status.js"></script>
+  <script src="js/bexhr-leave-authority.js"></script>
   <script src="js/manager-dashboard.js"></script>
+  <!-- Shared BexHR record-table scroll: first 10 visible records, scroll from 11 -->
+  <script src="js/bexhr-ten-record-scroll.js"></script>
 </body>
 
 </html>

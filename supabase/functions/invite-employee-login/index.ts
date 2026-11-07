@@ -97,6 +97,7 @@ async function upsertProfileAndLinkEmployeeAccount({
   fullName,
   tenantId,
   systemRole,
+  employeeId,
 }: {
   supabaseAdmin: any;
   userId: string;
@@ -104,6 +105,7 @@ async function upsertProfileAndLinkEmployeeAccount({
   fullName: string;
   tenantId: string | null;
   systemRole: string;
+  employeeId: string;
 }) {
   const cleanUserId = cleanText(userId);
   const cleanEmail = cleanText(workEmail).toLowerCase();
@@ -115,23 +117,92 @@ async function upsertProfileAndLinkEmployeeAccount({
   const cleanSystemRole =
     normaliseRole(systemRole) === "manager" ? "manager" : "employee";
 
-  if (!cleanUserId || !cleanEmail) {
+  if (!cleanUserId || !cleanEmail || !tenantId || !employeeId) {
     return {
       success: false,
       linkedEmployeeCount: 0,
-      error: "User account or work email was missing during employee login linkage.",
+      error: "User account, target employee, or company workspace was missing during login linkage.",
+    };
+  }
+
+  // PHASE 7A11: An Auth account must not be linked to a different employee or
+  // company, even if the requested email matches. Recheck inside each recovery
+  // path before modifying an existing profile or employee record.
+  const { data: targetEmployee, error: targetEmployeeError } =
+    await supabaseAdmin
+      .from("employees")
+      .select("id, tenant_id, status, user_id, work_email")
+      .eq("id", employeeId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+  if (targetEmployeeError || !targetEmployee ||
+      normaliseRole(targetEmployee.status) !== "active" ||
+      cleanText(targetEmployee.work_email).toLowerCase() !== cleanEmail ||
+      (targetEmployee.user_id && targetEmployee.user_id !== cleanUserId)) {
+    return {
+      success: false,
+      linkedEmployeeCount: 0,
+      error: "Employee login linkage requires the same active, unclaimed employee record.",
+    };
+  }
+
+  const { data: existingEmployeeLinks, error: existingEmployeeLinksError } =
+    await supabaseAdmin
+      .from("employees")
+      .select("id, tenant_id")
+      .eq("user_id", cleanUserId)
+      .limit(2);
+
+  if (existingEmployeeLinksError || !Array.isArray(existingEmployeeLinks) ||
+      existingEmployeeLinks.some((linked: any) => linked.id !== employeeId || linked.tenant_id !== tenantId)) {
+    return {
+      success: false,
+      linkedEmployeeCount: 0,
+      error: "This Auth login is already linked to another employee or company.",
+    };
+  }
+
+  const { data: emailProfiles, error: emailProfilesError } =
+    await supabaseAdmin
+      .from("profiles")
+      .select("id, tenant_id, is_active")
+      .eq("email", cleanEmail)
+      .limit(2);
+
+  if (emailProfilesError || !Array.isArray(emailProfiles) ||
+      emailProfiles.some((profile: any) => profile.id !== cleanUserId || profile.tenant_id !== tenantId || profile.is_active !== true)) {
+    return {
+      success: false,
+      linkedEmployeeCount: 0,
+      error: "An existing email profile is disabled or belongs to another account or company.",
     };
   }
 
   const { data: existingProfile, error: existingProfileError } =
     await supabaseAdmin
       .from("profiles")
-      .select("id, email, full_name, role, tenant_id")
+      .select("id, email, full_name, role, tenant_id, is_active")
       .eq("id", cleanUserId)
       .maybeSingle();
 
   if (existingProfileError) {
-    console.warn("Existing profile lookup failed before profile repair:", existingProfileError);
+    console.error("Existing profile lookup failed before profile repair:", existingProfileError);
+    return { success: false, linkedEmployeeCount: 0, error: "Existing login ownership could not be validated." };
+  }
+
+  if (existingProfile && existingProfile.tenant_id !== tenantId) {
+    return { success: false, linkedEmployeeCount: 0, error: "An existing login belongs to another company workspace." };
+  }
+
+  // Never turn an intentionally disabled account back on via Resend Invite.
+  // Reactivation and admin access approval are separate, audited workflows.
+  if (existingProfile && existingProfile.is_active !== true) {
+    return { success: false, linkedEmployeeCount: 0, error: "This login is disabled. Use the authorised access-management workflow before resending an invite." };
+  }
+
+  if (existingProfile && cleanText(existingProfile.email).toLowerCase() !== cleanEmail) {
+    return { success: false, linkedEmployeeCount: 0, error: "Existing login email does not match the selected employee." };
   }
 
   const profilePayload: Record<string, unknown> = {
@@ -165,14 +236,18 @@ async function upsertProfileAndLinkEmployeeAccount({
     };
   }
 
+  // Update exactly the selected employee, not every record matching an email.
+  // Preserve the validated user_id state so racing edits cannot silently rebind it.
   let employeeLinkQuery = supabaseAdmin
     .from("employees")
     .update({ user_id: cleanUserId })
+    .eq("id", employeeId)
+    .eq("tenant_id", tenantId)
     .eq("work_email", cleanEmail);
 
-  if (tenantId) {
-    employeeLinkQuery = employeeLinkQuery.eq("tenant_id", tenantId);
-  }
+  employeeLinkQuery = targetEmployee.user_id
+    ? employeeLinkQuery.eq("user_id", cleanUserId)
+    : employeeLinkQuery.is("user_id", null);
 
   const { data: linkedEmployees, error: employeeLinkError } =
     await employeeLinkQuery.select("id, work_email, user_id");
@@ -187,9 +262,17 @@ async function upsertProfileAndLinkEmployeeAccount({
     };
   }
 
+  if (!Array.isArray(linkedEmployees) || linkedEmployees.length !== 1 || linkedEmployees[0].id !== employeeId) {
+    return {
+      success: false,
+      linkedEmployeeCount: 0,
+      error: "Employee account linkage changed during provisioning. Review the record before retrying.",
+    };
+  }
+
   return {
     success: true,
-    linkedEmployeeCount: Array.isArray(linkedEmployees) ? linkedEmployees.length : 0,
+    linkedEmployeeCount: 1,
     error: "",
   };
 }
@@ -233,14 +316,13 @@ serve(async (req: Request) => {
       return jsonResponse(401, { error: "Unauthorized." });
     }
 
-    // HR EMPLOYEE LOGIN RESEND - STEP 15K
-    // Verify the caller has an active HR or Admin profile.
-    // Primary lookup is by verified Auth user id. Email fallback is used only from
-    // the verified JWT user object, so the browser cannot spoof caller identity.
+    // HR EMPLOYEE LOGIN RESEND - PHASE 7A11
+    // Authorize privileged invites only through the verified Auth user's exact
+    // profile ID. Email-based caller fallback can impersonate another profile.
     const { data: callerProfileById, error: callerProfileByIdError } =
       await supabaseAdmin
         .from("profiles")
-        .select("id, email, role, is_active")
+        .select("id, email, role, is_active, tenant_id")
         .eq("id", callerUser.id)
         .maybeSingle();
 
@@ -252,28 +334,7 @@ serve(async (req: Request) => {
       });
     }
 
-    let callerProfile = callerProfileById;
-
-    const callerEmail = cleanText(callerUser.email).toLowerCase();
-
-    if (!callerProfile && callerEmail) {
-      const { data: callerProfileByEmail, error: callerProfileByEmailError } =
-        await supabaseAdmin
-          .from("profiles")
-          .select("id, email, role, is_active")
-          .eq("email", callerEmail)
-          .maybeSingle();
-
-      if (callerProfileByEmailError) {
-        console.error("Caller profile lookup by email failed:", callerProfileByEmailError);
-
-        return jsonResponse(403, {
-          error: "Caller profile could not be validated.",
-        });
-      }
-
-      callerProfile = callerProfileByEmail;
-    }
+    const callerProfile = callerProfileById;
 
     if (!callerProfile) {
       return jsonResponse(403, { error: "Caller profile not found." });
@@ -281,7 +342,7 @@ serve(async (req: Request) => {
 
     const callerRole = normaliseRole(callerProfile.role);
 
-    if (!allowedRoles.has(callerRole) || callerProfile.is_active === false) {
+    if (!allowedRoles.has(callerRole) || callerProfile.is_active !== true) {
       return jsonResponse(403, {
         error: "You do not have permission to provision employee logins.",
       });
@@ -297,7 +358,15 @@ serve(async (req: Request) => {
 
     const workEmail = cleanText(payload.workEmail).toLowerCase();
     const fullName = cleanText(payload.fullName);
-    const tenantId = cleanText(payload.tenantId) || null;
+    const requestedTenantId = cleanText(payload.tenantId) || null;
+    const callerTenantId = cleanText(callerProfile.tenant_id) || null;
+    if (!callerTenantId) {
+      return jsonResponse(403, { error: "Caller company workspace could not be validated." });
+    }
+    if (requestedTenantId && requestedTenantId !== callerTenantId) {
+      return jsonResponse(403, { error: "Employee login invite cannot cross company workspaces." });
+    }
+    const tenantId = callerTenantId;
     const companyName = cleanText(payload.companyName) || "Your Company";
 
     // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
@@ -315,16 +384,65 @@ serve(async (req: Request) => {
       return jsonResponse(400, { error: "fullName is required." });
     }
 
-    // EMPLOYEE LOGIN PROVISIONING HARDENING - STEP 1
-    // The invite email says "Set My Password", so the verified invite must
-    // return to the password setup page, not the normal sign-in landing page.
-    // APP_URL must match the Supabase Auth Site URL / Redirect URLs exactly.
-    const appOrigin = cleanText(Deno.env.get("APP_URL")) ||
-      cleanText(req.headers.get("origin"));
+    const targetEmployeeQuery = supabaseAdmin
+      .from("employees")
+      .select("id, tenant_id, status, work_email, user_id")
+      .eq("tenant_id", tenantId)
+      .eq("work_email", workEmail);
 
-    const redirectTo = appOrigin
-      ? `${appOrigin}/reset-password.html?mode=first-time`
-      : "/reset-password.html?mode=first-time";
+    const { data: targetEmployees, error: targetEmployeeError } =
+      await targetEmployeeQuery.limit(2);
+
+    if (targetEmployeeError) {
+      console.error("Employee lifecycle lookup failed before login invite:", targetEmployeeError);
+      return jsonResponse(500, { error: "Employee lifecycle status could not be validated." });
+    }
+
+    if (!Array.isArray(targetEmployees) || targetEmployees.length !== 1) {
+      return jsonResponse(409, { error: "Exactly one matching employee record is required before login can be provisioned." });
+    }
+
+    if (normaliseRole(targetEmployees[0]?.status) !== "active") {
+      return jsonResponse(409, {
+        error: "This employee is offboarded. Use Reactivate Employee before sending a login invite.",
+      });
+    }
+
+    // Fail before sending a new invitation when a matching BexHR profile is
+    // disabled or belongs to a different company. Never let Resend Invite
+    // function as an unapproved access reactivation route.
+    const { data: matchingProfiles, error: matchingProfilesError } =
+      await supabaseAdmin
+        .from("profiles")
+        .select("id, tenant_id, is_active")
+        .eq("email", workEmail)
+        .limit(2);
+
+    if (matchingProfilesError || !Array.isArray(matchingProfiles)) {
+      return jsonResponse(500, { error: "Existing employee login access could not be checked." });
+    }
+    if (matchingProfiles.length > 1 || matchingProfiles.some((profile: any) =>
+      profile.tenant_id !== tenantId || profile.is_active !== true)) {
+      return jsonResponse(409, { error: "Existing login access is disabled, ambiguous or belongs to another company. Use the authorised access-management workflow." });
+    }
+
+    // PHASE 7A11: Trust the configured application origin, never an untrusted
+    // request Origin header. APP_URL must match Supabase Auth Redirect URLs.
+    const appOrigin = cleanText(Deno.env.get("APP_URL"));
+    let trustedOrigin: string;
+    try {
+      const url = new URL(appOrigin);
+      const isLocal = url.protocol === "http:" &&
+        (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+      if (url.username || url.password || url.search || url.hash ||
+          url.pathname !== "/" || (url.protocol !== "https:" && !isLocal)) {
+        throw new Error("APP_URL must be an approved HTTPS origin (or localhost for development).");
+      }
+      trustedOrigin = url.origin;
+    } catch {
+      return jsonResponse(500, { error: "Application redirect URL is not configured safely. Contact the administrator." });
+    }
+    const redirectTo = `${trustedOrigin}/reset-password.html?mode=first-time`;
 
     // HR EMPLOYEE LOGIN INVITE RECOVERY - STEP 2A
     // Send the invite. If the Auth account already exists, repair/link the
@@ -374,6 +492,7 @@ serve(async (req: Request) => {
         workEmail,
         fullName,
         tenantId,
+        employeeId: targetEmployees[0].id,
 
         // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
         systemRole: requestedSystemRole,
@@ -442,6 +561,7 @@ serve(async (req: Request) => {
       workEmail,
       fullName,
       tenantId,
+      employeeId: targetEmployees[0].id,
 
         // EMPLOYEE/PROFILE ROLE SYNCHRONISATION
         systemRole: requestedSystemRole,

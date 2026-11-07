@@ -182,10 +182,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     bindNavigationEvents();
     bindEmployeeLeaveInlineTabs();
 
-    // EMPLOYEE PROFILE CARD HEIGHT SYNC - v1.0.0
-    // Presentation-only synchronisation between the natural
-    // Identity card and scrollable Account Details card.
-    initialiseEmployeeProfileHeightSync();
+    // R14C: natural card heights match the universal HR profile pattern.
 
     bindLeaveFormEvents();
     bindUtilityEvents();
@@ -215,15 +212,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     bindEmployeeLeaveHistoryCardEvents();
 
     bindProfileImageEvents();
-
-    // EMPLOYEE PROFILE REVIEW - STEP 1B
-    // Keep the HR profile review compact by switching between read-only tabs.
-    bindEmployeeProfileReviewTabs();
-
-    // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
-    // Bind the formal employee correction request flow.
-    // This saves requests to Supabase and does not edit HR master data.
-    bindEmployeeProfileCorrectionRequestEvents();
 
     bindSyncEvents();
 
@@ -297,11 +285,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Leave readiness uses its own narrow RPC so UI and database enforce the
     // same active-Primary-Manager rule.
     await loadEmployeeLeavePrimaryManagerReadiness();
-
-    // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
-    // Load employee-visible correction request status after the employee row
-    // has been resolved. This is read-only and does not update HR master data.
-    await loadEmployeeProfileCorrectionRequests();
 
     await loadEmployeeLeaveBalances();
     await loadLeaveTypes();
@@ -948,8 +931,8 @@ function cacheDomElements() {
        Display-only bindings for existing employee state.
        No additional Supabase queries or access changes. */
     overviewProfileStatus: document.getElementById("overviewProfileStatus"),
-    overviewOpenRequestCount: document.getElementById(
-      "overviewOpenRequestCount",
+    overviewDepartmentValue: document.getElementById(
+      "overviewDepartmentValue",
     ),
     overviewLeaveRequestCount: document.getElementById(
       "overviewLeaveRequestCount",
@@ -1160,7 +1143,7 @@ function bindNavigationEvents() {
   });
 
   // EMPLOYEE OVERVIEW QUICK ACTIONS - v1.0.0
-  // Reuse the existing Employee workspace and correction-request flows.
+  // Reuse the existing Employee workspace routes without correction requests.
   document
     .querySelectorAll("[data-employee-overview-target]")
     .forEach((button) => {
@@ -1169,59 +1152,16 @@ function bindNavigationEvents() {
           button.getAttribute("data-employee-overview-target") || "",
         ).trim();
 
-        if (target === "requests") {
-          // BEXHR TICKET 5 - EMPLOYEE RAISE HR REQUEST QUICK ACTION
-          // Open the existing Profile workspace and Identity review area.
-          // Reveal the existing correction form without invoking its normal
-          // form-level auto-scroll, because this quick action should retain
-          // the wider HR Profile Review context.
+        if (target === "managers") {
           rememberEmployeeWorkspace("profile");
           showSection("profile");
-
-          const identityReviewTab = document.querySelector(
-            '[data-employee-profile-review-tab="identity"]',
-          );
-
-          identityReviewTab?.click();
-
-          const correctionPanel =
-            state.dom.profileCorrectionRequestPanel;
-
-          if (correctionPanel) {
-            correctionPanel.classList.remove("d-none");
-            populateEmployeeProfileCorrectionFieldOptions();
-          }
-
-          // Allow the Identity panel and correction form to finish rendering,
-          // then position the HR Profile Review heading below the sticky header.
           window.requestAnimationFrame(() => {
-            window.requestAnimationFrame(() => {
-              const reviewPanel = document.querySelector(
-                ".employee-profile-review-panel",
-              );
-
-              if (!reviewPanel) return;
-
-              const stickyHeader = document.querySelector(
-                ".employee-modern-app-header",
-              );
-
-              const headerHeight =
-                stickyHeader?.getBoundingClientRect().height || 0;
-
-              const reviewTop =
-                reviewPanel.getBoundingClientRect().top +
-                window.scrollY -
-                headerHeight -
-                16;
-
-              window.scrollTo({
-                top: Math.max(0, reviewTop),
-                behavior: "smooth",
-              });
-            });
+            const card = document.getElementById("employeeReportingManagersCard");
+            if (!card) return;
+            const headerHeight = document.querySelector(".employee-modern-app-header")?.getBoundingClientRect().height || 0;
+            const top = card.getBoundingClientRect().top + window.scrollY - headerHeight - 16;
+            window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
           });
-
           return;
         }
 
@@ -2127,7 +2067,7 @@ function showSection(sectionName) {
       module: "Overview",
       title: "Employee Overview",
       subtitle:
-        "Review your profile, HR requests, leave activity, payroll information, and recent updates.",
+        "Review your profile, reporting line, leave activity, payroll information, and recent updates.",
     },
     profile: {
       module: "My Profile",
@@ -2363,6 +2303,20 @@ async function loadEmployeeRecord(userId, userEmail) {
     }
   }
 
+  // P7 Stage B: never retain a raw NIN from a legacy employees row in
+  // Employee Self Service state. Only a protected, authenticated four-digit
+  // suffix can be carried into a profile or correction-request display.
+  employee = { ...employee, nin: null };
+  try {
+    const { data: lastFour, error: ninMaskError } = await supabase.rpc(
+      "bexhr_p7_nin_last4_for_self",
+    );
+    if (!ninMaskError && /^\d{4}$/.test(String(lastFour || ""))) {
+      employee.nin = String(lastFour);
+    }
+  } catch (_ninMaskError) {
+    // Display is optional. No fallback to the raw employees.nin column.
+  }
   state.employeeRecord = employee;
   applyResolvedIdentity(employee);
   renderEmployeeRecord(employee);
@@ -2562,18 +2516,12 @@ function renderEmployeeReportingManagers(reportingManagers = []) {
     ? [...reportingManagers]
     : [];
 
+  // Preserve the authoritative Primary-first ordering.
   rows.sort((left, right) => {
-    const leftType = normalizeText(left?.manager_type);
-    const rightType = normalizeText(right?.manager_type);
-
-    const priority = {
-      primary: 1,
-      secondary: 2,
-    };
-
+    const priority = { primary: 1, secondary: 2 };
     return (
-      (priority[leftType] || 3) -
-      (priority[rightType] || 3)
+      (priority[normalizeText(left?.manager_type)] || 3) -
+      (priority[normalizeText(right?.manager_type)] || 3)
     );
   });
 
@@ -2583,117 +2531,36 @@ function renderEmployeeReportingManagers(reportingManagers = []) {
   if (!rows.length) {
     list.classList.add("d-none");
     empty.classList.remove("d-none");
-    empty.textContent =
-      "No active reporting managers are currently assigned.";
+    empty.textContent = "No active reporting managers are currently assigned.";
     return;
   }
 
   empty.classList.add("d-none");
   list.classList.remove("d-none");
 
+  // R14D: concise employee-facing display: name + assigned relationship.
+  // The authoritative RPC, manager data, and reporting hierarchy are unchanged.
   rows.forEach((manager) => {
-    const managerType =
-      normalizeText(manager.manager_type) === "primary"
-        ? "Primary Manager"
-        : "Secondary Manager";
-
-    const fullName =
-      [
-        manager.manager_first_name,
-        manager.manager_last_name,
-      ]
-        .map((value) => String(value || "").trim())
-        .filter(Boolean)
-        .join(" ") ||
-      manager.manager_work_email ||
-      "Manager";
-
-    const jobTitle =
-      String(manager.manager_job_title || "").trim();
-
-    const department =
-      String(manager.manager_department || "").trim();
-
-    const workEmail =
-      String(manager.manager_work_email || "").trim();
-
-    const relationshipTone =
-      managerType === "Primary Manager"
-        ? "bexhr-status-pill--success"
-        : "bexhr-status-pill--neutral";
+    const isPrimary = normalizeText(manager?.manager_type) === "primary";
+    const managerType = isPrimary ? "Primary Manager" : "Secondary Manager";
+    const fullName = [manager?.manager_first_name, manager?.manager_last_name]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" ") || "Manager";
 
     const item = document.createElement("article");
-
-    item.className =
-      "border rounded-4 bg-light p-3";
-
+    item.className = "employee-reporting-compact__row";
     item.innerHTML = `
-      <div
-        class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3"
-      >
-        <div class="d-flex align-items-start gap-3 min-w-0">
-          <span
-            class="rounded-circle bg-white border d-inline-flex align-items-center justify-content-center flex-shrink-0"
-            style="width: 42px; height: 42px;"
-            aria-hidden="true"
-          >
-            <i class="bi bi-person-badge"></i>
-          </span>
-
-          <div class="min-w-0">
-            <div class="fw-semibold">
-              ${escapeHtml(fullName)}
-            </div>
-
-            ${jobTitle
-        ? `
-                  <div class="small text-secondary mt-1">
-                    ${escapeHtml(jobTitle)}
-                  </div>
-                `
-        : ""
-      }
-
-            ${department
-        ? `
-                  <div class="small text-secondary">
-                    ${escapeHtml(department)}
-                  </div>
-                `
-        : ""
-      }
-
-            ${workEmail
-        ? `
-                  <div class="small mt-2">
-                    <i
-                      class="bi bi-envelope me-1 text-secondary"
-                      aria-hidden="true"
-                    ></i>
-                    ${escapeHtml(workEmail)}
-                  </div>
-                `
-        : ""
-      }
-          </div>
-        </div>
-
-        <span
-          class="bexhr-status-pill ${relationshipTone} flex-shrink-0"
-        >
-          <i
-            class="bi ${managerType === "Primary Manager"
-        ? "bi-person-check-fill"
-        : "bi-people-fill"
-      }"
-            aria-hidden="true"
-          ></i>
-
-          <span>${escapeHtml(managerType)}</span>
+      <div class="employee-reporting-compact__identity">
+        <span class="employee-reporting-compact__avatar" aria-hidden="true">
+          <i class="bi bi-person" aria-hidden="true"></i>
         </span>
+        <span class="employee-reporting-compact__name">${escapeHtml(fullName)}</span>
       </div>
+      <span class="employee-reporting-compact__role ${isPrimary ? "employee-reporting-compact__role--primary" : "employee-reporting-compact__role--secondary"}">
+        ${escapeHtml(managerType)}
+      </span>
     `;
-
     list.appendChild(item);
   });
 }
@@ -2777,6 +2644,20 @@ function setEmployeeProfileReviewField(field, value) {
 // EMPLOYEE PROFILE REVIEW - STEP 1A
 // Render HR-prepared employee data for employee review. This is display-only.
 function renderEmployeeHrProfileReview(employee = {}) {
+  // PRE-7B - Employee summary reflects the same approved core profile fields.
+  const fields = {
+    pre7bReviewWorkEmail: employee.work_email,
+    pre7bReviewPhone: employee.phone_number,
+    pre7bReviewDateOfBirth: employee.date_of_birth ? formatDate(employee.date_of_birth) : "",
+    pre7bReviewJobTitle: employee.job_title,
+    pre7bReviewDepartment: employee.department,
+    pre7bReviewEmploymentDate: employee.employment_date ? formatDate(employee.employment_date) : "",
+    pre7bReviewNationality: employee.nationality,
+    pre7bReviewTown: employee.town,
+  };
+  Object.entries(fields).forEach(([id, value]) =>
+    setEmployeeProfileReviewField(document.getElementById(id), value),
+  );
   setEmployeeProfileReviewField(
     state.dom.reviewEmployeeNumber,
     getEmployeeIdDisplayValue(employee),
@@ -3347,6 +3228,8 @@ function renderEmployeeProfileCorrectionRequestHistory(records = []) {
 // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
 // Load only the signed-in employee's own correction requests.
 async function loadEmployeeProfileCorrectionRequests() {
+  // R14C: Retired UI. Do not query historical correction records during employee startup.
+  return;
   const employee = state.employeeRecord || {};
   const list = state.dom.profileCorrectionRequestHistoryList;
 
@@ -3416,7 +3299,9 @@ async function refreshEmployeeProfileCorrectionRequestHistory() {
 // Save a formal correction request to Supabase.
 // Employees do not edit employees.* directly; HR reviews this request later.
 async function handleEmployeeProfileCorrectionRequestSubmit(event) {
-  event.preventDefault();
+  event?.preventDefault();
+  // R14C: Legacy helper retained only for source compatibility; submissions retired.
+  return;
 
   const selectedField = getSelectedEmployeeProfileCorrectionField();
   const employee = state.employeeRecord || {};
@@ -3572,12 +3457,6 @@ function bindEmployeeProfileCorrectionRequestEvents() {
 function renderEmployeeOverviewMetrics() {
   const employee = state.employeeRecord || null;
 
-  const correctionRequests = Array.isArray(
-    state.profileCorrectionRequests,
-  )
-    ? state.profileCorrectionRequests
-    : [];
-
   const leaveRequests = Array.isArray(state.leaveRequests)
     ? state.leaveRequests
     : [];
@@ -3594,28 +3473,8 @@ function renderEmployeeOverviewMetrics() {
       : "Unavailable";
   }
 
-  /* Open means HR work has not reached a terminal outcome.
-     Approved remains open until HR completes or closes the request. */
-  const terminalCorrectionStatuses = new Set([
-    "completed",
-    "closed",
-    "rejected",
-  ]);
-
-  const openCorrectionRequestCount = correctionRequests.filter(
-    (request) => {
-      const status = normalizeEmployeeProfileCorrectionStatus(
-        request?.status || "Pending",
-      );
-
-      return !terminalCorrectionStatuses.has(status);
-    },
-  ).length;
-
-  if (state.dom.overviewOpenRequestCount) {
-    state.dom.overviewOpenRequestCount.textContent = String(
-      openCorrectionRequestCount,
-    );
+  if (state.dom.overviewDepartmentValue) {
+    state.dom.overviewDepartmentValue.textContent = String(employee?.department || "Unassigned").trim() || "Unassigned";
   }
 
   /* The card label says Leave Requests and its supporting copy says
@@ -3705,10 +3564,6 @@ function renderEmployeeRecord(employee) {
   if (state.dom.phoneNumber) state.dom.phoneNumber.value = phone;
   if (state.dom.roleName) state.dom.roleName.value = role;
   if (state.dom.managerName) state.dom.managerName.value = managerName;
-
-  // EMPLOYEE PROFILE REVIEW - STEP 1A
-  // Populate the extended read-only HR profile review block.
-  renderEmployeeHrProfileReview(employee);
 
   renderEmployeeOverviewMetrics();
 }

@@ -209,24 +209,68 @@
      Safe expansion for manager dashboard and future stories.
      Existing pages that only need a subset will continue to work.
   ========================================================= */
-  async function getProfile(userId) {
+  // BEXHR AUTH READ SAFETY - PHASE 7B SUPPORT
+  // A failed network/RLS/API read is not evidence that an active employee was
+  // offboarded. Only a successful inactive profile or a definitive no-row
+  // response may revoke the local session as unauthorized. All unknown reads
+  // fail closed (no dashboard authorisation) but preserve the login for retry.
+  async function readProfileStatus(userId) {
     const supabase = getSupabaseClient();
-    if (!supabase || !userId) return null;
+    if (!supabase || !userId) return { status: "unavailable", profile: null };
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(
-        "id, email, full_name, role, hr_access_level, tenant_id, department, is_active, must_change_password",
-      )
-      .eq("id", userId)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(
+          "id, email, full_name, role, hr_access_level, tenant_id, department, is_active, must_change_password",
+        )
+        .eq("id", userId)
+        .single();
 
-    if (error) {
-      console.error("Error fetching profile:", error.message);
-      return null;
+      if (error) {
+        // .single() returns PGRST116 for a missing/inaccessible profile.
+        // The id lookup is unique, so multiple-row ambiguity cannot occur.
+        if (String(error.code || "").toUpperCase() === "PGRST116") {
+          return { status: "missing", profile: null };
+        }
+
+        console.warn(
+          "BexHR profile check temporarily unavailable:",
+          error.message || error,
+        );
+        return { status: "unavailable", profile: null };
+      }
+
+      return data
+        ? { status: "found", profile: data }
+        : { status: "missing", profile: null };
+    } catch (error) {
+      console.warn("BexHR profile check temporarily unavailable:", error);
+      return { status: "unavailable", profile: null };
     }
+  }
 
-    return data;
+  async function getProfile(userId) {
+    const result = await readProfileStatus(userId);
+    return result.profile;
+  }
+
+  function showProfileVerificationRetry() {
+    if (typeof document === "undefined" || !document.body) return;
+    if (document.getElementById("bexhr-profile-verification-retry")) return;
+
+    const notice = document.createElement("div");
+    notice.id = "bexhr-profile-verification-retry";
+    notice.setAttribute("role", "alert");
+    notice.style.cssText =
+      "position:fixed;z-index:100000;top:16px;left:50%;transform:translateX(-50%);" +
+      "max-width:min(560px,92vw);padding:14px 18px;border:1px solid #e5b661;" +
+      "border-radius:10px;background:#fff7e6;color:#573e15;" +
+      "box-shadow:0 8px 25px #0002;font:14px/1.5 Arial,sans-serif";
+    notice.textContent =
+      "BexHR could not verify your access because the connection failed. " +
+      "You have not been signed out. Check your connection and refresh this page.";
+    document.body.appendChild(notice);
   }
 
   // PAYSLIP EMAIL DEEP LINK ROUTING - STEP 1B
@@ -582,33 +626,101 @@
     return data?.currentLevel === "aal2";
   }
 
-  // MULTI-WORKSPACE ACCESS - HR / MANAGER DECOUPLING - v1.0.1
-  // System access and reporting-line responsibility are independent.
-  // An HR user with an active Primary or Secondary Manager assignment may
-  // enter the Manager workspace without changing their HR system role.
+  // PHASE 7B: HR and Manager access stay distinct from organisation rank.
+  // The new server RPC checks authenticated tenant/profile identity and either
+  // assigned reporting lines or a uniquely configured whole-company position.
+  // Until that RPC is deployed, fall back ONLY to the pre-existing protected
+  // reporting-line read. An explicit server denial is authoritative.
   async function hasManagerWorkspaceAccess(profile = {}) {
     const role = String(profile.role || "").trim().toLowerCase();
-
     if (role === "manager") return true;
     if (role !== "hr") return false;
 
     const supabase = getSupabaseClient();
     if (!supabase) return false;
 
-    const { data, error } = await supabase.rpc(
-      "get_manager_reporting_line_assignments",
-    );
-
-    if (error) {
-      console.warn(
-        "Manager workspace availability could not be resolved:",
-        error.message || error,
-      );
+    // P7B INTEGRATION GATE: fallback is permitted ONLY when the position-aware
+    // RPC has not been deployed (PostgREST PGRST202 / PostgreSQL 42883).
+    // Errors, timeouts, malformed responses or an explicit false must deny.
+    let legacyRpcNotInstalled = false;
+    try {
+      const { data, error } = await supabase.rpc("bexhr_p7b_workspace_access");
+      if (!error) {
+        if (!data || !(typeof data.can_enter_manager === "boolean")) return false;
+        return data.can_enter_manager === true;
+      }
+      const code = String(error?.code || "").trim().toUpperCase();
+      if (code !== "PGRST202" && code !== "42883") {
+        console.warn("Position-aware workspace verification failed:", error);
+        return false;
+      }
+      legacyRpcNotInstalled = true;
+    } catch (error) {
+      console.warn("Position-aware workspace verification unavailable:", error);
       return false;
     }
 
-    return Array.isArray(data) && data.length > 0;
+    if (!legacyRpcNotInstalled) return false;
+
+    // Compatibility only before the new RPC exists. Once it exists, a server
+    // error or denial must never be bypassed by an older reporting-line read.
+    try {
+      const { data, error } = await supabase.rpc(
+        "get_manager_reporting_line_assignments",
+      );
+      if (error) throw error;
+      return Array.isArray(data) && data.length > 0;
+    } catch (error) {
+      console.warn("Manager workspace availability could not be resolved:", error);
+      return false;
+    }
   }
+
+// BEXHR H10 — WHOLE-ORGANISATION DUAL WORKSPACE
+// The H8 position RPC is the only authority for whole-company eligibility.
+// Before that RPC exists, retain the historical assigned-team switcher so
+// H10 does not regress the already working UI while H11 is still pending.
+// Transient RPC failures or explicit denials NEVER activate legacy fallback.
+async function readWholeOrganizationDualWorkspaceStatus(profile = {}) {
+  const role = String(profile.role || "").trim().toLowerCase();
+  const hrAccess = String(profile.hr_access_level || "")
+    .trim().toLowerCase().replace(/[\s-]+/g, "_");
+
+  // Keep legacy HR access unmodified until the H8 RPC is installed.
+  // Once installed, only explicit HR Standard can use the new dual mode.
+  if (role !== "hr" ||
+      profile.is_active !== true || !profile.id || !profile.tenant_id) {
+    return { mode: "denied", eligible: false };
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase || typeof supabase.rpc !== "function") {
+    return { mode: "denied", eligible: false };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc("bexhr_p7b_workspace_access");
+    if (error) {
+      const code = String(error.code || "").trim().toUpperCase();
+      if (code === "PGRST202" || code === "42883") {
+        return { mode: "not_installed", eligible: false };
+      }
+      return { mode: "denied", eligible: false };
+    }
+    if (!data || typeof data.can_enter_manager !== "boolean" ||
+        typeof data.preferred_workspace !== "string") {
+      return { mode: "denied", eligible: false };
+    }
+    return {
+      mode: "authoritative",
+      eligible: hrAccess === "standard" && data.can_enter_manager === true &&
+        data.preferred_workspace === "manager",
+    };
+  } catch (error) {
+    console.warn("Whole-organisation workspace eligibility unavailable:", error);
+    return { mode: "denied", eligible: false };
+  }
+}
 
 function getCurrentWorkspaceKey() {
   const path = String(window.location.pathname || "")
@@ -722,35 +834,26 @@ function getCurrentWorkspaceKey() {
         "document.getElementById('hrTabProfileBtn')?.click()";
     }
 
-    const role = String(profile.role || "").trim().toLowerCase();
-    const managerAvailable = await hasManagerWorkspaceAccess(profile);
+    const dualStatus = await readWholeOrganizationDualWorkspaceStatus(profile);
+    // Preserve the pre-H8 assigned-team switcher only when the RPC does not
+    // exist. It is not evidence of company-wide position authority.
+    const legacyMode = dualStatus.mode === "not_installed";
+    const dualWorkspaceAvailable = dualStatus.eligible ||
+      (legacyMode && await hasManagerWorkspaceAccess(profile));
     const options = [];
 
-    if (role === "hr") {
-      const normalizedHrAccessLevel = String(profile.hr_access_level || "")
-        .trim()
-        .toLowerCase()
-        .replace(/[\s-]+/g, "_");
-
-      const accessLabel = new Set([
-        "admin",
-        "hr_admin",
-        "tenant_admin",
-        "company_admin",
-      ]).has(normalizedHrAccessLevel)
-        ? "HR Administration"
-        : "HR Workspace";
-
+    if (dualWorkspaceAvailable) {
       options.push({
         key: "hr",
-        label: accessLabel,
-        description: "People, HR review, payroll, and organisation setup.",
+        label: legacyMode ? "HR Workspace" : "HR Standard Workspace",
+        description: "Authorised people management and HR responsibilities.",
         icon: "bi bi-people",
-        href: "hr-dashboard.html",
+        // Explicit intent prevents manager-default redirect after H8 activates.
+        href: legacyMode ? "hr-dashboard.html" : "hr-dashboard.html?workspace=hr",
       });
     }
 
-    if (managerAvailable) {
+    if (dualWorkspaceAvailable) {
       options.push({
         key: "manager",
         label: "Manager Workspace",
@@ -894,9 +997,24 @@ function getCurrentWorkspaceKey() {
     const session = await requireAuth();
     if (!session) return null;
 
-    const profile = await getProfile(session.user.id);
+    const profileRead = await readProfileStatus(session.user.id);
+    if (profileRead.status === "unavailable") {
+      // Deny page initialisation, but do not destroy a valid Auth session
+      // because Supabase/PostgREST could not be reached this time.
+      showProfileVerificationRetry();
+      return null;
+    }
+    const profile = profileRead.profile;
 
     if (!profile) {
+      await logoutUser("unauthorized");
+      return null;
+    }
+
+    // PHASE 7A12: a valid Auth JWT is not permission to keep using BexHR.
+    // Offboarding sets profiles.is_active=false; reject an already-open session
+    // before routing to any HR/Manager/Employee workspace.
+    if (profile.is_active !== true) {
       await logoutUser("unauthorized");
       return null;
     }
@@ -940,8 +1058,22 @@ function getCurrentWorkspaceKey() {
     const result = await requireRole(expectedRole);
     if (!result) return null;
 
+    // H10: an eligible whole-organisation HR Standard lands in Manager by
+    // default. Intentional HR choices (?workspace=hr) and all deep links are
+    // respected. Before H8 RPC activation, routing remains unchanged.
+    const currentPath = String(window.location.pathname || "").toLowerCase();
+    const isHrLanding = currentPath.endsWith("/hr-dashboard") ||
+      currentPath.endsWith("/hr-dashboard.html");
+    if (expectedRole === "hr" && isHrLanding &&
+        !String(window.location.search || "").trim() &&
+        (await readWholeOrganizationDualWorkspaceStatus(result.profile)).eligible) {
+      window.location.href = "manager-dashboard.html";
+      return null;
+    }
+
     startIdleTimeout();
     attachAuthStateListener();
+    attachActiveProfileLifecycleChecks();
 
     try {
       await initialiseWorkspaceSwitcher(result.profile);
@@ -950,6 +1082,71 @@ function getCurrentWorkspaceKey() {
     }
 
     return result;
+  }
+
+  // PHASE 7A12: periodically revalidate the authoritative profiles row.
+  // Local Auth signOut cannot instantaneously revoke already-issued JWTs;
+  // the database's active-account RLS remains the server-side enforcement.
+  let activeProfileLifecycleCheckPromise = null;
+  let activeProfileLifecycleTimerId = null;
+  let activeProfileLifecycleListenersAttached = false;
+
+  async function revalidateActiveProfile() {
+    if (activeProfileLifecycleCheckPromise) return activeProfileLifecycleCheckPromise;
+    activeProfileLifecycleCheckPromise = (async () => {
+      const session = await getSession();
+      if (!session?.user?.id) {
+        await logoutUser("expired");
+        return false;
+      }
+      const profileRead = await readProfileStatus(session.user.id);
+      if (profileRead.status === "unavailable") {
+        // Protect server-side access through RLS; retry on the next check.
+        // A temporary API/network failure must never become a false logout.
+        return false;
+      }
+      const profile = profileRead.profile;
+      if (!profile || profile.is_active !== true) {
+        await logoutUser("unauthorized");
+        return false;
+      }
+      return true;
+    })();
+    try {
+      return await activeProfileLifecycleCheckPromise;
+    } finally {
+      activeProfileLifecycleCheckPromise = null;
+    }
+  }
+
+  function stopActiveProfileLifecycleChecks() {
+    if (activeProfileLifecycleTimerId !== null) {
+      window.clearInterval(activeProfileLifecycleTimerId);
+      activeProfileLifecycleTimerId = null;
+    }
+  }
+
+  function attachActiveProfileLifecycleChecks() {
+    if (!activeProfileLifecycleListenersAttached) {
+      const checkWhenVisible = () => {
+        if (!document.hidden) void revalidateActiveProfile().catch((error) => {
+          console.warn("Active profile check failed:", error);
+        });
+      };
+      window.addEventListener("focus", checkWhenVisible);
+      document.addEventListener("visibilitychange", checkWhenVisible);
+      window.addEventListener("storage", (event) => {
+        if (event.key === "bexhrEmployeeLifecycleSync") checkWhenVisible();
+      });
+      activeProfileLifecycleListenersAttached = true;
+    }
+    if (activeProfileLifecycleTimerId === null) {
+      activeProfileLifecycleTimerId = window.setInterval(() => {
+        if (!document.hidden) void revalidateActiveProfile().catch((error) => {
+          console.warn("Active profile periodic check failed:", error);
+        });
+      }, 20000);
+    }
   }
 
   function attachSessionRecoveryListeners() {
@@ -1004,6 +1201,7 @@ function getCurrentWorkspaceKey() {
     supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT") {
         stopIdleTimeout();
+        stopActiveProfileLifecycleChecks();
       }
 
       if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
@@ -1029,5 +1227,6 @@ function getCurrentWorkspaceKey() {
     redirectToRoleDashboard,
     hasManagerWorkspaceAccess,
     initialiseWorkspaceSwitcher,
+    revalidateActiveProfile,
   };
 })();

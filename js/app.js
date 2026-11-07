@@ -508,7 +508,27 @@ document.addEventListener("DOMContentLoaded", function () {
     };
   }
 
-  function finishSuccessfulLoginRedirect(loginContext = {}) {
+  // BEXHR_P7B_EXECUTIVE_DEFAULT_LANDING
+  // Only the backend can authorise an HR executive's Manager landing.
+  // If the staged RPC is unavailable, normal HR login remains unchanged.
+  async function getPreferredAuthorizedLandingForHr(profile) {
+    if (String(profile?.role || '').trim().toLowerCase() !== 'hr') return '';
+    try {
+      const { data, error } = await Promise.race([
+        supabaseClient.rpc('bexhr_p7b_workspace_access'),
+        new Promise(resolve => setTimeout(() => resolve({data:null,error:{message:'unavailable'}}), 2500)),
+      ]);
+      if (!error && data?.can_enter_manager === true &&
+          data?.preferred_workspace === 'manager') {
+        return '/manager-dashboard.html';
+      }
+    } catch (error) {
+      console.warn('Executive workspace landing could not be resolved:', error);
+    }
+    return '';
+  }
+
+  async function finishSuccessfulLoginRedirect(loginContext = {}) {
     const { authData, profile, tenantValidation, cachedTenantContext } = loginContext;
 
     localStorage.setItem(
@@ -522,8 +542,11 @@ document.addEventListener("DOMContentLoaded", function () {
       ),
     );
 
-    const redirectTarget =
-      getSafePostLoginRedirectForRole(profile.role) ||
+    const safeRedirect = getSafePostLoginRedirectForRole(profile.role);
+    const preferredLanding = safeRedirect
+      ? ''
+      : await getPreferredAuthorizedLandingForHr(profile);
+    const redirectTarget = safeRedirect || preferredLanding ||
       getDashboardByRole(profile.role);
 
     console.log("Supabase sign-in success:", {

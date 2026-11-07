@@ -17,6 +17,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     bindEvents();
 
+    // EDIT ACTION FIRST-CLICK RELIABILITY: expose the existing guarded
+    // employee Edit action before any asynchronous startup requests.
+    // It previously registered only after every People/Payroll fetch.
+    // Existing People-maintenance role check is unchanged.
+    window.hrEditEmployee = (employeeId) => {
+      if (!canCurrentUserMaintainPeopleData()) {
+        showHrPeopleAccessDeniedMessage();
+        return;
+      }
+
+      startEmployeeEdit(employeeId);
+    };
+
     // PAYROLL WORKSPACE LAYOUT - HR/PAYROLL STANDARD STEP 2A
     // Keep the Payroll workspace in the correct operational order:
     // Payroll Overview first, then Create Payroll Record / Create Payroll Batch.
@@ -477,6 +490,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const jobTitlesSection =
         state.dom.organizationJobTitlesSection ||
         document.getElementById("organizationJobTitlesSection");
+      // BEXHR_H6E_REPORTING_LINES_TAB: use the EXISTING setup tab engine.
+      const reportingLinesSection = document.getElementById("bexhrHierarchyTemplateAssistant");
 
       const organizationShell = createHrSetupInternalWorkspace({
         shellId: "hrOrganizationInternalWorkspace",
@@ -502,6 +517,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             label: "Job Titles",
             iconClass: "bi bi-person-workspace",
             node: jobTitlesSection,
+          },
+          {
+            key: "reportingLines",
+            label: "Reporting Lines",
+            iconClass: "bi bi-diagram-3-fill",
+            node: reportingLinesSection,
           },
         ],
       });
@@ -1017,8 +1038,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       const jobTitlesPanel = shell.querySelector(
         '[data-hr-setup-workspace-panel="jobTitles"]',
       );
+      const reportingLinesPanel = shell.querySelector(
+        '[data-hr-setup-workspace-panel="reportingLines"]',
+      );
 
-      if (!organizationPanel || !departmentsPanel || !jobTitlesPanel) {
+      if (!organizationPanel || !departmentsPanel || !jobTitlesPanel || !reportingLinesPanel) {
         console.warn("Manage Organization internal panels are incomplete.");
         return false;
       }
@@ -1045,6 +1069,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         .getElementById("organizationJobTitleRecordsHeader")
         ?.closest(".mt-4");
 
+      // H6E: show company summary on its own tab, not above Reporting Lines.
+      const summaryGrid = organizationContainer.querySelector('.hr-setup-summary-grid');
+      if (summaryGrid && !organizationPanel.contains(summaryGrid)) {
+        organizationPanel.insertBefore(summaryGrid, organizationForm || null);
+      }
       if (organizationForm && !organizationPanel.contains(organizationForm)) {
         organizationPanel.appendChild(organizationForm);
       }
@@ -1311,18 +1340,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateHrModernApplicationHeader(getRememberedHrWorkspace());
     renderHrModernOverview();
 
-    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
-    // Keep employee editing blocked for Payroll, Auditor, QA, and custom
-    // HR-routed roles. These roles may review People records but not maintain them.
-    window.hrEditEmployee = (employeeId) => {
-      if (!canCurrentUserMaintainPeopleData()) {
-        showHrPeopleAccessDeniedMessage();
-        return;
-      }
-
-      startEmployeeEdit(employeeId);
-    };
-
     // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
     // Expose read-only filled-form review actions used by the Employee List
     // and the read-only modal. This must sit beside the other global HR row
@@ -1383,6 +1400,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     // The backend decides whether to send an initial invite or resend a setup/recovery link.
     window.hrSendEmployeeLoginInvite = async (employeeId) => {
       await sendEmployeeLoginInviteForExistingRecord(employeeId);
+    };
+
+    // BEXHR PHASE 7 - LEAN OFFBOARDING
+    window.hrOffboardEmployee = (employeeId) => {
+      openEmployeeOffboardingModal(employeeId);
+    };
+    window.hrCloseEmployeeOffboarding = () => {
+      closeEmployeeOffboardingModal();
+    };
+    window.hrConfirmOffboardEmployee = async () => {
+      await submitEmployeeOffboarding();
+    };
+    window.hrReactivateEmployee = async (employeeId) => {
+      await reactivateEmployeeRecord(employeeId);
     };
 
     // EMPLOYEE BIODATA COMPLETION - STEP 6C-4C
@@ -1575,8 +1606,7 @@ const HR_NAVIGATION_TASKS = Object.freeze({
   "people.directory": { workspace: "employees", group: "people", title: "Employee Directory", subtitle: "Search, review, and maintain employee records.", module: "People" },
   "people.add": { workspace: "employees", group: "people", title: "Add Employee", subtitle: "Create or maintain one employee profile using the existing employee form.", module: "People" },
   "people.import": { workspace: "employees", group: "people", title: "Import Employees", subtitle: "Upload and review employee records using the existing batch import workflow.", module: "People" },
-  "review.corrections": { workspace: "review", group: "reviews", title: "Profile Corrections", subtitle: "Review employee-submitted profile correction requests.", module: "Reviews" },
-  "review.leave": { workspace: "review", group: "reviews", title: "Leave Decision Oversight", subtitle: "Review recorded manager leave decisions and audit history.", module: "Reviews" },
+  "people.lifecycle": { workspace: "employees", group: "people", title: "Employee Lifecycle", subtitle: "Offboard or reactivate employees through the protected HR workflow.", module: "People" },
   "payroll.overview": { workspace: "payroll", group: "payroll", title: "Payroll Overview", subtitle: "Review payroll totals, status, and current processing readiness.", module: "Payroll" },
   "payroll.salary": { workspace: "payroll", group: "payroll", title: "Salary Setup", subtitle: "Maintain employee salary setup records before payroll processing.", module: "Payroll" },
   "payroll.run": { workspace: "payroll", group: "payroll", title: "Run Payroll", subtitle: "Select employees and a pay period, review BexHR calculations, then finalise payroll.", module: "Payroll" },
@@ -1600,7 +1630,7 @@ const HR_FOCUSED_WORKSPACE_TASK_SWITCHERS = Object.freeze({
     id: "hrPeopleTaskSwitcher",
     label: "People sections",
     className: "hr-focused-workspace-switcher--people",
-    taskKeys: ["people.directory", "people.add", "people.import"],
+    taskKeys: ["people.directory", "people.add", "people.import", "people.lifecycle"],
   },
   payroll: {
     id: "hrPayrollTaskSwitcher",
@@ -1697,17 +1727,19 @@ function applyHrPeopleFocusedTaskCardVisibility(taskKey = "") {
     state.dom.employeeFormCardCollapse?.closest(".dashboard-section-card");
   const importCard =
     state.dom.batchEmployeeCsvImportPanel?.closest(".dashboard-section-card");
+  const lifecycleCard = document.getElementById("hrEmployeeLifecycleCard");
 
   const activeCardByTask = {
     "people.directory": directoryCard,
     "people.add": employeeFormCard,
     "people.import": importCard,
+    "people.lifecycle": lifecycleCard,
   };
   const activeCard = activeCardByTask[normalizedTaskKey];
 
   if (!activeCard) return false;
 
-  [summaryCard, directoryCard, employeeFormCard, importCard]
+  [summaryCard, directoryCard, employeeFormCard, importCard, lifecycleCard]
     .filter(Boolean)
     .forEach((card) => {
       card.classList.toggle("bexhr-hr-task-hidden", card !== activeCard);
@@ -2876,9 +2908,9 @@ function syncIdentificationDocumentNumberVisibility({ clearWhenHidden = false } 
 }
 
 // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
-// Show NIN for any selected means of identification.
-// It is required for National ID / NIN Slip and optional for other IDs.
-// If no means of identification is selected, hide and clear NIN.
+// R14B: NIN is an optional stand-alone HR field in Core Details.
+// It must remain visible without requiring the retired Means of Identification field.
+// Never clear a historical NIN merely because that retired field is blank.
 function syncNinFieldVisibility({ clearWhenHidden = false } = {}) {
   const selectedMeans = String(
     state.dom.meansOfIdentification?.value || "",
@@ -2889,7 +2921,7 @@ function syncNinFieldVisibility({ clearWhenHidden = false } = {}) {
   // - required for National ID / NIN Slip;
   // - optional but allowed for Passport, Driver's Licence, Voter's Card/PVC,
   //   Birth Certificate, and Other.
-  const shouldShowNin = Boolean(selectedMeans);
+  const shouldShowNin = true;
   const shouldRequireNin = isNinRequiredForMeansOfIdentification(selectedMeans);
 
   state.dom.ninFieldCol?.classList.toggle("d-none", !shouldShowNin);
@@ -2992,6 +3024,7 @@ const state = {
   // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
   // Tenant-scoped whole-organization position ordering loaded under RLS.
   organizationJobTitleHierarchy: [],
+  organizationPositionHierarchyLoaded: false,
 
   // COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
   // The protected RPC is the source of truth. Standard HR never loads this data.
@@ -3661,9 +3694,11 @@ function applyHrOrganizationSetupAccessControls() {
     state.dom.organizationJobTitleDepartmentId,
     state.dom.organizationJobTitleName,
     state.dom.organizationJobTitleStatus,
+    state.dom.organizationJobTitleReportsTo,
     state.dom.organizationJobTitleNotes,
     state.dom.saveOrganizationJobTitleBtn,
     state.dom.cancelOrganizationJobTitleEditBtn,
+    state.dom.removeOrganizationJobTitleLinkBtn,
 
     state.dom.organizationPositionHierarchyJobTitleId,
     state.dom.organizationPositionHierarchyParentId,
@@ -4316,7 +4351,7 @@ function isValidHrWorkspaceKey(workspace = "") {
   // Review is a real top-level HR workspace, safe to remember across refresh.
   // It stores only the workspace key, not employee, leave, payroll, salary,
   // bank, or decision data.
-  return ["dashboard", "profile", "employees", "review", "setup", "payroll", "selfservice"].includes(
+  return ["dashboard", "profile", "employees", "setup", "payroll", "selfservice"].includes(
     String(workspace || "").trim(),
   );
 }
@@ -4751,6 +4786,10 @@ function getHrNavigationTaskTarget(taskKey = "") {
     case "people.import":
       return document.getElementById("batchEmployeeImportCard");
 
+    case "people.lifecycle":
+      window.BexHrPeopleUxPhase7?.renderLifecycle?.();
+      return document.getElementById("hrEmployeeLifecycleCard");
+
     case "review.corrections":
       openProfileCorrectionRequestsCard();
       return state.dom.profileCorrectionRequestsCard;
@@ -4847,6 +4886,7 @@ function getHrNavigationTaskTarget(taskKey = "") {
 
 function applyHrNavigationTask(taskKey = "", options = {}) {
   const normalizedTaskKey = String(taskKey || "").trim();
+  if (normalizedTaskKey.startsWith("review.")) return false;
   const task = HR_NAVIGATION_TASKS[normalizedTaskKey];
   if (!task) return false;
 
@@ -4894,6 +4934,7 @@ function getHrWorkspaceButtonForNavigationTask(taskKey = "") {
 
 function openHrNavigationTask(taskKey = "") {
   const normalizedTaskKey = String(taskKey || "").trim();
+  if (normalizedTaskKey.startsWith("review.")) return false;
   const task = HR_NAVIGATION_TASKS[normalizedTaskKey];
   if (!task) return false;
 
@@ -5507,6 +5548,7 @@ function cacheDomElements() {
     hrOverviewPayrollReady: document.getElementById("hrOverviewPayrollReady"),
     hrOverviewPayrollReadyDetail: document.getElementById("hrOverviewPayrollReadyDetail"),
     hrOverviewMissingInformation: document.getElementById("hrOverviewMissingInformation"),
+    hrOverviewDepartmentsCount: document.getElementById("hrOverviewDepartmentsCount"),
     hrOverviewPayrollReadinessPercent: document.getElementById("hrOverviewPayrollReadinessPercent"),
     hrOverviewPayrollReadinessProgress: document.getElementById("hrOverviewPayrollReadinessProgress"),
     hrOverviewPayrollReadinessBar: document.getElementById("hrOverviewPayrollReadinessBar"),
@@ -5694,9 +5736,12 @@ function cacheDomElements() {
     organizationJobTitleDepartmentId: document.getElementById("organizationJobTitleDepartmentId"),
     organizationJobTitleName: document.getElementById("organizationJobTitleName"),
     organizationJobTitleStatus: document.getElementById("organizationJobTitleStatus"),
+    organizationJobTitleReportsTo: document.getElementById("organizationJobTitleReportsTo"),
+    organizationJobTitleReportsToField: document.getElementById("organizationJobTitleReportsToField"),
     saveOrganizationJobTitleBtn: document.getElementById("saveOrganizationJobTitleBtn"),
     organizationJobTitleSubmitLabel: document.getElementById("organizationJobTitleSubmitLabel"),
     cancelOrganizationJobTitleEditBtn: document.getElementById("cancelOrganizationJobTitleEditBtn"),
+    removeOrganizationJobTitleLinkBtn: document.getElementById("removeOrganizationJobTitleLinkBtn"),
     organizationJobTitlesEmptyState: document.getElementById("organizationJobTitlesEmptyState"),
     organizationJobTitlesTableWrapper: document.getElementById("organizationJobTitlesTableWrapper"),
     organizationJobTitlesTableBody: document.getElementById("organizationJobTitlesTableBody"),
@@ -5793,8 +5838,6 @@ function cacheDomElements() {
     // It is required for National ID / NIN Slip, and optional for other IDs.
     ninFieldCol: document.getElementById("ninFieldCol"),
     nin: document.getElementById("nin"),
-
-    exitDate: document.getElementById("exitDate"),
     hmoProvider: document.getElementById("hmoProvider"),
     hmoPlan: document.getElementById("hmoPlan"),
     hmoNumber: document.getElementById("hmoNumber"),
@@ -5880,7 +5923,6 @@ function cacheDomElements() {
     // The Employment Status dropdown exists in the employee form, but it was
     // not cached here. Without this, buildEmployeePayload() falls back to
     // "active", so Inactive/Pending/Exited selections are not saved.
-    employmentStatus: document.getElementById("employmentStatus"),
 
     // ASSIGN LINE MANAGER - STEP 1E
     // System Role is saved on employee records and displayed in the employee list.
@@ -11295,6 +11337,31 @@ function bindEvents() {
     }
   });
 
+  // PHASE 7A12: update People, Overview, payroll readiness, and hierarchy when
+  // another HR tab changes a record; also reconcile across separate sessions
+  // when this page returns to the foreground. Storage contains no PII.
+  window.addEventListener("storage", (event) => {
+    if (event.key !== HR_EMPLOYEE_LIFECYCLE_SYNC_STORAGE_KEY) return;
+    let detail = null;
+    try { detail = JSON.parse(event.newValue || "null"); } catch (_) { return; }
+    if (!detail || String(detail.tenantId || "") !==
+        String(state.currentProfile?.tenant_id || "")) return;
+    if (!document.hidden) {
+      void refreshHrAfterEmployeeLifecycleChange().catch((error) => {
+        console.warn("Cross-tab employee lifecycle refresh failed:", error);
+      });
+    }
+  });
+  window.addEventListener("focus", () => {
+    void checkForHrEmployeeLifecycleChanges();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) void checkForHrEmployeeLifecycleChanges();
+  });
+  window.setInterval(() => {
+    if (!document.hidden) void checkForHrEmployeeLifecycleChanges();
+  }, 30000);
+
   state.dom.employeeCreateForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await handleEmployeeSave();
@@ -11391,8 +11458,6 @@ function bindEvents() {
 
     state.dom.identificationIssueState,
     state.dom.nin,
-
-    state.dom.exitDate,
     state.dom.hmoProvider,
     state.dom.hmoPlan,
     state.dom.hmoNumber,
@@ -11446,7 +11511,6 @@ function bindEvents() {
     state.dom.lineManager,
     state.dom.employmentDate,
     state.dom.approverEmail,
-    state.dom.employmentStatus,
     state.dom.systemRole,
 
     // DESCRIPTION ITEM 3 - STEP 2B CLEANUP
@@ -11818,6 +11882,13 @@ function bindEvents() {
     resetOrganizationJobTitleForm();
   });
 
+  // Row Edit opens this same form; Cancel Edit returns it to Create mode.
+  state.dom.removeOrganizationJobTitleLinkBtn?.addEventListener("click", async () => {
+    const id = String(state.dom.editingOrganizationJobTitleId?.value || "").trim();
+    if (!id || !getOrganizationPositionHierarchyRecord(id)) return;
+    await deleteOrganizationPositionHierarchyRecord(id);
+  });
+
   // ORGANIZATION HR SETUP VALUES - STEP 4B-2
   // Keep Job Title button grey/disabled until required fields are complete.
   [
@@ -11825,6 +11896,7 @@ function bindEvents() {
     state.dom.organizationJobTitleDepartmentId,
     state.dom.organizationJobTitleName,
     state.dom.organizationJobTitleStatus,
+    state.dom.organizationJobTitleReportsTo,
   ].forEach((field) => {
     field?.addEventListener("input", updateOrganizationJobTitleSaveButtonState);
     field?.addEventListener("change", updateOrganizationJobTitleSaveButtonState);
@@ -11832,6 +11904,10 @@ function bindEvents() {
 
   state.dom.organizationJobTitleScope?.addEventListener("change", () => {
     syncOrganizationJobTitleScopeControls();
+  });
+  state.dom.organizationJobTitleStatus?.addEventListener('change', () => {
+    syncOrganizationJobTitleReportsToControls();
+    updateOrganizationJobTitleSaveButtonState();
   });
 
   syncOrganizationJobTitleScopeControls();
@@ -12631,69 +12707,32 @@ function escapeBatchEmployeeCsvCell(value) {
 // Employee Number is optional:
 // - supplied values are preserved and validated;
 // - blank values are generated during employee creation.
-function downloadBatchEmployeeCsvImportTemplate() {
-  const headers = [
-    "First Name",
-    "Middle Name",
-    "Last Name",
-    "Employee Number",
-    "Work Email",
-    "Personal Email",
-    "Phone Number",
-    "Alternative Phone Number",
-    "Date Of Birth",
-    "Gender",
-    "Marital Status",
-    "Nationality",
-    "State Of Origin",
-    "Local Government Area",
-    "Town",
-    "Means Of Identification",
-    "Identification Document Number",
-    "Identification Issue State",
-    "NIN",
-    "Department",
-    "Job Title",
-    "Line Manager",
-    "Approver Email",
-    "Employment Date",
-    "Exit Date",
-    "HMO Provider",
-    "HMO Plan",
-    "HMO Number",
-    "Status",
-    "System Role",
+// PRE-7B - 20-field approved import interface; no dashboard roles or privileged fields.
+const PRE7B_EMPLOYEE_IMPORT_HEADERS = Object.freeze([
+  "First Name",
+  "Middle Name",
+  "Last Name",
+  "Employee Number",
+  "Work Email",
+  "Phone Number",
+  "Date Of Birth",
+  "Nationality",
+  "Town of Origin",
+  "Department",
+  "Job Title",
+  "Employment Date",
+  "Current Address Line 1",
+  "Current City",
+  "Current State Region",
+  "Current Country",
+  "Next Of Kin Full Name",
+  "Next Of Kin Relationship",
+  "Next Of Kin Phone Number",
+  "Next Of Kin Address"
+]);
 
-    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
-    // Child biodata fields. These are saved after the employee row exists,
-    // because child tables require the created employee_id.
-    "Current Address Line 1",
-    "Current City",
-    "Current State Region",
-    "Current Country",
-    "Current Postal Code",
-    "Permanent Address Line 1",
-    "Permanent City",
-    "Permanent State Region",
-    "Permanent Country",
-    "Permanent Postal Code",
-    "Next Of Kin Full Name",
-    "Next Of Kin Relationship",
-    "Next Of Kin Phone Number",
-    "Next Of Kin Email",
-    "Next Of Kin Address",
-    "Education Institution",
-    "Education Qualification",
-    "Education Field Of Study",
-    "Education Graduation Year",
-    "Education Status",
-    "Highest Qualification",
-    "Dependant Full Name",
-    "Dependant Relationship",
-    "Dependant Date Of Birth",
-    "Dependant Phone Number",
-    "Dependant Coverage Type",
-  ];
+function downloadBatchEmployeeCsvImportTemplate() {
+  const headers = PRE7B_EMPLOYEE_IMPORT_HEADERS;
 
   const csvContent = headers
     .map(escapeBatchEmployeeCsvCell)
@@ -12843,7 +12882,7 @@ function buildBatchEmployeeInsertPayload(employee = {}, employeeNumber = "", ten
     // the manual employee form. Existing mixed-case records are still handled
     // by the edit-mode normalisation above.
     system_role:
-      normaliseEmployeeSystemRoleForForm(employee.system_role) || null,
+      normaliseEmployeeSystemRoleForForm(employee.system_role) || "employee",
 
     // HRP-EMPNUM / HRP-80
     // Tenant-scope the batch row so RLS and data segmentation treat it
@@ -13301,7 +13340,10 @@ async function handleBatchEmployeeSubmit() {
       `${createdRows.length} created; ${excludedRows.length} excluded.`,
     );
 
-    if (createdRows.length) redirectToFullEmployeeListAfterEmployeeSave();
+    if (createdRows.length) {
+      publishHrEmployeeLifecycleChange("", "batch_employees_created");
+      redirectToFullEmployeeListAfterEmployeeSave();
+    }
   } catch (error) {
     const errorMessage = String(error?.message || "").trim();
     console.error("Error creating batch employees:", error);
@@ -13350,10 +13392,13 @@ function setBatchEmployeeCsvImportLoading(isLoading) {
 // Normalise CSV headers so "Work Email", "work_email", and "work-email"
 // are treated safely as the same type of header.
 function normalizeBatchEmployeeCsvHeader(value = "") {
-  return String(value || "")
+  const header = String(value || "")
     .trim()
     .toLowerCase()
     .replace(/[\s_-]+/g, "");
+  // Permit the previous 20-field template's Town column as a single
+  // backwards-compatible alias. All retired 54-column fields remain rejected.
+  return header === "town" ? "townoforigin" : header;
 }
 
 // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1E
@@ -13609,7 +13654,7 @@ function buildBatchEmployeePreparedRowFromCsv(
 
   const stateOfOrigin = getBatchEmployeeCsvCell(row, headerMap, "State Of Origin");
   const localGovernmentArea = getBatchEmployeeCsvCell(row, headerMap, "Local Government Area");
-  const town = getBatchEmployeeCsvCell(row, headerMap, "Town");
+  const town = getBatchEmployeeCsvCell(row, headerMap, "Town of Origin");
 
   const meansOfIdentification = getBatchEmployeeCsvCell(row, headerMap, "Means Of Identification");
 
@@ -13636,14 +13681,11 @@ function buildBatchEmployeePreparedRowFromCsv(
   const rawEmploymentDate = getBatchEmployeeCsvCell(row, headerMap, "Employment Date");
   const employmentDate = normalizeBatchEmployeeCsvDate(rawEmploymentDate);
 
-  const rawExitDate = getBatchEmployeeCsvCell(row, headerMap, "Exit Date");
-  const exitDate = normalizeBatchEmployeeCsvDate(rawExitDate);
-
   const hmoProvider = getBatchEmployeeCsvCell(row, headerMap, "HMO Provider");
   const hmoPlan = getBatchEmployeeCsvCell(row, headerMap, "HMO Plan");
   const hmoNumber = getBatchEmployeeCsvCell(row, headerMap, "HMO Number");
 
-  const status = getBatchEmployeeCsvCell(row, headerMap, "Status") || "Active";
+  const status = "Active"; // Phase 7: lifecycle status is not imported from CSV.
   const systemRole = getBatchEmployeeCsvCell(row, headerMap, "System Role");
 
   // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
@@ -13771,10 +13813,6 @@ function buildBatchEmployeePreparedRowFromCsv(
 
   if (rawDateOfBirth && !dateOfBirth) {
     warnings.push("Date Of Birth was invalid and will be left blank");
-  }
-
-  if (rawExitDate && !exitDate) {
-    warnings.push("Exit Date was invalid and will be left blank");
   }
 
   const safePersonalEmail =
@@ -13917,7 +13955,7 @@ function buildBatchEmployeePreparedRowFromCsv(
     approver_email: safeApproverEmail || null,
 
     employment_date: employmentDate || null,
-    exit_date: exitDate || null,
+    exit_date: null,
 
     hmo_provider: hmoProvider || null,
     hmo_plan: hmoPlan || null,
@@ -14156,11 +14194,42 @@ async function handleBatchEmployeeCsvImport() {
       return;
     }
 
+    // PRE-7B - Fail closed on unsupported, duplicate or legacy template columns.
+    // Explicitly prevents mass assignment of System Role, payroll/ID fields and
+    // obsolete child biodata, even when a CSV was crafted outside the UI.
+    const allowedHeaders = new Set(
+      PRE7B_EMPLOYEE_IMPORT_HEADERS.map(normalizeBatchEmployeeCsvHeader),
+    );
+    const uploadedHeaders = rows[headerRowIndex]
+      .map(normalizeBatchEmployeeCsvHeader).filter(Boolean);
+    if (
+      rows[headerRowIndex].some((name) => !normalizeBatchEmployeeCsvHeader(name)) ||
+      uploadedHeaders.some((name) => !allowedHeaders.has(name)) ||
+      new Set(uploadedHeaders).size !== uploadedHeaders.length
+    ) {
+      showPageAlert(
+        "warning",
+        "Import stopped: this CSV contains unsupported or duplicate columns. Download the new 20-column Employee Template and copy only approved values.",
+      );
+      return;
+    }
+
     const headerMap = buildBatchEmployeeHeaderMap(rows[headerRowIndex]);
 
     const dataRows = rows
       .slice(headerRowIndex + 1)
       .filter((row) => row.some((cell) => String(cell || "").trim()));
+
+    // R14B: Never silently disregard values beyond the approved header width.
+    // Missing optional trailing cells are allowed; extra non-empty cells are not.
+    const approvedColumnCount = rows[headerRowIndex].length;
+    if (dataRows.some((row) => row.slice(approvedColumnCount).some((cell) => String(cell || "").trim()))) {
+      showPageAlert(
+        "warning",
+        "Import stopped: a CSV row has more values than the approved header columns. Check for misplaced commas or unapproved data.",
+      );
+      return;
+    }
 
     const preparedRows = [];
     const skippedRows = [];
@@ -14521,15 +14590,27 @@ function getSavedLineManagerOptionForEmployee(employee = {}) {
 // ASSIGN LINE MANAGER - STEP 1
 // Populate Assign Line Manager from existing active employee records.
 // This uses state.employees already loaded from Supabase, so no new table is needed.
-// Same-department reporting assignments: shared by both HR entry points.
+// The Edit form and the reporting shortcut must resolve the same selected
+// position, not a stale position ID left on the saved employee snapshot.
 function getHrReportingFormEmployee() {
   const current = state.currentEditingEmployee || {};
+  const selectedDepartment = getSelectedEmployeeDepartmentValue();
+  const selectedTitle = state.dom.jobTitle?.value ?? current.job_title ?? "";
+  const positionUnchanged =
+    normalizeText(selectedDepartment) === normalizeText(current.department || "") &&
+    normalizeText(selectedTitle) === normalizeText(current.job_title || "");
   return {
     ...current,
     id: current.id || state.dom.editingEmployeeId?.value || "",
-    department_id: "",
-    department: getSelectedEmployeeDepartmentValue(),
-    job_title: state.dom.jobTitle?.value ?? current.job_title ?? "",
+    // Keep the saved explicit position identity only while the form still
+    // refers to that position. Changed department/title must be re-resolved.
+    department_id: positionUnchanged ? (current.department_id || "") : "",
+    organization_job_title_id: positionUnchanged
+      ? (current.organization_job_title_id || "") : "",
+    job_title_id: positionUnchanged ? (current.job_title_id || "") : "",
+    tenant_id: current.tenant_id || state.currentProfile?.tenant_id || "",
+    department: selectedDepartment,
+    job_title: selectedTitle,
     system_role:
       getSelectedEmployeeSystemRoleValue() ||
       current.system_role ||
@@ -14541,30 +14622,9 @@ function getHrReportingFormEmployee() {
 // This mirrors only the broad DB direct-report rule. It does not assign a
 // replacement manager and does not use CEO/COO title strings.
 function isHrPrimaryReportCompatibleWithManagerPosition(manager = {}, employee = {}) {
-  if (!manager || !employee) return false;
-
-  const managerRole = normalizeText(manager.system_role || manager.role || "");
-  const employeeRole = normalizeText(employee.system_role || employee.role || "");
-  const managerWholeOrganization = isHrWholeOrganizationReportingManager(manager);
-  const employeeWholeOrganization = isHrWholeOrganizationEmployee(employee);
-  const managerTier = getHrReportingRoleTier(manager);
-  const employeeTier = getHrReportingRoleTier(employee);
-
-  if (managerWholeOrganization && managerRole === "manager") {
-    return employeeTier === 4 || (employeeWholeOrganization && employeeRole === "manager");
-  }
-
-  if (managerTier === 4) {
-    return !employeeWholeOrganization && employeeTier !== 4 && ["hr", "hr_manager", "manager"].includes(employeeRole);
-  }
-
-  if (managerRole === "manager" && !managerWholeOrganization) {
-    const managerDepartment = normalizeText(manager.department || "");
-    const employeeDepartment = normalizeText(employee.department || "");
-    return !employeeWholeOrganization && !["hr", "hr_manager", "manager"].includes(employeeRole) && Boolean(managerDepartment) && managerDepartment === employeeDepartment;
-  }
-
-  return false;
+  // Phase 7B: position-change preflight must use the same predicate as the
+  // reporting dropdown and the final Save action.
+  return canHrPrimaryReportingManagerSitImmediatelyAboveEmployee(manager, employee);
 }
 
 function getHrInvalidPrimaryReportsForPendingManagerPosition(managerEmployeeId, pendingManager = {}) {
@@ -14599,6 +14659,31 @@ function publishHrReportingHierarchyChange(employeeId = "", reason = "reporting_
   }
 }
 
+// PHASE 7B PRIMARY/SECONDARY REPORTING: one tenant-specific position contract.
+// The database remains authoritative for saved relationships and privileges.
+// A configured position uses the organisation hierarchy; a departmental title
+// without a hierarchy link uses legacy eligibility ONLY until backend rollout.
+function getHrConfiguredReportingEligibility(manager, employee, kind = "secondary") {
+  const helper = globalThis.BexHRReportingPositionEligibility;
+  if (!helper || typeof helper.evaluate !== "function") {
+    // Fail closed in the real app if its required helper script did not load.
+    return { mode: "blocked", allowed: false, reason: "HIERARCHY_ENGINE_MISSING" };
+  }
+  return helper.evaluate({
+    kind,
+    tenantId: String(state.currentProfile?.tenant_id || "").trim(),
+    employee,
+    manager,
+    employees: state.employees || [],
+    positions: state.organizationJobTitles || [],
+    links: state.organizationJobTitleHierarchy || [],
+    departments: state.organizationDepartments || [],
+    loaded: state.organizationPositionHierarchyLoaded === true,
+    departmentReportingEnabled: state.p7bDepartmentReportingEnabled === true,
+    hierarchyCore: globalThis.BexHROrganizationHierarchy,
+  });
+}
+
 function isHrManagerInEmployeeDepartment(manager, employee) {
   if (!manager || !employee) return false;
   if (String(manager.id || "") === String(employee.id || "")) return false;
@@ -14609,6 +14694,9 @@ function isHrManagerInEmployeeDepartment(manager, employee) {
   ) {
     return false;
   }
+
+  const configured = getHrConfiguredReportingEligibility(manager, employee, "secondary");
+  if (configured.mode !== "legacy") return configured.allowed;
 
   // R-12C: whole-organization positions can manage across departments.
   if (isHrWholeOrganizationEmployee(manager)) {
@@ -14710,143 +14798,184 @@ function getHrReportingRoleTier(employee = {}) {
 }
 
 function isHrWholeOrganizationReportingManager(employee = {}) {
+  // Organisation position and application role are independent. HR/Manager
+  // login roles may occupy the same configured executive position.
   return Boolean(
     isHrWholeOrganizationEmployee(employee) &&
-    normalizeText(employee.system_role || employee.role || "") === "manager"
+    hasHrReportingManagerRole(employee)
   );
 }
 
-// BEXHR WHOLE-ORGANIZATION EXECUTIVE ORDER - R-12C.3
-// Job Title still does NOT grant dashboard/system authority. System Role remains
-// the permission source. This narrow helper orders only approved whole-organization
-// executive positions after the employee is already a whole-organization Manager.
-// Locked BexHR executive reporting order: CEO > COO > other whole-organization Manager.
-function getHrWholeOrganizationExecutiveRank(employee = {}) {
-  if (!isHrWholeOrganizationReportingManager(employee)) return 0;
+// BEXHR PHASE 7B: CONFIGURED ORGANIZATION POSITION HIERARCHY.
+// Job Title is a position, not a login role. Never infer CEO, COO or any
+// executive order from a title string. The tenant's configured hierarchy is
+// authoritative, including an explicit root and vacancies between positions.
+function getHrEmployeeOrganizationPosition(employee = {}) {
+  if (!state.organizationPositionHierarchyLoaded ||
+      !isHrWholeOrganizationEmployee(employee)) return null;
 
-  const jobTitle = normalizeText(employee.job_title || "");
+  const title = normalizeText(employee.job_title || "");
+  const tenantId = String(employee.tenant_id || state.currentProfile?.tenant_id || "").trim();
+  if (!title || !tenantId) return null;
 
-  if (jobTitle === "ceo" || jobTitle === "chief executive officer") {
-    return 3;
+  const positions = (state.organizationJobTitles || []).filter((record) =>
+    normalizeText(record.job_title || "") === title &&
+    normalizeText(record.status || "active") === "active" &&
+    !String(record.department_id || "").trim() &&
+    (!record.tenant_id || String(record.tenant_id) === tenantId)
+  );
+  if (positions.length !== 1) return null;
+
+  const rows = (state.organizationJobTitleHierarchy || []).filter((record) =>
+    String(record.job_title_id || "") === String(positions[0].id) &&
+    String(record.tenant_id || "") === tenantId
+  );
+  if (rows.length !== 1) return null;
+
+  return {
+    id: String(positions[0].id),
+    tenantId,
+    parentId: String(rows[0].reports_to_job_title_id || "").trim(),
+  };
+}
+
+function isHrPositionOccupiedByActiveManager(positionId, tenantId) {
+  const position = getOrganizationJobTitleRecordById(positionId);
+  if (!position) return false;
+  return (state.employees || []).some((person) =>
+    String(person.tenant_id || "") === tenantId &&
+    normalizeText(person.status) === "active" &&
+    isHrWholeOrganizationReportingManager(person) &&
+    normalizeText(person.job_title || "") === normalizeText(position.job_title || "")
+  );
+}
+
+function getHrNearestOccupiedAncestorPositionId(employee = {}) {
+  const resolved = getHrEmployeeOrganizationPosition(employee);
+  if (!resolved) return "";
+  let nextId = resolved.parentId;
+  const seen = new Set([resolved.id]);
+
+  while (nextId && !seen.has(nextId)) {
+    seen.add(nextId);
+    if (isHrPositionOccupiedByActiveManager(nextId, resolved.tenantId)) {
+      return nextId;
+    }
+    const next = getOrganizationPositionHierarchyRecord(nextId);
+    if (!next || String(next.tenant_id || "") !== resolved.tenantId) {
+      return "";
+    }
+    nextId = String(next.reports_to_job_title_id || "").trim();
   }
+  return "";
+}
 
-  if (jobTitle === "coo" || jobTitle === "chief operating officer") {
-    return 2;
+function isHrSameOrAncestorPosition(managerPositionId, employeePositionId, tenantId) {
+  let nextId = String(employeePositionId || "").trim();
+  const seen = new Set();
+  while (nextId && !seen.has(nextId)) {
+    if (nextId === managerPositionId) return true;
+    seen.add(nextId);
+    const next = getOrganizationPositionHierarchyRecord(nextId);
+    if (!next || String(next.tenant_id || "") !== tenantId) return false;
+    nextId = String(next.reports_to_job_title_id || "").trim();
   }
+  return false;
+}
 
-  return 1;
+// The closest occupied level to HR Admin is the lowest occupied organization
+// position: no *occupied* descendants in its tenant hierarchy. If executives
+// are all vacant, HR Admin is the acting highest level and has no Primary.
+function isHrLowestOccupiedOrganizationPosition(employee = {}) {
+  const position = getHrEmployeeOrganizationPosition(employee);
+  if (!position || !isHrWholeOrganizationReportingManager(employee) ||
+      !isHrPositionOccupiedByActiveManager(position.id, position.tenantId)) {
+    return false;
+  }
+  const rows = (state.organizationJobTitleHierarchy || []).filter(
+    (row) => String(row.tenant_id || "") === position.tenantId,
+  );
+  return !rows.some((row) => {
+    const otherId = String(row.job_title_id || "");
+    return otherId !== position.id &&
+      isHrSameOrAncestorPosition(position.id, otherId, position.tenantId) &&
+      isHrPositionOccupiedByActiveManager(otherId, position.tenantId);
+  });
 }
 
 function canHrReportingManagerSitAboveEmployee(manager, employee) {
-  if (!manager || !employee) return false;
+  if (!manager || !employee || !hasHrReportingManagerRole(manager)) return false;
+  const configured = typeof getHrConfiguredReportingEligibility === "function"
+    ? getHrConfiguredReportingEligibility(manager, employee, "secondary")
+    : { mode: "legacy", allowed: false };
+  if (configured.mode !== "legacy") return configured.allowed;
+  const managerWhole = isHrWholeOrganizationReportingManager(manager);
+  const employeeWhole = isHrWholeOrganizationEmployee(employee);
 
-  const managerIsWholeOrganization =
-    isHrWholeOrganizationReportingManager(manager);
-  const employeeIsWholeOrganization =
-    isHrWholeOrganizationEmployee(employee);
-
-  // BEXHR SECONDARY / SUPPORTING MANAGER RULE - R-12C.5
-  // The shared/base candidate rule is deliberately broader than Primary:
-  // a supporting manager may be a peer or a higher reporting level.
-  // Self, descendants, the current Primary Manager, and duplicate Secondary
-  // Managers are filtered separately by the shared candidate/picker logic.
-  if (employeeIsWholeOrganization) {
-    if (!managerIsWholeOrganization) return false;
-
-    return (
-      getHrWholeOrganizationExecutiveRank(manager) >=
-      getHrWholeOrganizationExecutiveRank(employee)
-    );
+  if (employeeWhole) {
+    if (!managerWhole) return false;
+    const targetPosition = getHrEmployeeOrganizationPosition(employee);
+    const managerPosition = getHrEmployeeOrganizationPosition(manager);
+    // Any highest occupied organization position (including an explicit root)
+    // reports to nobody, neither Primary nor Secondary.
+    if (!targetPosition || !managerPosition ||
+        !getHrNearestOccupiedAncestorPositionId(employee)) return false;
+    return targetPosition.tenantId === managerPosition.tenantId &&
+      isHrSameOrAncestorPosition(
+        managerPosition.id, targetPosition.id, targetPosition.tenantId,
+      );
   }
 
-  // Whole-organization Managers may support departmental employees.
-  if (managerIsWholeOrganization) {
-    return true;
-  }
+  // Secondary candidates may include a whole-organization Manager supporting
+  // a departmental employee. Existing role/department checks still apply.
+  if (managerWhole) return Boolean(getHrEmployeeOrganizationPosition(manager));
 
-  return (
-    getHrReportingRoleTier(manager) >=
-    getHrReportingRoleTier(employee)
-  );
+  return getHrReportingRoleTier(manager) >= getHrReportingRoleTier(employee);
 }
 
 function isHrReportingManagerCandidate(manager, employee) {
   if (!manager || !employee) return false;
-
-  const isActive = normalizeText(manager.status) === "active";
-  const hasEmail = Boolean(String(manager.work_email || "").trim());
-
   return Boolean(
-    isActive &&
-    hasEmail &&
+    normalizeText(manager.status) === "active" &&
+    String(manager.work_email || "").trim() &&
     isHrManagerInEmployeeDepartment(manager, employee) &&
     hasHrReportingManagerRole(manager) &&
     canHrReportingManagerSitAboveEmployee(manager, employee)
   );
 }
 
-// BEXHR STRICT PRIMARY REPORTING CHAIN - R-12C.4
-// Primary Manager is an immediate reporting relationship, not a generic
-// "any higher level" relationship. Keep the locked BexHR chain:
-// Employee -> Manager -> HR Standard -> HR Admin -> COO -> CEO.
-// Secondary/supporting manager eligibility remains on the broader shared rule.
 function canHrPrimaryReportingManagerSitImmediatelyAboveEmployee(manager, employee) {
-  if (!manager || !employee) return false;
+  if (!manager || !employee || !hasHrReportingManagerRole(manager)) return false;
+  const configured = typeof getHrConfiguredReportingEligibility === "function"
+    ? getHrConfiguredReportingEligibility(manager, employee, "primary")
+    : { mode: "legacy", allowed: false };
+  if (configured.mode !== "legacy") return configured.allowed;
+  const managerWhole = isHrWholeOrganizationReportingManager(manager);
+  const employeeWhole = isHrWholeOrganizationEmployee(employee);
 
-  const managerIsWholeOrganization =
-    isHrWholeOrganizationReportingManager(manager);
-  const employeeIsWholeOrganization =
-    isHrWholeOrganizationEmployee(employee);
-
-  if (employeeIsWholeOrganization) {
-    if (!managerIsWholeOrganization) return false;
-
-    const employeeExecutiveRank =
-      getHrWholeOrganizationExecutiveRank(employee);
-    const managerExecutiveRank =
-      getHrWholeOrganizationExecutiveRank(manager);
-
-    // CEO is top-level. COO reports only to CEO. Any future lower
-    // whole-organization Manager reports only to the next executive level.
-    if (
-      !employeeExecutiveRank ||
-      !managerExecutiveRank ||
-      employeeExecutiveRank >= 3
-    ) {
-      return false;
-    }
-
-    return managerExecutiveRank === employeeExecutiveRank + 1;
+  if (employeeWhole) {
+    if (!managerWhole) return false;
+    const managerPosition = getHrEmployeeOrganizationPosition(manager);
+    const employeePosition = getHrEmployeeOrganizationPosition(employee);
+    if (!managerPosition || !employeePosition ||
+        managerPosition.tenantId !== employeePosition.tenantId) return false;
+    const nearestOccupiedParent = getHrNearestOccupiedAncestorPositionId(employee);
+    return Boolean(nearestOccupiedParent && managerPosition.id === nearestOccupiedParent);
   }
 
-  const employeeRoleTier = getHrReportingRoleTier(employee);
-  const managerRoleTier = getHrReportingRoleTier(manager);
-
-  // BEXHR SIMPLIFIED PRIMARY REPORTING HIERARCHY - R-12C.5
-  // CEO -> COO -> HR Admin -> { HR Standard, Manager } -> Employee.
-  //
-  // HR Admin reports specifically to COO. CEO is intentionally not offered
-  // directly because Primary Manager follows the immediate reporting parent.
-  if (employeeRoleTier === 4) {
-    return Boolean(
-      managerIsWholeOrganization &&
-      getHrWholeOrganizationExecutiveRank(manager) === 2
-    );
+  const employeeTier = getHrReportingRoleTier(employee);
+  const managerTier = getHrReportingRoleTier(manager);
+  // No executive positions occupied -> HR Admin becomes highest and has no
+  // Primary. CEO present but COO vacant -> HR Admin reports to CEO (nearest
+  // occupied lower/parent tier, not a hardcoded title).
+  if (employeeTier === 4) {
+    return managerWhole && isHrLowestOccupiedOrganizationPosition(manager);
   }
-
-  // Departmental roles do not report directly to CEO/COO except HR Admin.
-  if (managerIsWholeOrganization) return false;
-
-  // HR Standard and Manager are sibling branches directly under HR Admin.
-  if (employeeRoleTier === 3 || employeeRoleTier === 2) {
-    return managerRoleTier === 4;
-  }
-
-  // Employees report directly to Managers.
-  if (employeeRoleTier === 1) {
-    return managerRoleTier === 2;
-  }
-
+  if (managerWhole) return false;
+  // HR Standard and departmental Managers are sibling branches below HR Admin.
+  if (employeeTier === 3 || employeeTier === 2) return managerTier === 4;
+  // Normal employees report directly to departmental Managers.
+  if (employeeTier === 1) return managerTier === 2;
   return false;
 }
 
@@ -14984,6 +15113,40 @@ function getHrReportingManagerCandidatesForEmployee(
     );
 }
 
+// BEXHR_H6B_ADOPTION_PREVIEW_V1: read-only HR Admin adoption review of existing reporting lines.
+// Uses already tenant-filtered state. Does not query/write data or grant authority.
+window.addEventListener('bexhr:h6b-adoption-review-request', () => {
+  const destination = document.getElementById('bexhrHierarchyAdoptionResults');
+  if (!destination) return;
+  const helper = window.BexHRHierarchyAdoptionPreview;
+  if (!helper || typeof helper.analyze !== 'function') {
+    destination.textContent = 'Existing-reporting review is unavailable. No changes were made.';
+    return;
+  }
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    destination.textContent = 'Only the authorised HR Admin can review company reporting adoption.';
+    return;
+  }
+  const tenantId = String(state.currentProfile?.tenant_id || '').trim();
+  try {
+    helper.render(destination, helper.analyze({
+      tenantId,
+      employees: state.employees || [],
+      // Existing loader already enforces .eq('tenant_id', tenantId) before
+      // caching lines. Add tenant tag for the pure model's explicit gate.
+      reportingLines: (state.primaryReportingLines || []).map((row) => ({ ...row, tenant_id: tenantId })),
+      positions: state.organizationJobTitles || [],
+      links: state.organizationJobTitleHierarchy || [],
+      departments: state.organizationDepartments || [],
+      positionLoaded: state.organizationPositionHierarchyLoaded === true,
+      reportingLoaded: state.primaryReportingHierarchyLoaded === true,
+      core: window.BexHROrganizationHierarchy,
+    }));
+  } catch (_) {
+    destination.textContent = 'The current hierarchy could not be reviewed safely. No records were changed.';
+  }
+});
+
 async function loadHrPrimaryReportingHierarchy() {
   try {
     const tenantId = getRequiredTenantIdForHrEmployeeData();
@@ -15092,9 +15255,11 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
       ? "Reporting hierarchy unavailable - refresh records"
       : managerCandidates.length || savedManagerOption
         ? "Select line manager"
-        : baseManagerCandidates.length
-          ? "No valid Primary Managers outside this reporting chain"
-          : "No eligible managers for this employee";
+        : state.p7bDepartmentReportingEnabled === true
+          ? "No configured Primary Manager for this position"
+          : baseManagerCandidates.length
+            ? "No valid Primary Managers outside this reporting chain"
+            : "No eligible managers for this employee";
   select.appendChild(placeholderOption);
 
   managerCandidates.forEach((employee) => {
@@ -15603,20 +15768,20 @@ function validateEmployeeReportingLines() {
       const managerTitle = String(
         invalidManager?.job_title || "selected manager",
       ).trim();
-      const employeeExecutiveRank =
-        getHrWholeOrganizationExecutiveRank(targetEmployee);
-
-      const message = employeeExecutiveRank >= 3
-        ? "<strong>" + escapeHtml(employeeTitle) + "</strong> is the top whole-organization position and must not have a Primary Manager. Remove " + escapeHtml(managerTitle) + " before saving."
-        : "<strong>" + escapeHtml(employeeTitle) + "</strong> can report only to a higher whole-organization position. " + escapeHtml(managerTitle) + " cannot sit above this employee. Replace or remove the Primary Manager before saving.";
+      const hasOccupiedAncestor = Boolean(
+        getHrNearestOccupiedAncestorPositionId(targetEmployee),
+      );
+      const message = !hasOccupiedAncestor
+        ? "<strong>" + escapeHtml(employeeTitle) + "</strong> is the highest occupied organization position and must not have a reporting manager. Remove " + escapeHtml(managerTitle) + " before saving."
+        : "<strong>" + escapeHtml(employeeTitle) + "</strong> can report only to the nearest occupied configured ancestor. " + escapeHtml(managerTitle) + " is not eligible. Replace or remove the Primary Manager before saving.";
 
       showPageAlert("warning", message);
       showDashboardToast(
         "warning",
         "Primary Manager must be changed",
-        employeeExecutiveRank >= 3
-          ? employeeTitle + " is top-level and cannot report to " + managerTitle + "."
-          : managerTitle + " is not above " + employeeTitle + " in the whole-organization reporting order.",
+        !hasOccupiedAncestor
+          ? employeeTitle + " is highest occupied and cannot report to " + managerTitle + "."
+          : managerTitle + " is not the nearest occupied parent of " + employeeTitle + ".",
       );
     } else {
       showPageAlert(
@@ -15941,7 +16106,7 @@ function validateEmployeeAddressFields() {
   let isValid = true;
   let firstInvalidField = null;
 
-  getEmployeeAddressGroups().forEach((group) => {
+  getEmployeeAddressGroups().filter((group) => group.type === "Current").forEach((group) => {
     const hasAnyValue = isEmployeeAddressGroupStarted(group);
     const hasMainAddress = Boolean(String(group.addressLine1?.value || "").trim());
 
@@ -15976,7 +16141,7 @@ function buildEmployeeAddressRowsForEmployee(employeeId) {
   const tenantId = getRequiredTenantIdForHrEmployeeData();
 
   return getEmployeeAddressGroups()
-    .filter((group) => isEmployeeAddressGroupStarted(group))
+    .filter((group) => group.type === "Current" && isEmployeeAddressGroupStarted(group))
     .map((group) => ({
       employee_id: employeeKey,
       tenant_id: tenantId,
@@ -16007,7 +16172,8 @@ async function saveEmployeeAddressesForEmployee(employeeId) {
   const { error: deleteError } = await supabase
     .from("employee_addresses")
     .delete()
-    .eq("employee_id", employeeKey);
+    .eq("employee_id", employeeKey)
+    .eq("address_type", "Current"); // Preserve retired Permanent Address records.
 
   if (deleteError) throw deleteError;
 
@@ -16088,7 +16254,7 @@ async function loadEmployeeAddressesForEdit(employeeId) {
 }
 
 function areEmployeeAddressFieldsReadyForSubmit() {
-  return getEmployeeAddressGroups().every((group) => {
+  return getEmployeeAddressGroups().filter((group) => group.type === "Current").every((group) => {
     const hasAnyValue = isEmployeeAddressGroupStarted(group);
     const hasMainAddress = Boolean(String(group.addressLine1?.value || "").trim());
 
@@ -16167,10 +16333,6 @@ function validateEmployeeNextOfKinFields() {
     firstInvalidField ||= fields.phoneNumber;
   }
 
-  if (!validateEmailField(fields.email, { required: false })) {
-    issues.push("Enter a valid next of kin email address.");
-    firstInvalidField ||= fields.email;
-  }
 
   if (issues.length) {
     showPageAlert(
@@ -16318,11 +16480,8 @@ function areEmployeeNextOfKinFieldsReadyForSubmit() {
     String(fields.phoneNumber?.value || "").trim(),
   );
 
-  const emailValue = String(fields.email?.value || "").trim();
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const hasValidEmail = !emailValue || emailPattern.test(emailValue);
-
-  return hasRequiredFields && hasValidEmail;
+  // PRE-7B: next-of-kin email is not collected on the minimal form.
+  return hasRequiredFields;
 }
 
 // EMPLOYEE BIODATA COMPLETION - STEP 6C-3A
@@ -18060,14 +18219,9 @@ function isEmployeeFormReadyForSubmit() {
   // Optional Personal Email should not be required, but should block Save
   // if HR enters an invalid email format.
   const personalEmail = String(state.dom.personalEmail?.value || "").trim();
-  const hasValidPersonalEmail = !personalEmail || emailPattern.test(personalEmail);
+  const hasValidPersonalEmail = true; // PRE-7B retired personal-email input is not required.
 
-  const employmentDateValue = String(state.dom.employmentDate?.value || "").trim();
-  const exitDateValue = String(state.dom.exitDate?.value || "").trim();
-  const hasValidExitDate =
-    !employmentDateValue ||
-    !exitDateValue ||
-    new Date(exitDateValue).getTime() >= new Date(employmentDateValue).getTime();
+  const hasValidExitDate = true;
 
   // EMPLOYEE BIODATA COMPLETION - STEP 3I
   // Additional reporting manager rows are optional.
@@ -18093,12 +18247,12 @@ function isEmployeeFormReadyForSubmit() {
   // EMPLOYEE BIODATA COMPLETION - STEP 6C-3A
   // Education is optional. If HR starts it, Institution and Qualification
   // must be completed, and Graduation Year must be realistic.
-  const hasValidEducationFields = areEmployeeEducationFieldsReadyForSubmit();
+  const hasValidEducationFields = true; // PRE-7B: education saved outside routine onboarding.
 
   // EMPLOYEE BIODATA COMPLETION - STEP 6D-3
   // Beneficiaries/dependants are optional. If HR starts a visible row,
   // it must be complete before Create/Update Employee is enabled.
-  const hasValidDependantFields = areEmployeeDependantFieldsReadyForSubmit();
+  const hasValidDependantFields = true; // PRE-7B: dependants are outside routine onboarding.
 
   // HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
   // If HR access is newly selected, Save must remain disabled until
@@ -18136,6 +18290,8 @@ function isEmployeeFormReadyForSubmit() {
 //
 // This is shared behaviour for every company workspace.
 function updateEmployeeSaveButtonState() {
+  // Secure NIN retrieval is required only to CHANGE NIN, not to save ordinary
+  // profile fields. buildEmployeePayload omits NIN on all unverified edits.
   const canSubmit = isEmployeeFormReadyForSubmit();
 
   // Additional reporting managers are optional, but every rendered row
@@ -18182,15 +18338,8 @@ function updateEmployeeSaveButtonState() {
 const EMPLOYEE_BIODATA_TAB_DEFINITIONS = [
   { key: "core", stepNumber: "1", heading: "" },
   { key: "reporting", stepNumber: "2", heading: "Reporting Lines" },
-  { key: "dependants", stepNumber: "3", heading: "Benefits / HMO" },
   { key: "address", stepNumber: "4", heading: "Address Details" },
   { key: "next-of-kin", stepNumber: "5", heading: "Next of Kin" },
-  {
-    key: "education",
-    stepNumber: "6",
-    heading: "Education / Academic Qualifications",
-  },
-  { key: "documents", stepNumber: "7", heading: "Supporting Documents" },
 ];
 
 function normalizeEmployeeBiodataHeading(value = "") {
@@ -18354,7 +18503,7 @@ function enhanceEmployeeBiodataInternalWorkspace() {
 
   if (!hasSafeBoundaries || tabs.some((tab) => !tab)) {
     console.warn(
-      "Employee biodata navigation was not applied because the seven sections could not be resolved safely.",
+      "Employee biodata navigation could not safely identify all existing sections.",
     );
     return false;
   }
@@ -20312,6 +20461,9 @@ async function refreshRecentManagerLeaveDecisionsWorkspace(options = {}) {
 // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
 // Load correction requests for the current HR tenant only.
 async function loadProfileCorrectionRequests() {
+  // R14C: profile correction workflow retired; preserved records are not loaded.
+  state.profileCorrectionRequests = [];
+  return;
   const supabase = getSupabaseClient();
   const tenantId = getRequiredTenantIdForHrEmployeeData();
 
@@ -20764,6 +20916,7 @@ function findPayrollMasterEffectiveDateConflict(
   return (state.payrollMasterRecords || []).find((record) => {
     const recordId = String(record.id || "").trim();
     if (excludedId && recordId === excludedId) return false;
+    if (normalizeText(record.payroll_status || record.status || "active") !== "active") return false;
 
     return (
       String(record.employee_id || "").trim() === employeeKey &&
@@ -21294,6 +21447,7 @@ function startPayrollMasterEdit(payrollMasterId) {
   }
 
   state.currentEditingPayrollMaster = record;
+  populatePayrollMasterEmployeeOptions(record.employee_id || "");
 
   if (state.dom.editingPayrollMasterId) {
     state.dom.editingPayrollMasterId.value = record.id || "";
@@ -26518,7 +26672,7 @@ function getHrWorkspacePresentation(workspace = "dashboard") {
   const presentations = {
     dashboard: {
       title: "HR Overview",
-      subtitle: "Monitor people operations, HR reviews, payroll readiness, and recent activity.",
+      subtitle: "Monitor employee records, departmental coverage, payroll readiness, and recent activity.",
       module: "Dashboard",
     },
     profile: {
@@ -26653,6 +26807,7 @@ function getPerformanceAppraisalDepartmentId(departmentName = "") {
 // resolved tenant-scoped people/reporting context into the standalone module.
 function getHrPerformanceAppraisalAvailableEmployees() {
   return (Array.isArray(state.employees) ? state.employees : [])
+    .filter((employee) => normalizeText(employee.status || "active") === "active")
     .map((employee) => {
       const employeeName = [
         employee.first_name,
@@ -27233,31 +27388,14 @@ async function isCurrentHrEmployeeExcludedFromActivePaCycle() {
       return false;
     }
 
-    const participationAwareCycles =
-      activeCycles.filter(
-        (cycle) =>
-          Array.isArray(
-            cycle?.payload
-              ?.participationSnapshot
-              ?.excludedEmployeeIds,
-          ),
+    // Match the PA page: exclude only when every Active cycle explicitly
+    // snapshots this employee as excluded. Missing snapshots mean eligible.
+    return activeCycles.every((cycle) => {
+      const excludedIds = cycle?.payload?.participationSnapshot?.excludedEmployeeIds;
+      return Array.isArray(excludedIds) && excludedIds.some(
+        (id) => String(id || "").trim() === employeeId,
       );
-
-    if (participationAwareCycles.length === 0) {
-      return false;
-    }
-
-    return participationAwareCycles.every(
-      (cycle) =>
-        cycle.payload.participationSnapshot
-          .excludedEmployeeIds
-          .some(
-            (excludedEmployeeId) =>
-              String(
-                excludedEmployeeId || "",
-              ).trim() === employeeId,
-          ),
-    );
+    });
   } catch (error) {
     console.error(
       "PA highest-tier participation could not be resolved for the HR chooser:",
@@ -27996,14 +28134,6 @@ function renderHrModernOverview() {
     employees.map((employee) => [String(employee.id || "").trim(), employee]),
   );
 
-  const openReviews = (Array.isArray(state.profileCorrectionRequests)
-    ? state.profileCorrectionRequests
-    : []
-  ).filter((request) => {
-    const status = normalizeText(request.status || request.request_status || "pending");
-    return !["completed", "rejected", "cancelled", "closed"].includes(status);
-  });
-
   const missingInformationEmployees =
     activeEmployees.filter((employee) => {
       const hasOrganizationPlacement =
@@ -28065,15 +28195,15 @@ function renderHrModernOverview() {
   );
 
   if (state.dom.hrOverviewTotalEmployees) {
-    state.dom.hrOverviewTotalEmployees.textContent = String(employees.length);
+    state.dom.hrOverviewTotalEmployees.textContent = String(activeEmployees.length);
   }
 
   if (state.dom.hrOverviewActiveEmployees) {
-    state.dom.hrOverviewActiveEmployees.textContent = `${activeEmployees.length} active`;
-  }
-
-  if (state.dom.hrOverviewOpenReviews) {
-    state.dom.hrOverviewOpenReviews.textContent = String(openReviews.length);
+    const exitedCount = employees.filter((employee) =>
+      normalizeText(employee.status || "") === "exited",
+    ).length;
+    state.dom.hrOverviewActiveEmployees.textContent =
+      `${employees.length} employee records \u00b7 ${exitedCount} exited`;
   }
 
   if (state.dom.hrOverviewPayrollReady) {
@@ -28087,6 +28217,16 @@ function renderHrModernOverview() {
 
   if (state.dom.hrOverviewMissingInformation) {
     state.dom.hrOverviewMissingInformation.textContent = String(missingInformationEmployees.length);
+  }
+
+  // R14C: Distinct active departments from already-loaded, tenant-scoped employees.
+  // Whole-organisation positions (CEO/COO) and unassigned records are not departments.
+  if (state.dom.hrOverviewDepartmentsCount) {
+    const departmentKeys = new Set(activeEmployees
+      .filter((employee) => !isHrWholeOrganizationEmployee(employee))
+      .map((employee) => String(employee.department || "").trim().toLowerCase())
+      .filter(Boolean));
+    state.dom.hrOverviewDepartmentsCount.textContent = String(departmentKeys.size);
   }
 
   if (state.dom.hrOverviewPayrollReadinessPercent) {
@@ -28119,15 +28259,6 @@ function renderHrModernOverview() {
     ).filter((log) => normalizeText(log.status || log.delivery_status) === "failed");
 
     const priorityItems = [
-      openReviews.length
-        ? {
-          tone: "review",
-          icon: "bi-inbox",
-          title: `${openReviews.length} open HR review${openReviews.length === 1 ? "" : "s"}`,
-          detail: "Employee correction requests require HR attention.",
-          target: "hrTabReviewBtn",
-        }
-        : null,
       missingInformationEmployees.length
         ? {
           tone: "warning",
@@ -28182,7 +28313,7 @@ function renderHrModernOverview() {
             <i class="bi bi-check2-circle" aria-hidden="true"></i>
             <div>
               <strong>All clear</strong>
-              <span>No employee, review, payroll, or delivery actions need attention.</span>
+              <span>No employee, payroll, or delivery actions need attention.</span>
             </div>
           </div>
 
@@ -28193,16 +28324,6 @@ function renderHrModernOverview() {
               <span class="hr-overview-check-copy">
                 <small>Employee records</small>
                 <strong>${activeEmployees.length ? "Complete" : "No active staff"}</strong>
-              </span>
-              <i class="bi bi-chevron-right" aria-hidden="true"></i>
-            </button>
-
-            <button type="button" class="hr-overview-check-card tone-review"
-              onclick="document.getElementById('hrTabReviewBtn')?.click()">
-              <span class="hr-overview-check-icon"><i class="bi bi-clipboard2-check"></i></span>
-              <span class="hr-overview-check-copy">
-                <small>HR reviews</small>
-                <strong>No open reviews</strong>
               </span>
               <i class="bi bi-chevron-right" aria-hidden="true"></i>
             </button>
@@ -28359,23 +28480,6 @@ function renderHrModernOverview() {
       });
     });
 
-    (Array.isArray(state.profileCorrectionRequests) ? state.profileCorrectionRequests : [])
-      .forEach((request) => {
-        const date = getHrOverviewRecordDate(request, ["updated_at", "submitted_at", "created_at"]);
-        if (!date) return;
-
-        const employee = employeeById.get(String(request.employee_id || "").trim());
-        activities.push({
-          date,
-          icon: "bi-clipboard-check",
-          tone: "review",
-          title: "Profile correction activity",
-          detail: employee
-            ? getHrOverviewEmployeeName(employee)
-            : String(request.field_label || request.field_name || "Employee request"),
-        });
-      });
-
     (Array.isArray(state.recentManagerLeaveDecisionRecords)
       ? state.recentManagerLeaveDecisionRecords
       : []
@@ -28436,6 +28540,9 @@ function renderHrModernOverview() {
 }
 
 function switchHrWorkspace(workspace) {
+  // PRE-7B - Review destinations are retired, including calls from stale
+  // workspace memory or direct-link parameters. No review data is deleted.
+  if (workspace === "review") workspace = "dashboard";
   // BEXHR HR NAVIGATION ARCHITECTURE - US-02
   // Generic/mobile/programmatic workspace navigation restores the existing
   // full workspace. A sidebar task reapplies its focused view immediately
@@ -29850,7 +29957,7 @@ async function refreshOrganizationHrSetupValues() {
   try {
     const supabase = getSupabaseClient();
 
-    const [departmentsResponse, jobTitlesResponse, hierarchyResponse] = await Promise.all([
+    const [departmentsResponse, jobTitlesResponse, hierarchyResponse, reportingCapabilitiesResponse] = await Promise.all([
       supabase
         .from("organization_departments")
         .select("*")
@@ -29865,11 +29972,24 @@ async function refreshOrganizationHrSetupValues() {
         .from("organization_job_title_hierarchy")
         .select("*")
         .order("created_at", { ascending: true }),
+
+      // P7B departmental structure is opt-in only after the reviewed SQL is
+      // deployed. Missing RPC is expected on older databases: retain legacy UI.
+      supabase.rpc("bexhr_p7b_structure_capabilities"),
     ]);
 
     if (departmentsResponse.error) throw departmentsResponse.error;
     if (jobTitlesResponse.error) throw jobTitlesResponse.error;
     if (hierarchyResponse.error) throw hierarchyResponse.error;
+
+    const capabilities = Array.isArray(reportingCapabilitiesResponse?.data)
+      ? reportingCapabilitiesResponse.data[0]
+      : reportingCapabilitiesResponse?.data;
+    state.p7bDepartmentReportingEnabled = Boolean(
+      !reportingCapabilitiesResponse?.error &&
+      capabilities?.department_positions === true &&
+      capabilities?.atomic_position_save === true,
+    );
 
     state.organizationDepartments = Array.isArray(departmentsResponse.data)
       ? departmentsResponse.data
@@ -29882,6 +30002,7 @@ async function refreshOrganizationHrSetupValues() {
     state.organizationJobTitleHierarchy = Array.isArray(hierarchyResponse.data)
       ? hierarchyResponse.data
       : [];
+    state.organizationPositionHierarchyLoaded = true;
 
     // ORGANIZATION HR SETUP VALUES - STEP 4A
     // Render Department Records after loading setup values.
@@ -29901,6 +30022,7 @@ async function refreshOrganizationHrSetupValues() {
 
     // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
     renderOrganizationPositionHierarchy();
+    syncOrganizationJobTitleReportsToControls();
 
     // ORGANIZATION HR SETUP VALUES - STEP 5A
     // Keep the Create/Edit Employee Department and Job Title dropdowns aligned
@@ -29914,12 +30036,80 @@ async function refreshOrganizationHrSetupValues() {
 
     refreshHrReportingDepartmentChoices();
     updateOrganizationJobTitleSaveButtonState();
+
+    // P7B locked contract: one tenant-data snapshot for the HR Admin setup
+    // reminder. No browser storage, no new query and no permission changes.
+    // Both HR Admin and HR Standard use this same refresh; only the admin
+    // is allowed to see a setup action in the onboarding UI.
+    const setupTenant = String(state.currentProfile?.tenant_id || '').trim();
+    const activePositions = (state.organizationJobTitles || []).filter((row) =>
+      normalizeText(row.status || 'active') === 'active' &&
+      (!String(row.tenant_id || '').trim() || String(row.tenant_id) === setupTenant),
+    );
+    const activeDepartments = (state.organizationDepartments || []).filter((row) =>
+      normalizeText(row.status || 'active') === 'active' &&
+      (!String(row.tenant_id || '').trim() || String(row.tenant_id) === setupTenant),
+    );
+    const wholeOrganizationPositions = activePositions.filter((row) =>
+      !String(row.department_id || '').trim(),
+    );
+    const configuredPositionIds = new Set(
+      (state.organizationJobTitleHierarchy || [])
+        .filter((row) => String(row.tenant_id || '') === setupTenant)
+        .map((row) => String(row.job_title_id || '').trim())
+        .filter(Boolean),
+    );
+    window.dispatchEvent(new CustomEvent('bexhr:organization-setup-updated', {
+      detail: {
+        loaded: true,
+        canMaintain: canCurrentUserMaintainOrganizationSetupData(),
+        activeDepartments: activeDepartments.length,
+        activeTitles: activePositions.length,
+        activeLinks: configuredPositionIds.size,
+        wholeOrganizationPositions: wholeOrganizationPositions.length,
+        // Do not demand department links until the upgraded SQL is present.
+        // Existing organisations remain usable while they configure changes.
+        unconfiguredPositions: (state.p7bDepartmentReportingEnabled
+          ? activePositions : wholeOrganizationPositions).filter((row) =>
+          !configuredPositionIds.has(String(row.id || '').trim()),
+        ).length,
+        // BEXHR_HIERARCHY_TEMPLATE_ASSISTANT_PHASE_H1: non-personal, tenant-scoped data for a read-only preview.
+        hierarchyPreview: {
+          tenantId: setupTenant,
+          departmentReportingEnabled: state.p7bDepartmentReportingEnabled === true,
+          positions: activePositions.map((row) => ({
+            id: String(row.id || '').trim(),
+            tenant_id: String(row.tenant_id || '').trim(),
+            job_title: String(row.job_title || '').trim(),
+            department_id: String(row.department_id || '').trim(),
+            status: String(row.status || 'active').trim(),
+          })),
+          departments: activeDepartments.map((row) => ({
+            id: String(row.id || '').trim(),
+            tenant_id: String(row.tenant_id || '').trim(),
+            department_name: String(row.department_name || '').trim(),
+          })),
+          links: (state.organizationJobTitleHierarchy || [])
+            .filter((row) => String(row.tenant_id || '').trim() === setupTenant)
+            .map((row) => ({
+              tenant_id: setupTenant,
+              job_title_id: String(row.job_title_id || '').trim(),
+              reports_to_job_title_id: String(row.reports_to_job_title_id || '').trim(),
+            })),
+        },
+      },
+    }));
   } catch (error) {
     console.error("Error loading organization HR setup values:", error);
 
     state.organizationDepartments = [];
     state.organizationJobTitles = [];
     state.organizationJobTitleHierarchy = [];
+    state.organizationPositionHierarchyLoaded = false;
+    state.p7bDepartmentReportingEnabled = false;
+    window.dispatchEvent(new CustomEvent('bexhr:organization-setup-updated', {
+      detail: { loaded: false },
+    }));
 
     showPageAlert(
       "danger",
@@ -31122,8 +31312,75 @@ function syncOrganizationJobTitleScopeControls() {
     }
   }
 
-  departmentField?.classList.toggle("opacity-50", isWholeOrganization);
+  // A company-wide title has no department; do not show a disabled empty field.
+  departmentField?.classList.toggle("d-none", isWholeOrganization);
+  syncOrganizationJobTitleReportsToControls();
   updateOrganizationJobTitleSaveButtonState();
+}
+
+// P7B: keep the legacy company-wide structure working until the protected,
+// atomic departmental reporting SQL has been rehearsed and deployed.
+// Once enabled by the server, the same form supports all active positions.
+function syncOrganizationJobTitleReportsToControls() {
+  const field = state.dom.organizationJobTitleReportsToField;
+  const select = state.dom.organizationJobTitleReportsTo;
+  if (!select) return;
+  const whole = getOrganizationJobTitleScopeValue() === 'organization';
+  const status = normalizeText(state.dom.organizationJobTitleStatus?.value || 'active');
+  const needsReporting = status === 'active' &&
+    (whole || state.p7bDepartmentReportingEnabled === true);
+  const editId = String(state.dom.editingOrganizationJobTitleId?.value || '').trim();
+  state.dom.removeOrganizationJobTitleLinkBtn?.classList.toggle(
+    'd-none', !(whole && editId && getOrganizationPositionHierarchyRecord(editId))
+  );
+  field?.classList.toggle('d-none', !needsReporting);
+  select.disabled = !needsReporting || !canCurrentUserMaintainOrganizationSetupData();
+  select.required = needsReporting;
+  if (!needsReporting) {
+    select.value = '';
+    delete select.dataset.editingPositionId;
+    return;
+  }
+  const editingId = String(state.dom.editingOrganizationJobTitleId?.value || '').trim();
+  const currentRecord = getOrganizationPositionHierarchyRecord(editingId);
+  const expected = currentRecord
+    ? String(currentRecord.reports_to_job_title_id || ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE)
+    : '';
+  // Do not carry a selected parent across two different edited titles.
+  const previouslySelected = String(select.dataset.editingPositionId || '') === editingId
+    ? String(select.value || '').trim() : '';
+  const descendants = getOrganizationPositionHierarchyDescendantIds(editingId);
+  const currentTenant = String(state.currentProfile?.tenant_id || '').trim();
+  const candidates = (state.p7bDepartmentReportingEnabled === true
+    ? getActiveOrganizationJobTitles()
+    : getActiveWholeOrganizationJobTitles()).filter((row) => {
+    const candidateId = String(row.id || '').trim();
+    const rowTenant = String(row.tenant_id || '').trim();
+    return candidateId && candidateId !== editingId && !descendants.has(candidateId) &&
+      (!rowTenant || rowTenant === currentTenant) &&
+      Boolean(getOrganizationPositionHierarchyRecord(candidateId));
+  });
+  const options = [
+    ['', 'Choose reporting position'],
+    [ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE, 'Top level (no parent)'],
+    ...candidates.map((row) => [String(row.id),
+      String(row.job_title || 'Unnamed position') +
+      (row.department_id
+        ? ' (' + String((state.organizationDepartments || []).find(
+            (d) => String(d.id) === String(row.department_id))?.department_name || 'Department') + ')'
+        : ' (Whole organisation)')]),
+  ];
+  select.replaceChildren(...options.map(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    return option;
+  }));
+  const allowable = new Set(options.map(([value]) => value));
+  select.value = allowable.has(previouslySelected) && previouslySelected
+    ? previouslySelected
+    : allowable.has(expected) ? expected : '';
+  select.dataset.editingPositionId = editingId;
 }
 
 function isOrganizationJobTitleFormReadyForSubmit() {
@@ -31138,12 +31395,17 @@ function isOrganizationJobTitleFormReadyForSubmit() {
   const hasStatus = Boolean(
     String(state.dom.organizationJobTitleStatus?.value || "").trim(),
   );
+  const requiresParent = (scope === 'organization' ||
+    state.p7bDepartmentReportingEnabled === true) &&
+    normalizeText(state.dom.organizationJobTitleStatus?.value || '') === 'active';
+  const parentSelected = Boolean(String(state.dom.organizationJobTitleReportsTo?.value || '').trim());
 
   return Boolean(
     hasValidScope &&
     hasJobTitle &&
     hasStatus &&
-    (scope === "organization" || hasDepartment)
+    (scope === "organization" || hasDepartment) &&
+    (!requiresParent || parentSelected)
   );
 }
 
@@ -31180,6 +31442,7 @@ function resetOrganizationJobTitleForm() {
   }
 
   state.dom.cancelOrganizationJobTitleEditBtn?.classList.add("d-none");
+  state.dom.removeOrganizationJobTitleLinkBtn?.classList.add("d-none");
 
   populateOrganizationJobTitleDepartmentOptions("");
   syncOrganizationJobTitleScopeControls();
@@ -31263,10 +31526,19 @@ function renderOrganizationJobTitlesTable() {
         fallbackDepartment?.department_name ||
         "Department unavailable";
 
+    const hierarchy = (!departmentId || state.p7bDepartmentReportingEnabled === true)
+      ? getOrganizationPositionHierarchyRecord(jobTitle.id) : null;
+    const reportingLabel = departmentId && !state.p7bDepartmentReportingEnabled
+      ? 'Assigned per employee'
+      : !hierarchy
+        ? 'Not linked yet'
+        : hierarchy.reports_to_job_title_id
+          ? getOrganizationJobTitleRecordById(hierarchy.reports_to_job_title_id)?.job_title || 'Unavailable position'
+          : 'Top level';
     const row = document.createElement("tr");
 
     row.innerHTML = [
-      "<td>",
+      "<td data-label=\"Job title\">",
       "<div class=\"fw-semibold\">" + escapeHtml(jobTitle.job_title || "--") + "</div>",
       getVisibleOrganizationSetupNote(jobTitle.notes)
         ? "<div class=\"text-secondary small\">" +
@@ -31274,17 +31546,15 @@ function renderOrganizationJobTitlesTable() {
           "</div>"
         : "",
       "</td>",
-      "<td>" + escapeHtml(appliesToLabel) + "</td>",
+      "<td data-label=\"Department / Scope\">" + escapeHtml(appliesToLabel) + "</td>",
+      "<td data-label=\"Reports to\">" + escapeHtml(reportingLabel) + "</td>",
       "<td class=\"bexhr-status-cell\" data-label=\"Status\">" +
         renderBexhrStatusPill(formatStatusLabel(jobTitle.status)) +
         "</td>",
-      "<td class=\"text-nowrap\">" +
-        formatDate(jobTitle.updated_at || jobTitle.created_at) +
-        "</td>",
-      "<td class=\"text-center\">",
+      "<td class=\"text-center\" data-label=\"Actions\">",
       "<div class=\"d-inline-flex align-items-center gap-2\">",
       "<button type=\"button\" class=\"btn btn-sm btn-outline-primary\" " +
-        "title=\"Edit job title\" aria-label=\"Edit job title\" " +
+        "title=\"Edit title and reporting\" aria-label=\"Edit title and reporting\" " +
         "onclick=\"window.hrEditOrganizationJobTitleRecord('" + safeJobTitleId + "')\">",
       "<i class=\"bi bi-pencil-square\"></i>",
       "</button>",
@@ -31306,6 +31576,22 @@ function renderOrganizationJobTitlesTable() {
 // reporting lines, Leave and Performance Appraisal routing are not modified here.
 const ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE = "__top_level__";
 
+// BEXHR_HIERARCHY_TEMPLATE_ASSISTANT_PHASE_H1: one-root client preflight. Database enforcement remains necessary.
+function isOtherActiveOrganizationRootConfigured(positionId = '') {
+  const tenant = String(state.currentProfile?.tenant_id || '').trim();
+  if (!tenant || state.organizationPositionHierarchyLoaded !== true) return true;
+  return (state.organizationJobTitleHierarchy || []).some((link) => {
+    if (String(link.tenant_id || '').trim() !== tenant ||
+        String(link.reports_to_job_title_id || '').trim() ||
+        String(link.job_title_id || '').trim() === String(positionId || '').trim()) return false;
+    const position = (state.organizationJobTitles || []).find((p) =>
+      String(p.id || '').trim() === String(link.job_title_id || '').trim());
+    // Unknown/inactive legacy roots require review, not automatic deletion.
+    return !position || normalizeText(position.status || 'active') === 'active';
+  });
+}
+
+
 function getActiveWholeOrganizationJobTitles() {
   return (state.organizationJobTitles || [])
     .filter((jobTitle) => {
@@ -31319,6 +31605,16 @@ function getActiveWholeOrganizationJobTitles() {
     .sort((a, b) =>
       String(a.job_title || "").localeCompare(String(b.job_title || "")),
     );
+}
+
+function getActiveOrganizationJobTitles() {
+  const currentTenant = String(state.currentProfile?.tenant_id || '').trim();
+  if (!currentTenant) return [];
+  return (state.organizationJobTitles || [])
+    .filter((jobTitle) => normalizeText(jobTitle.status || '') === 'active' &&
+      (!String(jobTitle.tenant_id || '').trim() ||
+        String(jobTitle.tenant_id).trim() === currentTenant))
+    .sort((a, b) => String(a.job_title || '').localeCompare(String(b.job_title || '')));
 }
 
 function getOrganizationJobTitleRecordById(jobTitleId) {
@@ -31641,6 +31937,12 @@ async function handleOrganizationPositionHierarchySave() {
     ? getOrganizationJobTitleRecordById(parentId)
     : null;
 
+  // BEXHR_HIERARCHY_TEMPLATE_ASSISTANT_PHASE_H1: do not configure a second active root by mistake.
+  if (!parentId && isOtherActiveOrganizationRootConfigured(jobTitleId)) {
+    showPageAlert('warning', 'This company already has an organisation head. Select its reporting position instead of creating another top level.');
+    return;
+  }
+
   try {
     clearPageAlert();
     setOrganizationPositionHierarchySaveLoading(true);
@@ -31765,6 +32067,10 @@ function validateOrganizationJobTitleForm() {
     ...(scope === "department"
       ? [state.dom.organizationJobTitleDepartmentId]
       : []),
+    ...((scope === 'organization' || state.p7bDepartmentReportingEnabled === true) &&
+        normalizeText(state.dom.organizationJobTitleStatus?.value || '') === 'active'
+      ? [state.dom.organizationJobTitleReportsTo]
+      : []),
     state.dom.organizationJobTitleName,
     state.dom.organizationJobTitleStatus,
   ];
@@ -31870,6 +32176,23 @@ async function handleOrganizationJobTitleSave() {
 
   const isEditMode = Boolean(editingId);
   const payload = buildOrganizationJobTitlePayload(isEditMode);
+  const requiresPositionLink = (getOrganizationJobTitleScopeValue() === 'organization' ||
+    state.p7bDepartmentReportingEnabled === true) &&
+    normalizeText(payload.p_status) === 'active';
+  const selectedParent = requiresPositionLink
+    ? String(state.dom.organizationJobTitleReportsTo?.value || '').trim()
+    : '';
+  // The default is deliberately blank, never an accidental Top level.
+  // Database-level cycle and tenant guards still decide whether this is valid.
+  const selectedParentId = selectedParent === ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE
+    ? null : selectedParent || null;
+
+  // BEXHR_HIERARCHY_TEMPLATE_ASSISTANT_PHASE_H1: protect the combined title-and-parent save as well.
+  if (requiresPositionLink && !selectedParentId &&
+      isOtherActiveOrganizationRootConfigured(editingId)) {
+    showPageAlert('warning', 'This company already has an organisation head. Choose the correct reporting parent instead of another top level.');
+    return;
+  }
 
   const duplicateJobTitle = (
     state.organizationJobTitles || []
@@ -31911,10 +32234,15 @@ async function handleOrganizationJobTitleSave() {
     setOrganizationJobTitleSaveLoading(true, isEditMode);
 
     const supabase = getSupabaseClient();
-    const response = await supabase.rpc(
-      "hr_tenant_admin_save_organization_job_title",
-      payload,
-    );
+    // The upgraded server saves title + parent in ONE DB transaction.
+    // Pre-upgrade tenants retain the existing two-RPC company-wide behaviour.
+    const response = state.p7bDepartmentReportingEnabled === true
+      ? await supabase.rpc("hr_tenant_admin_save_position_with_reporting", {
+          ...payload,
+          p_reports_to_job_title_id: selectedParentId,
+          p_configure_reporting: requiresPositionLink,
+        })
+      : await supabase.rpc("hr_tenant_admin_save_organization_job_title", payload);
 
     if (response.error) throw response.error;
 
@@ -31930,6 +32258,28 @@ async function handleOrganizationJobTitleSave() {
 
     state.lastSavedOrganizationJobTitleKey =
       buildOrganizationJobTitleSortKey(savedRecord);
+
+    // Old databases still use the existing protected company-wide hierarchy RPC.
+    // The new database operation already wrote the parent atomically.
+    if (!state.p7bDepartmentReportingEnabled && requiresPositionLink) {
+      const hierarchyResponse = await supabase.rpc(
+        'hr_tenant_admin_save_organization_job_title_hierarchy',
+        { p_job_title_id: savedRecord.id, p_reports_to_job_title_id: selectedParentId },
+      );
+      if (hierarchyResponse.error) {
+        // Existing APIs are not yet transactional as a pair. Never report
+        // success for both when only the job title was persisted. Keep the
+        // saved title editable so HR can finish the reporting step safely.
+        await refreshOrganizationHrSetupValues();
+        startOrganizationJobTitleEdit(savedRecord.id);
+        showPageAlert('warning',
+          `The job title was saved, but its reporting link was not. Review the Reports to field and retry. ${escapeHtml(hierarchyResponse.error.message || '')}`,
+        );
+        showDashboardToast('warning', 'Reporting link not saved',
+          'Your job title is safe. Complete the reporting link before finishing setup.');
+        return;
+      }
+    }
 
     resetOrganizationJobTitleForm();
     await refreshOrganizationHrSetupValues();
@@ -32032,9 +32382,11 @@ function startOrganizationJobTitleEdit(jobTitleId) {
     state.dom.organizationJobTitleSubmitLabel.textContent = "Update Job Title";
   }
 
+  syncOrganizationJobTitleReportsToControls();
   state.dom.cancelOrganizationJobTitleEditBtn?.classList.remove("d-none");
   updateOrganizationJobTitleSaveButtonState();
-  state.dom.organizationJobTitleName?.focus();
+  state.dom.organizationJobTitleForm?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  state.dom.organizationJobTitleName?.focus({ preventScroll: true });
 }
 
 // MANAGE ORGANIZATION CARD - STEP 3
@@ -32751,15 +33103,17 @@ function applyEmployeeSearch() {
   const searchTerm = normalizeText(state.dom.employeeSearchInput?.value || "");
   const searchTokens = searchTerm.split(/\s+/).filter(Boolean);
 
-  // BATCH PAYROLL DEFAULT - STEP 1
-  // Normal Employee Management still shows all employees.
-  // Run Payroll mode shows active employees only, because the batch payroll
-  // table should not prepare inactive employees for a new payroll run.
+  // PHASE 7 PEOPLE DIRECTORY - operational list, not a historical archive.
+  // Exited employees remain in tenant-scoped state.employees and the dedicated
+  // Employee Lifecycle workspace for Reactivation and historical records.
+  // Payroll selection remains strictly ACTIVE-only, unchanged.
   const employeeSource = state.isRunPayrollSelectionMode
     ? state.employees.filter(
       (employee) => normalizeText(employee.status) === "active",
     )
-    : [...state.employees];
+    : state.employees.filter(
+      (employee) => normalizeText(employee.status || "active") !== "exited",
+    );
 
   if (!searchTokens.length) {
     state.filteredEmployees = employeeSource;
@@ -32813,11 +33167,24 @@ function getEmployeeAccountLinkage(employee) {
   const employeeUserId = String(employee?.auth_user_id || employee?.user_id || "").trim();
   const workEmail = normalizeText(employee?.work_email || "");
 
+  const buildDisabledResult = (profile = null) => ({
+    code: "disabled",
+    label: "Login Disabled",
+    chipVariant: "neutral",
+    iconClass: "bi-person-lock",
+    matchedEmail: profile?.email || employee?.work_email || "--",
+    helperText: "Login is disabled because this employee is not currently active.",
+  });
+
   if (employeeUserId) {
     const linkedProfile =
       state.authProfiles.find(
         (profile) => String(profile.id || "").trim() === employeeUserId,
       ) || null;
+
+    if (linkedProfile?.is_active === false) {
+      return buildDisabledResult(linkedProfile);
+    }
 
     return {
       code: "linked",
@@ -32833,6 +33200,10 @@ function getEmployeeAccountLinkage(employee) {
     state.authProfiles.find(
       (profile) => normalizeText(profile.email || "") === workEmail,
     ) || null;
+
+  if (matchedProfile?.is_active === false) {
+    return buildDisabledResult(matchedProfile);
+  }
 
   if (matchedProfile) {
     return {
@@ -32906,6 +33277,12 @@ async function sendEmployeeLoginInviteForExistingRecord(employeeId) {
       "Refresh People records, then try sending the login invite again.",
     );
 
+    return;
+  }
+
+  if (normalizeText(employee.status || "active") !== "active") {
+    showPageAlert("warning", "Reactivate this employee before sending a login invite.");
+    showDashboardToast("warning", "Employee is offboarded", "Login stays disabled until Reactivate Employee is completed.");
     return;
   }
 
@@ -35136,7 +35513,7 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
         renderEmployeeFilledFormField("Department", employee.department),
         renderEmployeeFilledFormField("Job Title", employee.job_title),
         renderEmployeeFilledFormField("Employment Date", employee.employment_date, { date: true }),
-        renderEmployeeFilledFormField("Exit Date", employee.exit_date, { date: true }),
+        renderEmployeeFilledFormField("Last Working Day", employee.exit_date, { date: true }),
         renderEmployeeFilledFormField("Primary Line Manager", employee.line_manager),
         renderEmployeeFilledFormField("Primary Approver Email", employee.approver_email),
         renderEmployeeFilledFormField("HMO Provider", employee.hmo_provider),
@@ -35309,8 +35686,24 @@ async function viewEmployeeFilledForm(employeeId) {
   });
 
   try {
-    const relatedData = await loadEmployeeFilledFormRelatedData(employeeKey);
-    content.innerHTML = renderEmployeeFilledFormPreview(employee, relatedData);
+    // The ordinary filled-form preview must not depend on a separate NIN RPC.
+    // Never use the legacy row's raw NIN, even before the vault migration.
+    const [relatedData, ninResult] = await Promise.all([
+      loadEmployeeFilledFormRelatedData(employeeKey),
+      Promise.resolve()
+        .then(() => getSupabaseClient().rpc("bexhr_p7_nin_read_for_hr", { p_employee_id: employeeKey }))
+        .catch((error) => ({ data: null, error })),
+    ]);
+    const verifiedNin = !ninResult?.error && /^\d{11}$/.test(String(ninResult?.data || ""))
+      ? String(ninResult.data) : "";
+    content.innerHTML = renderEmployeeFilledFormPreview(
+      { ...employee, nin: verifiedNin },
+      relatedData,
+    );
+    if (ninResult?.error) {
+      content.insertAdjacentHTML("afterbegin",
+        '<div class="alert alert-info small mb-3">Secure NIN viewing is temporarily unavailable. The other employee details are still available.</div>');
+    }
   } catch (error) {
     console.error("Error loading employee filled form:", error);
 
@@ -35387,16 +35780,293 @@ function getEmployeeDirectoryAccountStatusPresentation(accountLinkage = {}) {
     };
   }
 
+  if (accountLinkage.code === "disabled") {
+    return {
+      iconClass: "bi-person-lock",
+      toneClass: "hr-employee-status-pill--neutral",
+    };
+  }
+
   return {
     iconClass: "bi-person-x-fill",
     toneClass: "hr-employee-status-pill--neutral",
   };
 }
 
+// BEXHR PHASE 7 - LEAN OFFBOARDING
+function getHrEmployeeLifecycleRecord(employeeId = "") {
+  const employeeKey = String(employeeId || "").trim();
+  return (state.employees || []).find(
+    (employee) => String(employee?.id || "").trim() === employeeKey,
+  ) || null;
+}
+
+function getHrEmployeeLifecycleDisplayName(employee = {}) {
+  return [employee.first_name, employee.middle_name, employee.last_name]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ") || String(employee.work_email || "Employee").trim() || "Employee";
+}
+
+function closeEmployeeOffboardingModal() {
+  const modal = document.getElementById("hrEmployeeOffboardingModal");
+  if (!modal) return;
+  modal.classList.add("d-none");
+  modal.setAttribute("aria-hidden", "true");
+  document.body?.classList.remove("hr-employee-access-modal-open");
+}
+
+function openEmployeeOffboardingModal(employeeId = "") {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const employee = getHrEmployeeLifecycleRecord(employeeId);
+  if (!employee) {
+    showPageAlert("warning", "The selected employee record could not be found. Refresh People records and try again.");
+    return;
+  }
+
+  if (normalizeText(employee.status || "active") !== "active") {
+    showPageAlert("warning", "This employee is already inactive. Use Reactivate Employee if they are returning to work.");
+    return;
+  }
+
+  const modal = document.getElementById("hrEmployeeOffboardingModal");
+  if (!modal) return;
+
+  const idField = document.getElementById("hrEmployeeOffboardingEmployeeId");
+  const nameField = document.getElementById("hrEmployeeOffboardingEmployeeName");
+  const reasonField = document.getElementById("hrEmployeeOffboardingReason");
+  const dayField = document.getElementById("hrEmployeeOffboardingLastWorkingDay");
+  const noteField = document.getElementById("hrEmployeeOffboardingNote");
+  const statusField = document.getElementById("hrEmployeeOffboardingStatus");
+
+  if (idField) idField.value = employee.id || "";
+  if (nameField) nameField.textContent = getHrEmployeeLifecycleDisplayName(employee);
+  if (reasonField) reasonField.value = "";
+  if (dayField) dayField.value = "";
+  if (noteField) noteField.value = "";
+  if (statusField) {
+    statusField.textContent = "";
+    statusField.className = "alert d-none mt-3 mb-0";
+  }
+
+  modal.classList.remove("d-none");
+  modal.setAttribute("aria-hidden", "false");
+  document.body?.classList.add("hr-employee-access-modal-open");
+  window.requestAnimationFrame(() => reasonField?.focus());
+}
+
+function setEmployeeOffboardingModalLoading(isLoading = false) {
+  const button = document.getElementById("hrEmployeeOffboardingConfirmBtn");
+  if (!button) return;
+  button.disabled = Boolean(isLoading);
+  button.innerHTML = isLoading
+    ? '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Offboarding...'
+    : '<i class="bi bi-person-dash me-2"></i>Offboard Employee';
+}
+
+// PHASE 7A12: One authoritative lifecycle reconciliation for every HR view.
+// Load employees before payroll (the salary loader depends on tenant employee
+// IDs); re-render linkage chips after profiles load. This is UI only.
+let hrLifecycleRefreshPromise = null;
+async function refreshHrAfterEmployeeLifecycleChange() {
+  if (hrLifecycleRefreshPromise) return hrLifecycleRefreshPromise;
+  hrLifecycleRefreshPromise = (async () => {
+    await loadEmployees();
+    await Promise.all([
+      loadAuthProfilesForLinkage(),
+      loadPayrollMasterRecords(),
+    ]);
+    await loadHrPrimaryReportingHierarchy();
+    applyEmployeeSearch();
+    populatePayrollEmployeeOptions();
+    populatePayrollMasterEmployeeOptions();
+    populateEmployeeBankEmployeeOptions();
+    populateAssignedLineManagerOptions();
+    renderHrModernOverview();
+  })();
+  try {
+    return await hrLifecycleRefreshPromise;
+  } finally {
+    hrLifecycleRefreshPromise = null;
+  }
+}
+
+const HR_EMPLOYEE_LIFECYCLE_SYNC_STORAGE_KEY = "bexhrEmployeeLifecycleSync";
+let hrLifecycleForegroundCheckInProgress = false;
+let lastHrLifecycleForegroundCheckAt = 0;
+
+function publishHrEmployeeLifecycleChange(employeeId = "", reason = "employee_changed") {
+  const detail = {
+    employeeId: String(employeeId || "").trim() || null,
+    tenantId: String(state.currentProfile?.tenant_id || "").trim(),
+    reason: String(reason || "employee_changed"),
+    changedAt: Date.now(),
+  };
+  window.dispatchEvent(new CustomEvent("bexhr:employee-lifecycle-changed", { detail }));
+  try {
+    window.localStorage.setItem(
+      HR_EMPLOYEE_LIFECYCLE_SYNC_STORAGE_KEY,
+      JSON.stringify(detail),
+    );
+  } catch (error) {
+    console.warn("Employee lifecycle cross-tab notice could not be published:", error);
+  }
+}
+
+function getHrEmployeeLifecycleStateSignature(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => `${String(row.id || "").trim()}:${normalizeText(row.status || "")}`)
+    .sort()
+    .join("|");
+}
+
+// Detect changes made in another browser, device, or incognito session without
+// requiring Supabase Realtime publication changes. This is a small tenant-scoped
+// ID/status read; only real membership/status changes trigger a full UI refresh.
+async function checkForHrEmployeeLifecycleChanges() {
+  if (document.hidden || !state.currentUser?.id || !state.currentProfile?.tenant_id) return;
+  const now = Date.now();
+  if (hrLifecycleForegroundCheckInProgress || hrLifecycleRefreshPromise ||
+      now - lastHrLifecycleForegroundCheckAt < 15000) return;
+  hrLifecycleForegroundCheckInProgress = true;
+  lastHrLifecycleForegroundCheckAt = now;
+  try {
+    if (window.SessionManager?.revalidateActiveProfile &&
+        !(await window.SessionManager.revalidateActiveProfile())) return;
+    const supabase = getSupabaseClient();
+    const { data, error } = await applyCurrentTenantFilter(
+      supabase.from("employees").select("id,status"),
+    );
+    if (error) throw error;
+    const latest = getHrEmployeeLifecycleStateSignature(data);
+    const current = getHrEmployeeLifecycleStateSignature(state.employees);
+    if (latest !== current) await refreshHrAfterEmployeeLifecycleChange();
+  } catch (error) {
+    console.warn("Employee lifecycle background check failed:", error);
+  } finally {
+    hrLifecycleForegroundCheckInProgress = false;
+  }
+}
+
+async function submitEmployeeOffboarding() {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const employeeId = String(document.getElementById("hrEmployeeOffboardingEmployeeId")?.value || "").trim();
+  const reason = String(document.getElementById("hrEmployeeOffboardingReason")?.value || "").trim();
+  const lastWorkingDay = String(document.getElementById("hrEmployeeOffboardingLastWorkingDay")?.value || "").trim();
+  const note = String(document.getElementById("hrEmployeeOffboardingNote")?.value || "").trim();
+  const statusField = document.getElementById("hrEmployeeOffboardingStatus");
+
+  if (!employeeId || !reason || !lastWorkingDay) {
+    if (statusField) {
+      statusField.textContent = "Reason and Last Working Day are required.";
+      statusField.className = "alert alert-warning mt-3 mb-0";
+    }
+    return;
+  }
+
+  const employee = getHrEmployeeLifecycleRecord(employeeId);
+  const displayName = getHrEmployeeLifecycleDisplayName(employee || {});
+
+  try {
+    setEmployeeOffboardingModalLoading(true);
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("hr_offboard_employee", {
+      p_employee_id: employeeId,
+      p_reason: reason,
+      p_last_working_day: lastWorkingDay,
+      p_note: note || null,
+    });
+
+    if (error) throw error;
+
+    if (state.currentEditingEmployee && String(state.currentEditingEmployee.id || "") === employeeId) {
+      resetEmployeeForm();
+    }
+
+    closeEmployeeOffboardingModal();
+    await refreshHrAfterEmployeeLifecycleChange();
+    publishHrEmployeeLifecycleChange(employeeId, "offboard");
+    publishHrReportingHierarchyChange(employeeId, "employee_offboarded");
+
+    showPageAlert("success", "<strong>" + escapeHtml(displayName) + "</strong> was offboarded. Login is disabled and future payroll is blocked. Historical records were preserved.");
+    showDashboardToast("success", "Employee offboarded", displayName + " is archived as Exited.");
+    return data;
+  } catch (error) {
+    console.error("Error offboarding employee:", error);
+    const detail = String(error?.details || error?.detail || "").trim();
+    const message = detail || String(error?.message || "Employee could not be offboarded.");
+    if (statusField) {
+      statusField.textContent = message;
+      statusField.className = "alert alert-warning mt-3 mb-0";
+    }
+    showDashboardToast("warning", "Offboarding blocked", message);
+    return null;
+  } finally {
+    setEmployeeOffboardingModalLoading(false);
+  }
+}
+
+async function reactivateEmployeeRecord(employeeId = "") {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const employee = getHrEmployeeLifecycleRecord(employeeId);
+  if (!employee) {
+    showPageAlert("warning", "The selected employee record could not be found. Refresh People records and try again.");
+    return;
+  }
+
+  if (normalizeText(employee.status || "active") === "active") {
+    showPageAlert("warning", "This employee is already active.");
+    return;
+  }
+
+  const displayName = getHrEmployeeLifecycleDisplayName(employee);
+  const confirmed = window.confirm(
+    "Reactivate " + displayName + "? Login will be re-enabled when an account exists, but old Salary Setup and reporting managers will not be restored.",
+  );
+  if (!confirmed) return;
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("hr_reactivate_employee", {
+      p_employee_id: String(employee.id || "").trim(),
+    });
+    if (error) throw error;
+
+    await refreshHrAfterEmployeeLifecycleChange();
+    publishHrEmployeeLifecycleChange(employeeId, "reactivate");
+    publishHrReportingHierarchyChange(employeeId, "employee_reactivated");
+    showPageAlert(
+      "success",
+      "<strong>" + escapeHtml(displayName) + "</strong> was reactivated. Create a new Salary Setup and assign reporting managers before normal payroll/manager workflows resume.",
+    );
+    showDashboardToast("success", "Employee reactivated", "Old salary and manager assignments were not restored.");
+    return data;
+  } catch (error) {
+    console.error("Error reactivating employee:", error);
+    const message = String(error?.details || error?.detail || error?.message || "Employee could not be reactivated.");
+    showPageAlert("danger", escapeHtml(message));
+    showDashboardToast("danger", "Reactivation failed", message);
+    return null;
+  }
+}
+
 function renderEmployeeRecords(employees) {
   const tbody = state.dom.employeeRecordsTableBody;
   if (!tbody) return;
 
+  window.BexHrPeopleUxPhase7?.closeMenu?.();
   tbody.innerHTML = "";
 
   if (!employees.length) {
@@ -35409,6 +36079,7 @@ function renderEmployeeRecords(employees) {
     }
 
     syncSelectAllEmployeesForPayrollCheckbox();
+    window.BexHrPeopleUxPhase7?.renderLifecycle?.();
     return;
   }
 
@@ -35462,6 +36133,14 @@ function renderEmployeeRecords(employees) {
 
     const canMaintainPeople = canCurrentUserMaintainPeopleData();
     const isHrAdmin = canCurrentUserAssignHrOfficerAccess();
+    const isEmployeeActive = normalizeText(employee.status || "active") === "active";
+    const canMaintainLiveAccess = canMaintainPeople && isEmployeeActive;
+    const lifecycleAction = isEmployeeActive
+      ? { handler: "hrOffboardEmployee", buttonClass: "btn-outline-danger", iconClass: "bi-person-dash", label: "Offboard", title: "Offboard employee" }
+      : { handler: "hrReactivateEmployee", buttonClass: "btn-outline-success", iconClass: "bi-person-check", label: "Reactivate", title: "Reactivate employee" };
+    const lifecycleActionButtonHtml = canMaintainPeople
+      ? '<button type="button" class="btn btn-sm ' + lifecycleAction.buttonClass + ' hr-employee-action-btn" title="' + escapeHtml(lifecycleAction.title) + '" aria-label="' + escapeHtml(lifecycleAction.title + " " + employeeDisplayName) + '" onclick="window.' + lifecycleAction.handler + '(\'' + safeEmployeeId + '\')"><i class="bi ' + lifecycleAction.iconClass + '" aria-hidden="true"></i><span>' + escapeHtml(lifecycleAction.label) + '</span></button>'
+      : "";
 
     // HR ACCESS / REPORTING RESPONSIBILITY DECOUPLING - PHASE 1
     // The row action no longer treats Manager dashboard access as the same thing
@@ -35485,10 +36164,12 @@ function renderEmployeeRecords(employees) {
       };
 
     const shouldShowLoginInviteRecovery =
-      canMaintainPeople && Boolean(String(employee.work_email || "").trim());
+      canMaintainLiveAccess && Boolean(String(employee.work_email || "").trim());
 
     const row = document.createElement("tr");
     row.className = "hr-employee-directory-row";
+    row.dataset.hrEmployeeId = rawEmployeeId;
+    row.dataset.hrEmployeeName = employeeDisplayName;
 
     if (isRecentlySavedEmployee) {
       row.classList.add("hr-employee-directory-row--recent");
@@ -35609,14 +36290,15 @@ function renderEmployeeRecords(employees) {
           <button
             type="button"
             class="btn btn-sm ${peopleAction.buttonClass} hr-employee-action-btn"
-            title="${canMaintainPeople ? peopleAction.title : "People maintenance is restricted for this role"}"
+            title="${canMaintainLiveAccess ? peopleAction.title : isEmployeeActive ? "People maintenance is restricted for this role" : "Reactivate this employee before changing access or managers"}"
             aria-label="${escapeHtml(peopleAction.ariaLabel)}"
-            ${canMaintainPeople ? "" : "disabled"}
+            ${canMaintainLiveAccess ? "" : "disabled"}
             onclick="window.${peopleAction.handler}('${safeEmployeeId}')"
           >
             <i class="bi ${peopleAction.iconClass}" aria-hidden="true"></i>
             <span>${escapeHtml(peopleAction.label)}</span>
           </button>
+          ${lifecycleActionButtonHtml}
         </div>
       </td>
     `;
@@ -35625,6 +36307,7 @@ function renderEmployeeRecords(employees) {
   });
 
   syncSelectAllEmployeesForPayrollCheckbox();
+  window.BexHrPeopleUxPhase7?.enhanceDirectory?.(tbody);
 }
 
 function resetEmployeeForm() {
@@ -35632,6 +36315,11 @@ function resetEmployeeForm() {
 
   state.dom.employeeCreateForm.reset();
   state.currentEditingEmployee = null;
+  ++p7NinEditTicket; // Invalidate a pending NIN read when leaving edit mode.
+  state.p7NinEditStatus = null;
+  state.p7NinLoadedValue = "";
+  if (state.dom.nin) state.dom.nin.readOnly = false;
+  syncP7NinEditHint();
   syncEmployeeCompanyAdminAccessBadge(null);
 
   const fieldsToReset = [
@@ -35651,7 +36339,6 @@ function resetEmployeeForm() {
     state.dom.gender,
     state.dom.maritalStatus,
     state.dom.nationality,
-    state.dom.exitDate,
     state.dom.hmoProvider,
     state.dom.hmoPlan,
     state.dom.hmoNumber,
@@ -35704,7 +36391,6 @@ function resetEmployeeForm() {
     state.dom.employmentDate,
     state.dom.approverEmail,
     state.dom.employeeNumber,
-    state.dom.employmentStatus,
     state.dom.systemRole,
   ];
 
@@ -35713,8 +36399,6 @@ function resetEmployeeForm() {
   });
 
   if (state.dom.editingEmployeeId) state.dom.editingEmployeeId.value = "";
-
-  setSelectValueIfPresent(state.dom.employmentStatus, "active", ["Active"]);
 
   // HR SELF-ROLE PROTECTION - STEP 1
   // Reset/create mode has no employee object, so clear and unlock System Role.
@@ -35821,6 +36505,65 @@ function resetEmployeeForm() {
   clearPageAlert();
 }
 
+// P7 Stage B: HR NIN reads are explicit, tenant-scoped, and fail closed.
+// Null/blank in an UPDATE means "preserve" in the Stage B capture trigger.
+// For an unchanged identifier, transmit no raw NIN in general employee updates.
+function getP7NinWriteValue(enteredValue, verifiedOriginalValue, isEditing) {
+  const entered = String(enteredValue || "").trim();
+  if (!isEditing) return entered || null;
+  const verifiedOriginal = String(verifiedOriginalValue || "").trim();
+  if (!entered || entered === verifiedOriginal) return null;
+  return entered;
+}
+
+// Use the existing NIN help text as a quiet, accessible status message.
+// No HTML or CSS changes, and no global red error for unrelated profile edits.
+function syncP7NinEditHint() {
+  const hint = state.dom.nin?.closest("#ninFieldCol")?.querySelector(".form-text");
+  if (!hint) return;
+  if (hint.dataset.p7NinDefaultText === undefined) {
+    hint.dataset.p7NinDefaultText = hint.textContent;
+  }
+  hint.textContent = state.currentEditingEmployee && state.p7NinEditStatus !== "ready"
+    ? "Secure NIN access is unavailable for this edit. Other employee details can still be saved; the existing NIN stays unchanged."
+    : hint.dataset.p7NinDefaultText;
+}
+
+let p7NinEditTicket = 0;
+async function loadP7HrNinForEmployeeEdit(employeeId, ticket) {
+  try {
+    const { data, error } = await getSupabaseClient().rpc(
+      "bexhr_p7_nin_read_for_hr", { p_employee_id: employeeId },
+    );
+    if (ticket !== p7NinEditTicket ||
+        String(state.currentEditingEmployee?.id || "") !== String(employeeId)) return;
+    if (error) throw error;
+
+    state.p7NinLoadedValue = String(data || "");
+    state.p7NinEditStatus = "ready";
+    if (state.dom.nin) {
+      state.dom.nin.value = state.p7NinLoadedValue;
+      state.dom.nin.readOnly = false;
+      state.dom.nin.classList.remove("is-invalid");
+    }
+    syncP7NinEditHint();
+    updateEmployeeSaveButtonState();
+  } catch (error) {
+    if (ticket !== p7NinEditTicket ||
+        String(state.currentEditingEmployee?.id || "") !== String(employeeId)) return;
+    state.p7NinEditStatus = "failed";
+    state.p7NinLoadedValue = "";
+    if (state.dom.nin) {
+      state.dom.nin.value = "";
+      state.dom.nin.readOnly = true;
+    }
+    syncP7NinEditHint();
+    updateEmployeeSaveButtonState();
+    console.warn("P7 Stage B HR NIN read unavailable; NIN changes remain locked:", error);
+    // No page-wide blocker. Ordinary employee saves omit the NIN column.
+  }
+}
+
 function enterEmployeeEditMode(employee) {
   state.currentEditingEmployee = employee;
 
@@ -35880,9 +36623,17 @@ function enterEmployeeEditMode(employee) {
 
   syncIdentificationIssueStateOptions(employee.identification_issue_state || "");
 
+  // P7 Stage B: raw NIN no longer travels in general employees SELECT queries.
+  // Load it only through the tenant-checked HR-only RPC for this edit session.
+  state.p7NinEditStatus = "loading";
+  state.p7NinLoadedValue = "";
+  const p7NinTicket = ++p7NinEditTicket;
   if (state.dom.nin) {
-    state.dom.nin.value = employee.nin || "";
+    state.dom.nin.value = "";
+    state.dom.nin.readOnly = true;
   }
+  syncP7NinEditHint();
+  void loadP7HrNinForEmployeeEdit(employee.id, p7NinTicket);
 
   // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
   // In edit mode, restore both values correctly:
@@ -35890,8 +36641,6 @@ function enterEmployeeEditMode(employee) {
   // - NIN for National ID/NIN Slip and optionally for other selected IDs.
   syncIdentificationDocumentNumberVisibility({ clearWhenHidden: true });
   syncNinFieldVisibility({ clearWhenHidden: true });
-
-  if (state.dom.exitDate) state.dom.exitDate.value = employee.exit_date || "";
   if (state.dom.hmoProvider) state.dom.hmoProvider.value = employee.hmo_provider || "";
   if (state.dom.hmoPlan) state.dom.hmoPlan.value = employee.hmo_plan || "";
   if (state.dom.hmoNumber) state.dom.hmoNumber.value = employee.hmo_number || "";
@@ -35938,11 +36687,6 @@ function enterEmployeeEditMode(employee) {
   resetEmployeeReportingLineRows();
 
   if (state.dom.employeeNumber) state.dom.employeeNumber.value = employee.employee_number || "";
-
-  setSelectValueIfPresent(state.dom.employmentStatus, employee.status, [
-    "active",
-    "Active",
-  ]);
 
   setEmployeeAccountPanel(getEmployeeAccountLinkage(employee));
 
@@ -36159,114 +36903,24 @@ function validateEmployeeForm() {
 
   // EMPLOYEE BIODATA COMPLETION - STEP 2F
   // Personal email is optional, but must be valid if HR enters it.
-  if (!validateEmailField(state.dom.personalEmail, { required: false })) {
-    isValid = false;
-    if (!firstInvalidField) firstInvalidField = state.dom.personalEmail;
-  }
-
-  // EMPLOYEE BIODATA COMPLETION - STEP 2F
-  // Exit Date must not be before Employment Date.
-  const employmentDateValue = String(state.dom.employmentDate?.value || "").trim();
-  const exitDateValue = String(state.dom.exitDate?.value || "").trim();
-
-  state.dom.exitDate?.classList.remove("is-invalid");
-
-  if (
-    employmentDateValue &&
-    exitDateValue &&
-    new Date(exitDateValue).getTime() < new Date(employmentDateValue).getTime()
-  ) {
-    state.dom.exitDate?.classList.add("is-invalid");
-    isValid = false;
-    if (!firstInvalidField) firstInvalidField = state.dom.exitDate;
-  }
 
   // QUICK FIX - APPROVER EMAIL BYPASS
   // Primary Approver Email is optional while approver mailboxes are not ready.
   // It must not block employee create/update, even when empty.
   state.dom.approverEmail?.classList.remove("is-invalid");
 
-  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
-  // Identity fields are optional until HR selects a means of identification.
-  // Once a non-NIN document is selected, its document number is required.
-  // NIN is required for National ID / NIN Slip and optional for other IDs,
-  // but when entered it must still be exactly 11 digits.
-  state.dom.alternativePhoneNumber?.classList.remove("is-invalid");
-  state.dom.identificationDocumentNumber?.classList.remove("is-invalid");
-  state.dom.nin?.classList.remove("is-invalid");
-
-  const primaryPhoneDigits = String(state.dom.phoneNumber?.value || "")
-    .replace(/\D/g, "");
-  const alternativePhoneDigits = String(state.dom.alternativePhoneNumber?.value || "")
-    .replace(/\D/g, "");
-
-  if (
-    primaryPhoneDigits &&
-    alternativePhoneDigits &&
-    primaryPhoneDigits === alternativePhoneDigits
-  ) {
-    state.dom.alternativePhoneNumber?.classList.add("is-invalid");
-    isValid = false;
-    if (!firstInvalidField) firstInvalidField = state.dom.alternativePhoneNumber;
-
-    showPageAlert(
-      "warning",
-      "Alternative Phone Number must be different from the primary Phone Number.",
-    );
-  }
-
-  const selectedMeansOfIdentification = String(
-    state.dom.meansOfIdentification?.value || "",
-  ).trim();
-
-  const isDocumentNumberRequired =
-    isIdentificationDocumentNumberRequiredForMeansOfIdentification(
-      selectedMeansOfIdentification,
-    );
-
-  const identificationDocumentNumberValue = String(
-    state.dom.identificationDocumentNumber?.value || "",
-  ).trim();
-
-  if (isDocumentNumberRequired && !identificationDocumentNumberValue) {
-    state.dom.identificationDocumentNumber?.classList.add("is-invalid");
-    isValid = false;
-    if (!firstInvalidField) {
-      firstInvalidField = state.dom.identificationDocumentNumber;
-    }
-
-    showPageAlert(
-      "warning",
-      "Identification Document Number is required for the selected means of identification.",
-    );
-  }
-
-  const isNinRequired = isNinRequiredForMeansOfIdentification(
-    selectedMeansOfIdentification,
-  );
-
-  const ninValue = String(state.dom.nin?.value || "").trim();
-
-  if (isNinRequired && !ninValue) {
+  // R14B: New or changed NINs must be exactly eleven digits. Legacy values
+  // remain unchanged on unrelated edits; do not block those edits here.
+  const enteredNin = String(state.dom.nin?.value || "").trim();
+  // Only the authorized NIN input may affect validation during edit.
+  const ninIsEditable = !state.currentEditingEmployee || state.p7NinEditStatus === "ready";
+  const previousNin = String(state.p7NinLoadedValue || "").trim();
+  if (ninIsEditable && enteredNin && enteredNin !== previousNin && !/^\d{11}$/.test(enteredNin)) {
     state.dom.nin?.classList.add("is-invalid");
     isValid = false;
     if (!firstInvalidField) firstInvalidField = state.dom.nin;
-
-    showPageAlert(
-      "warning",
-      "NIN is required when National ID / NIN Slip is selected as the means of identification.",
-    );
-  }
-
-  if (ninValue && !/^\d{11}$/.test(ninValue)) {
-    state.dom.nin?.classList.add("is-invalid");
-    isValid = false;
-    if (!firstInvalidField) firstInvalidField = state.dom.nin;
-
-    showPageAlert(
-      "warning",
-      "NIN must be exactly 11 digits when provided.",
-    );
+  } else {
+    state.dom.nin?.classList.remove("is-invalid");
   }
 
   if (!isValid && firstInvalidField) {
@@ -36289,9 +36943,12 @@ function buildEmployeePayload() {
     ? rawApproverEmail
     : "";
 
-  const rawStatus = String(
-    state.dom.employmentStatus?.value || "active",
-  ).trim();
+  // BEXHR PHASE 7 - lifecycle state is derived from Offboard/Reactivate actions.
+  // Normal Create Employee starts Active. Normal Edit Employee preserves the saved lifecycle state.
+  const lifecycleStatus = state.currentEditingEmployee
+    ? normalizeText(state.currentEditingEmployee.status || "active") || "active"
+    : "active";
+  const lifecycleExitDate = state.currentEditingEmployee?.exit_date || null;
 
   // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
   // Keep the primary ID document number separate from NIN.
@@ -36309,11 +36966,15 @@ function buildEmployeePayload() {
       ? String(state.dom.identificationDocumentNumber?.value || "").trim()
       : "";
 
-  const ninForPayload = selectedMeansOfIdentificationForPayload
-    ? String(state.dom.nin?.value || "").trim()
-    : "";
+  // Stage B trigger: writing null preserves the existing protected NIN.
+  // Never resend an unchanged raw NIN in an unrelated employee edit.
+  const ninForPayload = getP7NinWriteValue(
+    state.dom.nin?.value,
+    state.p7NinLoadedValue,
+    Boolean(state.currentEditingEmployee),
+  );
 
-  return {
+  const payload = {
     first_name: String(state.dom.firstName?.value || "").trim(),
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1C
@@ -36363,7 +37024,7 @@ function buildEmployeePayload() {
 
     // EMPLOYEE BIODATA COMPLETION - STEP 2D
     // Exit and HMO details are part of the employee profile lifecycle/benefits data.
-    exit_date: state.dom.exitDate?.value || null,
+    exit_date: lifecycleExitDate,
     hmo_provider: String(state.dom.hmoProvider?.value || "").trim() || null,
     hmo_plan: String(state.dom.hmoPlan?.value || "").trim() || null,
     hmo_number: String(state.dom.hmoNumber?.value || "").trim() || null,
@@ -36371,7 +37032,7 @@ function buildEmployeePayload() {
     approver_email: approverEmail || null,
     employee_number:
       String(state.dom.employeeNumber?.value || "").trim() || null,
-    status: normalizeText(rawStatus) || "active",
+    status: lifecycleStatus,
 
     // HRP-80 - TENANT DATA SEGMENTATION - STEP 7C
     // New and updated employee records inherit the logged-in HR user's tenant.
@@ -36383,6 +37044,29 @@ function buildEmployeePayload() {
     // and Assign Line Manager can identify real manager-level employees.
     system_role: getSelectedEmployeeSystemRoleValue() || null,
   };
+
+  // On an employee UPDATE, omit NIN unless HR has verified the original
+  // through the protected RPC and explicitly entered a different NIN.
+  // CRITICAL: an explicit null would ERASE legacy employees.nin before the
+  // vault migration. Omitting the property preserves NIN before AND after it.
+  if (state.currentEditingEmployee &&
+      (state.p7NinEditStatus !== "ready" || !ninForPayload)) {
+    delete payload.nin;
+  }
+
+  // PRE-7B - Saving visible fields must never erase retired biodata columns
+  // already present on employee records. Old values remain in the DB for
+  // authorised compliance/benefit processes, but aren't collected here.
+  const previous = state.currentEditingEmployee || {};
+  [
+    "personal_email", "alternative_phone_number", "gender", "marital_status",
+    "state_of_origin", "local_government_area", "means_of_identification",
+    "identification_document_number", "identification_issue_state",
+    "hmo_provider", "hmo_plan", "hmo_number",
+  ].forEach((column) => {
+    payload[column] = previous[column] ?? null;
+  });
+  return payload;
 }
 
 
@@ -37677,6 +38361,28 @@ function getHrSupportingManagerModal() {
             </div>
           </section>
 
+          <!-- H11A: HR Admin-only exception action, independent of default reporting choices. -->
+          <section id="hrPrimaryExceptionSection" class="hr-access-section-card mt-3 d-none" aria-label="Primary reporting exception approval">
+            <div class="hr-access-section-heading">
+              <span class="hr-access-section-step" aria-hidden="true"><i class="bi bi-shield-lock"></i></span>
+              <div>
+                <strong>HR Admin: Approve individual Primary exception</strong>
+                <span>Use only when the intended manager is outside the company's normal configured reporting path.</span>
+              </div>
+            </div>
+            <p class="small text-secondary mt-2 mb-2">Approval and assignment happen in one protected database transaction. Pending Leave and active PA responsibilities can block reassignment. This does not grant extra HR, PA or Leave privileges.</p>
+            <label for="hrPrimaryExceptionManagerSelect" class="form-label">Proposed exception manager</label>
+            <select class="form-select mb-2" id="hrPrimaryExceptionManagerSelect" disabled>
+              <option value="">No approved exception workflow available</option>
+            </select>
+            <label for="hrPrimaryExceptionReason" class="form-label">Approval reason (12–500 characters)</label>
+            <textarea class="form-control mb-2" id="hrPrimaryExceptionReason" rows="2" minlength="12" maxlength="500" placeholder="Explain why this specific employee requires a different reporting line."></textarea>
+            <p class="small mb-2" id="hrPrimaryExceptionStatus" role="status" aria-live="polite"></p>
+            <div class="d-flex justify-content-end">
+              <button type="button" class="btn btn-outline-warning btn-sm" id="hrPrimaryExceptionAssignBtn" disabled>Approve and assign exception</button>
+            </div>
+          </section>
+
           <section class="hr-access-section-card hr-access-section-card--primary">
             <div class="hr-access-section-heading">
               <span class="hr-access-section-step" aria-hidden="true">2</span>
@@ -37751,6 +38457,10 @@ function getHrSupportingManagerModal() {
     .getElementById("hrSupportingManagerAddBtn")
     ?.addEventListener("click", addHrSupportingManagerFromModal);
 
+  document
+    .getElementById("hrPrimaryExceptionAssignBtn")
+    ?.addEventListener("click", assignHrPrimaryExceptionFromModal);
+
   return modalElement;
 }
 
@@ -37767,6 +38477,7 @@ function closeHrSupportingManagerModal() {
     ?.classList.add("d-none");
 
   delete document.body.dataset.hrEmployeeAccessReturnEmployeeId;
+  hrPrimaryExceptionPanelGeneration += 1; // discard any in-flight read-only entitlement result
 }
 
 function getSupportingManagerDisplayName(employee = {}) {
@@ -37820,9 +38531,11 @@ function populateHrPrimaryManagerOptions(
       ? "Reporting hierarchy unavailable - refresh"
       : candidates.length
         ? "Select Primary Manager"
-        : baseCandidates.length
-          ? "No valid Primary Managers outside this reporting chain"
-          : "No eligible managers for this employee";
+        : state.p7bDepartmentReportingEnabled === true
+          ? "No configured Primary Manager for this position"
+          : baseCandidates.length
+            ? "No valid Primary Managers outside this reporting chain"
+            : "No eligible managers for this employee";
 
   select.appendChild(placeholderOption);
 
@@ -37882,7 +38595,7 @@ function populateHrSupportingManagerOptions(employeeId, assignedManagerIds = [])
 
       return `<option value="${escapeHtml(candidateId)}">${escapeHtml(displayName)}${meta ? ` - ${escapeHtml(meta)}` : ""}</option>`;
     }),
-  ].join(" - ");
+  ].join("");
 }
 
 async function loadHrSupportingManagersForModal(employeeId) {
@@ -38238,6 +38951,14 @@ ${canChangePrimaryManager
   }
 
   populateHrSupportingManagerOptions(employeeKey, assignedManagerIds);
+
+  // Separate admin-only exceptional routes from the ordinary configured
+  // Primary dropdown. This read-only check never delays normal reporting.
+  void syncHrPrimaryExceptionPanel(employeeKey, activeRows).catch((error) => {
+    console.warn("Exception UI readiness check unavailable:", error);
+    const section = document.getElementById("hrPrimaryExceptionSection");
+    section?.classList.add("d-none");
+  });
 }
 
 async function openEmployeeReportingManagerWorkspace(employeeId) {
@@ -38317,6 +39038,230 @@ async function openEmployeeReportingManagerWorkspace(employeeId) {
   }
 }
 
+// Keep the open reporting shortcut in sync with saved company-position lines.
+// Edit Employee is already refreshed by refreshOrganizationHrSetupValues().
+// Re-read the currently saved reporting rows, not an in-progress selector,
+// after configuration changes. A failed refresh closes the modal rather than
+// leaving a stale, potentially assignable manager option on screen.
+window.addEventListener("bexhr:organization-setup-updated", (event) => {
+  if (event?.detail?.loaded !== true) return;
+  const modal = document.getElementById("hrSupportingManagerModal");
+  if (!modal || modal.classList.contains("d-none") ||
+      modal.getAttribute("aria-hidden") === "true") return;
+  const employeeId = String(
+    document.getElementById("hrSupportingManagerEmployeeId")?.value || "",
+  ).trim();
+  if (!employeeId) return;
+  for (const selectId of ["hrPrimaryManagerSelect", "hrSupportingManagerSelect"]) {
+    const select = document.getElementById(selectId);
+    if (select) select.disabled = true;
+  }
+  Promise.resolve(loadHrSupportingManagersForModal(employeeId)).catch((error) => {
+    console.error("Reporting shortcut could not refresh configured manager choices:", error);
+    closeHrSupportingManagerModal();
+    showPageAlert("warning", "Company reporting configuration changed. Reopen Manage reporting managers to load the current eligible choices.");
+  });
+});
+
+
+// BEXHR H11A: INDIVIDUALLY APPROVED PRIMARY REPORTING EXCEPTIONS.
+// A separate HR Admin-only action; it deliberately does not broaden the
+// configured Primary dropdown used by Edit Employee and Shortcuts.
+// Backend guards (tenant, AAL2, current graph, PA, Leave, ledger) are final.
+let hrPrimaryExceptionPanelGeneration = 0;
+
+function getHrExceptionManagerCandidates(employeeId, activeRows = []) {
+  const employeeKey = String(employeeId || "").trim();
+  const tenantId = String(state.currentProfile?.tenant_id || "").trim();
+  const employee = (state.employees || []).find(
+    (row) => String(row.id || "") === employeeKey,
+  );
+  if (!employee || !tenantId || String(employee.tenant_id || "") !== tenantId ||
+      state.primaryReportingHierarchyLoaded !== true ||
+      state.organizationPositionHierarchyLoaded !== true) return [];
+
+  const assignedIds = new Set((activeRows || [])
+    .map((row) => String(row.manager_employee_id || "").trim())
+    .filter(Boolean));
+
+  return (state.employees || []).filter((manager) => {
+    const id = String(manager?.id || "").trim();
+    if (!id || id === employeeKey || assignedIds.has(id) ||
+        String(manager.tenant_id || "") !== tenantId ||
+        normalizeText(manager.status || "active") !== "active" ||
+        !hasHrReportingManagerRole(manager) ||
+        !isHrPrimaryManagerHierarchySafe(employeeKey, id)) return false;
+
+    // The protected RPC insists on an active, same-tenant linked login.
+    // A matching email alone cannot establish an authorised account.
+    const userId = String(manager.user_id || manager.auth_user_id || "").trim();
+    const linked = getEmployeeLinkedAuthProfile(manager);
+    if (!userId || !linked || String(linked.id || "") !== userId ||
+        String(linked.tenant_id || "") !== tenantId ||
+        linked.is_active !== true ||
+        !["manager", "hr", "hr_manager"].includes(normalizeText(linked.role))) {
+      return false;
+    }
+    // Do not turn ordinary permitted managers into 'exceptions'.
+    return !canHrPrimaryReportingManagerSitImmediatelyAboveEmployee(manager, employee);
+  }).sort((first, second) =>
+    getSupportingManagerDisplayName(first).localeCompare(
+      getSupportingManagerDisplayName(second),
+    ));
+}
+
+async function syncHrPrimaryExceptionPanel(employeeId, activeRows = []) {
+  const generation = ++hrPrimaryExceptionPanelGeneration;
+  const section = document.getElementById("hrPrimaryExceptionSection");
+  const select = document.getElementById("hrPrimaryExceptionManagerSelect");
+  const button = document.getElementById("hrPrimaryExceptionAssignBtn");
+  if (!section || !select || !button) return;
+  section.classList.add("d-none");
+  button.disabled = true;
+  select.disabled = true;
+  select.replaceChildren(new Option("Select an exceptional manager", ""));
+
+  if (!canCurrentUserAssignHrOfficerAccess() ||
+      state.p7bDepartmentReportingEnabled !== true ||
+      state.primaryReportingHierarchyLoaded !== true) return;
+
+  const candidates = getHrExceptionManagerCandidates(employeeId, activeRows);
+  if (!candidates.length) return;
+
+  // The H6D list RPC is READ-ONLY and requires the same authenticated tenant
+  // HR Admin guard. Missing backend capability: keep the action hidden.
+  const { error } = await getSupabaseClient().rpc(
+    "hr_tenant_admin_list_primary_exceptions",
+  );
+  if (error || generation !== hrPrimaryExceptionPanelGeneration) return;
+  const modal = document.getElementById("hrSupportingManagerModal");
+  if (!modal || modal.classList.contains("d-none") ||
+      String(document.getElementById("hrSupportingManagerEmployeeId")?.value || "") !== String(employeeId)) return;
+
+  for (const manager of candidates) {
+    const option = new Option(
+      `${getSupportingManagerDisplayName(manager)} - ${String(manager.job_title || "").trim()}`,
+      String(manager.id),
+    );
+    select.appendChild(option);
+  }
+  select.disabled = false;
+  button.disabled = false;
+  section.classList.remove("d-none");
+  section.dataset.employeeId = String(employeeId);
+}
+
+async function assignHrPrimaryExceptionFromModal() {
+  const section = document.getElementById("hrPrimaryExceptionSection");
+  const button = document.getElementById("hrPrimaryExceptionAssignBtn");
+  const select = document.getElementById("hrPrimaryExceptionManagerSelect");
+  const reasonField = document.getElementById("hrPrimaryExceptionReason");
+  const status = document.getElementById("hrPrimaryExceptionStatus");
+  const employeeId = String(document.getElementById("hrSupportingManagerEmployeeId")?.value || "").trim();
+  const managerId = String(select?.value || "").trim();
+  const reason = String(reasonField?.value || "").trim();
+  const updateStatus = (message) => { if (status) status.textContent = message; };
+
+  if (!canCurrentUserAssignHrOfficerAccess() ||
+      state.p7bDepartmentReportingEnabled !== true ||
+      state.primaryReportingHierarchyLoaded !== true ||
+      !section || section.classList.contains("d-none") ||
+      String(section.dataset.employeeId || "") !== employeeId ||
+      !button || button.disabled || !managerId) return;
+
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+  if (String(state.currentProfile?.tenant_id || "") !== tenantId ||
+      reason.length < 12 || reason.length > 500) {
+    updateStatus("Enter a clear approval reason between 12 and 500 characters.");
+    return;
+  }
+
+  // Server remains authoritative; UI checks only prevent stale/unsafe intent.
+  button.disabled = true;
+  const supabase = getSupabaseClient();
+  let rows;
+  try {
+    const response = await supabase
+      .from("employee_reporting_lines")
+      .select("id, manager_employee_id, manager_type, status")
+      .eq("tenant_id", tenantId)
+      .eq("employee_id", employeeId);
+    if (response.error) throw response.error;
+    rows = response.data;
+  } catch (error) {
+    updateStatus("Could not recheck current reporting lines. Refresh and try again.");
+    button.disabled = false;
+    return;
+  }
+  const activeRows = (rows || []).filter((row) =>
+    normalizeText(row.status || "active") === "active");
+  if (!getHrExceptionManagerCandidates(employeeId, activeRows)
+    .some((manager) => String(manager.id) === managerId)) {
+    updateStatus("Reporting assignments or eligible managers changed. Reopen the shortcut.");
+    button.disabled = false;
+    return;
+  }
+
+  const employee = (state.employees || []).find((row) => String(row.id) === employeeId);
+  const manager = (state.employees || []).find((row) => String(row.id) === managerId);
+  if (!employee || !manager ||
+      !window.confirm(`Approve an exceptional Primary reporting line for ${getSupportingManagerDisplayName(employee)} to ${getSupportingManagerDisplayName(manager)}?\n\nReason: ${reason}\n\nAn active PA cycle or pending Leave may prevent the change. This action will be audited.`)) {
+    button.disabled = false;
+    return;
+  }
+
+  button.disabled = true;
+  updateStatus("Checking permissions and saving the approved exception...");
+  let committed = false;
+  try {
+    // AAL2 cannot be provided by user input or a browser-side flag.
+    const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (assurance.error || assurance.data?.currentLevel !== "aal2") {
+      updateStatus("HR Admin MFA verification (AAL2) is required.");
+      return;
+    }
+    if (!canCurrentUserAssignHrOfficerAccess() ||
+        section.classList.contains("d-none") ||
+        String(document.getElementById("hrSupportingManagerEmployeeId")?.value || "") !== employeeId ||
+        String(state.currentProfile?.tenant_id || "") !== tenantId) {
+      updateStatus("Your account or selected employee changed during verification. Reopen the shortcut.");
+      return;
+    }
+    const { data, error } = await supabase.rpc(
+      "hr_tenant_admin_assign_primary_exception",
+      { p_employee_id: employeeId, p_manager_employee_id: managerId,
+        p_reason: reason, p_expires_at: null },
+    );
+    if (error) throw error;
+    if (!data?.reporting_line_id || !data?.approval_id) {
+      throw new Error("The server did not confirm the new reporting line. Refresh before retrying.");
+    }
+    committed = true;
+    updateStatus("Exception saved. Refreshing reporting and team information...");
+    publishHrReportingHierarchyChange(employeeId, "primary_exception_approved");
+    await refreshEmployeeWorkspace();
+    await loadHrPrimaryReportingHierarchy();
+    await loadHrSupportingManagersForModal(employeeId);
+    await updateHrAccountResponsibilityTitle(state.currentProfile || {});
+    showPageAlert("success", "The approved Primary Manager exception was saved. New PA and Leave decisions follow the backend's current-authority rules; completed history is unchanged.");
+  } catch (error) {
+    console.error("Primary Manager exception action failed:", error);
+    if (committed) {
+      // Never attempt a compensating browser write after the RPC committed.
+      updateStatus("Exception saved on the server, but the screen refresh failed. Refresh the page before doing anything else.");
+      showPageAlert("warning", "Reporting was saved; refresh the page to see the current assignment.");
+    } else {
+      const message = String(error?.message || "");
+      const blockedWorkflow = /BEXHR_H11A_(ACTIVE_PA|ACTIVE_PA_GOALS|PENDING_LEAVE)/.test(message);
+      updateStatus(blockedWorkflow
+        ? "This employee has active PA or pending Leave responsibilities. Resolve them before approving this exception."
+        : "The database did not approve this exception. No browser-side fallback was attempted.");
+    }
+  } finally {
+    if (!committed) button.disabled = false;
+  }
+}
+
 // HR STANDARD MANAGER MODAL - FIRST CLICK FIX
 // Make the employee-table action available before the long dashboard startup finishes.
 window.hrManageReportingManagers = (employeeId) => {
@@ -38375,10 +39320,13 @@ async function assignHrPrimaryManagerFromModal() {
     return;
   }
 
-  if (!isHrReportingManagerCandidate(manager, employee)) {
+  if (
+    !isHrReportingManagerCandidate(manager, employee) ||
+    !canHrPrimaryReportingManagerSitImmediatelyAboveEmployee(manager, employee)
+  ) {
     showPageAlert(
       "warning",
-      "Select an eligible Primary Manager for this employee.",
+      "Select the nearest eligible Primary Manager from the configured hierarchy.",
     );
     return;
   }
@@ -38875,8 +39823,13 @@ async function addHrSupportingManagerFromModal() {
 
   const employee = (state.employees || []).find(person => String(person.id) === employeeId);
   const manager = (state.employees || []).find(person => String(person.id) === managerEmployeeId);
-  if (!employee || !manager || !isHrReportingManagerCandidate(manager, employee)) {
-    showPageAlert("warning", "Select an eligible Secondary Manager for this employee.");
+  const supportingOptions = getHrReportingManagerCandidatesForEmployee(employee, {
+    primaryOnly: false,
+  });
+  if (!employee || !manager || !supportingOptions.some(
+    (option) => String(option.id) === managerEmployeeId,
+  )) {
+    showPageAlert("warning", "Select an eligible Secondary Manager from the configured reporting hierarchy.");
     return;
   }
 
@@ -39720,6 +40673,13 @@ async function toggleEmployeeManagerRole(employeeId) {
 
 async function handleEmployeeSave() {
   clearPageAlert();
+  // Read-only NIN is intentionally excluded from ordinary employee updates.
+  // Do not silently accept a forged NIN input while secure verification failed.
+  if (state.currentEditingEmployee && state.p7NinEditStatus !== "ready" &&
+      String(state.dom.nin?.value || "").trim()) {
+    showPageAlert("warning", "NIN cannot be changed until secure verification is available. Other employee details can still be edited.");
+    return;
+  }
 
   // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
   // Payroll, Auditor, QA, and unknown/custom HR-routed roles must not create
@@ -39860,21 +40820,8 @@ async function handleEmployeeSave() {
     return;
   }
 
-  // EMPLOYEE BIODATA COMPLETION - STEP 6C-3A
-  // Final guard: Education is optional, but if HR starts it,
-  // required education fields must be valid before save proceeds.
-  if (!validateEmployeeEducationFields()) {
-    updateEmployeeSaveButtonState();
-    return;
-  }
-
-  // EMPLOYEE BIODATA COMPLETION - STEP 6D-3
-  // Beneficiaries/dependants are optional, but any visible un-staged row must
-  // be complete before saving it to employee_dependants.
-  if (isEmployeeDependantStarted() && !validateEmployeeDependantFields()) {
-    updateEmployeeSaveButtonState();
-    return;
-  }
+  // PRE-7B - Retired education/dependant inputs cannot reject the minimal
+  // employee form. They remain untouched in their historical child tables.
   const employeePayload = buildEmployeePayload();
   const editingId = String(state.dom.editingEmployeeId?.value || "").trim();
   const isEditMode = Boolean(editingId);
@@ -40129,19 +41076,13 @@ async function handleEmployeeSave() {
     await Promise.all([
       saveEmployeeAddressesForEmployee(savedEmployeeId),
       saveEmployeeNextOfKinForEmployee(savedEmployeeId),
-      saveEmployeeEducationRecordsForEmployee(savedEmployeeId),
-      saveEmployeeDependantRecordsForEmployee(savedEmployeeId),
     ]);
 
-    // Refresh Education suggestions after Education records have saved.
-    await refreshEducationSuggestionLists();
-
-    if (state.pendingFiles.length) {
-      await uploadPendingFilesForEmployee(savedEmployeeId);
-    } else {
-      await loadEmployeeDocuments(savedEmployeeId);
-      renderAttachedDocuments();
-    }
+    // PRE-7B - Education, dependants, permanent address and supporting
+    // documents remain stored unchanged. Their retired controls cannot be
+    // used to overwrite child-table data during an ordinary profile edit.
+    await loadEmployeeDocuments(savedEmployeeId);
+    renderAttachedDocuments();
 
 
     // EMPLOYEE LIST STABLE ORDER - STEP 1
@@ -40162,7 +41103,7 @@ async function handleEmployeeSave() {
 
     // BEXHR R-14B LIVE REPORTING HIERARCHY REFRESH
     publishHrReportingHierarchyChange(savedEmployeeId, "employee_saved");
-
+    publishHrEmployeeLifecycleChange(savedEmployeeId, isEditMode ? "employee_updated" : "employee_created");
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
     // Keep payroll-related employee dropdowns aligned after employee create/update.
@@ -40389,6 +41330,7 @@ async function handleEmployeeSave() {
     }
 
     const isDuplicateNin =
+      combinedErrorText.includes("bexhr_p7_nin_tenant_unique") ||
       combinedErrorText.includes("employees_unique_nin_per_tenant_idx") ||
       (
         combinedErrorText.includes("duplicate key value") &&
@@ -41666,38 +42608,44 @@ function populateEmployeeBankBankOptions() {
   }
 }
 
-function populatePayrollEmployeeOptions() {
+function populatePayrollEmployeeOptions(preferredEmployeeId = "") {
   const select = state.dom.payrollEmployeeId;
   if (!select) return;
 
-  const currentValue = select.value;
-  const employees = [...state.employees].sort((a, b) => {
-    const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
-    const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+  const currentValue = String(preferredEmployeeId || select.value || "").trim();
+  const allowHistoricalEmployee = Boolean(currentValue && state.currentEditingPayroll);
+  const activeEmployees = (state.employees || []).filter(
+    (employee) => normalizeText(employee.status || "active") === "active",
+  );
+  const historicalEmployee = allowHistoricalEmployee
+    ? (state.employees || []).find((employee) => String(employee.id || "") === currentValue) || null
+    : null;
+  const employees = [...activeEmployees];
+  if (historicalEmployee && !employees.some((employee) => String(employee.id || "") === currentValue)) {
+    employees.push(historicalEmployee);
+  }
+
+  employees.sort((a, b) => {
+    const nameA = (String(a.first_name || "") + " " + String(a.last_name || "")).trim().toLowerCase();
+    const nameB = (String(b.first_name || "") + " " + String(b.last_name || "")).trim().toLowerCase();
     return nameA.localeCompare(nameB);
   });
 
-  select.innerHTML = `<option value="">Select employee</option>`;
-
+  select.innerHTML = '<option value="">Select employee</option>';
   employees.forEach((employee) => {
     const option = document.createElement("option");
     option.value = employee.id;
-    option.textContent =
-      `${employee.first_name || ""} ${employee.last_name || ""}`.trim() ||
-      employee.work_email ||
-      "Unnamed Employee";
+    const displayName = (String(employee.first_name || "") + " " + String(employee.last_name || "")).trim() || employee.work_email || "Unnamed Employee";
+    const isActive = normalizeText(employee.status || "active") === "active";
+    option.textContent = isActive ? displayName : displayName + " — historical payroll record";
     option.dataset.department = employee.department || "";
     option.dataset.jobTitle = employee.job_title || "";
+    option.disabled = !isActive;
     select.appendChild(option);
   });
 
-  if (currentValue) {
-    const stillExists = Array.from(select.options).some(
-      (option) => option.value === currentValue,
-    );
-    if (stillExists) {
-      select.value = currentValue;
-    }
+  if (currentValue && Array.from(select.options).some((option) => option.value === currentValue)) {
+    select.value = currentValue;
   }
 }
 // =========================================================
@@ -41797,40 +42745,42 @@ async function loadPayrollMasterRecords() {
 // Populate employee options for Payroll Master Data form
 // This reuses the current employee list already loaded for HR.
 // =========================================================
-function populatePayrollMasterEmployeeOptions() {
+function populatePayrollMasterEmployeeOptions(preferredEmployeeId = "") {
   const select = state.dom.payrollMasterEmployeeId;
   if (!select) return;
 
-  const currentValue = select.value;
+  const currentValue = String(preferredEmployeeId || select.value || "").trim();
+  const allowHistoricalEmployee = Boolean(currentValue && state.currentEditingPayrollMaster);
+  const activeEmployees = (state.employees || []).filter(
+    (employee) => normalizeText(employee.status || "active") === "active",
+  );
+  const historicalEmployee = allowHistoricalEmployee
+    ? (state.employees || []).find((employee) => String(employee.id || "") === currentValue) || null
+    : null;
+  const employees = [...activeEmployees];
+  if (historicalEmployee && !employees.some((employee) => String(employee.id || "") === currentValue)) {
+    employees.push(historicalEmployee);
+  }
 
-  const employees = [...state.employees].sort((a, b) => {
-    const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
-    const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+  employees.sort((a, b) => {
+    const nameA = (String(a.first_name || "") + " " + String(a.last_name || "")).trim().toLowerCase();
+    const nameB = (String(b.first_name || "") + " " + String(b.last_name || "")).trim().toLowerCase();
     return nameA.localeCompare(nameB);
   });
 
-  // Reset the dropdown before rebuilding it.
-  select.innerHTML = `<option value="">Select employee</option>`;
-
+  select.innerHTML = '<option value="">Select employee</option>';
   employees.forEach((employee) => {
     const option = document.createElement("option");
     option.value = employee.id;
-    option.textContent =
-      `${employee.first_name || ""} ${employee.last_name || ""}`.trim() ||
-      employee.work_email ||
-      "Unnamed Employee";
+    const displayName = (String(employee.first_name || "") + " " + String(employee.last_name || "")).trim() || employee.work_email || "Unnamed Employee";
+    const isActive = normalizeText(employee.status || "active") === "active";
+    option.textContent = isActive ? displayName : displayName + " — historical Salary Setup";
+    option.disabled = !isActive;
     select.appendChild(option);
   });
 
-  // Preserve existing selected value if the employee still exists.
-  if (currentValue) {
-    const stillExists = Array.from(select.options).some(
-      (option) => option.value === currentValue,
-    );
-
-    if (stillExists) {
-      select.value = currentValue;
-    }
+  if (currentValue && Array.from(select.options).some((option) => option.value === currentValue)) {
+    select.value = currentValue;
   }
 }
 
@@ -44444,6 +45394,7 @@ async function startPayrollEdit(payrollId) {
   }
 
   state.currentEditingPayroll = payrollRecord;
+  populatePayrollEmployeeOptions(payrollRecord.employee_id || "");
   setPhase6PayrollCompatibilityVisibility(true);
 
   if (state.dom.editingPayrollId) state.dom.editingPayrollId.value = payrollRecord.id || "";

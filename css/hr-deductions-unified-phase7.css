@@ -1,0 +1,114 @@
+/* BexHR Phase 7A8: One Deductions Setup surface, existing payroll logic intact. */
+body.bexhr-hr-visual-refresh #bexhrUnifiedDeductionsWorkspace {
+  --deductions-primary: var(--hr-primary, #0b8079);
+  color: #253f53;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-lead {
+  margin: 0 0 1rem;
+  font-size: 0.96rem;
+  line-height: 1.55;
+  color: #536a80;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-tablist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.35rem;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.33rem;
+  min-height: 76px;
+  padding: 0.9rem 1rem;
+  background: #f7fafc;
+  border: 1.5px solid #d7e3ed;
+  border-radius: 14px;
+  text-align: left;
+  color: #284256;
+  line-height: 1.3;
+  cursor: pointer;
+  white-space: normal;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-tab:hover {
+  border-color: #71b9b7;
+  background: #f1faf9;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-tab.is-active {
+  background: #eaf7f5;
+  border-color: #11978d;
+  box-shadow: inset 0 0 0 1px rgba(17, 151, 141, 0.24);
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-tab:focus-visible {
+  outline: 3px solid #195fcb;
+  outline-offset: 3px;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-tab-label {
+  display: block;
+  font-size: 1.02rem;
+  font-weight: 760;
+  color: #21475b;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-tab-hint {
+  font-size: 0.89rem;
+  line-height: 1.38;
+  color: #536b7e;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-pane[hidden],
+body.bexhr-hr-visual-refresh .bexhr-deductions-pane.d-none,
+body.bexhr-hr-visual-refresh .bexhr-deductions-old-heading,
+body.bexhr-hr-visual-refresh .bexhr-deductions-old-divider {
+  display: none !important;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-field-help {
+  margin: 0.55rem 0 0;
+  font-size: 0.91rem;
+  line-height: 1.55;
+  color: #456276;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-explainer,
+body.bexhr-hr-visual-refresh .bexhr-deductions-optional {
+  margin: 1.2rem 0;
+  border: 1px solid #d8e5ec;
+  border-radius: 12px;
+  background: #f6fafb;
+  color: #38556a;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-explainer summary,
+body.bexhr-hr-visual-refresh .bexhr-deductions-optional summary {
+  display: list-item;
+  padding: 0.88rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1.5;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-explainer summary:focus-visible,
+body.bexhr-hr-visual-refresh .bexhr-deductions-optional summary:focus-visible {
+  outline: 3px solid #195fcb;
+  outline-offset: 2px;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-explainer-body,
+body.bexhr-hr-visual-refresh .bexhr-deductions-optional-inner {
+  padding: 0.15rem 1rem 1rem;
+  line-height: 1.6;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-optional-inner > [class] {
+  width: 100%;
+  max-width: 480px;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-explainer-body p {
+  margin-bottom: 0.7rem;
+}
+body.bexhr-hr-visual-refresh .bexhr-deductions-explainer-body p:last-child {
+  margin-bottom: 0;
+}
+@media (max-width: 680px) {
+  body.bexhr-hr-visual-refresh .bexhr-deductions-tablist {
+    grid-template-columns: 1fr;
+  }
+  body.bexhr-hr-visual-refresh .bexhr-deductions-tab {
+    min-height: 60px;
+  }
+}

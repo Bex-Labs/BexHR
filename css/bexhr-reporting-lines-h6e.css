@@ -1,0 +1,60 @@
+/* H6E: fourth setup task fits the existing Organization workspace tabs. */
+#hrSetupSection #hrOrganizationInternalWorkspace > .hr-setup-internal-switcher {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+#hrSetupSection .bexhr-h6e-reporting-workspace {
+  border: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none;
+}
+#hrSetupSection .bexhr-h6e-reporting-workspace > h4 {
+  font-size: 1.2rem;
+  color: #122236;
+}
+#hrSetupSection .bexhr-h6e-status {
+  margin: 0.6rem 0 1.1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #b7e4e5;
+  border-radius: 12px;
+  color: #07545c;
+  background: #eefbfb;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+#hrSetupSection .bexhr-h6e-primary-action {
+  padding: 1.15rem;
+  border: 1px solid #d7e4ea;
+  border-radius: 14px;
+  background: #fff;
+}
+#hrSetupSection .bexhr-h6e-optional {
+  margin-top: 1rem;
+  border: 1px solid #d7e4ea;
+  border-radius: 12px;
+  background: #fff;
+}
+#hrSetupSection .bexhr-h6e-optional > summary {
+  cursor: pointer;
+  padding: 0.95rem 1rem;
+  color: #173d49;
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+#hrSetupSection .bexhr-h6e-optional > :not(summary) {
+  margin: 0.4rem 1rem 1rem;
+}
+#hrSetupSection .bexhr-h6e-optional #bexhrHierarchyTemplateResults[hidden],
+#hrSetupSection .bexhr-h6e-optional #bexhrHierarchyAdoptionResults[hidden] {display: none !important;}
+#hrSetupSection #bexhrH6CManualPositionEditor[hidden] {display: none !important;}
+@media (max-width: 950px) {
+  #hrSetupSection #hrOrganizationInternalWorkspace > .hr-setup-internal-switcher {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  #hrSetupSection #hrOrganizationInternalWorkspace > .hr-setup-internal-switcher {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #hrSetupSection .bexhr-h6e-primary-action {padding: 0.85rem;}
+}

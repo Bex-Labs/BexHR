@@ -126,6 +126,7 @@ const state = {
   currentUser: null,
   currentProfile: null,
   currentManagerEmployeeRecord: null,
+  currentOrganizationPositionSummary: null,
 
   // MANAGER PROFILE UI CLEANUP - STEP 1A
   // Stores the last loaded/saved editable profile values.
@@ -1283,11 +1284,16 @@ function notifyManagerTeamAssignmentChanges(nextTeamMembers = []) {
 async function refreshManagerTeamAssignmentsOnFocus(force = false) {
   if (document.hidden) return;
 
+  // Phase 7A12: the Overview must refresh along with Team. Previously only
+  // the Team tab was observed, leaving the Overview warning stale after exit.
   const isTeamWorkspaceVisible =
     state.dom.managerTeamSection &&
     !state.dom.managerTeamSection.classList.contains("d-none");
+  const isOverviewVisible =
+    state.dom.managerDashboardSection &&
+    !state.dom.managerDashboardSection.classList.contains("d-none");
 
-  if (!isTeamWorkspaceVisible) return;
+  if (!isTeamWorkspaceVisible && !isOverviewVisible) return;
 
   const now = Date.now();
   const minimumRefreshGapMs = force ? 0 : 15000;
@@ -1303,6 +1309,8 @@ async function refreshManagerTeamAssignmentsOnFocus(force = false) {
   state.lastTeamAssignmentFocusRefreshAt = now;
 
   try {
+    if (window.SessionManager?.revalidateActiveProfile &&
+        !(await window.SessionManager.revalidateActiveProfile())) return;
     await refreshManagerWorkspace();
   } catch (error) {
     console.warn("Manager team assignment focus refresh failed:", error);
@@ -1316,9 +1324,9 @@ async function refreshManagerTeamAssignmentsOnFocus(force = false) {
 // change must refresh the active Team workspace without requiring F5.
 const MANAGER_REPORTING_HIERARCHY_SYNC_STORAGE_KEY = "bexhrReportingHierarchySync";
 
-async function refreshManagerWorkspaceFromHierarchySync() {
-  state.lastTeamAssignmentFocusRefreshAt = 0;
-  await refreshManagerTeamAssignmentsOnFocus(true);
+async function refreshManagerWorkspaceFromHierarchySync(force = false) {
+  if (force) state.lastTeamAssignmentFocusRefreshAt = 0;
+  await refreshManagerTeamAssignmentsOnFocus(force);
 }
 
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
@@ -1508,13 +1516,29 @@ function bindEvents() {
   });
 
   window.addEventListener("storage", (event) => {
-    if (event.key !== MANAGER_REPORTING_HIERARCHY_SYNC_STORAGE_KEY) return;
-    void refreshManagerWorkspaceFromHierarchySync();
+    if (event.key !== MANAGER_REPORTING_HIERARCHY_SYNC_STORAGE_KEY &&
+        event.key !== "bexhrEmployeeLifecycleSync") return;
+    if (event.key === "bexhrEmployeeLifecycleSync") {
+      let notice = null;
+      try { notice = JSON.parse(event.newValue || "null"); } catch (_) { return; }
+      if (!notice || String(notice.tenantId || "") !==
+          String(state.currentProfile?.tenant_id || "")) return;
+    }
+    // No employee details are trusted from storage; reload from Supabase/RLS.
+    state.lastTeamAssignmentFocusRefreshAt = 0;
+    void refreshManagerWorkspaceFromHierarchySync(true);
   });
 
   window.addEventListener("bexhr:reporting-hierarchy-changed", () => {
-    void refreshManagerWorkspaceFromHierarchySync();
+    void refreshManagerWorkspaceFromHierarchySync(true);
   });
+  window.addEventListener("bexhr:employee-lifecycle-changed", () => {
+    void refreshManagerWorkspaceFromHierarchySync(true);
+  });
+  // Detect HR changes made in another browser or device without F5.
+  window.setInterval(() => {
+    if (!document.hidden) void refreshManagerWorkspaceFromHierarchySync();
+  }, 30000);
 
   state.dom.teamSearchInput?.addEventListener("input", () => {
     applyTeamFilter();
@@ -1827,31 +1851,14 @@ async function isCurrentManagerExcludedFromActivePaCycle() {
       return false;
     }
 
-    const participationAwareCycles =
-      activeCycles.filter(
-        (cycle) =>
-          Array.isArray(
-            cycle?.payload
-              ?.participationSnapshot
-              ?.excludedEmployeeIds,
-          ),
+    // Match the PA page: exclude only when every Active cycle explicitly
+    // snapshots this employee as excluded. Missing snapshots mean eligible.
+    return activeCycles.every((cycle) => {
+      const excludedIds = cycle?.payload?.participationSnapshot?.excludedEmployeeIds;
+      return Array.isArray(excludedIds) && excludedIds.some(
+        (id) => String(id || "").trim() === employeeId,
       );
-
-    if (participationAwareCycles.length === 0) {
-      return false;
-    }
-
-    return participationAwareCycles.every(
-      (cycle) =>
-        cycle.payload.participationSnapshot
-          .excludedEmployeeIds
-          .some(
-            (excludedEmployeeId) =>
-              String(
-                excludedEmployeeId || "",
-              ).trim() === employeeId,
-          ),
-    );
+    });
   } catch (error) {
     console.error(
       "PA highest-tier participation could not be resolved for the Manager chooser:",
@@ -2617,8 +2624,8 @@ async function submitLeaveDecisionFromModal() {
   }
 
   // SECONDARY MANAGER PENDING LEAVE VISIBILITY - STEP 1
-  // Submission remains Primary-Manager-only in the browser as well as in the
-  // existing database decision RPC.
+  // Submission requires fresh Primary or delegated Secondary authority; the
+  // protected database decision RPC is the final permission check.
   if (!canManagerDecideLeaveRequest(request)) {
     showPageAlert(
       "warning",
@@ -2640,6 +2647,9 @@ async function submitLeaveDecisionFromModal() {
   try {
     setDecisionModalLoading(true);
     setActionButtonLoading(state.pendingDecisionButton, true);
+
+    // Phase 7B: a newly revoked/expired delegation cannot rely on an old card.
+    await confirmFreshManagerLeaveAuthority(request);
 
     if (status === "Approved") {
       // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1D
@@ -6106,6 +6116,7 @@ async function loadAssignedTeamMembers() {
     const managerEmployeeRecord = await loadCurrentManagerEmployeeRecord();
 
     state.currentManagerEmployeeRecord = managerEmployeeRecord;
+    state.currentOrganizationPositionSummary = null;
 
     if (!managerEmployeeRecord?.id) {
       showPageAlert(
@@ -6132,8 +6143,27 @@ async function loadAssignedTeamMembers() {
     renderManagerCoverageModeFromReportingLines(reportingLineByEmployeeId);
 
     const assignedEmployeeIds = [...reportingLineByEmployeeId.keys()];
+    if (assignedEmployeeIds.length) state.currentOrganizationPositionSummary = null;
 
     if (!assignedEmployeeIds.length) {
+      // PHASE 7B: only a server-scoped self-position summary can identify
+      // top-level or highest occupied status. No CEO/COO title guesses.
+      const hierarchyStatusApi = window.BexHRManagerOrganizationStatus;
+      const currentManagerId = String(managerEmployeeRecord.id);
+      state.currentOrganizationPositionSummary = hierarchyStatusApi?.load
+        ? await Promise.race([
+            hierarchyStatusApi.load(supabase, currentManagerId),
+            new Promise((resolve) => setTimeout(() => resolve(null), 2000)),
+          ])
+        : null;
+      // Profile/session/tenant changes during the request must not leak a
+      // previous company or user's position label into the new workspace.
+      if (String(state.currentManagerEmployeeRecord?.id || '') !== currentManagerId ||
+          String(state.currentProfile?.tenant_id || '') !== String(managerEmployeeRecord.tenant_id || '')) {
+        state.currentOrganizationPositionSummary = null;
+        return false;
+      }
+      renderManagerCoverageModeFromReportingLines(reportingLineByEmployeeId);
       // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
       // If HR removes all reporting-line assignments while the manager has the
       // dashboard open, show a manager-facing toast and clear the visible team.
@@ -6142,9 +6172,10 @@ async function loadAssignedTeamMembers() {
       state.teamMembers = [];
       state.filteredTeamMembers = [];
 
+      const positionDisplay = getManagerOrganizationPositionPresentation();
       showPageAlert(
-        "warning",
-        "No active reporting-line employees were found for this manager.",
+        positionDisplay.kind === 'default' ? 'warning' : 'info',
+        positionDisplay.description,
       );
       renderTeamTable([]);
       renderSummaryTiles([]);
@@ -6416,6 +6447,18 @@ function setManagerActionCentreText(elementId, value) {
   }
 }
 
+// PHASE 7B: organisation position is independent of system role or title text.
+// The validated, tenant-bound read-only RPC supplies status for this manager only.
+// Missing API, unavailable data or transient errors must never be interpreted as a role.
+function getManagerOrganizationPositionPresentation() {
+  const helper = window.BexHRManagerOrganizationStatus;
+  if (!helper?.presentation) {
+    return {label: 'Manager', description: 'No employees currently report directly to you.',
+      decisionAuthority: 'A Primary Manager assignment is required for decisions', kind: 'default'};
+  }
+  return helper.presentation(state.currentOrganizationPositionSummary);
+}
+
 // BEXHR MANAGER COVERAGE EARLY RESOLUTION - R-05
 // Display-only first pass. It uses the same de-duplicated reporting-line rows
 // that later build state.teamMembers, so the label can settle as soon as the
@@ -6447,20 +6490,25 @@ function renderManagerCoverageModeFromReportingLines(reportingLineByEmployeeId) 
     coverageMode = "Mixed Manager Coverage";
     coverageModeKey = "mixed";
     coverageDescription =
-      "Your scope contains Primary and Secondary reporting lines. Decision rights apply only to employees assigned to you as Primary Manager.";
-    decisionAuthority = "Primary assignments only";
+      "Your scope includes Primary and Secondary reporting lines. Only assigned Primary requests or Secondary requests with a current temporary delegation may be decided.";
+    decisionAuthority = "Primary or actively delegated requests";
   } else if (hasSecondaryRelationship) {
     coverageMode = "Secondary Manager";
     coverageModeKey = "secondary";
     coverageDescription =
-      "You can monitor leave activity and team coverage. Pending decisions remain with each employee's Primary Manager.";
-    decisionAuthority = "Primary Manager action required";
+      "You can monitor leave activity and team coverage. Secondary requests require an active temporary delegation from their Primary Manager before you can decide.";
+    decisionAuthority = "Active delegation required for decisions";
   } else if (hasPrimaryRelationship) {
     coverageMode = "Primary Manager";
     coverageModeKey = "primary";
     coverageDescription =
       "You can review team coverage and decide pending requests for employees assigned to you as Primary Manager.";
     decisionAuthority = "You can review and decide";
+  } else {
+    const positionDisplay = getManagerOrganizationPositionPresentation();
+    coverageMode = positionDisplay.label;
+    coverageDescription = positionDisplay.description;
+    decisionAuthority = positionDisplay.decisionAuthority;
   }
 
   const modeBadge = document.getElementById(
@@ -6476,7 +6524,7 @@ function renderManagerCoverageModeFromReportingLines(reportingLineByEmployeeId) 
     setManagerCoverageModeLoading(false);
   }
 
-  let headerCoverageLabel = "Manager";
+  let headerCoverageLabel = coverageModeKey === "default" ? coverageMode : "Manager";
 
   if (coverageModeKey === "mixed") {
     headerCoverageLabel = "Mixed Manager Coverage";
@@ -6592,20 +6640,25 @@ function renderManagerActionCoverageCentre() {
     coverageMode = "Mixed Manager Coverage";
     coverageModeKey = "mixed";
     coverageDescription =
-      "Your scope contains Primary and Secondary reporting lines. Decision rights apply only to employees assigned to you as Primary Manager.";
-    decisionAuthority = "Primary assignments only";
+      "Your scope includes Primary and Secondary reporting lines. Only assigned Primary requests or Secondary requests with a current temporary delegation may be decided.";
+    decisionAuthority = "Primary or actively delegated requests";
   } else if (secondaryRelationshipCount > 0) {
     coverageMode = "Secondary Manager";
     coverageModeKey = "secondary";
     coverageDescription =
-      "You can monitor leave activity and team coverage. Pending decisions remain with each employee's Primary Manager.";
-    decisionAuthority = "Primary Manager action required";
+      "You can monitor leave activity and team coverage. Secondary requests require an active temporary delegation from their Primary Manager before you can decide.";
+    decisionAuthority = "Active delegation required for decisions";
   } else if (primaryRelationshipCount > 0) {
     coverageMode = "Primary Manager";
     coverageModeKey = "primary";
     coverageDescription =
       "You can review team coverage and decide pending requests for employees assigned to you as Primary Manager.";
     decisionAuthority = "You can review and decide";
+  } else {
+    const positionDisplay = getManagerOrganizationPositionPresentation();
+    coverageMode = positionDisplay.label;
+    coverageDescription = positionDisplay.description;
+    decisionAuthority = positionDisplay.decisionAuthority;
   }
 
   const modeBadge = document.getElementById(
@@ -6621,7 +6674,7 @@ function renderManagerActionCoverageCentre() {
     setManagerCoverageModeLoading(false);
   }
 
-  let headerCoverageLabel = "Manager";
+  let headerCoverageLabel = coverageModeKey === "default" ? coverageMode : "Manager";
 
   if (coverageModeKey === "mixed") {
     headerCoverageLabel = "Mixed Manager Coverage";
@@ -7078,10 +7131,30 @@ function renderTeamTable(teamMembers) {
 // Decision controls remain request-scoped. A Secondary Manager receives action
 // controls only when the protected readiness RPC confirms an active delegation.
 function canManagerDecideLeaveRequest(request = {}) {
-  return (
-    isPrimaryReportingManagerRelationship(request.managerRelationshipLabel) ||
-    request.canDecideLeaveRequest === true
-  );
+  // Neither a display label nor an executive/HR role confers leave authority.
+  // Readiness must explicitly confirm this Primary or delegated Secondary actor.
+  return window.BexHRLeaveAuthority?.canDecide(request) === true;
+}
+
+// Refresh the request-scoped server authority immediately before the final
+// transaction. Revocations and delegation expiry can occur after the queue
+// was rendered. The decision RPC still enforces authority and idempotency.
+async function confirmFreshManagerLeaveAuthority(request) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc("get_manager_leave_readiness");
+  if (error) throw error;
+  const fresh = Array.isArray(data)
+    ? data.find(item => String(item?.request_id || "") === String(request?.id || ""))
+    : null;
+  const snapshot = window.BexHRLeaveAuthority?.fromReadiness(fresh);
+  if (!snapshot || !canManagerDecideLeaveRequest(snapshot) ||
+      !String(snapshot.employeeRecordId || "").trim() ||
+      String(snapshot.employeeRecordId) !== String(request.employeeRecordId || "")) {
+    throw new Error(
+      "Leave approval access has changed or cannot be verified. Refresh the team leave requests before deciding.",
+    );
+  }
+  return true;
 }
 
 function getManagerDelegationContext() {
@@ -7659,8 +7732,12 @@ async function submitManagerLeaveDelegations(event) {
     showManagerLeaveDelegationNotice("warning", "Select the employee this temporary access should cover.");
     return;
   }
-  if (new Date(endsAt) <= new Date(startsAt)) {
-    showManagerLeaveDelegationNotice("warning", "The access end time must be after its start time.");
+  const startTimestamp = Date.parse(startsAt);
+  const endTimestamp = Date.parse(endsAt);
+  if (!Number.isFinite(startTimestamp) || !Number.isFinite(endTimestamp) ||
+      endTimestamp <= startTimestamp || endTimestamp <= Date.now() ||
+      endTimestamp > Date.now() + 90 * 24 * 60 * 60 * 1000) {
+    showManagerLeaveDelegationNotice("warning", "Choose valid dates: the end must follow the start, be in the future, and be no more than 90 days away.");
     return;
   }
 
@@ -7672,22 +7749,36 @@ async function submitManagerLeaveDelegations(event) {
   }
   try {
     const supabase = getSupabaseClient();
-    for (const delegateEmployeeId of selectedDelegateIds) {
-      const { error } = await supabase.rpc("create_manager_leave_delegation", {
-        p_delegate_employee_id: delegateEmployeeId,
-        p_scope_type: scopeType,
-        p_covered_employee_id: coveredEmployeeId,
-        p_starts_at: new Date(startsAt).toISOString(),
-        p_ends_at: new Date(endsAt).toISOString(),
-        p_reason: reason,
-      });
-      if (error) throw error;
+    const result = await window.BexHRLeaveAuthority.createIndividually(
+      selectedDelegateIds,
+      async delegateEmployeeId => {
+        const { error } = await supabase.rpc("create_manager_leave_delegation", {
+          p_delegate_employee_id: delegateEmployeeId,
+          p_scope_type: scopeType,
+          p_covered_employee_id: coveredEmployeeId,
+          p_starts_at: new Date(startTimestamp).toISOString(),
+          p_ends_at: new Date(endTimestamp).toISOString(),
+          p_reason: reason,
+        });
+        if (error) throw error;
+      },
+    );
+
+    // These are independent server transactions. Never imply an all-or-nothing
+    // grant if one Secondary Manager succeeded and another was rejected.
+    if (result.succeeded.length) {
+      await loadManagerLeaveDelegationContext();
+      await loadTeamLeaveVisibility();
+      populateManagerLeaveDelegationModal();
     }
-    showManagerLeaveDelegationNotice("success", `${selectedDelegateIds.length} temporary approval access record${selectedDelegateIds.length === 1 ? "" : "s"} created.`);
-    document.getElementById("managerLeaveDelegationForm")?.reset();
-    await loadManagerLeaveDelegationContext();
-    await loadTeamLeaveVisibility();
-    populateManagerLeaveDelegationModal();
+    if (result.failed.length) {
+      const firstFailure = result.failed[0].message;
+      const summary = `${result.succeeded.length} of ${selectedDelegateIds.length} temporary approvals granted. ${result.failed.length} failed: ${firstFailure}`;
+      showManagerLeaveDelegationNotice(result.succeeded.length ? "warning" : "danger", summary);
+    } else {
+      showManagerLeaveDelegationNotice("success", `${result.succeeded.length} temporary approval access record${result.succeeded.length === 1 ? "" : "s"} created.`);
+      document.getElementById("managerLeaveDelegationForm")?.reset();
+    }
   } catch (error) {
     showManagerLeaveDelegationNotice("danger", error?.message || "Temporary approval access could not be created.");
   } finally {
@@ -7740,8 +7831,8 @@ function initialiseManagerLeaveDelegationUi() {
 // MANAGER LEAVE READINESS IDENTITY RESOLUTION - v1.0.0
 // Read the minimum tenant-scoped readiness data through a protected RPC.
 // This avoids treating RLS-restricted Secondary Manager balance/profile reads
-// as missing data. The existing Primary-Manager-only decision RPC remains the
-// final authority for approve, reject, and return actions.
+// as missing data. The protected decision RPC remains the final authority
+// for Primary and actively delegated Secondary decisions.
 async function loadManagerLeaveReadinessRows() {
   try {
     const supabase = getSupabaseClient();
