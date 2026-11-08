@@ -513,6 +513,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // If the staged RPC is unavailable, normal HR login remains unchanged.
   async function getPreferredAuthorizedLandingForHr(profile) {
     if (String(profile?.role || '').trim().toLowerCase() !== 'hr') return '';
+    if (String(profile?.hr_access_level || '').trim().toLowerCase() === 'tenant_admin') return '';
     try {
       const { data, error } = await Promise.race([
         supabaseClient.rpc('bexhr_p7b_workspace_access'),
@@ -1357,7 +1358,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const { data: profile, error: profileError } = await supabaseClient
           .from("profiles")
           .select(
-            "id, email, full_name, role, department, is_active, must_change_password",
+            "id, email, full_name, role, hr_access_level, department, is_active, must_change_password",
           )
           .eq("id", authData.user.id)
           .single();

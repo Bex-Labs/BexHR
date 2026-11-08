@@ -713,7 +713,7 @@ async function readWholeOrganizationDualWorkspaceStatus(profile = {}) {
     }
     return {
       mode: "authoritative",
-      eligible: hrAccess === "standard" && data.can_enter_manager === true &&
+      eligible: (hrAccess === "standard" || hrAccess === "tenant_admin") && data.can_enter_manager === true &&
         data.preferred_workspace === "manager",
     };
   } catch (error) {
@@ -845,7 +845,7 @@ function getCurrentWorkspaceKey() {
     if (dualWorkspaceAvailable) {
       options.push({
         key: "hr",
-        label: legacyMode ? "HR Workspace" : "HR Standard Workspace",
+        label: (legacyMode || String(profile.hr_access_level || "").toLowerCase() === "tenant_admin") ? "HR Workspace" : "HR Standard Workspace",
         description: "Authorised people management and HR responsibilities.",
         icon: "bi bi-people",
         // Explicit intent prevents manager-default redirect after H8 activates.
@@ -1064,7 +1064,7 @@ function getCurrentWorkspaceKey() {
     const currentPath = String(window.location.pathname || "").toLowerCase();
     const isHrLanding = currentPath.endsWith("/hr-dashboard") ||
       currentPath.endsWith("/hr-dashboard.html");
-    if (expectedRole === "hr" && isHrLanding &&
+    if (expectedRole === "hr" && isHrLanding && String(result.profile.hr_access_level || "").toLowerCase() !== "tenant_admin" &&
         !String(window.location.search || "").trim() &&
         (await readWholeOrganizationDualWorkspaceStatus(result.profile)).eligible) {
       window.location.href = "manager-dashboard.html";

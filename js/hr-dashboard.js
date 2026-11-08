@@ -38726,6 +38726,13 @@ ${canChangePrimaryManager
         </div>
       </div>
     `
+      : primaryRow
+        ? `
+    <div class="alert alert-warning mb-3">
+      <strong>A Primary Manager is assigned, but the manager record could not be loaded.</strong>
+      <div class="small mt-1">Refresh before editing. Existing assignments have not changed.</div>
+    </div>
+  `
       : canCurrentUserMaintainPeopleData()
         ? `
     <div class="alert alert-light border mb-3">
@@ -38881,7 +38888,7 @@ ${canChangePrimaryManager
       });
   }
 
-  if (!primaryManager && canCurrentUserMaintainPeopleData()) {
+  if (!primaryRow && !primaryManager && canCurrentUserMaintainPeopleData()) {
     const secondaryManagerIds = rows
       .map((row) => String(row?.manager_employee_id || "").trim())
       .filter(Boolean);
