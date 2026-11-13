@@ -22,6 +22,14 @@
   <link rel="manifest" href="assets/favicon/site.webmanifest?v=20260731" />
   <meta name="msapplication-config" content="assets/favicon/browserconfig.xml?v=20260731" />
   <meta name="theme-color" content="#087f7a" />
+
+  <!-- BEXHR_GROUP_D_TEST_UI_DEACTIVATED_2026_11_10: hide retired validation-recipient UI only; email backend unchanged -->
+  <style id="bexhrGroupDAdminTestEmailUi">
+    #sidebarAdminEmailSetupBtn,
+    #adminOverviewManageEmailAction,
+    #adminEmailSetupWorkspace,
+    [data-admin-guide-target="sidebarAdminEmailSetupBtn"] { display: none !important; }
+  </style>
 </head>
 
 <body class="dashboard-page bexhr-has-sidebar bexhr-admin-visual-refresh admin-workspace-booting" aria-busy="true">
@@ -2402,8 +2410,7 @@
                   <strong>Configure</strong>
 
                   <small>
-                    Maintain Company Identity and controlled Email Setup
-                    where configuration is required.
+                    Maintain Company Identity and company configuration.
                   </small>
                 </div>
               </li>
@@ -2456,8 +2463,8 @@
 
               <p>
                 Start on Overview. Platform readiness, exception cards,
-                and the Action Centre will direct you to Company Identity,
-                Email Setup, or User Access.
+                and the Action Centre will direct you to Company Identity
+                or User Access.
               </p>
 
             </div>

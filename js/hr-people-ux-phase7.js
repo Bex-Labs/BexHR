@@ -263,6 +263,15 @@
   // Lifecycle mirrors the Directory's exact employee identity, contact,
   // role, two status pills and start-date presentation. Only its final
   // action differs: protected Offboard/Reactivate instead of Actions.
+  // Match Directory scope presentation; do not rewrite employee data.
+  function resolveLifecyclePositionScope(employee) {
+    const saved = String(employee?.department || "").trim() || "No department";
+    if (typeof getHrEmployeePositionScopePresentation !== "function") return saved;
+    const scope = getHrEmployeePositionScopePresentation(employee);
+    const label = String(scope?.label || "").trim() || saved;
+    return scope?.needsReview ? `${label} (scope review required)` : label;
+  }
+
   function renderLifecycle() {
     const list = document.getElementById(LIFE_LIST_ID);
     if (!list) return;
@@ -332,7 +341,7 @@
       const roleCell = createElement('td');
       roleCell.setAttribute('data-label', 'Role');
       roleCell.append(
-        createElement('div', 'hr-employee-cell-primary', employee.department || 'No department'),
+        createElement('div', 'hr-employee-cell-primary', resolveLifecyclePositionScope(employee)),
         createElement('div', 'hr-employee-cell-secondary', employee.job_title || 'No job title'),
         createElement('span', 'hr-employee-role-badge', roleLabel),
       );
@@ -388,6 +397,11 @@
       ?.addEventListener('input', renderLifecycle);
     document.getElementById('hrEmployeeLifecycleStatusFilter')
       ?.addEventListener('change', renderLifecycle);
+
+    // BEXHR GROUP B V11: update Lifecycle as soon as confirmed position setup reloads.
+    window.addEventListener('bexhr:organization-setup-updated', (event) => {
+      if (event?.detail?.loaded === true) renderLifecycle();
+    });
 
     document.addEventListener('pointerdown', (event) => {
       if (!openAction) return;

@@ -1,0 +1,9 @@
+/* BEXHR_GROUP_B_V6: brief contextual confirmation inside the existing Job Titles form. */
+.bexhr-group-b-root-advice {
+  margin-top:.45rem; padding:.55rem .7rem; border-radius:9px;
+  color:#17475e; background:#e9f6f6; border:1px solid #b5dcde;
+  font-size:.88rem; line-height:1.45;
+}
+.bexhr-group-b-root-advice[data-tone="warning"] { color:#87351e; background:#fff4ed; border-color:#f5c7aa; }
+.bexhr-group-b-root-advice[data-tone="success"] { color:#116343; background:#edfaf3; border-color:#b4e1c9; }
+.bexhr-group-b-root-advice[hidden] {display:none!important;}

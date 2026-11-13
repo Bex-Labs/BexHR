@@ -238,6 +238,26 @@ document.addEventListener("DOMContentLoaded", function () {
     return String(role || "").trim().toLowerCase() === "hr";
   }
 
+  // H12 G4 RC4: Manager role stays primary; explicit HR Standard grants
+  // must complete MFA before entering the scoped HR workspace.
+  async function isHrMfaRequiredForLoginProfile(profile = {}) {
+    if (isHrDashboardMfaRequiredRole(profile.role)) return true;
+    if (String(profile.role || "").trim().toLowerCase() !== "manager") return false;
+    try {
+      const { data, error } = await supabaseClient.rpc("bexhr_h12_workspace_entitlements");
+      if (error) {
+        const code = String(error.code || "").toUpperCase();
+        if (code === "PGRST202" || code === "42883") return false;
+        throw error;
+      }
+      if (typeof data?.hr_grant_present !== "boolean")
+        throw new Error("Malformed workspace entitlement response");
+      return data.hr_grant_present === true;
+    } catch (error) {
+      throw new Error("Unable to verify HR workspace MFA requirements");
+    }
+  }
+
   function setHrMfaStatus(type = "info", message = "") {
     if (!hrMfaStatus) return;
 
@@ -895,7 +915,8 @@ document.addEventListener("DOMContentLoaded", function () {
     alertContainer.replaceChildren();
 
     const prompt = document.createElement("div");
-    prompt.className = "alert alert-info";
+    // BEXHR_GROUP_D_V2_COLLAPSE_AND_SESSION_2026_11_10: trusted HR-only lock prompt gets the warning colour.
+    prompt.className = "alert alert-warning";
     prompt.setAttribute("role", "status");
 
     const title = document.createElement("div");
@@ -1204,10 +1225,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     switch (message) {
       case "session-timeout":
-        showAlert(
-          "Your workspace was locked due to inactivity. A verified HR session on this browser can continue without another authenticator code.",
-          "warning",
-        );
+        // BEXHR_GROUP_D_V2_COLLAPSE_AND_SESSION_2026_11_10: the login page serves all roles. Do not show
+        // HR-specific MFA/session claims to a manager, employee, or stranger.
+        // restoreTrustedHrSessionIfAvailable verifies an active HR profile,
+        // matching tenant context, refreshed session AND AAL2 before showing
+        // its role-specific warning and continuation controls.
         break;
       case "session-expired":
         showAlert("Your session has expired. Please sign in again.", "warning");
@@ -1515,7 +1537,8 @@ document.addEventListener("DOMContentLoaded", function () {
         // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
         // Do not create the local application session or redirect HR until Supabase
         // confirms the session has reached AAL2 through TOTP MFA.
-        if (isHrDashboardMfaRequiredRole(profile.role)) {
+        const loginNeedsHrMfa = await isHrMfaRequiredForLoginProfile(profile);
+        if (loginNeedsHrMfa) {
           try {
             await startHrDashboardMfaFlow(loginContext);
           } catch (mfaStartError) {

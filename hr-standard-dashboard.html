@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>HR Standard Workspace | BexHR</title>
+  <style>
+    :root{font-family:Inter,system-ui,Arial,sans-serif;color:#193340;background:#f3f7f8}
+    *{box-sizing:border-box}body{margin:0}.top{background:#0e5759;color:white;padding:18px max(20px,calc((100% - 1050px)/2));display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    .brand{font-size:1.2rem;font-weight:700}.top a{color:white;text-decoration:none;border:1px solid #ffffff90;border-radius:8px;padding:9px 14px}
+    main{max-width:1050px;margin:28px auto;padding:0 18px}h1{font-size:1.65rem;margin:0}p{color:#4a6570;line-height:1.5}section{background:#fff;border:1px solid #dce7e9;padding:20px;border-radius:12px;margin:18px 0;box-shadow:0 2px 6px #16333d0a}section h2{margin:0 0 12px;font-size:1.1rem}
+    table{width:100%;border-collapse:collapse;font-size:.88rem}td,th{padding:10px 8px;text-align:left;border-bottom:1px solid #e9eef1;overflow-wrap:anywhere}th{color:#3d6570} .scroll{overflow-x:auto}
+    .meta{font-size:.9rem}.error{background:#fff3f1;color:#9e2d20;padding:15px;border-radius:8px}.good{color:#096849} .empty{font-size:.9rem;color:#657680}
+    button{cursor:pointer;border:1px solid #b0c8cd;background:white;border-radius:7px;padding:9px 13px;color:#173f4b}button:hover{background:#edf5f5}
+  </style>
+</head>
+<body>
+  <header class="top"><span class="brand">BexHR · HR Standard</span><nav><a href="manager-dashboard.html">← Manager Workspace</a></nav></header>
+  <main>
+    <h1>HR Standard Workspace</h1>
+    <p>Limited, read-only HR Standard information. Manager responsibilities, leave decisions and PA reviews stay in their existing workspaces.</p>
+    <p id="status" role="status" aria-live="polite">Verifying HR Standard entitlement and MFA…</p>
+    <div id="content" hidden>
+      <section><h2>Employee Directory</h2><div id="directory" class="scroll"></div></section>
+      <section><h2>Reporting Summary</h2><div id="reporting" class="scroll"></div></section>
+      <section><h2>Processed Leave Decisions</h2><div id="leave" class="scroll"></div></section>
+      <p class="meta">Protected employee biodata, NIN, payroll, documents and administrative controls are not loaded in this workspace.</p>
+    </div>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/app.js"></script>
+  <script src="js/session.js"></script>
+  <script src="js/bexhr-h12-hr-standard.js"></script>
+</body></html>

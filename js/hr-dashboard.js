@@ -1,3 +1,4 @@
+// Group E - user-facing payroll adjustment copy - 2026-11-10. No persisted marker changed.
 // DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
 // Browser refresh can restore the previous scroll position before the dashboard
 // finishes restoring the active workspace. Keep browser restoration manual so
@@ -246,6 +247,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         ...payrollSetupCards,
         paymentSetupHeader,
         ...paymentSetupCards,
+        // BEXHR_GROUP_D_TEST_UI_DEACTIVATED_2026_11_10: test-only email section stays present in DOM but not in Setup navigation.
         communicationSetupHeader,
         ...communicationSetupCards,
       ].forEach((card) => {
@@ -1150,6 +1152,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
+    // BEXHR_H12_G4_NATIVE_PILOT_20261111: this is an authorised second workspace, not a role change.
+    state.h12NativeHrStandard = access.h12NativeHrStandard === true;
+    if (state.h12NativeHrStandard) {
+      document.body.dataset.h12NativeHrStandard = "pilot_read_only";
+    }
     state.currentUser = access.session.user;
     state.currentProfile = access.profile;
 
@@ -1164,6 +1171,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     await loadLatestHrProfile();
     primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
+    // BEXHR_GROUP_A_20261108: non-blocking, tenant-verified field configuration.
+    void window.BexHrGroupA?.init({ client: getSupabaseClient(), profile: state.currentProfile });
 
     console.timeEnd("BexHR startup: loadLatestHrProfile");
     console.log("[BexHR STARTUP] 4 - loadLatestHrProfile completed");
@@ -1615,7 +1624,7 @@ const HR_NAVIGATION_TASKS = Object.freeze({
   "setup.organization": { workspace: "setup", group: "setup", title: "Organization", subtitle: "Maintain organization details, departments, job titles, and audit context.", module: "Setup" },
   "setup.rules": { workspace: "setup", group: "setup", title: "Payroll Rules", subtitle: "Maintain payroll allowances, deductions, and one-period employee payroll adjustments.", module: "Setup" },
   "setup.payment": { workspace: "setup", group: "setup", title: "Payment Setup", subtitle: "Maintain bank directory and employee payment account details.", module: "Setup" },
-  "setup.communication": { workspace: "setup", group: "setup", title: "Communication", subtitle: "Manage approved email validation and delivery configuration.", module: "Setup" },
+  // BEXHR_GROUP_D_TEST_UI_DEACTIVATED_2026_11_10: test-only Communication task retired.
   "selfservice.leave": { workspace: "selfservice", group: "selfservice", title: "My Leave", subtitle: "Manage your own leave requests, balances, and decision history.", module: "My Self-Service" },
   "selfservice.payroll": { workspace: "selfservice", group: "selfservice", title: "My Payroll", subtitle: "Review your own authorised payroll records and payslips.", module: "My Self-Service" },
 });
@@ -1652,7 +1661,6 @@ const HR_FOCUSED_WORKSPACE_TASK_SWITCHERS = Object.freeze({
       "setup.organization",
       "setup.rules",
       "setup.payment",
-      "setup.communication",
     ],
   },
 });
@@ -3270,8 +3278,10 @@ function canCurrentUserMaintainPayrollSetupData() {
 
 function canCurrentUserMaintainPayrollMasterData() {
   // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
-  // Existing Payroll Master checks now follow the full Payroll Setup rule.
-  return canCurrentUserMaintainPayrollSetupData();
+  // H12 G4: keep ordinary HR salary authority; only the verified secondary
+  // HR Standard manager workspace receives the same salary-setup capability.
+  return canCurrentUserMaintainPayrollSetupData() ||
+    (state.h12NativeHrStandard === true && getCurrentHrBusinessRole() === "manager");
 }
 
 // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
@@ -3467,6 +3477,13 @@ const HR_REVIEW_MAINTENANCE_ROLES = new Set([
 
 function canCurrentUserMaintainHrReviewData() {
   return HR_REVIEW_MAINTENANCE_ROLES.has(getCurrentHrBusinessRole());
+}
+
+// H12 G4: approved Leave cancellation only, never Manager decisions or
+// unrelated HR Review actions. Backend entitlement + MFA is authoritative.
+function canCurrentUserCancelApprovedLeave() {
+  return canCurrentUserMaintainHrReviewData() ||
+    (state.h12NativeHrStandard === true && getCurrentHrBusinessRole() === "manager");
 }
 
 function showHrReviewAccessDeniedMessage(actionLabel = "change HR review records") {
@@ -3990,6 +4007,22 @@ function applyHrPayrollSetupAccessControls() {
     state.dom.savePayrollEmployeeOverrideBtnText =
       document.getElementById("savePayrollEmployeeOverrideBtnText");
   }
+  // H12 G4 secondary HR Standard: restore ONLY Salary Setup controls.
+  // Allowance, statutory, deductions, adjustments and operations remain locked.
+  if (state.h12NativeHrStandard === true && getCurrentHrBusinessRole() === "manager") {
+    applyPayrollMasterAccessControls();
+    if (state.dom.payrollMasterFormModeBadge) {
+      state.dom.payrollMasterFormModeBadge.textContent = "Salary Setup";
+      state.dom.payrollMasterFormModeBadge.className = "badge rounded-pill text-bg-light border px-3 py-2";
+    }
+    if (state.dom.savePayrollMasterBtn) {
+      state.dom.savePayrollMasterBtn.className = "btn btn-primary dashboard-action-btn";
+      state.dom.savePayrollMasterBtn.innerHTML = '<i class="bi bi-check2-circle me-2"></i><span id="savePayrollMasterBtnText">Save Salary Setup</span>';
+      state.dom.savePayrollMasterBtnText = document.getElementById("savePayrollMasterBtnText");
+      updatePayrollMasterSaveButtonState();
+    }
+  }
+
 }
 
 // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
@@ -4744,7 +4777,12 @@ function setHrPayrollRecordsTaskMode(mode = "records") {
     if (state.dom.payslipEmailLogsCollapse?.classList.contains("d-none")) {
       state.dom.togglePayslipEmailLogsBtn?.click();
     }
+    // BEXHR_GROUP_D_V2_COLLAPSE_AND_SESSION_2026_11_10: In dedicated Payslips / Delivery, the outer
+    // card is the sole collapse control. Keep status details expanded, but
+    // hide the redundant inner toggle. In Payroll Records restore it.
+    state.dom.togglePayslipEmailLogsBtn?.classList.add("d-none");
   } else {
+    state.dom.togglePayslipEmailLogsBtn?.classList.remove("d-none");
     // Payroll Records stays records-focused. Keep delivery available through
     // its dedicated Payroll option instead of extending this task vertically.
     if (separator) {
@@ -9410,7 +9448,7 @@ function formatPayrollEmployeeOverrideCategory(value = "") {
     OTHER_DEDUCTION: "Deduction Adjustment",
   };
 
-  return labels[value] || "Legacy Override";
+  return labels[value] || "Legacy adjustment";
 }
 
 
@@ -10504,7 +10542,7 @@ async function handlePayrollEmployeeOverrideSave() {
     showDashboardToast(
       "danger",
       "Payroll adjustment save failed",
-      error.message || "The employee payroll override could not be saved.",
+      error.message || "The payroll adjustment could not be saved.",
     );
   } finally {
     await waitForMinimumLoadingFeedback(startedAt, 600);
@@ -11367,6 +11405,15 @@ function bindEvents() {
     await handleEmployeeSave();
   });
 
+  // BEXHR_GROUP_A_20261108: editable historical child records for Alpatech only.
+  state.dom.employeeCreateForm?.addEventListener('input', (event) => {
+    if (!window.BexHrGroupA?.alpatech) return;
+    const group = event.target.closest?.('[data-employee-form-section]')?.dataset.employeeFormSection;
+    if (group === 'education') state.groupAEducationTouched = true;
+    if (group === 'dependants') state.groupADependantsTouched = true;
+  });
+  state.dom.addEmployeeEducationRecordBtn?.addEventListener('click', () => { if(window.BexHrGroupA?.alpatech) state.groupAEducationTouched = true; });
+  state.dom.addEmployeeDependantRecordBtn?.addEventListener('click', () => { if(window.BexHrGroupA?.alpatech) state.groupADependantsTouched = true; });
   // EMPLOYEE BIODATA COMPLETION - STEP 6C-4A
   // Stage the visible Education form as a saved education row in the page state.
   // Supabase save wiring comes after this UI behaviour is confirmed.
@@ -11527,6 +11574,11 @@ function bindEvents() {
   // System Role changes affect custom-role visibility, HR role warning,
   // self-role protection, and save readiness.
   state.dom.systemRole?.addEventListener("change", () => {
+    if (!state.currentEditingEmployee) {
+      state.bexhrRoleChoiceTouched = true;
+      state.bexhrRoleAutoSuggested = false;
+    }
+    if (!state.currentEditingEmployee) syncHrNewEmployeeManagerRoleSuggestion();
     syncCustomSystemRoleVisibility();
     syncHrRoleAssignmentWarning();
     syncHrSelfRoleProtectionState();
@@ -11575,6 +11627,7 @@ function bindEvents() {
   // job titles that fit the selected department.
   state.dom.department?.addEventListener("change", () => {
     populateJobTitleOptionsForDepartment("");
+    syncHrNewEmployeeManagerRoleSuggestion();
     refreshHrReportingDepartmentChoices();
   });
 
@@ -11582,6 +11635,7 @@ function bindEvents() {
   // Whole-organization executive order depends on the selected approved Job Title.
   // Rebuild reporting choices immediately when HR changes CEO/COO/title selection.
   state.dom.jobTitle?.addEventListener("change", () => {
+    syncHrNewEmployeeManagerRoleSuggestion();
     refreshHrReportingDepartmentChoices();
     updateEmployeeSaveButtonState();
   });
@@ -12731,8 +12785,70 @@ const PRE7B_EMPLOYEE_IMPORT_HEADERS = Object.freeze([
   "Next Of Kin Address"
 ]);
 
+const GROUP_A_V6_COMPACT_IMPORT_HEADERS = Object.freeze([
+  "First Name", "Last Name", "Work Email", "Employee Number", "Phone Number",
+  "Department", "Job Title", "Employment Date", "Date Of Birth", "Nationality"
+]);
+
+const ALPATECH_LEGACY_IMPORT_HEADERS = Object.freeze([
+  "First Name",
+  "Middle Name",
+  "Last Name",
+  "Employee Number",
+  "Work Email",
+  "Personal Email",
+  "Phone Number",
+  "Alternative Phone Number",
+  "Date Of Birth",
+  "Gender",
+  "Marital Status",
+  "Nationality",
+  "State Of Origin",
+  "Local Government Area",
+  "Town of Origin",
+  "Means Of Identification",
+  "Identification Document Number",
+  "Identification Issue State",
+  "NIN",
+  "Department",
+  "Job Title",
+  "Employment Date",
+  "HMO Provider",
+  "HMO Plan",
+  "HMO Number",
+  "Current Address Line 1",
+  "Current City",
+  "Current State Region",
+  "Current Country",
+  "Current Postal Code",
+  "Permanent Address Line 1",
+  "Permanent City",
+  "Permanent State Region",
+  "Permanent Country",
+  "Permanent Postal Code",
+  "Next Of Kin Full Name",
+  "Next Of Kin Relationship",
+  "Next Of Kin Phone Number",
+  "Next Of Kin Email",
+  "Next Of Kin Address",
+  "Education Institution",
+  "Education Qualification",
+  "Education Field Of Study",
+  "Education Graduation Year",
+  "Education Status",
+  "Highest Qualification",
+  "Dependant Full Name",
+  "Dependant Relationship",
+  "Dependant Date Of Birth",
+  "Dependant Phone Number",
+  "Dependant Coverage Type"
+]);
+
 function downloadBatchEmployeeCsvImportTemplate() {
-  const headers = PRE7B_EMPLOYEE_IMPORT_HEADERS;
+  let headers;
+  try {
+    headers = window.BexHrGroupA.headers(GROUP_A_V6_COMPACT_IMPORT_HEADERS, ALPATECH_LEGACY_IMPORT_HEADERS);
+  } catch (error) { showPageAlert('warning', error.message); return; }
 
   const csvContent = headers
     .map(escapeBatchEmployeeCsvCell)
@@ -13279,6 +13395,13 @@ async function handleBatchEmployeeSubmit() {
       }
     }
 
+    // BEXHR_GROUP_A_20261108: imported custom fields are saved against created employee IDs.
+    let groupACustomWarning = '';
+    try {
+      const result = await window.BexHrGroupA.saveImported(createdRows, batchTenantId);
+      if (result.failures?.length) groupACustomWarning = result.failures.join('; ');
+    } catch (error) { groupACustomWarning = error.message; }
+    if (groupACustomWarning) childBiodataWarning = [childBiodataWarning, 'Custom biodata: ' + groupACustomWarning].filter(Boolean).join('; ');
     state.batchEmployeePreparedRows = [];
     if (state.dom.batchEmployeeCsvFile) state.dom.batchEmployeeCsvFile.value = "";
     if (state.dom.batchEmployeeReviewCount) {
@@ -14164,6 +14287,8 @@ async function handleBatchEmployeeCsvImport() {
     const csvText = await file.text();
     const rows = parseBatchEmployeeCsvText(csvText);
 
+    // BEXHR_GROUP_A_20261108: fail closed until tenant configuration is loaded.
+    window.BexHrGroupA.headers(GROUP_A_V6_COMPACT_IMPORT_HEADERS, ALPATECH_LEGACY_IMPORT_HEADERS);
     // FLEXIBLE BATCH EMPLOYEE IMPORT - STEP 4
     // Only the minimum identity columns are mandatory. All other approved
     // template columns remain optional and can be completed after creation.
@@ -14197,9 +14322,8 @@ async function handleBatchEmployeeCsvImport() {
     // PRE-7B - Fail closed on unsupported, duplicate or legacy template columns.
     // Explicitly prevents mass assignment of System Role, payroll/ID fields and
     // obsolete child biodata, even when a CSV was crafted outside the UI.
-    const allowedHeaders = new Set(
-      PRE7B_EMPLOYEE_IMPORT_HEADERS.map(normalizeBatchEmployeeCsvHeader),
-    );
+    const approvedHeaders = window.BexHrGroupA.acceptedHeaders(GROUP_A_V6_COMPACT_IMPORT_HEADERS, PRE7B_EMPLOYEE_IMPORT_HEADERS, ALPATECH_LEGACY_IMPORT_HEADERS);
+    const allowedHeaders = new Set(approvedHeaders.map(normalizeBatchEmployeeCsvHeader));
     const uploadedHeaders = rows[headerRowIndex]
       .map(normalizeBatchEmployeeCsvHeader).filter(Boolean);
     if (
@@ -14209,7 +14333,7 @@ async function handleBatchEmployeeCsvImport() {
     ) {
       showPageAlert(
         "warning",
-        "Import stopped: this CSV contains unsupported or duplicate columns. Download the new 20-column Employee Template and copy only approved values.",
+        "Import stopped: this CSV contains unsupported, retired or duplicate columns. Download this tenant's current Employee Template; values from old fields cannot be discarded silently.",
       );
       return;
     }
@@ -14244,14 +14368,14 @@ async function handleBatchEmployeeCsvImport() {
     const seenEmployeeNumbers = new Set();
 
     dataRows.forEach((row, index) => {
-      const preparedRow = buildBatchEmployeePreparedRowFromCsv(
+      const preparedRow = window.BexHrGroupA.validateImportRow(buildBatchEmployeePreparedRowFromCsv(
         row,
         headerMap,
         headerRowIndex + index + 2,
         seenEmails,
         seenNames,
         seenEmployeeNumbers,
-      );
+      ), row, headerMap);
 
       if (preparedRow.skipped) {
         skippedRows.push(preparedRow);
@@ -18219,7 +18343,7 @@ function isEmployeeFormReadyForSubmit() {
   // Optional Personal Email should not be required, but should block Save
   // if HR enters an invalid email format.
   const personalEmail = String(state.dom.personalEmail?.value || "").trim();
-  const hasValidPersonalEmail = true; // PRE-7B retired personal-email input is not required.
+  const hasValidPersonalEmail = window.BexHrGroupA?.alpatech ? (!personalEmail || emailPattern.test(personalEmail)) : true;
 
   const hasValidExitDate = true;
 
@@ -18247,12 +18371,12 @@ function isEmployeeFormReadyForSubmit() {
   // EMPLOYEE BIODATA COMPLETION - STEP 6C-3A
   // Education is optional. If HR starts it, Institution and Qualification
   // must be completed, and Graduation Year must be realistic.
-  const hasValidEducationFields = true; // PRE-7B: education saved outside routine onboarding.
+  const hasValidEducationFields = window.BexHrGroupA?.alpatech ? areEmployeeEducationFieldsReadyForSubmit() : true;
 
   // EMPLOYEE BIODATA COMPLETION - STEP 6D-3
   // Beneficiaries/dependants are optional. If HR starts a visible row,
   // it must be complete before Create/Update Employee is enabled.
-  const hasValidDependantFields = true; // PRE-7B: dependants are outside routine onboarding.
+  const hasValidDependantFields = window.BexHrGroupA?.alpatech ? areEmployeeDependantFieldsReadyForSubmit() : true;
 
   // HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
   // If HR access is newly selected, Save must remain disabled until
@@ -18292,7 +18416,10 @@ function isEmployeeFormReadyForSubmit() {
 function updateEmployeeSaveButtonState() {
   // Secure NIN retrieval is required only to CHANGE NIN, not to save ordinary
   // profile fields. buildEmployeePayload omits NIN on all unverified edits.
-  const canSubmit = isEmployeeFormReadyForSubmit();
+  // GROUP A V6: required custom fields participate in the same grey/ready button rule.
+  // Imports are intentionally exempt and keep their existing flexible validation.
+  const canSubmit = isEmployeeFormReadyForSubmit() &&
+    (window.BexHrGroupA?.ready !== true || window.BexHrGroupA.requiredComplete());
 
   // Additional reporting managers are optional, but every rendered row
   // represents an active reporting-line entry and therefore needs a valid
@@ -18331,15 +18458,21 @@ function updateEmployeeSaveButtonState() {
   updateEmployeeFormSteps();
 }
 
+// GROUP A V6: notify the existing authoritative save-button check when custom inputs change.
+window.bexhrGaUpdateEmployeeSaveButton = updateEmployeeSaveButtonState;
+
 // EMPLOYEE BIODATA INTERNAL WORKSPACE - STEP 1
 // Show one logical employee-profile group at a time without moving or copying
 // the existing form controls. This keeps the current form and all business logic
 // authoritative while reducing the long-form cognitive load.
 const EMPLOYEE_BIODATA_TAB_DEFINITIONS = [
-  { key: "core", stepNumber: "1", heading: "" },
+  { key: "core", stepNumber: "1", heading: "Core Details" },
   { key: "reporting", stepNumber: "2", heading: "Reporting Lines" },
+  { key: "dependants", stepNumber: "3", heading: "Dependants" },
   { key: "address", stepNumber: "4", heading: "Address Details" },
   { key: "next-of-kin", stepNumber: "5", heading: "Next of Kin" },
+  { key: "education", stepNumber: "6", heading: "Education" },
+  { key: "documents", stepNumber: "7", heading: "Documents" },
 ];
 
 function normalizeEmployeeBiodataHeading(value = "") {
@@ -18375,6 +18508,8 @@ function setEmployeeBiodataTab(tabKey = "core", options = {}) {
   );
 
   if (!requestedTab) return false;
+  // BEXHR_GROUP_A_V5: tenant-scoped user-defined headings are valid navigation steps.
+  if (!window.BexHrGroupA?.alpatech && !["core","reporting","address","next-of-kin"].includes(cleanTabKey) && !window.BexHrGroupA?.isCustomHeading?.(cleanTabKey)) return false;
 
   const sectionNodes = Array.from(
     form.querySelectorAll("[data-employee-form-section]"),
@@ -18386,8 +18521,14 @@ function setEmployeeBiodataTab(tabKey = "core", options = {}) {
     return false;
   }
 
+  // BEXHR_GROUP_A_V4: real tab navigation, including legacy Alpatech fields.
+  // Some older CSS selectors force display:block!important, so hidden alone
+  // was not enough. Inline important is removed only for the selected step.
   sectionNodes.forEach((node) => {
-    node.hidden = node.dataset.employeeFormSection !== cleanTabKey;
+    const isVisible = node.dataset.employeeFormSection === cleanTabKey;
+    node.hidden = !isVisible;
+    if (isVisible) node.style.removeProperty('display');
+    else node.style.setProperty('display', 'none', 'important');
   });
 
   stepper.querySelectorAll("[data-employee-form-tab]").forEach((tab) => {
@@ -18405,6 +18546,7 @@ function setEmployeeBiodataTab(tabKey = "core", options = {}) {
   });
 
   form.dataset.activeEmployeeTab = cleanTabKey;
+  window.BexHrGroupA?.onTabChanged?.(cleanTabKey);
 
   if (options.resetScroll !== false) {
     form.scrollTop = 0;
@@ -18551,6 +18693,7 @@ function enhanceEmployeeBiodataInternalWorkspace() {
     const definition = EMPLOYEE_BIODATA_TAB_DEFINITIONS[index];
 
     tab.dataset.employeeFormTab = definition.key;
+    tab.querySelector('.bexhr-step-num')?.replaceChildren(document.createTextNode(definition.stepNumber));
     tab.classList.add("hr-employee-form-tab");
     tab.setAttribute("role", "button");
     tab.setAttribute("aria-pressed", String(index === 0));
@@ -18587,21 +18730,24 @@ function enhanceEmployeeBiodataInternalWorkspace() {
 
     event.preventDefault();
 
-    const currentIndex = tabs.indexOf(tab);
+    // BEXHR_GROUP_A_V5: include custom steps in arrow/Home/End keyboard navigation.
+    const eligibleTabs = Array.from(stepper.querySelectorAll('[data-employee-form-tab]'))
+      .filter((candidate) => window.BexHrGroupA?.alpatech || !["3", "6", "7"].includes(candidate.dataset.step));
+    const currentIndex = eligibleTabs.indexOf(tab);
     let nextIndex = currentIndex;
 
     if (event.key === "ArrowLeft") {
-      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+      nextIndex = (currentIndex - 1 + eligibleTabs.length) % eligibleTabs.length;
     } else if (event.key === "ArrowRight") {
-      nextIndex = (currentIndex + 1) % tabs.length;
+      nextIndex = (currentIndex + 1) % eligibleTabs.length;
     } else if (event.key === "Home") {
       nextIndex = 0;
     } else if (event.key === "End") {
-      nextIndex = tabs.length - 1;
+      nextIndex = eligibleTabs.length - 1;
     }
 
     setEmployeeBiodataTab(
-      EMPLOYEE_BIODATA_TAB_DEFINITIONS[nextIndex]?.key,
+      eligibleTabs[nextIndex]?.dataset.employeeFormTab,
       { focus: true, resetScroll: true },
     );
   });
@@ -19596,6 +19742,14 @@ async function loadHrEmployeesForLeaveDecisionIdentityMap() {
   const supabase = getSupabaseClient();
 
   try {
+    // BEXHR_H12_G4_PEOPLE_LEAVE_IDENTITY_V1: the dual-role COO must never query employees.select('*').
+    // Use the existing AAL2 + entitlement + tenant-checked minimal roster.
+    // Native HR accounts keep their original data path.
+    if (state.h12NativeHrStandard === true) {
+      const { data, error } = await supabase.rpc('bexhr_h12_native_hr_employee_roster');
+      if (error) throw error;
+      return Array.isArray(data) ? data : [];
+    }
     const { data, error } = await applyCurrentTenantFilter(
       supabase
         .from("employees")
@@ -19794,7 +19948,7 @@ function getHrApprovedLeaveCancellationActionHtml(decision = {}) {
     `;
   }
 
-  if (!canCurrentUserMaintainHrReviewData()) {
+  if (!canCurrentUserCancelApprovedLeave()) {
     return `
       <span class="badge bg-light text-secondary border hr-review-view-only-badge">
         <i class="bi bi-eye me-1" aria-hidden="true"></i>
@@ -20122,7 +20276,7 @@ function syncHrApprovedLeaveCancellationConfirmState() {
 function openHrApprovedLeaveCancellationModal(leaveRequestId) {
   // HR REVIEW ROLE ACCESS + MODERNISATION - STEP 7
   // Keep the modal inaccessible to Payroll, Auditor, QA, and unknown roles.
-  if (!canCurrentUserMaintainHrReviewData()) {
+  if (!canCurrentUserCancelApprovedLeave()) {
     showHrReviewAccessDeniedMessage("Approved-leave cancellation");
     return;
   }
@@ -20234,7 +20388,7 @@ async function submitHrApprovedLeaveCancellation() {
   // HR REVIEW ROLE ACCESS + MODERNISATION - STEP 8
   // The database RPC remains the final authority. This frontend guard prevents
   // review-only roles from initiating the destructive workflow at all.
-  if (!canCurrentUserMaintainHrReviewData()) {
+  if (!canCurrentUserCancelApprovedLeave()) {
     showHrReviewAccessDeniedMessage("Approved-leave cancellation");
     return;
   }
@@ -26160,7 +26314,7 @@ function renderImportedBatchPayrollCsvRows(preparedRows = [], skippedRows = []) 
 </div>
 ${preparedRow.employee_override_applied
         ? `<div class="text-primary small fw-semibold mt-1">
-      Employee override applied
+      Payroll adjustment applied
     </div>`
         : ""}
       </td>
@@ -26575,7 +26729,7 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
               </div>
               ${preparedPayrollRow.employee_override_applied
           ? `<div class="text-primary small fw-semibold mt-1">
-                    Employee override applied
+                    Payroll adjustment applied
                   </div>`
           : ""}`
         : ""
@@ -27414,7 +27568,9 @@ async function showHrPerformanceAppraisalChooser() {
     managerScope.primaryEmployeeIds.length > 0 ||
     managerScope.secondaryEmployeeIds.length > 0;
 
+  // BEXHR_GROUP_B_V13_PATCH: PA exclusion follows current hierarchy even without cycles.
   const employeeExcludedFromActivePaCycle =
+    await window.BexHRGroupBV13.isHighest(getSupabaseClient(), getCurrentHrEmployeeRecord()) ||
     await isCurrentHrEmployeeExcludedFromActivePaCycle();
 
   const existingChooser = document.getElementById(
@@ -27744,7 +27900,13 @@ async function ensureHrPerformanceAppraisalDepartmentsLoaded() {
   }
 }
 
-function openHrPerformanceAppraisal(mode = "auto", managerScope = null) {
+async function openHrPerformanceAppraisal(mode = "auto", managerScope = null) {
+  // BEXHR_GROUP_B_V13_PATCH: no direct bypass through employee-mode navigation.
+  if (mode === 'employee' &&
+      await window.BexHRGroupBV13.isHighest(getSupabaseClient(), getCurrentHrEmployeeRecord())) {
+    showPageAlert('warning','The highest occupied position does not have a personal appraisal.');
+    return;
+  }
   const isHrAdmin =
     canCurrentUserMaintainOrganizationSetupData();
 
@@ -29030,18 +29192,114 @@ function isHrWholeOrganizationEmployee(employee = {}) {
   );
 }
 
-function getEmployeeDepartmentSelectionValue(employee = {}) {
-  if (
-    isHrWholeOrganizationEmployee(
-      employee,
-    )
-  ) {
-    return HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE;
-  }
+// GROUP B V10: tenant-scoped presentation only; never bulk-update employees
+// by a shared job-title string or treat rank changes as department changes.
+function getHrEmployeePositionScopePresentation(employee = {}) {
+  return window.BexHrGroupBV10?.resolveEmployeeScope(employee, {
+    tenantId: state.currentProfile?.tenant_id || '',
+    loaded: state.organizationPositionHierarchyLoaded === true,
+    positions: state.organizationJobTitles || [],
+  }) || { label: String(employee?.department || '').trim() || 'No department',
+    kind: 'saved', needsReview: false };
+}
 
-  return String(
-    employee?.department || "",
-  ).trim();
+function getEmployeeDepartmentSelectionValue(employee = {}) {
+  return getHrEmployeePositionScopePresentation(employee).kind === 'whole'
+    ? HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE
+    : String(employee?.department || '').trim();
+}
+
+function syncHrEmployeeScopeReviewMessage(employee = state.currentEditingEmployee) {
+  const notice = document.getElementById('bexhrEmployeeScopeReview');
+  if (!notice) return;
+  notice.classList.toggle('d-none', !employee ||
+    !getHrEmployeePositionScopePresentation(employee).needsReview);
+}
+
+// Manager is a *suggested* role for a new hire into a configured whole-
+// organisation leadership position. Saved roles and manual choices always win.
+// BEXHR_GROUP_B_V12: onboarding role policy
+function getHrLeadershipOnboardingRolePolicy() {
+  if (state.currentEditingEmployee) return 'existing';
+  const whole = isHrWholeOrganizationDepartmentSelection(state.dom.department?.value || '');
+  if (!whole) return 'standard';
+  const title = String(state.dom.jobTitle?.value || '').trim();
+  if (!title) return 'awaiting-title';
+  const leadership = window.BexHrGroupBV10?.isConfiguredLeadershipPosition({
+    tenantId: state.currentProfile?.tenant_id || '',
+    loaded: state.organizationPositionHierarchyLoaded === true,
+    isWholeOrganisation: true,
+    jobTitle: title,
+    positions: state.organizationJobTitles || [],
+    links: state.organizationJobTitleHierarchy || [],
+  }) === true;
+  return leadership ? 'manager-only' : 'standard';
+}
+
+function restoreHrLeadershipOnboardingRoleOptions(restorePreviousChoice = true) {
+  const select = state.dom.systemRole;
+  if (!select || state.bexhrV12RoleLock !== true) return;
+  const saved = state.bexhrV12RoleOptionStates || [];
+  for (const original of saved) {
+    if (original.option?.isConnected === false) continue;
+    if (original.option) {
+      original.option.hidden = original.hidden;
+      original.option.disabled = original.disabled;
+    }
+  }
+  // Rebuilding the normal options preserves the existing HR Admin permission
+  // check; it does not grant a user HR Standard or HR Admin access.
+  const previous = String(state.bexhrV12RoleBeforeLock || '').trim();
+  state.bexhrV12RoleLock = false;
+  state.bexhrV12RoleOptionStates = null;
+  state.bexhrV12RoleBeforeLock = '';
+  if (restorePreviousChoice && !state.currentEditingEmployee && previous) {
+    setEmployeeSystemRoleFieldValue(previous);
+  } else {
+    syncEmployeeSystemRoleOptions(previous);
+  }
+  delete select.dataset.bexhrV12ManagerOnly;
+}
+
+function syncHrNewEmployeeManagerRoleSuggestion() {
+  const select = state.dom.systemRole;
+  if (!select) return;
+  if (state.currentEditingEmployee) {
+    restoreHrLeadershipOnboardingRoleOptions(false);
+    return;
+  }
+  // Do not override actual People view-only permissions.
+  if (select.disabled) return;
+  const policy = getHrLeadershipOnboardingRolePolicy();
+  const managerOnly = policy === 'manager-only' || policy === 'awaiting-title';
+  if (managerOnly) {
+    if (!Array.from(select.options).some(option => option.value === 'manager')) return;
+    if (state.bexhrV12RoleLock !== true) {
+      state.bexhrV12RoleBeforeLock = getSelectedEmployeeSystemRoleValue() || 'employee';
+      state.bexhrV12RoleLock = true;
+    }
+    // The existing role setter may rebuild the HR Standard option. Snapshot
+    // each current option before restricting; release restores original flags.
+    if (select.value !== 'manager') setEmployeeSystemRoleFieldValue('manager');
+    if (!Array.isArray(state.bexhrV12RoleOptionStates)) {
+      state.bexhrV12RoleOptionStates = Array.from(select.options).map(option => ({
+        option, hidden: option.hidden, disabled: option.disabled,
+      }));
+    }
+    Array.from(select.options).forEach(option => {
+      const allowed = option.value === 'manager';
+      option.hidden = !allowed;
+      option.disabled = !allowed;
+    });
+    select.value = 'manager';
+    select.dataset.bexhrV12ManagerOnly = 'true';
+    state.bexhrRoleAutoSuggested = true;
+  } else {
+    restoreHrLeadershipOnboardingRoleOptions(true);
+    state.bexhrRoleAutoSuggested = false;
+  }
+  syncHrRoleAssignmentWarning();
+  updateEmployeeSaveButtonState();
 }
 
 function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartment = "") {
@@ -29259,7 +29517,7 @@ function setEmployeeAccountPanel(accountLinkage = null) {
 // updates profiles.department to "Human Resources" so it is always sourced
 // from the list rather than being a blank or freehand string.
 async function ensureHrProfileDepartment(supabase, profileData) {
-  if (!profileData) return profileData;
+  if (!profileData || state.h12NativeHrStandard === true) return profileData;
 
   const HR_DEPT_NAME = "Human Resources";
 
@@ -29464,6 +29722,19 @@ function renderHrProfile(profile, user) {
   const role = String(profile?.role || "hr").toLowerCase();
   const department = profile?.department || "";
   const initials = getInitials(fullName, "HR");
+
+  // BEXHR_H12_G4_NATIVE_PILOT_20261111: label verified secondary access without modifying profile.role.
+  if (state.h12NativeHrStandard === true) {
+    const area = document.querySelector(".hr-modern-account-area");
+    if (area && !document.getElementById("bexhrH12SecondaryHrBadge")) {
+      const badge = document.createElement("span");
+      badge.id = "bexhrH12SecondaryHrBadge";
+      badge.textContent = "HR Standard · Dual role pilot";
+      badge.style.cssText = "font-size:12px;font-weight:700;border-radius:14px;" +
+        "padding:6px 10px;background:#e5f5f2;color:#17675e;";
+      area.insertBefore(badge, area.firstChild);
+    }
+  }
 
   if (state.dom.hrInitials) {
     state.dom.hrInitials.textContent = initials;
@@ -30033,6 +30304,32 @@ async function refreshOrganizationHrSetupValues() {
     populateJobTitleOptionsForDepartment(
       state.dom.jobTitle?.value || "",
     );
+
+    // A successful position-scope update immediately refreshes the directory.
+    // Do not replace form inputs someone has deliberately changed mid-edit.
+    const openEmployee = state.currentEditingEmployee;
+    if (openEmployee) {
+      const originalDepartment = String(openEmployee.department || '').trim();
+      const shownDepartment = String(state.dom.department?.value || '').trim();
+      const configuredScope = getHrEmployeePositionScopePresentation(openEmployee);
+      if (configuredScope.kind === 'whole' &&
+          (normalizeText(shownDepartment) === normalizeText(originalDepartment) ||
+           !shownDepartment)) {
+        populateEmployeeDepartmentOptionsFromOrganizationSetup(
+          HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE);
+        if (state.dom.department) {
+          state.dom.department.value = HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE;
+        }
+        populateJobTitleOptionsForDepartment(openEmployee.job_title || '');
+      }
+      syncHrEmployeeScopeReviewMessage(openEmployee);
+    } else {
+      syncHrNewEmployeeManagerRoleSuggestion();
+    }
+    if (Array.isArray(state.filteredEmployees) &&
+        Array.isArray(state.employees) && state.employees.length) {
+      renderEmployeeRecords(state.filteredEmployees);
+    }
 
     refreshHrReportingDepartmentChoices();
     updateOrganizationJobTitleSaveButtonState();
@@ -31548,7 +31845,7 @@ function renderOrganizationJobTitlesTable() {
       "</td>",
       "<td data-label=\"Department / Scope\">" + escapeHtml(appliesToLabel) + "</td>",
       "<td data-label=\"Reports to\">" + escapeHtml(reportingLabel) + "</td>",
-      "<td class=\"bexhr-status-cell\" data-label=\"Status\">" +
+      "<td class=\"bexhr-status-cell\" data-label=\"Position status\">" +
         renderBexhrStatusPill(formatStatusLabel(jobTitle.status)) +
         "</td>",
       "<td class=\"text-center\" data-label=\"Actions\">",
@@ -32898,7 +33195,9 @@ async function loadAuthProfilesForLinkage() {
     // Use the protected tenant-scoped RPC instead of reading profiles directly.
     // This gives every authorised HR browser the same tenant profile data.
     const { data, error } = await supabase.rpc(
-      "hr_list_tenant_profile_linkage",
+      state.h12NativeHrStandard === true
+        ? "bexhr_h12_native_hr_profile_linkage"
+        : "hr_list_tenant_profile_linkage",
     );
 
     if (error) throw error;
@@ -32937,17 +33236,21 @@ async function loadEmployees() {
   try {
     // HRP-80 - TENANT DATA SEGMENTATION - STEP 7D
     // HR users should only load employees that belong to their logged-in tenant.
-    const { data, error } = await applyCurrentTenantFilter(
-      supabase
-        .from("employees")
-        .select("*"),
-    ).order("created_at", { ascending: false });
+    // BEXHR_H12_G4_NATIVE_PILOT_20261111: only an allowlisted, tenant-scoped roster crosses to
+    // secondary HR Standard. Never use employees.select('*') for this actor.
+    const { data, error } = state.h12NativeHrStandard === true
+      ? await supabase.rpc("bexhr_h12_native_hr_employee_roster")
+      : await applyCurrentTenantFilter(
+          supabase.from("employees").select("*"),
+        ).order("created_at", { ascending: false });
 
     if (error) throw error;
 
     state.employees = sortEmployeeRecordsByEmployeeNumber(
       Array.isArray(data) ? data : [],
     );
+    // BEXHR_GROUP_B_V14_PATCH: self-only highest-position leave visibility.
+    void window.BexHRGroupBV14Leave?.apply(getSupabaseClient(),getCurrentHrEmployeeRecord()?.id);
 
     publishHrPerformanceAppraisalContext();
 
@@ -35510,7 +35813,7 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
     ${renderEmployeeFilledFormSection(
       "Employment Details",
       [
-        renderEmployeeFilledFormField("Department", employee.department),
+        renderEmployeeFilledFormField("Department / Position scope", getHrEmployeePositionScopePresentation(employee).label),
         renderEmployeeFilledFormField("Job Title", employee.job_title),
         renderEmployeeFilledFormField("Employment Date", employee.employment_date, { date: true }),
         renderEmployeeFilledFormField("Last Working Day", employee.exit_date, { date: true }),
@@ -36111,6 +36414,7 @@ function renderEmployeeRecords(employees) {
       getEmployeeDirectoryEmploymentStatusPresentation(employee.status);
     const accountStatusPresentation =
       getEmployeeDirectoryAccountStatusPresentation(accountLinkage);
+    const positionScope = getHrEmployeePositionScopePresentation(employee);
     const rawEmployeeId = String(employee.id || "").trim();
     const safeEmployeeId = rawEmployeeId.replaceAll("'", "\\'");
     const isRecentlySavedEmployee =
@@ -36226,17 +36530,18 @@ function renderEmployeeRecords(employees) {
 
       <td data-label="Role">
         <div class="hr-employee-cell-primary">
-          ${escapeHtml(employee.department || "No department")}
+          ${escapeHtml(positionScope.label)}
         </div>
         <div class="hr-employee-cell-secondary">
           ${escapeHtml(employee.job_title || "No job title")}
         </div>
+        ${positionScope.needsReview ? '<span class="small text-warning-emphasis">Position scope needs review</span>' : ''}
         <span class="hr-employee-role-badge">
           ${escapeHtml(formatEmployeeAccessRoleLabel(employee))}
         </span>
       </td>
 
-      <td class="hr-employee-status-cell" data-label="Status">
+      <td class="hr-employee-status-cell" data-label="Employment / Account">
         <div class="hr-employee-status-stack">
           <span class="hr-employee-status-pill ${employmentStatusPresentation.toneClass}">
             <i class="bi ${employmentStatusPresentation.iconClass}" aria-hidden="true"></i>
@@ -36312,9 +36617,16 @@ function renderEmployeeRecords(employees) {
 
 function resetEmployeeForm() {
   if (!state.dom.employeeCreateForm) return;
+  restoreHrLeadershipOnboardingRoleOptions(false);
 
   state.dom.employeeCreateForm.reset();
+  state.groupAEducationTouched = false;
+  state.groupADependantsTouched = false;
+  window.BexHrGroupA?.reset();
   state.currentEditingEmployee = null;
+  state.bexhrRoleChoiceTouched = false;
+  state.bexhrRoleAutoSuggested = false;
+  syncHrEmployeeScopeReviewMessage(null);
   ++p7NinEditTicket; // Invalidate a pending NIN read when leaving edit mode.
   state.p7NinEditStatus = null;
   state.p7NinLoadedValue = "";
@@ -36565,7 +36877,14 @@ async function loadP7HrNinForEmployeeEdit(employeeId, ticket) {
 }
 
 function enterEmployeeEditMode(employee) {
+  restoreHrLeadershipOnboardingRoleOptions(false);
   state.currentEditingEmployee = employee;
+  state.bexhrRoleChoiceTouched = true; // never auto-default an existing role
+  state.bexhrRoleAutoSuggested = false;
+  syncHrEmployeeScopeReviewMessage(employee);
+  state.groupAEducationTouched = false;
+  state.groupADependantsTouched = false;
+  void window.BexHrGroupA?.editEmployee(employee.id);
 
   if (state.dom.editingEmployeeId) state.dom.editingEmployeeId.value = employee.id || "";
   if (state.dom.firstName) state.dom.firstName.value = employee.first_name || "";
@@ -36904,6 +37223,10 @@ function validateEmployeeForm() {
   // EMPLOYEE BIODATA COMPLETION - STEP 2F
   // Personal email is optional, but must be valid if HR enters it.
 
+  if (window.BexHrGroupA?.alpatech && !validateEmailField(state.dom.personalEmail)) {
+    focusEmployeeBiodataField(state.dom.personalEmail);
+    return false;
+  }
   // QUICK FIX - APPROVER EMAIL BYPASS
   // Primary Approver Email is optional while approver mailboxes are not ready.
   // It must not block employee create/update, even when empty.
@@ -37059,12 +37382,12 @@ function buildEmployeePayload() {
   // authorised compliance/benefit processes, but aren't collected here.
   const previous = state.currentEditingEmployee || {};
   [
-    "personal_email", "alternative_phone_number", "gender", "marital_status",
+    "personal_email", "alternative_phone_number", "marital_status",
     "state_of_origin", "local_government_area", "means_of_identification",
     "identification_document_number", "identification_issue_state",
     "hmo_provider", "hmo_plan", "hmo_number",
   ].forEach((column) => {
-    payload[column] = previous[column] ?? null;
+    if (!window.BexHrGroupA?.alpatech) payload[column] = previous[column] ?? null;
   });
   return payload;
 }
@@ -38777,12 +39100,25 @@ ${canChangePrimaryManager
   `;
   }
   const targetEmployee = (state.employees || []).find(person => String(person.id) === employeeKey);
-  const outOfDepartment = activeRows.some(row => !isHrManagerInEmployeeDepartment(
-    (state.employees || []).find(person => String(person.id) === String(row.manager_employee_id)), targetEmployee));
-  if (primarySummary && outOfDepartment) {
-    const warning = document.createElement("p");
-    warning.className = "alert alert-warning mt-3";
-    warning.textContent = "An existing manager assignment is outside this employee's reporting scope or cannot be resolved. Review and replace or remove it; no assignments have been changed automatically.";
+  const currentPrimaryCheck = primaryRow && primaryManager && targetEmployee
+    ? getHrConfiguredReportingEligibility(primaryManager, targetEmployee, 'primary')
+    : null;
+  if (primarySummary && primaryRow && primaryManager &&
+      currentPrimaryCheck?.mode === 'configured' && currentPrimaryCheck.allowed === false) {
+    const warning = document.createElement('p');
+    warning.className = 'alert alert-warning mt-3';
+    warning.textContent = "Review required: the saved Primary Manager no longer matches this employee's configured position hierarchy. Use Change Primary Manager, or have HR Admin review an approved exception. The saved Primary and historical PA/Leave decisions have not been changed automatically.";
+    primarySummary.appendChild(warning);
+  }
+  const unresolvedSecondary = rows.some((row) => {
+    const assigned = (state.employees || []).find(
+      (person) => String(person.id) === String(row.manager_employee_id));
+    return !assigned || !isHrManagerInEmployeeDepartment(assigned, targetEmployee);
+  });
+  if (primarySummary && unresolvedSecondary) {
+    const warning = document.createElement('p');
+    warning.className = 'alert alert-warning mt-3';
+    warning.textContent = 'Review a supporting-manager assignment outside its current scope. Existing Secondary assignments remain unchanged until an authorised action.';
     primarySummary.appendChild(warning);
   }
   // REPORTING MANAGER MANAGEMENT REPAIR - PRIMARY MANAGER REMOVE BUTTON
@@ -40680,6 +41016,13 @@ async function toggleEmployeeManagerRole(employeeId) {
 
 async function handleEmployeeSave() {
   clearPageAlert();
+  // BEXHR_GROUP_B_V12: form role restriction is also enforced on submit.
+  if (!state.currentEditingEmployee && getHrLeadershipOnboardingRolePolicy() === 'manager-only' &&
+      normaliseHrBusinessRole(getSelectedEmployeeSystemRoleValue()) !== 'manager') {
+    showPageAlert('warning', 'A configured whole-organisation leadership appointment must be onboarded as Manager.');
+    syncHrNewEmployeeManagerRoleSuggestion();
+    return;
+  }
   // Read-only NIN is intentionally excluded from ordinary employee updates.
   // Do not silently accept a forged NIN input while secure verification failed.
   if (state.currentEditingEmployee && state.p7NinEditStatus !== "ready" &&
@@ -40827,8 +41170,13 @@ async function handleEmployeeSave() {
     return;
   }
 
-  // PRE-7B - Retired education/dependant inputs cannot reject the minimal
-  // employee form. They remain untouched in their historical child tables.
+  // BEXHR_GROUP_A_20261108: validate custom biodata before any core record write.
+  try { window.BexHrGroupA?.validateManual(); }
+  catch (error) { showPageAlert('warning', error.message); return; }
+  // Re-enabled Alpatech sections also retain their original validation.
+  if (window.BexHrGroupA?.alpatech &&
+      (!validateEmployeeEducationFields() || !validateEmployeeDependantFields())) return;
+  // PRE-7B: all existing core payroll/reporting validations stay authoritative.
   const employeePayload = buildEmployeePayload();
   const editingId = String(state.dom.editingEmployeeId?.value || "").trim();
   const isEditMode = Boolean(editingId);
@@ -41084,11 +41432,27 @@ async function handleEmployeeSave() {
       saveEmployeeAddressesForEmployee(savedEmployeeId),
       saveEmployeeNextOfKinForEmployee(savedEmployeeId),
     ]);
+    // BEXHR_GROUP_A_20261108: never overwrite untouched historical child records.
+    if (window.BexHrGroupA?.alpatech) {
+      if (state.groupAEducationTouched) await saveEmployeeEducationRecordsForEmployee(savedEmployeeId);
+      if (state.groupADependantsTouched) await saveEmployeeDependantRecordsForEmployee(savedEmployeeId);
+    }
+    let groupAManualWarning = '';
+    try { await window.BexHrGroupA?.saveManual(savedEmployeeId); }
+    catch (error) { groupAManualWarning = error.message; }
 
-    // PRE-7B - Education, dependants, permanent address and supporting
-    // documents remain stored unchanged. Their retired controls cannot be
-    // used to overwrite child-table data during an ordinary profile edit.
-    await loadEmployeeDocuments(savedEmployeeId);
+    // PRE-7B: Other tenants keep their historical supporting documents unchanged.
+    // Alpatech can save newly selected documents using the existing secured uploader.
+    if (window.BexHrGroupA?.alpatech && state.pendingFiles?.length) {
+      try { await uploadPendingFilesForEmployee(savedEmployeeId); }
+      catch (error) {
+        groupAManualWarning = [groupAManualWarning, 'Supporting document upload: ' + error.message]
+          .filter(Boolean).join('; ');
+        await loadEmployeeDocuments(savedEmployeeId);
+      }
+    } else {
+      await loadEmployeeDocuments(savedEmployeeId);
+    }
     renderAttachedDocuments();
 
 
@@ -41201,7 +41565,8 @@ async function handleEmployeeSave() {
   `;
     }
 
-    showPageAlert(employeeSaveAlertType, employeeSaveSuccessMessage);
+    if (groupAManualWarning) employeeSaveSuccessMessage += '<div class="mt-2 text-warning"><strong>Custom fields were NOT saved:</strong> ' + escapeHtml(groupAManualWarning) + '. Employee main record was saved.</div>';
+    showPageAlert(groupAManualWarning ? 'warning' : employeeSaveAlertType, employeeSaveSuccessMessage);
 
     // ADMIN COMPANY / HR USER BOOTSTRAP - STEP 1G
     // HR-facing confirmation after employee create/update.
@@ -42718,9 +43083,9 @@ async function loadPayrollMasterRecords() {
         })
         .map((record) => ({
           ...record,
-          first_name: record.employees?.first_name || "",
-          last_name: record.employees?.last_name || "",
-          work_email: record.employees?.work_email || "",
+          first_name: record.employees?.first_name || (state.h12NativeHrStandard ? state.employees.find(e => String(e.id) === String(record.employee_id))?.first_name : "") || "",
+          last_name: record.employees?.last_name || (state.h12NativeHrStandard ? state.employees.find(e => String(e.id) === String(record.employee_id))?.last_name : "") || "",
+          work_email: record.employees?.work_email || (state.h12NativeHrStandard ? state.employees.find(e => String(e.id) === String(record.employee_id))?.work_email : "") || "",
         }))
       : [];
 
@@ -43979,7 +44344,8 @@ function buildPayrollRecordSourceDetailsHtml(
 ) {
   const currency = record.currency || "NGN";
   const cleanOverrideAudit = String(employeeOverrideAuditSummary || "")
-    .replace("Employee override audit:", "")
+    .replace(/^\s*(?:Employee override audit|Payroll adjustment audit):\s*/i, "")
+    .replace(/(\s\|\s)Override(?=\s)/g, "$1Adjustment")
     .trim();
 
   const sourceLabel = employeeOverrideAuditSummary
@@ -44011,7 +44377,7 @@ function buildPayrollRecordSourceDetailsHtml(
 
         ${cleanOverrideAudit
       ? `<div class="mt-1 text-break">
-              <span class="fw-semibold">Override audit:</span>
+              <span class="fw-semibold">Adjustment audit:</span>
               ${escapeHtml(cleanOverrideAudit)}
             </div>`
       : ""}
@@ -44207,7 +44573,7 @@ ${recentlyEditedPayrollBadgeHtml}
         ? `<div class="mt-1">
               ${employeeOverrideAuditSummary
           ? `<span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-                    <i class="bi bi-shield-check me-1"></i>Override
+                    <i class="bi bi-shield-check me-1"></i>Adjustment
                   </span>`
           : `<span class="badge bg-light text-secondary border">
                     Versioned salary
@@ -45506,7 +45872,19 @@ async function startPayrollEdit(payrollId) {
   if (state.dom.payrollNetPay) state.dom.payrollNetPay.value = payrollRecord.net_pay ?? "";
   if (state.dom.payrollCurrency) state.dom.payrollCurrency.value = payrollRecord.currency || "NGN";
   if (state.dom.payrollIsFinalised) state.dom.payrollIsFinalised.checked = Boolean(payrollRecord.is_finalised);
-  if (state.dom.payrollNotes) state.dom.payrollNotes.value = payrollRecord.notes || "";
+  if (state.dom.payrollNotes) {
+    // Presentation only: preserve the stored audit marker and numeric audit evidence.
+    const originalNotes = String(payrollRecord.notes || "");
+    state.dom.payrollNotes.value = originalNotes
+      .split(/\r?\n/)
+      .map((line) => {
+        if (!/^\s*Employee override audit:/i.test(line)) return line;
+        return line
+          .replace(/^(\s*)Employee override audit:/i, "$1Payroll adjustment audit:")
+          .replace(/(\s\|\s)Override(?=\s)/g, "$1Adjustment");
+      })
+      .join("\n");
+  }
 
   // PAYROLL FINALISATION CORRECTION - STEP 1
   // Finalised records can be corrected by authorised HR/Payroll users.
@@ -46980,7 +47358,7 @@ function stripPayrollEmployeeOverrideAuditFromNotes(notes = "") {
       (line) =>
         !String(line || "")
           .trim()
-          .startsWith("Employee override audit:"),
+          .match(/^(?:Employee override audit|Payroll adjustment audit):/i),
     )
     .join("\n")
     .trim();
@@ -47000,7 +47378,7 @@ function getPayrollRecordEmployeeOverrideAuditSummary(record = {}) {
   return String(record.notes || "")
     .split(/\r?\n/)
     .find((line) =>
-      String(line || "").trim().startsWith("Employee override audit:"),
+      String(line || "").trim().match(/^(?:Employee override audit|Payroll adjustment audit):/i),
     ) || "";
 }
 
@@ -47752,6 +48130,25 @@ function renderPhase6RunPayrollPreview() {
   setMoney("phase6PreviewPaye", state.dom.payrollPayeTax);
   setMoney("phase6PreviewTotalDeductions", state.dom.payrollTotalDeductions);
   setMoney("phase6PreviewNetPay", state.dom.payrollNetPay);
+
+  // BEXHR GROUP E V2 - PAYE EXPLAINER + SINGLE PREVIEW LABEL: show only effective and supported adjustments; read-only label.
+  const adjustmentNote = document.getElementById("phase6PayrollAdjustmentNote");
+  if (adjustmentNote) {
+    const totals = hasEmployee && !isCurrentPayrollFinalisedCorrectionMode()
+      ? getCurrentPayrollAdjustmentAmounts() : null;
+    const parts = [
+      ["Bonus", totals?.bonus],
+      ["Overtime", totals?.overtime],
+      ["Other earning", totals?.otherEarning],
+      ["Other deduction", totals?.otherDeduction],
+    ]
+      .filter(([, value]) => Number.isFinite(Number(value)) && Number(value) > 0)
+      .map(([name, value]) => name + " " + formatCurrency(Number(value), "NGN"));
+    adjustmentNote.textContent = parts.length
+      ? "Payroll adjustment applied: " + parts.join(" · ")
+      : "";
+    adjustmentNote.classList.toggle("d-none", parts.length === 0);
+  }
 }
 
 function clearPhase6CreateDerivedPayrollFields() {

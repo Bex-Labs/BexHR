@@ -1,0 +1,56 @@
+/* BEXHR_H12_G4_UI02_20261111
+   Visual-only refinement for the existing native HR/Manager workspace switcher.
+   No access-control logic, entitlement caching or role/route changes. */
+body.bexhr-manager-visual-refresh .bexhr-workspace-account-area .manager-modern-account-button,
+body.bexhr-hr-visual-refresh .bexhr-workspace-account-area .hr-modern-account-button {
+  border-color: #d5e7e5;
+  background: linear-gradient(135deg, #ffffff 0%, #f5fbfa 100%);
+  border-radius: 16px;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+body.bexhr-manager-visual-refresh .bexhr-workspace-account-area .manager-modern-account-button:hover,
+body.bexhr-hr-visual-refresh .bexhr-workspace-account-area .hr-modern-account-button:hover,
+body.bexhr-manager-visual-refresh .bexhr-workspace-account-area .manager-modern-account-button[aria-expanded="true"],
+body.bexhr-hr-visual-refresh .bexhr-workspace-account-area .hr-modern-account-button[aria-expanded="true"] {
+  border-color: #8dcac3;
+  background: #f8fdfc;
+  box-shadow: 0 4px 15px rgba(14, 116, 105, .08);
+}
+.bexhr-workspace-account-area .bexhr-workspace-menu {
+  border-color: #dbeae7;
+  border-radius: 18px;
+  padding: 9px;
+  box-shadow: 0 14px 40px rgba(21, 52, 58, .14);
+}
+.bexhr-workspace-account-area .bexhr-workspace-menu-heading {
+  padding: 9px 12px 12px;
+}
+.bexhr-workspace-account-area .bexhr-workspace-menu-option {
+  border-radius: 12px;
+  transition: background-color .16s ease, border-color .16s ease;
+}
+.bexhr-workspace-account-area .bexhr-workspace-menu-option:hover,
+.bexhr-workspace-account-area .bexhr-workspace-menu-option:focus-visible {
+  transform: none;
+  background: #f1faf8;
+}
+.bexhr-workspace-account-area .bexhr-workspace-menu-option.is-current {
+  background: #e9f8f5;
+  border-color: #c7e9e2;
+}
+.bexhr-workspace-account-area .bexhr-workspace-menu-current {
+  background: #0f766e;
+  font-size: .61rem;
+  letter-spacing: .02em;
+}
+@media (max-width: 767.98px) {
+  .bexhr-workspace-account-area .bexhr-workspace-menu {
+    right: 0;
+    max-width: calc(100vw - 24px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bexhr-workspace-account-area .bexhr-workspace-menu-option,
+  .bexhr-workspace-account-area .manager-modern-account-button,
+  .bexhr-workspace-account-area .hr-modern-account-button { transition: none !important; }
+}

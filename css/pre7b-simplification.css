@@ -16,7 +16,7 @@
    Hidden source elements are still available for historical record hydration. */
 #employeeCreateForm .row.g-4 > [class*="col-"]:has(#personalEmail),
 #employeeCreateForm .row.g-4 > [class*="col-"]:has(#alternativePhoneNumber),
-#employeeCreateForm .row.g-4 > [class*="col-"]:has(#gender),
+/* BEXHR_GROUP_B_V14_PATCH: restore leave-relevant gender for all tenants. */
 #employeeCreateForm .row.g-4 > [class*="col-"]:has(#maritalStatus),
 #employeeCreateForm .row.g-4 > [class*="col-"]:has(#stateOfOrigin),
 #employeeCreateForm .row.g-4 > [class*="col-"]:has(#localGovernmentArea),
@@ -35,10 +35,6 @@
 #sidebarReviewBtn, #sidebarReviewsSubnav, #hrTabReviewBtn, #hrReviewSection,
 #hrOverviewOpenReviews, #hrDashboardSection .hr-overview-metric-card.metric-review,
 #hrDashboardSection .hr-overview-check-card.tone-review,
-#bexPaEmployeeAppraisalsNavButton, #bexPaEmployeeAppraisalsSection,
-#bexPaOverviewSection [data-bex-pa-summary="awaiting-hr"],
-#bexPaHrAppraisalReviewSection, #bexPaManagerAppraisalSection,
-#bexPaSelfAppraisalSection, #bexPaFinalAppraisalSection,
 .employee-profile-review-tabs,
 [data-employee-profile-review-panel="personal"],
 .employee-profile-review-panel [class*="col-"]:has(#reviewPersonalEmail),

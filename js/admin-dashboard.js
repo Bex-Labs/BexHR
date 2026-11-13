@@ -220,9 +220,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
     window.adminOpenEmailSetupWorkspace = () => {
+      // BEXHR_GROUP_D_TEST_UI_DEACTIVATED_2026_11_10: stale help/deep links resolve to the safe Company Identity view.
       rememberAdminWorkspace("tenants");
       switchAdminWorkspace("tenants");
-      openAdminEmailSetupPanel();
+      openAdminCompanyIdentityPanel();
     };
 
     window.adminOpenUserAccessWorkspace = () => {
@@ -1042,7 +1043,8 @@ function setAdminDashboardCardExpanded(button, panel, shouldExpand) {
 // Existing Company, Email and User Access workflows remain unchanged.
 // =========================================================
 function switchAdminCompaniesSubWorkspace(subWorkspace = "identity") {
-  const validWorkspace = ["identity", "email", "access"].includes(
+  // BEXHR_GROUP_D_TEST_UI_DEACTIVATED_2026_11_10: obsolete email test panel is no longer a navigable workspace.
+  const validWorkspace = ["identity", "access"].includes(
     String(subWorkspace || "").trim(),
   )
     ? String(subWorkspace || "").trim()
@@ -4748,14 +4750,9 @@ function startAdminEmailRecipientEdit(recipientId) {
 }
 
 function openAdminEmailSetupPanel() {
-  // ADMIN COMPANIES SUB-WORKSPACE NAVIGATION - v1.0.0
-  switchAdminCompaniesSubWorkspace("email");
-
-  setAdminDashboardCardExpanded(
-    state.dom.toggleAdminEmailSetupCardBtn,
-    state.dom.adminEmailSetupCollapse,
-    true,
-  );
+  // BEXHR_GROUP_D_V2_COLLAPSE_AND_SESSION_2026_11_10: deny all obsolete test-email panel entry points,
+  // including legacy internal actions, without removing its backend code.
+  openAdminCompanyIdentityPanel();
 }
 
 // ADMIN DELETE ACTIONS - STEP 1

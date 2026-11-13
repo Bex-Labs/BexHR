@@ -1516,6 +1516,7 @@
   }
 
   function bexPaHasEmployeeCapability() {
+    if (!bexPaCanOpenPersonalAppraisal()) return false;
     const currentEmployeeId =
       bexPaGetCurrentEmployeeId();
 
@@ -1564,13 +1565,34 @@
   );
 }
 
+  // BEXHR_GROUP_B_V14_PATCH: self-only RPC; no local title inference.
+  // Null means unverified, which cannot grant personal appraisal mode.
+  let bexPaPersonalAppraisalAllowed = null;
+  async function bexPaVerifyPersonalAppraisalAccess(identity) {
+    bexPaPersonalAppraisalAllowed = false;
+    const employeeId = String(identity?.employeeId || '').trim();
+    if (!employeeId || !window.supabaseClient?.rpc) return;
+    const contextId = String(bexPaGetIntegratedContext()?.employeeId || '').trim();
+    if (contextId && contextId !== employeeId) return;
+    try {
+      const {data,error}=await window.supabaseClient.rpc('bexhr_p7b_my_organization_position',{p_employee_id:employeeId});
+      if(!error && data && ['CONFIGURED_ROOT','HIGHEST_OCCUPIED','HAS_OCCUPIED_PARENT','SETUP_NEEDED'].includes(data.status))
+        bexPaPersonalAppraisalAllowed = !['CONFIGURED_ROOT','HIGHEST_OCCUPIED','SETUP_NEEDED'].includes(data.status);
+    } catch (_) { /* On lookup failure do not grant a personal appraisal. */ }
+  }
+  function bexPaCanOpenPersonalAppraisal() {
+    return !bexPaGetIntegratedContext() || bexPaPersonalAppraisalAllowed === true;
+  }
   let bexPaActiveMode = "";
 
   function bexPaGetActiveMode() {
-    return (
-      bexPaActiveMode ||
-      bexPaGetCurrentPersona()
-    );
+    const proposed = bexPaActiveMode || bexPaGetCurrentPersona();
+    if (proposed !== 'employee' || bexPaCanOpenPersonalAppraisal()) return proposed;
+    // Highest occupied role may still manage goals or HR responsibilities.
+    if (bexPaHasManagerWorkspaceCapability()) return 'primary-manager';
+    if (bexPaHasHrAdminCapability()) return 'hr-admin';
+    if (bexPaHasHrStandardCapability()) return 'hr-standard';
+    return '';
   }
 
   function bexPaSetActiveMode(mode) {
@@ -3250,10 +3272,10 @@
       bexPaCanViewEmployeeAppraisalRegister();
 
     if (bexPaElements.employeeAppraisalsNavButton) {
-      bexPaElements.employeeAppraisalsNavButton.hidden = true;
+      bexPaElements.employeeAppraisalsNavButton.hidden = !canViewAppraisalRegister;
       bexPaElements.employeeAppraisalsNavButton.classList.toggle(
         "d-none",
-        true,
+        !canViewAppraisalRegister,
       );
     }
 
@@ -5480,10 +5502,8 @@
   };
 
   function bexPaShowSection(sectionName) {
-    // PRE-7B - Fail closed on stale remembered/direct Review destinations.
-    if (sectionName === "employeeAppraisals") {
-      sectionName = bexPaGetDefaultSectionForMode();
-    }
+    // H12 Gate 5: permit the appraisal register only through the existing
+    // bexPaCanViewEmployeeAppraisalRegister() capability guard below.
     const sectionMap = {
       overview: bexPaElements.overviewSection,
       cycles: bexPaElements.cyclesSection,
@@ -6587,10 +6607,12 @@
         },
       ).length;
 
+    // H12 G5 METRIC V4: use the same derived acknowledgement state as
+    // the 25% active-cycle progress indicator; the base record is Finalised.
     const completedCount =
-      visibleEmployeeAppraisals.filter(
-        (appraisal) =>
-          appraisal.status ===
+      visibleOperationalRecords.filter(
+        (record) =>
+          record.status ===
           "Acknowledged",
       ).length;
 
@@ -17143,7 +17165,7 @@
 
   // PRE-7B - Review detail route is retired for every persona.
   function bexPaOpenHrAppraisalReview(appraisalId) {
-    return false; // Reversible UI-only guard; no backend/data changes.
+    // H12 Gate 5: original role/cycle reviewer guards are now reachable.
     if (!bexPaIsHrAdminMode()) {
       return;
     }
@@ -17775,7 +17797,7 @@
 
   // PRE-7B - Review detail route is retired for every persona.
   function bexPaOpenFinalAppraisal(appraisalId) {
-    return false; // Reversible UI-only guard; no backend/data changes.
+    // H12 Gate 5: original role/cycle reviewer guards are now reachable.
     if (!bexPaIsEmployeeMode()) {
       return;
     }
@@ -18837,7 +18859,7 @@
 
   // PRE-7B - Review detail route is retired for every persona.
   function bexPaOpenManagerAppraisal(appraisalId) {
-    return false; // Reversible UI-only guard; no backend/data changes.
+    // H12 Gate 5: original role/cycle reviewer guards are now reachable.
     const appraisal =
       bexPaGetEligibleManagerAppraisals().find(
         (existingAppraisal) =>
@@ -19449,7 +19471,7 @@
 
   // PRE-7B - Review detail route is retired for every persona.
   function bexPaOpenSelfAppraisal(appraisalId, options = {}) {
-    return false; // Reversible UI-only guard; no backend/data changes.
+    // H12 Gate 5: original role/cycle reviewer guards are now reachable.
     const appraisal =
       bexPaGetEligibleEmployeeAppraisals().find(
         (existingAppraisal) =>
@@ -20283,7 +20305,9 @@
 
     if (hasIntegratedContext) {
       try {
-        await bexPaResolvePersistenceIdentity();
+        const verifiedIdentity = await bexPaResolvePersistenceIdentity();
+        await bexPaVerifyPersonalAppraisalAccess(verifiedIdentity);
+        if (!bexPaCanOpenPersonalAppraisal() && bexPaActiveMode === "employee") bexPaActiveMode = "";
         await bexPaHydrateRemoteState();
       } catch (error) {
         bexPaPersistence.mode = "remote-error";

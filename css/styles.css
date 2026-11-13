@@ -9619,8 +9619,8 @@ body.alpatech-workspace .hr-create-employee-card .hr-employee-form-chip--info {
   /* Job title records */
   #organizationJobTitlesTableWrapper td:nth-child(1)::before { content: "Job title"; }
   #organizationJobTitlesTableWrapper td:nth-child(2)::before { content: "Department"; }
-  #organizationJobTitlesTableWrapper td:nth-child(3)::before { content: "Status"; }
-  #organizationJobTitlesTableWrapper td:nth-child(4)::before { content: "Updated"; }
+  #organizationJobTitlesTableWrapper td:nth-child(3)::before { content: "Reports to"; }
+  #organizationJobTitlesTableWrapper td:nth-child(4)::before { content: "Position status"; }
   #organizationJobTitlesTableWrapper td:nth-child(5)::before { content: "Action"; }
 
   /* Allowance records */
@@ -23435,7 +23435,7 @@ body.bexhr-hr-visual-refresh .hr-payment-record-code {
   #organizationJobTitlesTableWrapper
   tbody
   td:nth-child(3)::before {
-  content: "Status";
+  content: "Reports to";
 }
 
 #hrSetupSection
@@ -23443,7 +23443,7 @@ body.bexhr-hr-visual-refresh .hr-payment-record-code {
   #organizationJobTitlesTableWrapper
   tbody
   td:nth-child(4)::before {
-  content: "Last updated";
+  content: "Position status";
 }
 
 #hrSetupSection
@@ -33116,4 +33116,111 @@ body.bexhr-hr-visual-refresh
   .hr-deduction-record-card {
   width: 100% !important;
   max-width: none !important;
+}
+
+/* BEXHR_GROUP_B_V16_PATCH: read-only leave balance card typography and alignment.
+   HR, Manager and Employee use the same layout; no entitlement logic changes. */
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3,
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: .45rem;
+  row-gap: .4rem;
+  margin-left: 0;
+  margin-right: 0;
+  --bs-gutter-x: 0;
+}
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 > [class*="col-"],
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 > [class*="col-"] {
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 .small,
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 .info-tile-label,
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 .small,
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 .info-tile-label {
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  hyphens: none !important;
+  font-size: .77rem !important;
+  letter-spacing: -.015em;
+}
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 .fw-semibold,
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 .fw-bold,
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 .fw-bold {
+  white-space: nowrap;
+  line-height: 1.35;
+  margin-top: .2rem;
+}
+
+/* BEXHR_GROUP_B_V18_LEAVE_TABS: equal-width peer tabs whether Request Leave is present or hidden.
+   Presentation only. All leave approval, entitlement and history logic is untouched. */
+.ss-leave-inline-tabs > .ss-leave-inline-tab[hidden] {
+  display: none !important;
+}
+.ss-leave-inline-tabs > .ss-leave-inline-tab {
+  width: 100%;
+  box-sizing: border-box;
+}
+@media (min-width: 768px) {
+  /* Four visible peer tabs use the existing four-column grid.
+     When highest-position rules hide Request Leave, expand three peers
+     evenly to fill the whole row, leaving no empty fourth slot. */
+  .ss-leave-inline-tabs:has(> .ss-leave-inline-tab[hidden]) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* BEXHR_GROUP_D_V2_COLLAPSE_AND_SESSION_2026_11_10: consistent collapse-control dimensions across HR,
+   Manager, Employee and Platform Admin. Controls retain their own IDs,
+   aria-expanded state and existing click listeners. */
+body.bexhr-has-sidebar button.dashboard-action-btn[aria-controls$="Collapse"] {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 42px !important;
+  height: 42px !important;
+  max-height: 42px !important;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.84rem;
+  line-height: 1.2;
+  font-weight: 700;
+  border-radius: 10px;
+  white-space: nowrap !important;
+}
+@media (min-width: 768px) {
+  body.bexhr-has-sidebar button.dashboard-action-btn[aria-controls$="Collapse"] {
+    width: auto;
+    min-width: 116px;
+    align-self: flex-start !important;
+  }
+}
+/* BEXHR_GROUP_D_V3_DOUBLE_CLICK_TOGGLE_NO_VISIBLE_COLLAPSE_BUTTONS
+   Collapse buttons are not shown in the normal UI. Keep the exact DOM nodes
+   for existing JS handlers, and make them visible on keyboard focus so that
+   keyboard/screen-reader users can still operate the controls. */
+body.bexhr-has-sidebar button.dashboard-action-btn[aria-controls$="Collapse"]:not(:focus-visible) {
+  position: absolute !important;
+  width: 1px !important;
+  min-width: 1px !important;
+  max-width: 1px !important;
+  height: 1px !important;
+  min-height: 1px !important;
+  max-height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}
+body.bexhr-has-sidebar [data-bexhr-doubleclick-heading="true"] {
+  cursor: pointer;
 }

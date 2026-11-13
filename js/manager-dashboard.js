@@ -30,6 +30,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
 
     await loadLatestManagerProfile();
+    // BEXHR_GROUP_B_V13_PATCH: load tenant-owned position labels for read-only presentation.
+    await window.BexHRGroupBV13?.loadScope(getSupabaseClient(), state.currentProfile?.tenant_id);
     primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
 
     // ALPATECH TENANT BRANDING - MANAGER STEP 1D
@@ -1878,7 +1880,10 @@ async function showManagerPerformanceAppraisalChooser() {
     existingChooser.remove();
   }
 
+  // BEXHR_GROUP_B_V13_PATCH: configured/highest-occupied head has no My Appraisal,
+  // even when no PA cycle exists. Existing PA snapshot check stays in force.
   const employeeExcludedFromActivePaCycle =
+    await window.BexHRGroupBV13.isHighest(getSupabaseClient(), state.currentManagerEmployeeRecord) ||
     await isCurrentManagerExcludedFromActivePaCycle();
 
   ensureManagerPerformanceAppraisalChooserStyles();
@@ -2068,6 +2073,11 @@ async function openManagerPerformanceAppraisal(
     mode !== "employee" &&
     mode !== "primary-manager"
   ) {
+    return;
+  }
+  if (mode === 'employee' &&
+      await window.BexHRGroupBV13.isHighest(getSupabaseClient(), state.currentManagerEmployeeRecord)) {
+    showPageAlert('warning','The highest occupied position does not have a personal appraisal.');
     return;
   }
 
@@ -2951,10 +2961,18 @@ function applyManagerSelfServiceTask(taskKey = MANAGER_SELF_SERVICE_TASK_DEFAULT
   const resolvedKey = syncManagerSelfServiceTaskChrome(taskKey, options);
   const config = MANAGER_SELF_SERVICE_TASKS[resolvedKey];
 
+  // BEXHR_GROUP_B_V16_PATCH: keep the visible content aligned with the selected Manager task.
+  // Highest occupants can review balances/history, but cannot open a request form.
   if (typeof window.EmployeeSelfService?.show === "function") {
+    const highest = window.BexHRGroupBV14Leave?.isHighestCurrent?.() === true;
     window.EmployeeSelfService.show(resolvedKey, {
-      leaveView: resolvedKey === "leave" ? "request" : undefined,
+      leaveView: resolvedKey === "leave" ? (highest ? "balances" : "request") : undefined,
     });
+    // BEXHR_GROUP_B_V17_PATCH: sync the verified top-level leave content after the focused
+    // navigation has become visible. This is presentation-only.
+    if (resolvedKey === "leave" && highest) {
+      window.requestAnimationFrame(() => window.BexHRGroupBV14Leave?.syncView?.());
+    }
   } else {
     document.getElementById(config.navButtonId)?.click();
   }
@@ -3067,9 +3085,17 @@ function switchManagerWorkspace(workspace) {
   }
 
   if (isSelfService) {
-    syncManagerSelfServiceTaskChrome(getRememberedManagerSelfServiceTask(), {
-      remember: false,
-    });
+    // BEXHR_GROUP_B_V16_PATCH: switching back to Manager Self-Service must restore the actual
+    // Leave/Payroll pane, not just the header and highlighted sidebar entry.
+    const requestedTask = getRememberedManagerSelfServiceTask();
+    syncManagerSelfServiceTaskChrome(requestedTask, { remember: false });
+    if (state.currentUser?.id) {
+      if (_managerSelfServiceInitialised) {
+        applyManagerSelfServiceTask(requestedTask, { remember: false, scroll: false });
+      } else if (!_managerSelfServiceInitPromise) {
+        void initManagerSelfServiceOnFirstOpen(requestedTask);
+      }
+    }
     return;
   }
 
@@ -3089,9 +3115,11 @@ function initManagerSelfServiceOnFirstOpen(preferredTask = getRememberedManagerS
 
   syncManagerSelfServiceTaskChrome(task, { remember: true });
 
-  window.EmployeeSelfService?.prepare?.(task, {
-    leaveView: task === "leave" ? "request" : undefined,
-  });
+  // BEXHR_GROUP_B_V16_PATCH: don't initialise a highest-position leave view on a hidden request.
+  const initialLeaveView = task === "leave"
+    ? (window.BexHRGroupBV14Leave?.isHighestCurrent?.() === true ? "balances" : "request")
+    : undefined;
+  window.EmployeeSelfService?.prepare?.(task, { leaveView: initialLeaveView });
 
   if (_managerSelfServiceInitialised) {
     applyManagerSelfServiceTask(task, { remember: true, scroll: false });
@@ -3100,7 +3128,8 @@ function initManagerSelfServiceOnFirstOpen(preferredTask = getRememberedManagerS
 
   if (_managerSelfServiceInitPromise) {
     return _managerSelfServiceInitPromise.then(() => {
-      applyManagerSelfServiceTask(task, { remember: true, scroll: false });
+      // BEXHR_GROUP_B_V17_PATCH: an earlier async load must not override the latest selected tab.
+      applyManagerSelfServiceTask(getRememberedManagerSelfServiceTask(), { remember: false, scroll: false });
     });
   }
 
@@ -3112,11 +3141,12 @@ function initManagerSelfServiceOnFirstOpen(preferredTask = getRememberedManagerS
   _managerSelfServiceInitPromise = window.EmployeeSelfService
     .init(state.currentUser, state.currentProfile, {
       initialSection: task,
-      leaveView: task === "leave" ? "request" : undefined,
+      leaveView: initialLeaveView,
     })
     .then(() => {
       _managerSelfServiceInitialised = true;
-      applyManagerSelfServiceTask(task, { remember: true, scroll: false });
+      // BEXHR_GROUP_B_V17_PATCH: use the latest route, not a stale async initial-section choice.
+      applyManagerSelfServiceTask(getRememberedManagerSelfServiceTask(), { remember: false, scroll: false });
     })
     .catch((err) => {
       console.error("Manager self-service init error:", err);
@@ -5300,7 +5330,7 @@ function openManagerEmployeeDetails(employeeId = "") {
       .join("") || "TM";
 
   const jobTitle = String(employee.job_title || "--").trim();
-  const department = String(employee.department || "--").trim();
+  const department = window.BexHRGroupBV13?.display(employee) || '--';
   const relationship = String(
     employee.relationshipLabel || "Reporting relationship",
   ).trim();
@@ -5996,7 +6026,7 @@ function buildAssignedEmployeeRoleDepartmentHtml(member = {}) {
       ${escapeHtml(member.job_title || "--")}
     </div>
     <div class="text-secondary small mt-1">
-      ${escapeHtml(member.department || "--")}
+      ${escapeHtml(window.BexHRGroupBV13?.display(member) || '--')}
     </div>
   `;
 }
@@ -6116,6 +6146,14 @@ async function loadAssignedTeamMembers() {
     const managerEmployeeRecord = await loadCurrentManagerEmployeeRecord();
 
     state.currentManagerEmployeeRecord = managerEmployeeRecord;
+    // BEXHR_GROUP_B_V14_PATCH: role-agnostic self leave gate.
+    void window.BexHRGroupBV14Leave?.apply(getSupabaseClient(),managerEmployeeRecord?.id);
+    if (managerEmployeeRecord && state.dom.managerDepartment) {
+      state.dom.managerDepartment.textContent = window.BexHRGroupBV13?.display(managerEmployeeRecord) || '--';
+    }
+    if (managerEmployeeRecord && state.dom.managerProfileDepartment) {
+      state.dom.managerProfileDepartment.value = window.BexHRGroupBV13?.display(managerEmployeeRecord, '') || '';
+    }
     state.currentOrganizationPositionSummary = null;
 
     if (!managerEmployeeRecord?.id) {
@@ -7070,7 +7108,7 @@ function renderTeamTable(teamMembers) {
 
     const workEmail = String(member.work_email || "--").trim();
     const jobTitle = String(member.job_title || "--").trim();
-    const department = String(member.department || "--").trim();
+    const department = window.BexHRGroupBV13?.display(member) || '--';
     const statusKey = normalizeText(member.teamStatusLabel || "");
 
     row.dataset.managerEmployeeId = employeeRecordId;

@@ -1,0 +1,20 @@
+/* Group B V4: one job-title form, readable and unambiguous. */
+body.dashboard-page #bexhrBcV3Executive { display: none !important; }
+body.dashboard-page #bexhrHierarchyTemplateAssistant[hidden] { display: none !important; }
+body.dashboard-page [data-reporting-step="reportingLines"][hidden] { display: none !important; }
+body.dashboard-page #bexhrBcV4Review[hidden] { display: none !important; }
+body.dashboard-page .bexhr-bc-v4-review {
+  width: 100%; max-width: 100%; margin-top: .75rem; padding: .9rem 1rem;
+  border: 1px solid #a8d7d3; border-radius: 12px; background: #f1faf8;
+  color: #203e51; line-height: 1.5;
+}
+body.dashboard-page .bexhr-bc-v4-impact {
+  padding: .2rem 0 .7rem; font-weight: 720;
+}
+body.dashboard-page .bexhr-bc-v4-confirm {
+  display: flex; gap: .65rem; align-items: flex-start;
+  cursor: pointer; font-weight: 520;
+}
+body.dashboard-page .bexhr-bc-v4-confirm input { flex: 0 0 auto; margin-top: .3rem; }
+body.dashboard-page .bexhr-bc-v4-status { margin-top: .5rem; font-size: .92rem; }
+body.dashboard-page .bexhr-bc-v4-error { color: #a02626; font-weight: 680; }

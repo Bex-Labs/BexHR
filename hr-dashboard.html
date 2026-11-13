@@ -12,6 +12,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
   <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/bexhr-h12-workspace-switcher-polish.css?v=h12g4ui02" />
   <link rel="stylesheet" href="css/hr-people-accessibility-phase7.css" />
 
   <!-- SYSTEM-WIDE HR SELF-SERVICE LEAVE INNER-SCROLL PARITY - v1.0.0
@@ -99,6 +100,17 @@
   <link rel="stylesheet" href="css/phase7b-compact-setup.css?v=2" />
   <!-- BEXHR_H6E_REPORTING_LINES_TAB: style for existing setup workspace -->
   <link rel="stylesheet" href="css/bexhr-reporting-lines-h6e.css?v=1" />
+<!-- BEXHR_GROUP_A_20261108: tenant-scoped Alpatech biodata + custom fields -->
+<link rel="stylesheet" href="css/bexhr-biodata-group-a.css?v=6.2" />
+  <link rel="stylesheet" href="css/bexhr-groups-bc.css?v=2" />
+  <link rel="stylesheet" href="css/bexhr-group-b-v6.css?v=6">
+
+  <!-- BEXHR_GROUP_D_TEST_UI_DEACTIVATED_2026_11_10: retired test-email consoles (backend protections/records retained) -->
+  <style id="bexhrGroupDRetiredTestEmailUi">
+    #sidebarSetupCommunicationBtn,
+    #setupCommunicationGroupHeader,
+    #hrp85EmailIntegrationCard { display: none !important; }
+  </style>
 </head>
 
 <body class="dashboard-page bexhr-has-sidebar bexhr-hr-visual-refresh hr-workspace-booting" aria-busy="true">
@@ -1389,7 +1401,7 @@
               <details class="small text-secondary mt-2">
                 <summary class="fw-semibold">How reporting works</summary>
                 <p class="mb-0 mt-1">
-                  Select the position this job title reports to. Choose Top level only for a true root.
+                  Select the position this job title reports to. Choose Top-level position (no parent) only for the single organisational root.
                   Department reporting becomes available after your company upgrades its reporting structure.
                 </p>
               </details>
@@ -1458,7 +1470,7 @@
 
                 <div class="col-12 col-md-6 col-xl-3">
                   <label for="organizationJobTitleStatus" class="form-label fw-semibold">
-                    Status <span class="text-danger">*</span>
+                    Position status <span class="text-danger">*</span>
                   </label>
                   <select id="organizationJobTitleStatus" class="form-select" required>
                     <option value="Active">Active</option>
@@ -1475,7 +1487,7 @@
                     <option value="">Choose reporting position</option>
                   </select>
                   <div id="organizationJobTitleReportsToHelp" class="form-text">
-                    Select a parent position, or Top level if none.
+                    Select a parent position, or Top-level position (no parent). This does not assign an employee Primary Manager.
                   </div>
                 </div>
 
@@ -1540,7 +1552,7 @@
                       <th>Job Title</th>
                       <th>Department / Scope</th>
                       <th>Reports to</th>
-                      <th>Status</th>
+                      <th>Position status</th>
                       <th class="text-center">Actions</th>
                     </tr>
                   </thead>
@@ -1710,8 +1722,7 @@
                   class="bi bi-file-earmark-spreadsheet"></i></span>
               <div>
                 <div class="fw-bold">Employee CSV file</div>
-                <div class="small text-secondary">Use the 20-column template. Town of Origin maps to the employee's
-                  existing origin field. NIN, Tax ID, dashboard roles and payroll values must not be imported here.</div>
+                <div class="small text-secondary">Use the short employee template for every company. Only First Name, Last Name and Work Email are required; other columns may be left blank. Existing approved CSVs still work.</div>
               </div>
             </div>
 
@@ -1858,12 +1869,12 @@
               </div>
               <div class="bexhr-form-step-connector"></div>
               <div class="bexhr-form-step" data-step="4" title="Address Details">
-                <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">3</span></div>
+                <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">4</span></div>
                 <span class="bexhr-step-label">Address</span>
               </div>
               <div class="bexhr-form-step-connector"></div>
               <div class="bexhr-form-step" data-step="5" title="Next of Kin">
-                <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">4</span></div>
+                <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">5</span></div>
                 <span class="bexhr-step-label">Next of Kin</span>
               </div>
               <div class="bexhr-form-step-connector"></div>
@@ -2269,6 +2280,9 @@
                   </select>
 
                   <div class="invalid-feedback">Department is required.</div>
+                  <div id="bexhrEmployeeScopeReview" class="alert alert-warning small d-none mt-2 mb-0" role="status">
+                    More than one configured position has this title. Confirm the employee's exact position scope; no employee department was changed automatically.
+                  </div>
                 </div>
 
                 <!-- EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1E
@@ -2430,8 +2444,7 @@
                     placeholder="Enter new system role" autocomplete="off" />
 
                   <div class="form-text">
-                    Employee is the default dashboard role. Company Admins can also assign Manager or HR Standard
-                    access.
+                    For a configured whole-organisation leadership appointment, Manager is the only onboarding role. HR Standard duties require separate authorisation and verified manager responsibilities. Existing HR Admin access stays protected.
                   </div>
 
                   <div id="employeeCompanyAdminAccess" class="d-none mt-3" aria-live="polite">
@@ -3257,7 +3270,7 @@ Disable browser address autofill popup on HR employee address fields. -->
                     <th class="text-nowrap">Employee</th>
                     <th>Contact</th>
                     <th class="text-nowrap">Role</th>
-                    <th class="text-center text-nowrap">Status</th>
+                    <th class="text-center text-nowrap">Employment / Account</th>
                     <th class="text-nowrap">Start Date</th>
                     <th class="text-center text-nowrap">Action</th>
                   </tr>
@@ -3285,14 +3298,26 @@ Disable browser address autofill popup on HR employee address fields. -->
       <section id="hrEmployeeLifecycleCard" class="card dashboard-section-card hr-employee-lifecycle-card mb-4"
         aria-labelledby="hrEmployeeLifecycleTitle">
         <div class="card-body p-4 p-lg-5">
-          <header class="hr-employee-lifecycle-header">
-            <div>
-              <span class="hr-employee-lifecycle-kicker">People / Employee lifecycle</span>
-              <h2 id="hrEmployeeLifecycleTitle">Offboarding &amp; Reactivation</h2>
-              <p>Find an employee, verify their details, and start the authorised lifecycle workflow.
-                You can reopen an employee profile without leaving this workspace.</p>
+          <!-- BEXHR_H12_G4_LIFECYCLE_CARD_UI_20261111: reuse Employee Directory heading and card behaviour -->
+          <header class="hr-employee-lifecycle-header hr-card-heading hr-employee-directory-header mb-4">
+            <div class="hr-card-heading-main">
+              <span class="hr-card-heading-icon hr-card-heading-icon--directory" aria-hidden="true">
+                <i class="bi bi-person-gear"></i>
+              </span>
+              <div class="hr-card-heading-copy">
+                <span class="hr-people-section-kicker">People / Employee lifecycle</span>
+                <h2 id="hrEmployeeLifecycleTitle" class="section-heading h4 mb-1">Offboarding &amp; Reactivation</h2>
+                <p class="section-subtext mb-0">Find an employee, verify their details, and start the authorised lifecycle workflow.
+                  You can reopen an employee profile without leaving this workspace.</p>
+              </div>
             </div>
+            <button type="button" id="toggleEmployeeLifecycleCardBtn"
+              class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+              aria-controls="employeeLifecycleCardCollapse">
+              <i class="bi bi-chevron-up me-2"></i><span>Collapse</span>
+            </button>
           </header>
+          <div id="employeeLifecycleCardCollapse">
 
           <div class="hr-employee-lifecycle-toolbar" role="search" aria-label="Find lifecycle records">
             <div class="hr-lifecycle-field">
@@ -3342,6 +3367,7 @@ Disable browser address autofill popup on HR employee address fields. -->
             Offboarding preserves employment history and ends live access and salary setup.
             Reactivation does not reinstate previous salary setup or reporting managers.
           </div>
+          </div><!-- /#employeeLifecycleCardCollapse -->
         </div>
       </section>
     </section>
@@ -3422,7 +3448,7 @@ Disable browser address autofill popup on HR employee address fields. -->
      wording here to reduce payroll workflow confusion. -->
             <h2 class="section-heading h4 mb-1">Setup &amp; Configuration</h2>
             <p class="section-subtext mb-0">
-              Maintain organisation settings, payroll rules, deductions, payment setup, and email configuration.
+              Maintain organisation settings, payroll rules, deductions, and payment setup.
             </p>
           </div>
 
@@ -3458,15 +3484,7 @@ Disable browser address autofill popup on HR employee address fields. -->
               </div>
             </div>
 
-            <!-- HRP-85 - STEP 1E
-                 Email integration is a setup/configuration feature, so it is
-                 surfaced in Setup summary rather than Payroll operations. -->
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Email Setup</div>
-                <div class="summary-tile-value h6 mb-0">Provider validation</div>
-              </div>
-            </div>
+            <!-- BEXHR_GROUP_D_TEST_UI_DEACTIVATED_2026_11_10: email testing summary retired; backend retained. -->
           </div>
         </div>
       </section>
@@ -5794,6 +5812,21 @@ Disable browser address autofill popup on HR employee address fields. -->
                         <div class="fw-bold" id="phase6PreviewNetPay">--</div>
                       </div>
                     </div>
+                    <!-- BEXHR GROUP E V2 - PAYE EXPLAINER + SINGLE PREVIEW LABEL. Read-only preview help; no tax calculation changes. -->
+                    <div id="phase6PayrollAdjustmentNote" class="d-none small text-success fw-semibold mt-3" role="status"></div>
+                    <details id="phase6PayeExplanation" class="small mt-3">
+                      <summary class="text-primary fw-semibold" style="cursor: pointer;">
+                        <i class="bi bi-info-circle me-1" aria-hidden="true"></i>How is PAYE calculated?
+                      </summary>
+                      <div class="mt-2 p-3 rounded-3 bg-white border text-secondary" role="note">
+                        PAYE follows the Nigeria Tax Act 2025 rates (effective from 2026). It uses annual
+                        <strong>chargeable income</strong> after configured eligible deductions, not a flat
+                        percentage of monthly salary. The first <strong>₦800,000 a year</strong> is taxed at
+                        <strong>0%</strong>; higher portions are taxed progressively at 15% to 25%.
+                        For example, ₦50,000 a month is ₦600,000 a year before extras, so PAYE can be ₦0.
+                        Payroll adjustments may change the result. This is a preview until finalisation.
+                      </div>
+                    </details>
                   </div>
                 </div>
 
@@ -7466,6 +7499,10 @@ Disable browser address autofill popup on HR employee address fields. -->
   <script src="js/session.js"></script>
   <script src="js/employee-self-service.js"></script>
   <script src="js/bexhr-organization-hierarchy.js"></script>
+  <!-- BEXHR_GROUP_B_V13_PATCH -->
+  <script src="js/bexhr-group-b-v13.js?v=13"></script>
+  <!-- BEXHR_GROUP_B_V14_PATCH -->
+  <script src="js/bexhr-group-b-v14-leave.js?v=14"></script>
   <script src="js/bexhr-reporting-position-eligibility.js"></script>
   <script src="js/bexhr-hierarchy-template-assistant.js"></script>
   <!-- BEXHR_H6B_ADOPTION_PREVIEW_V1: read-only HR-approved reporting adoption preview -->
@@ -7476,16 +7513,24 @@ Disable browser address autofill popup on HR employee address fields. -->
   <script src="js/bexhr-reporting-lines-h6e.js"></script>
   <!-- BEXHR_H7_SAVE_READY: protected position save activates only with deployed P7B capability -->
   <script src="js/bexhr-reporting-lines-save-h7.js"></script>
-  <script src="js/hr-dashboard.js"></script>
+  <script src="js/bexhr-biodata-group-a.js?v=6.2"></script>
+<script src="js/bexhr-group-b-v10.js?v=10"></script>
+<script src="js/hr-dashboard.js?v=group-b-v10"></script>
   <script src="js/bexhr-organization-setup-guide.js"></script>
   <script src="js/hr-people-ux-phase7.js"></script>
+  <script src="js/bexhr-h12-lifecycle-card-ui.js?v=h12g4dbl03"></script>
   <!-- Shared BexHR record-table scroll: first 10 visible records, scroll from 11 -->
   <script src="js/bexhr-ten-record-scroll.js"></script>
   <script src="js/hr-deductions-unified-phase7.js"></script>
   <script src="js/hr-payroll-clarity-phase7.js"></script>
-  <script src="js/bexhr-reporting-structure-h11.js"></script>
+  <script src="js/bexhr-reporting-structure-h11.js?v=restore51"></script>
   <script src="js/bexhr-record-scroll-h11.js"></script>
-  <script src="js/bexhr-hierarchy-ui-h11.js"></script>
+  <script src="js/bexhr-hierarchy-ui-h11.js?v=restore51"></script>
+  <script src="js/bexhr-groups-bc.js?v=restore51"></script>
+  <script src="js/bexhr-group-b-v6.js?v=6"></script>
+  <script src="js/bexhr-group-b-v7.js?v=7"></script>
+  <script src="js/bexhr-group-b-v8.js?v=8"></script>
+  <script src="js/bexhr-group-b-v9.js?v=9"></script>
 </body>
 
 </html>

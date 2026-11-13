@@ -1,0 +1,164 @@
+/* BexHR Groups B+C: lifecycle alignment and readability only. */
+#bexhrOffboardOtherNoteRow[hidden] { display: none !important; }
+#hrEmployeeLifecycleTableWrapper .hr-employee-status-stack {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  gap: .35rem !important;
+  width: 100%;
+}
+#hrEmployeeLifecycleTableWrapper .hr-employee-status-pill {
+  display: inline-flex !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+  gap: .35rem;
+  max-width: 100%;
+  white-space: nowrap;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-start-date {
+  display: inline-block !important;
+  width: max-content;
+  max-width: 100%;
+  white-space: nowrap !important;
+  font-variant-numeric: tabular-nums;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(5),
+body.dashboard-page #hrEmployeeLifecycleTableWrapper td:nth-child(5) {
+  white-space: nowrap !important;
+  min-width: 105px;
+}
+@media (max-width: 1100px) {
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(5),
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper td:nth-child(5) {
+    white-space: nowrap !important;
+    min-width: 98px;
+  }
+}
+@media (max-width: 740px) {
+  #hrEmployeeLifecycleTableWrapper .hr-employee-status-stack { align-items: center !important; }
+}
+
+/* GROUPS_BC_V2_DIRECTORY_ALIGNMENT
+   Match the Employee Directory's actual table layout rules from
+   css/hr-people-accessibility-phase7.css, retaining lifecycle actions.
+   Does NOT alter the Directory table, employee records, or any backend data. */
+body.dashboard-page #hrEmployeeLifecycleTableWrapper.hr-lifecycle-table-wrapper {
+  width: 100%; max-width: 100%;
+  padding: 0 0.15rem 0.4rem;
+  border: 0;
+  overflow-x: clip;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table {
+  display: table !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0 0.35rem;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table thead { display: table-header-group !important; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table tbody { display: table-row-group !important; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table tr { display: table-row !important; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th {
+  display: table-cell !important;
+  padding: 0.6rem 0.45rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  vertical-align: middle;
+  background: #f3f7fa;
+  color: #42586e;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-row > td {
+  display: table-cell !important;
+  min-width: 0;
+  padding: 0.65rem 0.45rem !important;
+  border-top: 1px solid #e0e9f1;
+  border-bottom: 1px solid #e0e9f1;
+  background: #fff;
+  vertical-align: middle !important;
+  border-radius: 0;
+  box-shadow: none !important;
+  overflow-wrap: anywhere;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  text-align: left;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-row > td:first-child {
+  border-left: 1px solid #e0e9f1;
+  border-radius: 12px 0 0 12px;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-row > td:last-child {
+  border-right: 1px solid #e0e9f1;
+  border-radius: 0 12px 12px 0;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-row:hover > td { background: #f7fbfc; }
+/* Like the Directory: align the STATUS and ACTION headings with their contents. */
+body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(4),
+body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(6) { text-align: center !important; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-status-cell { text-align: center !important; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-status-stack {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.35rem;
+  width: 100%;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-status-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.35rem;
+  max-width: 100%;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-identity { min-width: 0; gap: 0.5rem; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-name-button {
+  max-width: 100%; white-space: normal; overflow-wrap: anywhere;
+  text-align: left; font-size: 0.94rem; line-height: 1.35;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-cell-primary,
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-cell-secondary,
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-number {
+  overflow-wrap: anywhere; white-space: normal; line-height: 1.35; font-size: 0.84rem;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-start-date {
+  display: inline-block !important;
+  width: max-content; max-width: 100%;
+  white-space: nowrap !important;
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-action-cell { text-align: center !important; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-operation {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px;
+  max-width: 100%;
+  margin-inline: auto;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+/* Keep six columns, matching the Directory's visual rhythm without its Pay column. */
+@media (min-width: 1101px) {
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(1) { width: 22.5%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(2) { width: 23.5%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(3) { width: 19.5%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(4) { width: 12%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(5) { width: 10.5%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(6) { width: 12%; }
+}
+/* Retain Phase 7's progressive columns at enlarged zoom and on mobile. */
+@media (max-width: 1100px) {
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(4),
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper th:nth-child(6) { text-align: center !important; }
+}
+@media (max-width: 740px) {
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-operation {
+    white-space: normal;
+  }
+}
+

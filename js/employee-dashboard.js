@@ -228,6 +228,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
 
     await loadLatestEmployeeProfile();
+    // BEXHR_GROUP_B_V13_PATCH: read-only tenant position labels.
+    await window.BexHRGroupBV13?.loadScope(getSupabaseClient(),state.currentProfile?.tenant_id);
     primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
 
     // ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
@@ -1733,6 +1735,29 @@ function requestEmployeeLeaveLayoutSync() {
   }, 50);
 }
 
+// BEXHR_GROUP_B_V15_PATCH: refresh saved gender and eligible balances on entry/focus.
+let employeeLeaveAutoRefreshPromise = null;
+async function refreshEmployeeLeaveEligibilityOnOpen() {
+  if (!state.currentUser?.id || !state.employeeRecord?.id) return false;
+  if (employeeLeaveAutoRefreshPromise) return employeeLeaveAutoRefreshPromise;
+  const userId = state.currentUser.id;
+  const task = (async () => {
+    await loadEmployeeRecord(userId, state.currentUser?.email || state.currentProfile?.email);
+    if (state.currentUser?.id !== userId) return false;
+    await Promise.all([loadEmployeeLeaveBalances(), loadLeaveTypes()]);
+    window.BexHRGroupBV14Leave?.syncView?.();
+    return true;
+  })();
+  employeeLeaveAutoRefreshPromise = task;
+  try { return await task; }
+  catch (error) {
+    console.warn('Employee leave auto-refresh failed:', error);
+    return false;
+  } finally {
+    if (employeeLeaveAutoRefreshPromise === task) employeeLeaveAutoRefreshPromise = null;
+  }
+}
+
 async function refreshEmployeeLeaveBalancesManually() {
   if (!state.currentUser) return;
 
@@ -1988,7 +2013,9 @@ function setEmployeeLeaveView(view = EMPLOYEE_LEAVE_VIEW_DEFAULT, options = {}) 
 
   if (!section) return EMPLOYEE_LEAVE_VIEW_DEFAULT;
 
-  const resolved = normaliseEmployeeLeaveView(view);
+  // BEXHR_GROUP_B_V14_PATCH: highest-position requests are not offered.
+  let resolved = normaliseEmployeeLeaveView(view);
+  if (resolved === "request" && window.BexHRGroupBV14Leave?.isHighestCurrent()) resolved = "balances";
   const nodes = getEmployeeLeaveViewNodes();
   const usesMainRow = resolved === "request" || resolved === "history";
 
@@ -2159,6 +2186,7 @@ function showSection(sectionName) {
     setEmployeeLeaveView(
       state.employeeLeaveActiveView || EMPLOYEE_LEAVE_VIEW_DEFAULT,
     );
+    void refreshEmployeeLeaveEligibilityOnOpen();
   }
 
   if (isPayroll) {
@@ -2320,6 +2348,7 @@ async function loadEmployeeRecord(userId, userEmail) {
   state.employeeRecord = employee;
   applyResolvedIdentity(employee);
   renderEmployeeRecord(employee);
+  void window.BexHRGroupBV14Leave?.apply(getSupabaseClient(),employee.id);
 }
 
 // EMPLOYEE ASSIGNED MANAGERS VISIBILITY - STEP 1
@@ -2493,11 +2522,17 @@ window.addEventListener("storage", (event) => {
 
 window.addEventListener("focus", () => {
   void refreshEmployeeLeaveReadinessFromHierarchyChange();
+  if (!state.dom.leaveSection?.classList.contains('d-none')) {
+    void refreshEmployeeLeaveEligibilityOnOpen();
+  }
 });
 
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     void refreshEmployeeLeaveReadinessFromHierarchyChange();
+    if (!state.dom.leaveSection?.classList.contains('d-none')) {
+      void refreshEmployeeLeaveEligibilityOnOpen();
+    }
   }
 });
 
@@ -3474,7 +3509,7 @@ function renderEmployeeOverviewMetrics() {
   }
 
   if (state.dom.overviewDepartmentValue) {
-    state.dom.overviewDepartmentValue.textContent = String(employee?.department || "Unassigned").trim() || "Unassigned";
+    state.dom.overviewDepartmentValue.textContent = window.BexHRGroupBV13?.display(employee,'Unassigned') || 'Unassigned';
   }
 
   /* The card label says Leave Requests and its supporting copy says
@@ -3510,7 +3545,7 @@ function renderEmployeeRecord(employee) {
 
   const phone = getEmployeePhoneDisplayValue(employee);
   const role = employee.role || state.currentProfile?.role || "Employee";
-  const department = employee.department || "--";
+  const department = window.BexHRGroupBV13?.display(employee) || '--';
   const employeeId = getEmployeeIdDisplayValue(employee);
   const managerName = getEmployeeManagerDisplayName(employee);
   const jobTitle = employee.job_title || employee.position || role || "Employee";
@@ -4783,7 +4818,17 @@ async function handleLeaveRequestSubmit() {
 
   const supabase = getSupabaseClient();
 
+  // H12 Gate 6: take tenant identity only from authenticated profile/employee data.
+  // Never trust a manually edited browser tenant context for a leave write.
+  const profileTenantId = String(state.currentProfile?.tenant_id || "").trim();
+  const employeeTenantId = String(state.employeeRecord?.tenant_id || "").trim();
+  if (!profileTenantId || (employeeTenantId && employeeTenantId !== profileTenantId)) {
+    showPageAlert("danger", "Your authenticated company could not be verified for this leave request. Refresh and try again.");
+    return;
+  }
+
   const payload = {
+    tenant_id: profileTenantId,
     employee_id: getPreferredEmployeeReferenceId(),
     leave_type_id: state.dom.leaveType.value,
     start_date: state.dom.startDate.value,

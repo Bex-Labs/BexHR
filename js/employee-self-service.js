@@ -384,11 +384,13 @@
 
   window.addEventListener("focus", () => {
     void refreshSsLeaveReadinessFromHierarchyChange();
+    void refreshSsLeaveEligibilityOnOpen();
   });
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
       void refreshSsLeaveReadinessFromHierarchyChange();
+      void refreshSsLeaveEligibilityOnOpen();
     }
   });
 
@@ -552,7 +554,10 @@
 
     ensureSsLeaveInlineTabs();
 
-    const resolved = normaliseSsLeaveView(view);
+    // BEXHR_GROUP_B_V15_PATCH: an unapprovable top-level request cannot be an active view.
+    const highest = window.BexHRGroupBV14Leave?.isHighestCurrent?.() === true;
+    const requested = normaliseSsLeaveView(view);
+    const resolved = highest && requested === 'request' ? 'balances' : requested;
     const nodes = getSsLeaveViewNodes();
     const usesMainRow = resolved === "request" || resolved === "history";
 
@@ -568,6 +573,11 @@
     nodes.historyColumn?.classList.toggle("ss-leave-focused-column", resolved === "history");
 
     document.querySelectorAll("#ssLeaveInlineTabs [data-ss-leave-view]").forEach((button) => {
+      if (button.dataset.ssLeaveView === 'request') {
+        button.hidden = highest;
+        if (highest) button.style.setProperty('display', 'none', 'important');
+        else button.style.removeProperty('display');
+      }
       const active = button.dataset.ssLeaveView === resolved;
       button.classList.toggle("active", active);
       button.setAttribute("aria-selected", String(active));
@@ -601,6 +611,30 @@
 
     scheduleSsLeaveMainCardHeightSync();
     return resolved;
+  }
+
+  // BEXHR_GROUP_B_V15_PATCH: navigation/focus refreshes eligibility without touching balances.
+  let ssLeaveAutoRefreshPromise = null;
+  async function refreshSsLeaveEligibilityOnOpen() {
+    if (!ssState.isInitialized || ssState.activeSection !== 'leave' ||
+        !ssState.currentUser?.id || !ssState.employeeRecord?.id) return false;
+    if (ssLeaveAutoRefreshPromise) return ssLeaveAutoRefreshPromise;
+    const userId = ssState.currentUser.id;
+    const task = (async () => {
+      await loadSsEmployeeRecord(); // Re-read gender, not cached form state.
+      if (ssState.currentUser?.id !== userId) return false;
+      await Promise.all([loadSsLeaveBalances(), loadSsLeaveTypes()]);
+      window.BexHRGroupBV14Leave?.syncView?.();
+      return true;
+    })();
+    ssLeaveAutoRefreshPromise = task;
+    try { return await task; }
+    catch (error) {
+      console.warn('[SS] Automatic leave eligibility refresh failed:', error);
+      return false;
+    } finally {
+      if (ssLeaveAutoRefreshPromise === task) ssLeaveAutoRefreshPromise = null;
+    }
   }
 
   function prepareSsSubSection(section = "payroll", options = {}) {
@@ -639,6 +673,9 @@
       setSsLeaveView(
         options.leaveView || ssState.activeLeaveView || SS_LEAVE_VIEW_DEFAULT,
       );
+      if (ssState.isInitialized && ssState.employeeRecord?.id) {
+        void refreshSsLeaveEligibilityOnOpen();
+      }
     }
 
     if (isPayroll) {

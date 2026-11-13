@@ -676,49 +676,42 @@
     }
   }
 
-// BEXHR H10 — WHOLE-ORGANISATION DUAL WORKSPACE
-// The H8 position RPC is the only authority for whole-company eligibility.
-// Before that RPC exists, retain the historical assigned-team switcher so
-// H10 does not regress the already working UI while H11 is still pending.
-// Transient RPC failures or explicit denials NEVER activate legacy fallback.
+// H12 G4: use server-issued, tenant-scoped entitlements. Never infer HR
+// authority from a title, profile.hr_access_level or a cached workspace flag.
 async function readWholeOrganizationDualWorkspaceStatus(profile = {}) {
   const role = String(profile.role || "").trim().toLowerCase();
-  const hrAccess = String(profile.hr_access_level || "")
-    .trim().toLowerCase().replace(/[\s-]+/g, "_");
-
-  // Keep legacy HR access unmodified until the H8 RPC is installed.
-  // Once installed, only explicit HR Standard can use the new dual mode.
-  if (role !== "hr" ||
-      profile.is_active !== true || !profile.id || !profile.tenant_id) {
-    return { mode: "denied", eligible: false };
+  if (profile.is_active !== true || !profile.id || !profile.tenant_id ||
+      !["hr", "manager"].includes(role)) {
+    return { mode: "denied", eligible: false, canHr: false };
   }
-
   const supabase = getSupabaseClient();
-  if (!supabase || typeof supabase.rpc !== "function") {
-    return { mode: "denied", eligible: false };
-  }
-
+  if (!supabase?.rpc) return { mode: "denied", eligible: false, canHr: false };
   try {
-    const { data, error } = await supabase.rpc("bexhr_p7b_workspace_access");
+    const { data, error } = await supabase.rpc("bexhr_h12_workspace_entitlements");
     if (error) {
-      const code = String(error.code || "").trim().toUpperCase();
-      if (code === "PGRST202" || code === "42883") {
-        return { mode: "not_installed", eligible: false };
+      // Existing HR accounts continue their old protected route only when
+      // this NEW RPC has not yet been deployed; managers cannot inherit it.
+      const code = String(error.code || "").toUpperCase();
+      if ((code === "PGRST202" || code === "42883") && role === "hr") {
+        const old = await supabase.rpc("bexhr_p7b_workspace_access");
+        if (!old.error && typeof old.data?.can_enter_manager === "boolean") {
+          return { mode: "legacy", eligible: old.data.can_enter_manager === true &&
+            old.data.preferred_workspace === "manager", canHr: true };
+        }
       }
-      return { mode: "denied", eligible: false };
+      return { mode: "denied", eligible: false, canHr: false };
     }
-    if (!data || typeof data.can_enter_manager !== "boolean" ||
-        typeof data.preferred_workspace !== "string") {
-      return { mode: "denied", eligible: false };
+    if (typeof data?.can_enter_manager !== "boolean" ||
+        typeof data?.can_enter_hr !== "boolean" ||
+        typeof data?.hr_grant_present !== "boolean") {
+      return { mode: "denied", eligible: false, canHr: false };
     }
-    return {
-      mode: "authoritative",
-      eligible: (hrAccess === "standard" || hrAccess === "tenant_admin") && data.can_enter_manager === true &&
-        data.preferred_workspace === "manager",
-    };
+    return { mode: "authoritative", canHr: data.can_enter_hr === true,
+      eligible: data.can_enter_manager === true && data.can_enter_hr === true,
+      preferred: data.preferred_workspace || "" };
   } catch (error) {
-    console.warn("Whole-organisation workspace eligibility unavailable:", error);
-    return { mode: "denied", eligible: false };
+    console.warn("Dual workspace entitlement lookup failed:", error);
+    return { mode: "denied", eligible: false, canHr: false };
   }
 }
 
@@ -837,7 +830,7 @@ function getCurrentWorkspaceKey() {
     const dualStatus = await readWholeOrganizationDualWorkspaceStatus(profile);
     // Preserve the pre-H8 assigned-team switcher only when the RPC does not
     // exist. It is not evidence of company-wide position authority.
-    const legacyMode = dualStatus.mode === "not_installed";
+    const legacyMode = dualStatus.mode === "legacy";
     const dualWorkspaceAvailable = dualStatus.eligible ||
       (legacyMode && await hasManagerWorkspaceAccess(profile));
     const options = [];
@@ -849,7 +842,7 @@ function getCurrentWorkspaceKey() {
         description: "Authorised people management and HR responsibilities.",
         icon: "bi bi-people",
         // Explicit intent prevents manager-default redirect after H8 activates.
-        href: legacyMode ? "hr-dashboard.html" : "hr-dashboard.html?workspace=hr",
+        href: String(profile.role || "").toLowerCase() === "manager" ? "hr-dashboard.html?workspace=hr" : (legacyMode ? "hr-dashboard.html" : "hr-dashboard.html?workspace=hr"),
       });
     }
 
@@ -1037,6 +1030,36 @@ function getCurrentWorkspaceKey() {
       hasExpectedAccess = await hasManagerWorkspaceAccess(profile);
     }
 
+    // BEXHR_H12_G4_NATIVE_PILOT_20261111: native HR page requires an explicit live grant + real MFA.
+    // Keep the database profile.role as Manager; never manufacture an HR profile.
+    let h12NativeHrStandard = false;
+    if (!hasExpectedAccess && expectedRole === "hr" &&
+        String(profile.role || "").trim().toLowerCase() === "manager") {
+      try {
+        const client = getSupabaseClient();
+        if (!client?.rpc || !client?.auth?.mfa?.getAuthenticatorAssuranceLevel) {
+          throw new Error("Native HR entitlement/MFA service unavailable");
+        }
+        const [grant, assurance] = await Promise.all([
+          client.rpc("bexhr_h12_workspace_entitlements"),
+          client.auth.mfa.getAuthenticatorAssuranceLevel(),
+        ]);
+        h12NativeHrStandard = !grant.error && !assurance.error &&
+          grant.data?.hr_grant_present === true &&
+          grant.data?.can_enter_manager === true &&
+          grant.data?.can_enter_hr === true &&
+          grant.data?.hr_standard_scope === "read_only" &&
+          assurance.data?.currentLevel === "aal2";
+      } catch (error) {
+        console.warn("Native HR Standard entry verification failed closed:", error);
+      }
+      if (!h12NativeHrStandard) {
+        window.location.replace("manager-dashboard.html");
+        return null;
+      }
+      hasExpectedAccess = true;
+    }
+
     if (!hasExpectedAccess) {
       redirectToRoleDashboard(profile.role);
       return null;
@@ -1051,7 +1074,7 @@ function getCurrentWorkspaceKey() {
       return null;
     }
 
-    return { session, profile };
+    return { session, profile, h12NativeHrStandard };
   }
 
   async function protectPage(expectedRole = null) {
@@ -1109,6 +1132,26 @@ function getCurrentWorkspaceKey() {
       if (!profile || profile.is_active !== true) {
         await logoutUser("unauthorized");
         return false;
+      }
+      // BEXHR_H12_G4_NATIVE_PILOT_20261111: do not retain native HR access after grant/MFA revocation.
+      const pathname = String(window.location.pathname || "").toLowerCase();
+      if ((pathname.endsWith("/hr-dashboard") || pathname.endsWith("/hr-dashboard.html")) &&
+          String(profile.role || "").toLowerCase() === "manager") {
+        try {
+          const client = getSupabaseClient();
+          const [grant, assurance] = await Promise.all([
+            client.rpc("bexhr_h12_workspace_entitlements"),
+            client.auth.mfa.getAuthenticatorAssuranceLevel(),
+          ]);
+          if (grant.error || assurance.error || grant.data?.hr_grant_present !== true ||
+              grant.data?.can_enter_hr !== true || assurance.data?.currentLevel !== "aal2") {
+            window.location.replace("manager-dashboard.html");
+            return false;
+          }
+        } catch (error) {
+          window.location.replace("manager-dashboard.html");
+          return false;
+        }
       }
       return true;
     })();
