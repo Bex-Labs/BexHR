@@ -12949,7 +12949,8 @@ function buildBatchEmployeeInsertPayload(employee = {}, employeeNumber = "", ten
       String(employee.identification_document_number || "").trim() || null,
     identification_issue_state:
       String(employee.identification_issue_state || "").trim() || null,
-    nin: String(employee.nin || "").trim() || null,
+    // Stage A cutover: bulk CSV never writes NIN to the public employees row.
+    // NIN is entered only via the authorised individual-employee workflow.
 
     department: String(employee.department || "").trim(),
     job_title: String(employee.job_title || "").trim(),
@@ -13766,9 +13767,8 @@ function buildBatchEmployeePreparedRowFromCsv(
       : "";
 
   const identificationIssueState = getBatchEmployeeCsvCell(row, headerMap, "Identification Issue State");
-  const nin = meansOfIdentification
-    ? getBatchEmployeeCsvCell(row, headerMap, "NIN")
-    : "";
+  // Stage A cutover: never extract a raw NIN from a CSV row.
+  // The import gate below rejects any non-empty legacy NIN column.
 
   const department = getBatchEmployeeCsvCell(row, headerMap, "Department");
   const jobTitle = getBatchEmployeeCsvCell(row, headerMap, "Job Title");
@@ -13899,6 +13899,11 @@ function buildBatchEmployeePreparedRowFromCsv(
 
   if (incomingNameKey) seenNames.add(incomingNameKey);
 
+  // A CSV may name NIN Slip as the ID type, but must not carry the number.
+  // Secure individual-employee entry is required after creation.
+  if (isNinRequiredForMeansOfIdentification(meansOfIdentification)) {
+    warnings.push("NIN must be entered later in the secure employee form");
+  }
   if (!department) warnings.push("Department not provided");
   if (!jobTitle) warnings.push("Job Title not provided");
 
@@ -14044,7 +14049,7 @@ function buildBatchEmployeePreparedRowFromCsv(
     means_of_identification: meansOfIdentification || null,
     identification_document_number: identificationDocumentNumber || null,
     identification_issue_state: identificationIssueState || null,
-    nin: nin || null,
+    // NIN is intentionally absent from all prepared bulk-employee records.
 
     department: department || "",
     job_title: jobTitle || "",
@@ -14325,6 +14330,23 @@ async function handleBatchEmployeeCsvImport() {
       showPageAlert(
         "warning",
         "Import stopped: a CSV row has more values than the approved header columns. Check for misplaced commas or unapproved data.",
+      );
+      return;
+    }
+
+    // Phase 7 NIN Stage A security cutover: legacy templates may include the
+    // NIN header, but non-empty NIN values are never accepted or processed.
+    // Stop the entire import instead of silently dropping a sensitive value.
+    const ninCsvColumnIndex = uploadedHeaders.indexOf(
+      normalizeBatchEmployeeCsvHeader("NIN"),
+    );
+    if (
+      ninCsvColumnIndex !== -1 &&
+      dataRows.some((row) => String(row[ninCsvColumnIndex] ?? "").trim() !== "")
+    ) {
+      showPageAlert(
+        "warning",
+        "Import stopped: NIN values cannot be imported from CSV. Remove those values and use the secure employee form after creation.",
       );
       return;
     }

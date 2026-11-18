@@ -101,8 +101,11 @@ const helperSource =
 
 const context = {
   state: {
+    currentProfile: { tenant_id: "tenant-1" },
+    organizationPositionHierarchyLoaded: true,
     organizationJobTitles: [],
   },
+  window: {},
 
   HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE:
     "__whole_organization__",
@@ -116,6 +119,15 @@ const context = {
 };
 
 vm.createContext(context);
+// Use the actual unchanged Group B V10 browser helper. The previous
+// VM lacked window and loaded-tenant context, so it could not exercise
+// the production fail-closed position-scope contract.
+vm.runInContext(
+  fs.readFileSync("js/bexhr-group-b-v10.js", "utf8"),
+  context,
+);
+assert.strictEqual(typeof context.window.BexHrGroupBV10.resolveEmployeeScope,
+  "function", "Tenant-scoped position resolver must be installed");
 
 vm.runInContext(
   helperSource +
@@ -160,6 +172,14 @@ assert.strictEqual(
   "Edit mode must select Whole organization for a configured whole-org employee",
 );
 
+
+// A different-tenant employee must NOT inherit Whole organization from
+// a same-titled position in the active tenant.
+assert.strictEqual(
+  context.departmentSelection({ ...wholeEmployee, tenant_id: "tenant-2" }),
+  "Human Resources",
+  "Cross-tenant scope resolution must fail closed to saved department",
+);
 
 // Department-scoped employee stays departmental.
 context.state.organizationJobTitles = [

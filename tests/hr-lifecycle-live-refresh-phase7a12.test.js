@@ -132,7 +132,13 @@ async function tests(){
   await f.refreshFocus(true);
   assert.equal(managerRefreshes,1,'inactive manager cannot refresh team');
   assert.match(manager,/event\.key !== "bexhrEmployeeLifecycleSync"/);
-  assert.match(manager,/if \(!document\.hidden\) void refreshManagerWorkspaceFromHierarchySync\(\)/);
+  // H12 quiet refresh: explicit lifecycle broadcasts remain immediate, while
+  // ordinary tab-return refresh waits for a real absence. Do not restore
+  // pre-H12 every-focus reloads merely to satisfy a stale regex.
+  assert.match(manager,/window\.addEventListener\("bexhr:employee-lifecycle-changed", \(\) => \{\s*void refreshManagerWorkspaceFromHierarchySync\(true\);/);
+  assert.match(manager,/const refreshManagerAfterReturn = \(\) => \{/);
+  assert.match(manager,/if \(awayDurationMs < 5000\) return;/);
+  assert.match(manager,/if \(!document\.hidden && overviewVisible\) \{\s*void refreshManagerWorkspaceFromHierarchySync\(\);/);
 
   // Active session is enforced on page entry AND after the page was opened.
   const guard=base();let profile={id:'u1',role:'manager',is_active:false};const signouts=[];
@@ -154,7 +160,7 @@ async function tests(){
   live.readProfileStatus=async()=>{liveFetchCount++;return {status:"found",profile:freshProfile};};
   live.logoutUser=async r=>eventsLive.push(r);
   live.document={hidden:false,addEventListener(){}};
-  live.window={addEventListener(){},setInterval(){return 1},clearInterval(){}};
+  live.window={location:{pathname:"/manager-dashboard.html"},addEventListener(){},setInterval(){return 1},clearInterval(){}};
   run(live,slice(session,'let activeProfileLifecycleCheckPromise = null;','function attachSessionRecoveryListeners() {')+'\nthis.checkActive = revalidateActiveProfile;');
   assert.equal(await live.checkActive(),true);
   freshProfile={id:'u1',is_active:false};

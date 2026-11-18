@@ -151,9 +151,21 @@ const pendingRpc = new Promise((resolve) => {
   releaseRpc = resolve;
 });
 
+let feedbackListenerRegistrations = 0;
 const context = {
   console,
   Promise,
+  // The extracted application slice installs a browser-only click listener
+  // during evaluation. Model that DOM contract rather than removing the boot.
+  document: {
+    documentElement: { dataset: {} },
+    addEventListener(type, listener, capture) {
+      assert.strictEqual(type, "click");
+      assert.strictEqual(typeof listener, "function");
+      assert.strictEqual(capture, true);
+      feedbackListenerRegistrations += 1;
+    },
+  },
 
   bexPaState: {
     activatingCycleId: "cycle-qa",
@@ -229,6 +241,11 @@ vm.runInContext(
   "\nthis.getBusy = () => bexPaActivationInFlight;",
   context,
 );
+
+assert.strictEqual(feedbackListenerRegistrations, 1,
+  "Global button feedback must register exactly one listener");
+assert.strictEqual(context.document.documentElement.dataset.bexPaImmediateButtonFeedback,
+  "installed", "Browser feedback bootstrap must remain active");
 
 const first = context.activate();
 const second = context.activate();

@@ -3,6 +3,7 @@
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
+const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
 const paPath = path.join(
@@ -132,15 +133,57 @@ const storyPeople = section(
   "function bexPaStoryManager(employeeId)",
 );
 
-assert(
-  storyPeople.includes(
-    "restrictToActiveParticipants",
-  ) &&
-  storyPeople.includes(
-    "Whole organization",
-  ),
-  "Story navigator is not participant-aware / Whole-organization friendly.",
+const storyDepartment = section(
+  "function bexPaStoryDepartmentLabel(person)",
+  "function bexPaDisplayDepartmentLabel(record)",
 );
+const storyGoalDepartment = section(
+  "function bexPaGoalRowDepartmentLabel(row)",
+  "// P7B: use the same tenant-scoped structural model as HR and Manager.",
+);
+assert(
+  storyPeople.includes("restrictToActiveParticipants") &&
+  storyPeople.includes("isVisibleParticipant") &&
+  storyPeople.includes("bexPaStoryDepartmentLabel") &&
+  storyPeople.includes("bexPaGoalRowDepartmentLabel") &&
+  storyDepartment.includes("Whole organization") &&
+  storyGoalDepartment.includes("Whole organization"),
+  "Story navigator must filter active participants and delegate whole-org labels to real helpers.",
+);
+
+// Execute the real story/label function bodies, not only a literal-text check.
+// HR Standard must never discover an inactive/non-participant employee in the
+// story navigator; HR Admin can show a legitimate company-wide job title.
+let storyMode = "hr-standard";
+const storyContext = {
+  bexPaGetActiveMode: () => storyMode,
+  bexPaGetActiveParticipantEmployeeIdSet: () => new Set(["active-1"]),
+  bexPaIsHrAdminMode: () => storyMode === "hr-admin",
+  bexPaGetAvailableEmployees: () => [
+    { id: "executive-1", name: "Chief", jobTitle: "Group President", department: "" },
+  ],
+  bexPaIsWholeOrganizationJobTitle: (title) => title === "Group President",
+  bexPaFriendlyDepartmentLabel: (value) => value,
+};
+vm.runInNewContext(
+  storyDepartment + storyGoalDepartment + storyPeople +
+    "\nthis.storyPeople = bexPaStoryPeople;",
+  storyContext,
+);
+const storyRows = [
+  { employeeId: "active-1", employee: "In scope", departmentId: null },
+  { employeeId: "inactive-1", employee: "Out of scope", departmentId: null },
+];
+const scopedPeople = storyContext.storyPeople(storyRows);
+assert.deepStrictEqual(Array.from(scopedPeople, (person) => person.employeeId), ["active-1"],
+  "HR Standard must not see a non-participant in story navigation");
+assert.strictEqual(scopedPeople[0].department, "Whole organization",
+  "Departmentless PA goal must use Whole organization label");
+storyMode = "hr-admin";
+const adminPeople = storyContext.storyPeople(storyRows);
+assert(adminPeople.some((person) =>
+  person.employeeId === "executive-1" && person.department === "Whole organization"),
+  "HR Admin must show a configured Whole organization employee");
 
 const individualValidation = section(
   "function bexPaValidateIndividualGoal(goal)",
