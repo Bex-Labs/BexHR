@@ -151,14 +151,27 @@
     section.dataset.gaSection = key;
     section.hidden = true;
     section.style.setProperty('display', 'none', 'important');
-    const heading = document.createElement('h3');
-    heading.className = 'h6 fw-bold mt-3 mb-2';
-    heading.textContent = 'Additional employee fields';
+    // Core/base heading fields belong to their existing form step, directly
+    // after that heading's native fields. Only a new custom heading gets a
+    // separate section title. This preserves every existing Alpatech field.
+    if (isCustomHeading(key)) {
+      const heading = document.createElement('h3');
+      heading.className = 'h6 fw-bold mt-3 mb-2';
+      heading.textContent = headingName(key);
+      section.appendChild(heading);
+    }
     const container = document.createElement('div');
     container.className = 'row g-3';
     container.dataset.gaInputs = 'true';
-    section.append(heading, container);
-    sourceRow.insertBefore(section, submitWrap);
+    section.appendChild(container);
+    const nativeNodes = Array.from(sourceRow.children).filter((node) =>
+      node.dataset?.employeeFormSection === key && !node.dataset?.gaSection);
+    const lastNative = nativeNodes[nativeNodes.length - 1];
+    if (lastNative && !isCustomHeading(key)) {
+      sourceRow.insertBefore(section, lastNative.nextSibling);
+    } else {
+      sourceRow.insertBefore(section, submitWrap);
+    }
     return section;
   }
   function syncSections(active = 'core') {
@@ -208,6 +221,38 @@
       renderValues(values || {});
     } catch (error) { message('Could not load custom values: ' + error.message, true); }
   }
+  // H12 read-only configured biodata: use the same active tenant schema as Edit Employee.
+  // Existing RPCs enforce active HR role and tenant ownership. No writes occur.
+  // H12 acceptance: every read-only opening uses a fresh, tenant-scoped field
+  // definition snapshot. A configured field is immediately available after add,
+  // edit or delete, even when the same HR session has not reloaded the page.
+  async function readOnlyEmployeeDetails(employeeId) {
+    assertReady();
+    const employeeKey = String(employeeId || '').trim();
+    if (!employeeKey) throw new Error('Employee record is required.');
+    const currentTenant = tenantId;
+    const schema = await rpc('bexhr_ga_configuration_v5');
+    const values = await rpc('bexhr_ga_list_values', { p_employee_id: employeeKey });
+    if (currentTenant !== tenantId) throw new Error('Employee workspace changed; reopen this record.');
+    const liveFields = (Array.isArray(schema?.fields) ? schema.fields : [])
+      .filter((field) => field.active !== false);
+    const headings = [
+      ...(schema?.alpatech === true ? alpatechHeadings : standardHeadings),
+      ...(Array.isArray(schema?.headings) ? schema.headings : []),
+    ];
+    return headings.map((heading) => {
+      const items = liveFields.filter((field) => (field.heading || 'core') === heading.key);
+      return {
+        key: String(heading.key),
+        title: String(heading.label || 'Additional Details'),
+        fields: items.map((field) => ({
+          label: String(field.label || ''),
+          value: String(values?.[field.id] ?? '').trim(),
+          type: field.type === 'date' ? 'date' : 'text',
+        })),
+      };
+    }).filter((heading) => heading.fields.length > 0);
+  }
   function reset() {
     selectedEmployeeId = '';
     if (ready) {
@@ -222,7 +267,9 @@
     assertReady();
     if (!activeFields().length) return { saved: 0 };
     validateManual();
-    return rpc('bexhr_ga_save_values', { p_employee_id: employeeId, p_values: collectValues() });
+    const result = await rpc('bexhr_ga_save_values', { p_employee_id: employeeId, p_values: collectValues() });
+    publishSchemaChanged('values');
+    return result;
   }
   function headerFor(field) { return `Custom [${headingName(field.heading || 'core')}]: ${field.label}`; }
   function legacyHeaderFor(field) { return `Custom: ${field.label}`; }
@@ -486,6 +533,7 @@
           await rpc('bexhr_ga_delete_field_v5', { p_field_id: field.id });
           if (editingFieldId === field.id) clearEditor();
           await refreshDefinitions();
+          publishSchemaChanged('delete');
           message('Field permanently deleted from this company.');
         } catch (error) { message(error.message, true); }
       });
@@ -497,6 +545,29 @@
     positionFieldActionPortal(toggle);
     edit.focus({ preventScroll: true });
   }
+  const SCHEMA_REFRESH_KEY = 'bexhr:biodata-schema-refresh-v1';
+  function publishSchemaChanged(action) {
+    // In-page preview updates instantly; other HR tabs can refresh metadata too.
+    // Never publish employee values, credentials or field definitions.
+    document.dispatchEvent(new CustomEvent('bexhr:biodata-fields-changed', {
+      detail: { action, tenantId },
+    }));
+    try {
+      window.localStorage.setItem(SCHEMA_REFRESH_KEY,
+        JSON.stringify({ tenantId, changedAt: Date.now() }));
+    } catch (_error) { /* Browser storage is optional, in-page updates still work. */ }
+  }
+  window.addEventListener('storage', (event) => {
+    if (event.key !== SCHEMA_REFRESH_KEY || !ready) return;
+    try {
+      if (JSON.parse(event.newValue || '{}').tenantId !== tenantId) return;
+    } catch (_error) { return; }
+    void refreshDefinitions().then(() => {
+      document.dispatchEvent(new CustomEvent('bexhr:biodata-fields-changed', {
+        detail: { action: 'external', tenantId },
+      }));
+    }).catch((error) => message('Could not refresh configured fields: ' + error.message, true));
+  });
   function renderManagement() {
     const manager = el('bexhrGaManager');
     const panel = el('bexhrGaPanel');
@@ -604,6 +675,13 @@
           const edited = Boolean(editingFieldId);
           clearEditor();
           await refreshDefinitions();
+          // Ensure the newly saved field exists in the form right now: no
+          // browser reload or manual Refresh Records action is necessary.
+          if (!activeFields().some((field) => String(field.id) === String(result.id)) ||
+              !el(`bexhrGaValue-${result.id}`)) {
+            throw new Error('Field saved, but the form did not update. Reopen the form before continuing.');
+          }
+          publishSchemaChanged(edited ? 'edit' : 'add');
           const newTab = el('employeeFormSteps')?.querySelector(`[data-employee-form-tab="${result.heading}"]`);
           newTab?.click();
           message(edited ? 'Field updated. Employee data has been preserved.' : 'Field added under ' + headingName(result.heading) + '.');
@@ -630,7 +708,7 @@
   }
   window.BexHrGroupA = Object.freeze({
     init, headers, acceptedHeaders, validateImportRow, saveImported, validateManual,
-    saveManual, editEmployee, reset, isCustomHeading, requiredComplete,
+    saveManual, editEmployee, reset, readOnlyEmployeeDetails, isCustomHeading, requiredComplete,
     onTabChanged: syncSections,
     get ready() { return ready; },
     get alpatech() { return isAlpatech; },

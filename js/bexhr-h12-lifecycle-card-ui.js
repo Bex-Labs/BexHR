@@ -1,9 +1,7 @@
-/* BEXHR_H12_G4_LIFECYCLE_DBLCLICK_V3_20261111
- * Fix: no pointer single-click collapse/expand handler is registered.
- * Pointer double-click on the header/blank card surface or the toggle
- * expands/collapses in both directions. Keyboard Enter/Space remains accessible.
- * Sidebar navigation remains a normal single-click action.
- * No employee, leave, payroll, PA or permission behaviour is modified.
+/* BEXHR_H12_G4_LIFECYCLE_SINGLE_CLICK_V4_20261113
+ * The visible, accessible Expand/Collapse button toggles on one click.
+ * Sidebar navigation remains one-click and opens the lifecycle workspace.
+ * Existing lifecycle data / authorization / offboard actions are untouched.
  */
 (() => {
   'use strict';
@@ -11,7 +9,7 @@
     const card = document.getElementById('hrEmployeeLifecycleCard');
     const toggle = document.getElementById('toggleEmployeeLifecycleCardBtn');
     const panel = document.getElementById('employeeLifecycleCardCollapse');
-    if (!card || !toggle || !panel || toggle.dataset.bexhrH12LifecycleCardBound === 'v3') return;
+    if (!card || !toggle || !panel || toggle.dataset.bexhrH12LifecycleCardBound === 'v4') return;
 
     // Intentionally DO NOT call bindCardCollapseToggle(toggle, panel).
     // That native helper registers a pointer single-click action.
@@ -27,28 +25,17 @@
       setExpanded(panel.classList.contains('d-none'));
     }
 
-    // Suppress pointer single-clicks on the toggle. Retain Enter/Space,
-    // whose native button click event has detail === 0.
+    // H12 single-click contract: standard pointer and keyboard click both toggle.
     toggle.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (event.detail === 0) flip();
-    }, true);
-
-    // One delegated double-click handler; works with open and closed cards.
-    card.addEventListener('dblclick', (event) => {
-      if (event.button !== 0) return;
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target) return;
-      const interactive = target.closest('button, a, input, select, textarea, label, table, summary, [contenteditable="true"], [role="button"], [role="link"]');
-      if (interactive && interactive !== toggle) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       flip();
     }, true);
 
-    toggle.title = 'Double-click to expand or collapse; Enter/Space also works';
-    toggle.dataset.bexhrH12LifecycleCardBound = 'v3';
+    // Removed legacy double-click handler. Use the visible Expand/Collapse button.
+
+    toggle.title = 'Click to expand or collapse';
+    toggle.dataset.bexhrH12LifecycleCardBound = 'v4';
 
     // Deliberate exception: selecting Employee Lifecycle from the sidebar
     // must open the relevant view with a single click.

@@ -76,6 +76,12 @@
   </style>
   <!-- PRE-7B: reversible UI simplification; existing business data is preserved. -->
   <link rel="stylesheet" href="css/pre7b-simplification.css?v=1" />
+  <!-- BEXHR_H11_LEADERSHIP_CONTEXT_20261113: verified position display only -->
+  <link rel="stylesheet" href="css/bexhr-h11-leadership-header-chip.css?v=h11lead1">
+  <!-- BEXHR_QUIET_HEADER_LIFECYCLE_20261114: presentation only -->
+  <link rel="stylesheet" href="css/bexhr-quiet-header-lifecycle.css?v=20261114a">
+  <!-- BEXHR_SWITCHER_PORTAL_LAYER_20261114: floating menu presentation only -->
+  <link rel="stylesheet" href="css/bexhr-workspace-switcher-portal.css?v=20261114b">
 </head>
 
 <body class="dashboard-page bexhr-has-sidebar bexhr-manager-visual-refresh manager-workspace-booting" aria-busy="true">
@@ -672,8 +678,9 @@
 
             <!-- MANAGER COVERAGE BADGE STARTUP FLASH FIX -->
             <!-- Remain hidden until reporting-line assignments have been resolved. -->
+            <!-- BEXHR_H12_MANAGER_QUIET_REFRESH_20261114: avoid unverified yellow/placeholder label flash. -->
             <span id="managerCoverageModeBadge" class="manager-coverage-mode-badge manager-coverage-mode-badge--loading"
-              aria-live="polite" aria-busy="true">
+              style="visibility: hidden;" aria-live="polite" aria-busy="true">
               <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
               Checking coverage
             </span>
@@ -2251,9 +2258,19 @@
   <script src="js/bexhr-manager-organization-status.js"></script>
   <script src="js/bexhr-leave-authority.js"></script>
   <script src="js/manager-dashboard.js"></script>
+  <!-- H12 Stage 2B: server-authorised dual workspace entry (AAL2 + explicit grant) -->
+  <script src="js/bexhr-h12-dual-entry.js"></script>
+  <!-- H12 Stage 2B: server-authorised dual workspace entry (AAL2 + explicit grant) -->
+  <!-- BEXHR_QUIET_HEADER_LIFECYCLE_20261114: standalone HR link retired; native authenticated account switcher retained -->
   <!-- Shared BexHR record-table scroll: first 10 visible records, scroll from 11 -->
   <script src="js/bexhr-ten-record-scroll.js"></script>
   <script src="js/bexhr-record-scroll-h11.js"></script>
+  <!-- BEXHR_H11_LEADERSHIP_CONTEXT_20261113: verified position display only -->
+  <script src="js/bexhr-h11-leadership-header-chip.js?v=h11lead1"></script>
+  <!-- BEXHR_QUIET_HEADER_LIFECYCLE_20261114: presentation only -->
+  <script src="js/bexhr-quiet-header-lifecycle.js?v=20261114a"></script>
+  <!-- BEXHR_SWITCHER_PORTAL_LAYER_20261114: floating menu presentation only -->
+  <script src="js/bexhr-workspace-switcher-portal.js?v=20261114b"></script>
 </body>
 
 </html>

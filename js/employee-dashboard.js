@@ -1401,22 +1401,7 @@ function bindEmployeeLeaveBalancesCardEvents() {
     setEmployeeLeaveBalancesCardExpanded(!isExpanded);
   });
 
-  card.addEventListener("dblclick", (event) => {
-    // EMPLOYEE DASHBOARD FINAL QA - STEP 1R-A
-    // Ignore double-clicks inside the scrollable history records area.
-    // This prevents the card from collapsing while the employee is reviewing
-    // or selecting text from manager decision comments.
-    const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, .employee-leave-history-scroll-area, [contenteditable='true']",
-    );
-
-    if (ignoredTarget) return;
-
-    const isExpanded = !panel.classList.contains("d-none");
-    if (!isExpanded) return;
-
-    setEmployeeLeaveBalancesCardExpanded(false);
-  });
+  // H12 single-click contract: use visible native button only.
 }
 
 // EMPLOYEE UI CLEANUP - STEP 1N
@@ -1466,18 +1451,7 @@ function bindEmployeeLatestDecisionCardEvents() {
     setEmployeeLatestDecisionCardExpanded(!isExpanded);
   });
 
-  card.addEventListener("dblclick", (event) => {
-    const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, [contenteditable='true']",
-    );
-
-    if (ignoredTarget) return;
-
-    const isExpanded = !panel.classList.contains("d-none");
-    if (!isExpanded) return;
-
-    setEmployeeLatestDecisionCardExpanded(false);
-  });
+  // H12 single-click contract: use visible native button only.
 }
 
 // EMPLOYEE UI CLEANUP - STEP 1O-C
@@ -1533,23 +1507,7 @@ function bindEmployeeLeaveHistoryCardEvents() {
   // Make double-click responsive across the whole history card shell,
   // matching the existing employee card collapse pattern.
   // Interactive controls are ignored so Refresh History remains safe.
-  card.addEventListener("dblclick", (event) => {
-    const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, .employee-leave-history-scroll-area, [contenteditable='true']",
-    );
-
-    if (ignoredTarget) return;
-
-    const isExpanded = !panel.classList.contains("d-none");
-    if (!isExpanded) return;
-
-    // EMPLOYEE LEAVE UX WIRING - STEP 1B
-    // Double-click should behave exactly like pressing the visible Collapse
-    // button. The HTML layout-sync script already listens to that button click,
-    // so using button.click() avoids the tall blank card left by the direct
-    // collapse path.
-    button.click();
-  });
+  // H12 single-click contract: use visible native button only.
 }
 
 // EMPLOYEE UI CLEANUP - STEP 1B
@@ -1599,18 +1557,7 @@ function bindEmployeePayrollHistoryCardEvents() {
     setEmployeePayrollHistoryCardExpanded(!isExpanded);
   });
 
-  card.addEventListener("dblclick", (event) => {
-    const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, table, .dashboard-table-wrap, [contenteditable='true']",
-    );
-
-    if (ignoredTarget) return;
-
-    const isExpanded = !panel.classList.contains("d-none");
-    if (!isExpanded) return;
-
-    setEmployeePayrollHistoryCardExpanded(false);
-  });
+  // H12 single-click contract: use visible native button only.
 }
 
 // EMPLOYEE PROFILE REVIEW - STEP 1B
@@ -2387,6 +2334,7 @@ async function loadEmployeeReportingManagers() {
     state.reportingManagers = rows;
 
     renderEmployeeReportingManagers(rows);
+    if (state.employeeRecord) renderEmployeeRecord(state.employeeRecord);
   } catch (error) {
     console.error(
       "Error loading employee reporting managers:",
@@ -2601,6 +2549,12 @@ function renderEmployeeReportingManagers(reportingManagers = []) {
 }
 
 function getEmployeeManagerDisplayName(employee) {
+  const assignedPrimary = (Array.isArray(state.reportingManagers) ? state.reportingManagers : [])
+    .find((manager) => normalizeText(manager?.manager_type) === "primary");
+  if (assignedPrimary) {
+    return [assignedPrimary.manager_first_name, assignedPrimary.manager_last_name]
+      .map((part) => String(part || "").trim()).filter(Boolean).join(" ") || "--";
+  }
   return (
     employee.manager_name ||
     employee.line_manager_name ||
@@ -2776,7 +2730,7 @@ function renderEmployeeHrProfileReview(employee = {}) {
 // NIN is shown only as the masked display value; the full NIN is never copied
 // into the correction request snapshot.
 function getEmployeeProfileCorrectionFieldOptions(employee = state.employeeRecord || {}) {
-  return [
+  const availableFields = [
     {
       category: "core",
       categoryLabel: "Core Details",
@@ -2876,6 +2830,12 @@ function getEmployeeProfileCorrectionFieldOptions(employee = state.employeeRecor
       currentValue: getMaskedEmployeeNin(employee.nin),
     },
   ];
+  // Compact standard BexHR biodata retired these fields. Keep the existing
+  // Alpatech correction choices and form unchanged.
+  return isCurrentEmployeeTenantAlpatechWorkspace()
+    ? availableFields
+    : availableFields.filter((field) =>
+        !["personal_email", "alternative_phone_number"].includes(field.fieldKey));
 }
 
 // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B

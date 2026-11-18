@@ -19,11 +19,11 @@ test('position row has exactly five columns and matching headings',()=>{
  const header=html.match(/id="organizationJobTitlesTableWrapper"[\s\S]*?<thead>([\s\S]*?)<\/thead>/)?.[1];
  assert.ok(header);
  const cols=[...header.matchAll(/<th[^>]*>(.*?)<\/th>/g)].map(x=>x[1]);
- assert.deepEqual(cols,['Job Title','Department / Scope','Reports to','Status','Actions']);
+ assert.deepEqual(cols,['Job Title','Department / Scope','Reports to','Position status','Actions']);
  const source=js.match(/function renderOrganizationJobTitlesTable\(\) {[\s\S]*?\n}\n\n\/\/ BEXHR PHASE 4A-2/)?.[0];
  assert.ok(source);
  assert.doesNotMatch(source,/formatDate\(jobTitle.updated_at/);
- for(const label of ['Job title','Department / Scope','Reports to','Status','Actions']){
+ for(const label of ['Job title','Department / Scope','Reports to','Position status','Actions']){
    assert.ok(source.includes('data-label=\\\"'+label),`Missing label: ${label}`);
  }
 });
@@ -39,7 +39,7 @@ test('shared original record styling with preserved accessible column labels',()
  assert.doesNotMatch(css, /#hrSetupSection #organizationJobTitlesTableWrapper/);
  assert.match(js, /data-label=\\"Department \/ Scope/);
  assert.match(js, /data-label=\\"Reports to/);
- assert.match(js, /data-label=\\"Status/);
+ assert.match(js, /data-label=\\"Position status/);
  assert.match(js, /data-label=\\"Actions/);
  assert.match(html, /<th class="text-center">Actions<\/th>/);
 });

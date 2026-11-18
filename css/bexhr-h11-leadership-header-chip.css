@@ -1,0 +1,29 @@
+/* BexHR H11 leadership context. Presentation only. No roles or permissions. */
+.bexhr-h11-leadership-chip {
+  display: inline-flex; align-items: center; gap: 10px;
+  flex: 0 1 auto; min-width: 0; padding: 9px 13px;
+  color: #125e60; border: 1px solid #b6deda;
+  background: linear-gradient(118deg, #f1fffc 0%, #e8f5f4 100%);
+  box-shadow: 0 3px 12px rgba(11, 105, 101, .08);
+  border-radius: 15px; white-space: nowrap;
+  font-family: inherit;
+}
+.bexhr-h11-leadership-icon {
+  display: flex; align-items: center; justify-content: center;
+  flex: 0 0 32px; width: 32px; height: 32px;
+  border-radius: 11px; background: #c9eee7; color: #067c76;
+  font-size: 17px; font-weight: 800;
+}
+.bexhr-h11-leadership-copy { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; line-height: 1.15; }
+.bexhr-h11-leadership-overline { font-size: 9px; font-weight: 850; letter-spacing: .075em; color: #218a86; text-transform: uppercase; }
+.bexhr-h11-leadership-detail { font-size: 12px; font-weight: 750; color: #114b50; overflow: hidden; text-overflow: ellipsis; max-width: 195px; }
+@media (max-width: 900px) {
+ .bexhr-h11-leadership-chip { gap: 6px; padding: 7px 8px; border-radius: 12px; }
+ .bexhr-h11-leadership-icon { width: 24px; height: 24px; flex-basis: 24px; font-size: 13px; border-radius: 8px; }
+ .bexhr-h11-leadership-overline { display: none; }
+ .bexhr-h11-leadership-detail { font-size: 10px; max-width: 116px; }
+}
+@media (max-width: 600px) {
+ .bexhr-h11-leadership-chip { max-width: 145px; }
+ .bexhr-h11-leadership-detail { max-width: 90px; }
+}

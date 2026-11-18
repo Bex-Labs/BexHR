@@ -1018,28 +1018,8 @@
   // leave-history inner scroll area are ignored, so normal clicking/scrolling
   // does not accidentally collapse the card.
   function bindSsCardDoubleClickCollapse(btn, body) {
-    if (!btn || !body) return;
-
-    const card = body.closest(".dashboard-section-card");
-    if (!card) return;
-
-    if (card.dataset.ssDoubleClickCollapseBound === "true") return;
-    card.dataset.ssDoubleClickCollapseBound = "true";
-
-    card.addEventListener("dblclick", (event) => {
-      const ignoredTarget = event.target.closest(
-        "button, a, input, select, textarea, label, table, .employee-leave-history-scroll-area, [contenteditable='true']",
-      );
-
-      if (ignoredTarget) return;
-
-      const isExpanded = !body.classList.contains("d-none");
-      if (!isExpanded) return;
-
-      // Use the visible button path so double-click behaves exactly like
-      // pressing Collapse.
-      btn.click();
-    });
+    // H12 single-click contract: standard visible buttons already toggle.
+    return;
   }
 
   // -----------------------------------------------------------------------
@@ -2033,7 +2013,7 @@ ${isCancelledAudit
 
     const block = getSsLeaveRequestPolicyBlock();
 
-    if (block) {
+    if (block && ssState.leavePrimaryManagerReadinessStatus !== "loading") {
       notice.textContent = block.message;
       notice.classList.remove("d-none");
     } else {

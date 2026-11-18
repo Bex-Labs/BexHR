@@ -509,9 +509,9 @@ function getRememberedManagerWorkspace() {
   if (isValidManagerWorkspaceKey(_managerWorkspaceInMemory)) return _managerWorkspaceInMemory;
 
   try {
+    // BEXHR_H12_MANAGER_QUIET_REFRESH_20261114: do not restore an unscoped boot key across accounts.
     const scopedWorkspace = sessionStorage.getItem(getManagerWorkspaceMemoryKey());
-    const bootWorkspace = sessionStorage.getItem(MANAGER_DASHBOARD_WORKSPACE_BOOT_KEY);
-    const workspace = scopedWorkspace || bootWorkspace || "dashboard";
+    const workspace = scopedWorkspace || "dashboard";
 
     return isValidManagerWorkspaceKey(workspace) ? workspace : "dashboard";
   } catch (error) {
@@ -561,7 +561,53 @@ function forceManagerDashboardToTopAfterRefresh() {
 function revealRestoredManagerWorkspace() {
   // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
   // Give fast Manager restores the same deliberate loader timing as HR.
+  // BEXHR_H12_MANAGER_NATIVE_LOADER_READY_20261114
+  // Keep the existing Manager loader until the selected Leave card is ready.
+  const leaveFirstPaintDeadline = Date.now() + 10000;
+
   const releaseWorkspace = () => {
+    const restoringOwnLeave =
+      getRememberedManagerWorkspace() === 'selfservice' &&
+      getRememberedManagerSelfServiceTask() === 'leave' &&
+      !document.documentElement.classList.contains('bexhr-pa-return');
+
+    if (restoringOwnLeave) {
+      const host = document.getElementById('managerSelfServiceSection');
+      const leave = document.getElementById('ssLeaveSection');
+      const position = document.documentElement.getAttribute('data-bexhr-h12-leave-position');
+      const view = leave?.dataset.ssLeaveView;
+
+      const cardId = {
+        request: 'ssLeaveRequestForm',
+        balances: 'ssLeaveBalancesCardCollapse',
+        history: 'ssLeaveHistoryCardCollapse',
+        decision: 'ssLatestDecisionCardCollapse'
+      }[view];
+
+      const card = cardId ? document.getElementById(cardId) : null;
+
+      const isVisible = element => Boolean(
+        element &&
+        !element.closest('.d-none') &&
+        element.getClientRects().length > 0
+      );
+
+      const ready =
+        (position === 'highest' || position === 'other') &&
+        (position !== 'highest' || view !== 'request') &&
+        isVisible(host) &&
+        isVisible(leave) &&
+        isVisible(card);
+
+      if (!ready && Date.now() < leaveFirstPaintDeadline) {
+        window.setTimeout(releaseWorkspace, 60);
+        return;
+      }
+
+      if (!ready) {
+        console.warn('[H12] Manager Leave first paint timed out; native loader released.');
+      }
+    }
     document.body?.classList.remove("manager-workspace-booting");
     document.body?.setAttribute("aria-busy", "false");
 
@@ -968,7 +1014,7 @@ function bindManagerCardCollapseToggle(button, panel, header) {
     panel;
 
   button.addEventListener("click", toggleCardFromButton);
-  cardSurface.addEventListener("dblclick", collapseCardFromDoubleClick);
+  // H12 single-click contract: native collapse button is authoritative.
 }
 
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1I
@@ -1313,7 +1359,7 @@ async function refreshManagerTeamAssignmentsOnFocus(force = false) {
   try {
     if (window.SessionManager?.revalidateActiveProfile &&
         !(await window.SessionManager.revalidateActiveProfile())) return;
-    await refreshManagerWorkspace();
+    await refreshManagerWorkspace({ quiet: true });
   } catch (error) {
     console.warn("Manager team assignment focus refresh failed:", error);
   } finally {
@@ -1507,14 +1553,20 @@ function bindEvents() {
   // Refresh the Team workspace when the manager returns to the browser tab.
   // If HR changed reporting lines while the manager was away, the dashboard
   // reloads the assignment list and shows a toast for added/removed employees.
-  window.addEventListener("focus", () => {
+  // BEXHR_H12_MANAGER_QUIET_REFRESH_20261114: refresh after an actual absence, not every focus ping.
+  let managerLastAwayAt = 0;
+  const refreshManagerAfterReturn = () => {
+    if (!managerLastAwayAt) return;
+    const awayDurationMs = Date.now() - managerLastAwayAt;
+    managerLastAwayAt = 0;
+    if (awayDurationMs < 5000) return;
     void refreshManagerWorkspaceFromHierarchySync();
-  });
-
+  };
+  window.addEventListener("blur", () => { managerLastAwayAt = Date.now(); });
+  window.addEventListener("focus", refreshManagerAfterReturn);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) {
-      void refreshManagerWorkspaceFromHierarchySync();
-    }
+    if (document.hidden) managerLastAwayAt = Date.now();
+    else refreshManagerAfterReturn();
   });
 
   window.addEventListener("storage", (event) => {
@@ -1537,10 +1589,15 @@ function bindEvents() {
   window.addEventListener("bexhr:employee-lifecycle-changed", () => {
     void refreshManagerWorkspaceFromHierarchySync(true);
   });
-  // Detect HR changes made in another browser or device without F5.
+  // BEXHR_H12_MANAGER_QUIET_REFRESH_20261114: do not repeatedly reload the active Team workspace.
+  // Keep a quiet overview fallback for cross-device HR changes.
   window.setInterval(() => {
-    if (!document.hidden) void refreshManagerWorkspaceFromHierarchySync();
-  }, 30000);
+    const overviewVisible = Boolean(state.dom.managerDashboardSection) &&
+      !state.dom.managerDashboardSection.classList.contains("d-none");
+    if (!document.hidden && overviewVisible) {
+      void refreshManagerWorkspaceFromHierarchySync();
+    }
+  }, 120000);
 
   state.dom.teamSearchInput?.addEventListener("input", () => {
     applyTeamFilter();
@@ -3486,6 +3543,28 @@ function clearPageAlert() {
 
   state.dom.pageAlert.className = "alert d-none mb-4";
   state.dom.pageAlert.textContent = "";
+}
+
+// BEXHR_H12_MANAGER_TEAM_ONLY_ASSIGNMENT_NOTICE_20261114
+// Assignment warnings are relevant to Manager Team only, not My Leave,
+// Payroll, Profile or the overview. Verified reporting-line results drive them.
+function setManagerTeamAssignmentNotice(message = '', type = 'warning') {
+  const teamSection = state.dom.managerTeamSection;
+  if (!teamSection) return;
+  let notice = document.getElementById('managerTeamAssignmentNotice');
+  if (!message) {
+    notice?.remove();
+    return;
+  }
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.id = 'managerTeamAssignmentNotice';
+    notice.setAttribute('role', 'status');
+    teamSection.querySelector('.manager-team-workspace-intro')?.after(notice);
+    if (!notice.isConnected) teamSection.prepend(notice);
+  }
+  notice.className = 'alert alert-' + (type === 'info' ? 'info' : 'warning') + ' mb-3';
+  notice.textContent = String(message);
 }
 
 // MANAGER HEADER RESPONSIBILITY BADGE - v1.0.0
@@ -6094,13 +6173,15 @@ function notifyLeaveDecisionChanged() {
   }
 }
 
-async function refreshManagerWorkspace() {
-  setManagerCoverageModeLoading(true);
-
-  renderPendingRequestsLoadingState();
-  renderProcessedRequestsLoadingState();
-  renderTeamScheduleLoadingState();
-  renderTeamLoadingState();
+async function refreshManagerWorkspace({ quiet = false } = {}) {
+  // BEXHR_H12_MANAGER_QUIET_REFRESH_20261114: preserve visible cards during a background sync.
+  if (!quiet) {
+    setManagerCoverageModeLoading(true);
+    renderPendingRequestsLoadingState();
+    renderProcessedRequestsLoadingState();
+    renderTeamScheduleLoadingState();
+    renderTeamLoadingState();
+  }
 
   const teamLoaded = await loadAssignedTeamMembers();
 
@@ -6126,8 +6207,7 @@ async function loadAssignedTeamMembers() {
   );
 
   if (!state.currentUser?.id && !managerEmail) {
-    showPageAlert(
-      "warning",
+    setManagerTeamAssignmentNotice(
       "Your manager profile is missing a login identity and email, so assigned team members could not be resolved.",
     );
     renderTeamTable([]);
@@ -6157,8 +6237,7 @@ async function loadAssignedTeamMembers() {
     state.currentOrganizationPositionSummary = null;
 
     if (!managerEmployeeRecord?.id) {
-      showPageAlert(
-        "warning",
+      setManagerTeamAssignmentNotice(
         "Your login could not be matched to an employee manager record. Please check employees.user_id or employees.work_email for this manager.",
       );
       renderTeamTable([]);
@@ -6211,9 +6290,9 @@ async function loadAssignedTeamMembers() {
       state.filteredTeamMembers = [];
 
       const positionDisplay = getManagerOrganizationPositionPresentation();
-      showPageAlert(
-        positionDisplay.kind === 'default' ? 'warning' : 'info',
+      setManagerTeamAssignmentNotice(
         positionDisplay.description,
+        positionDisplay.kind === 'default' ? 'warning' : 'info',
       );
       renderTeamTable([]);
       renderSummaryTiles([]);
@@ -6394,14 +6473,15 @@ async function loadAssignedTeamMembers() {
     notifyManagerTeamAssignmentChanges(enrichedTeamMembers);
 
     state.teamMembers = enrichedTeamMembers;
+    // Clear the prior assignment notice only after the new team is confirmed.
+    if (enrichedTeamMembers.length) setManagerTeamAssignmentNotice();
 
     publishManagerPerformanceAppraisalContext();
 
     applyTeamFilter();
 
     if (!enrichedTeamMembers.length) {
-      showPageAlert(
-        "warning",
+      setManagerTeamAssignmentNotice(
         "No assigned employee records were returned for the active reporting lines. Please check employees RLS for manager team visibility.",
       );
       return false;
@@ -6456,6 +6536,8 @@ function setManagerCoverageModeLoading(isLoading) {
   if (!modeBadge) return;
 
   if (isLoading) {
+    // BEXHR_H12_MANAGER_QUIET_REFRESH_20261114: keep the last verified label visible while refreshing.
+    if (modeBadge.dataset.bexhrCoverageResolved === "true") return;
     modeBadge.className =
       "manager-coverage-mode-badge manager-coverage-mode-badge--loading";
 
@@ -6558,6 +6640,8 @@ function renderManagerCoverageModeFromReportingLines(reportingLineByEmployeeId) 
     modeBadge.className =
       "manager-coverage-mode-badge " +
       `manager-coverage-mode-badge--${coverageModeKey}`;
+    modeBadge.dataset.bexhrCoverageResolved = "true";
+    modeBadge.style.visibility = "visible";
 
     setManagerCoverageModeLoading(false);
   }
@@ -6708,6 +6792,8 @@ function renderManagerActionCoverageCentre() {
     modeBadge.className =
       `manager-coverage-mode-badge ` +
       `manager-coverage-mode-badge--${coverageModeKey}`;
+    modeBadge.dataset.bexhrCoverageResolved = "true";
+    modeBadge.style.visibility = "visible";
 
     setManagerCoverageModeLoading(false);
   }

@@ -1,0 +1,28 @@
+/* BEXHR_SWITCHER_PORTAL_LAYER_20261114
+   Render the EXISTING authenticated switcher menu above workspace cards.
+   Append its presentation copy to document.body to escape arbitrary header,
+   card and sticky-container stacking contexts; do not change auth/roles.
+   Bootstrap backdrops (1050) and modals (1055) remain above this menu. */
+#bexhrWorkspaceSwitcherFloatingPortal.bexhr-workspace-menu {
+  position: fixed !important;
+  right: auto !important;
+  bottom: auto !important;
+  z-index: 1049 !important;
+  box-sizing: border-box;
+  margin: 0 !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+  background: #fff;
+  isolation: isolate;
+}
+#bexhrWorkspaceSwitcherFloatingPortal[hidden],
+body.modal-open #bexhrWorkspaceSwitcherFloatingPortal {
+  display: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  #bexhrWorkspaceSwitcherFloatingPortal .bexhr-workspace-menu-option {
+    transition: none !important;
+  }
+}

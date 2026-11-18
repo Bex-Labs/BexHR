@@ -10,7 +10,7 @@ test('all four personas load the same tenant-aware hierarchy model before their 
  for (const [p,main,src] of [
    ['hr-dashboard.html','js/hr-dashboard.js','js/bexhr-organization-hierarchy.js'],
    ['manager-dashboard.html','js/manager-dashboard.js','js/bexhr-organization-hierarchy.js'],
-   ['employee-dashboard.html','js/employee-dashboard.js?v=14d','js/bexhr-organization-hierarchy.js'],
+   ['employee-dashboard.html','js/employee-dashboard.js','js/bexhr-organization-hierarchy.js'],
    ['features/performance-appraisal/performance-appraisal.html','js/performance-appraisal-context.js','../../js/bexhr-organization-hierarchy.js'],
  ]) {
   const html=page(p);

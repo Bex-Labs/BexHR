@@ -6775,33 +6775,7 @@ function collapseDashboardWorkingCardsByDefault() {
 // Allow HR to double-click inside an open card to collapse it.
 // Ignore form fields, buttons, links, and tables so normal data entry
 // and record actions are not interrupted.
-function bindDashboardCardDoubleClickCollapse(button, panel) {
-  if (!button || !panel) return;
-
-  const card = panel.closest(".dashboard-section-card");
-  if (!card) return;
-
-  card.addEventListener("dblclick", (event) => {
-    const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, table, [contenteditable='true']",
-    );
-
-    if (ignoredTarget) return;
-
-    const isExpanded = !panel.classList.contains("d-none");
-    if (!isExpanded) return;
-
-    setDashboardCardExpanded(button, panel, false);
-  });
-}
-
-// DESCRIPTION ITEM 4 - STEP 2B
-// Bind double-click collapse to all long HR/payroll working cards.
-function bindDashboardCardDoubleClickCollapseShortcuts() {
-  getDashboardWorkingCardPairs().forEach(([button, panel]) => {
-    bindDashboardCardDoubleClickCollapse(button, panel);
-  });
-}
+// H12 single-click: legacy card double-click helpers removed.
 
 // REMOVE GRADE LEVEL FIELD FROM EMPLOYEE DATA - STEP 3
 // Scroll with an offset so card headings remain visible after redirect.
@@ -12485,7 +12459,7 @@ function bindEvents() {
   // DESCRIPTION ITEM 4 - STEP 2B
   // Add double-click collapse shortcuts after normal collapse buttons
   // have been bound. This is a helper only and does not change save logic.
-  bindDashboardCardDoubleClickCollapseShortcuts();
+  // H12 single-click: no whole-card double-click binding.
 
   state.dom.payrollSearchInput?.addEventListener("input", () => {
     applyPayrollSearch();
@@ -35660,6 +35634,180 @@ async function loadEmployeeFilledFormRelatedData(employeeId) {
   };
 }
 
+// H12: Read-only source-of-truth reporting. Never use stale legacy snapshots
+// when an authoritative active Primary reporting line exists.
+async function loadEmployeeFilledFormPrimaryManager(employeeId) {
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("employee_reporting_lines")
+    .select("manager_employee_id,manager_type,status,effective_date,end_date")
+    .eq("tenant_id", tenantId)
+    .eq("employee_id", employeeId);
+  if (error) throw error;
+  const today = new Date().toISOString().slice(0, 10);
+  const activeRows = (data || []).filter((line) =>
+    normalizeText(line.status || "active") === "active" &&
+    (!line.effective_date || line.effective_date <= today) &&
+    (!line.end_date || line.end_date >= today));
+  const primaryRow = activeRows.find((line) => normalizeText(line.manager_type) === "primary");
+  const supportingRows = activeRows.filter((line) =>
+    normalizeText(line.manager_type) !== "primary" && line.manager_employee_id);
+  const ids = [...new Set([primaryRow?.manager_employee_id,
+    ...supportingRows.map((line) => line.manager_employee_id)].filter(Boolean))];
+  const cached = (state.employees || []).filter((employee) =>
+    ids.includes(String(employee.id || "")));
+  const missingIds = ids.filter((id) =>
+    !cached.some((employee) => String(employee.id || "") === String(id)));
+  let missing = [];
+  if (missingIds.length) {
+    const { data: scopedManagers, error: managerError } = await supabase
+      .from("employees")
+      .select("id,first_name,middle_name,last_name,work_email")
+      .eq("tenant_id", tenantId)
+      .in("id", missingIds);
+    if (managerError) throw managerError;
+    missing = scopedManagers || [];
+  }
+  const names = [...cached, ...missing];
+  const find = (id) => names.find((person) =>
+    String(person.id || "") === String(id || ""));
+  const primaryPerson = find(primaryRow?.manager_employee_id);
+  return {
+    name: primaryRow ? (primaryPerson ? getEmployeeFilledFormFullName(primaryPerson) : "--") : "",
+    email: primaryRow ? String(primaryPerson?.work_email || "").trim() : "",
+    hasPrimary: Boolean(primaryRow),
+    supporting: supportingRows.map((line) => ({
+      name: find(line.manager_employee_id)
+        ? getEmployeeFilledFormFullName(find(line.manager_employee_id)) : "--",
+      type: String(line.manager_type || "Secondary"),
+    })),
+  };
+}
+
+// H12: configured fields must appear INSIDE their selected existing biodata
+// heading. New, administrator-created headings are the only standalone cards.
+// Uses the same tenant-scoped HR-only field definitions as Edit Employee.
+function placeEmployeeFilledFormConfiguredFields(content, configuredSections = []) {
+  const builtInSectionTitles = {
+    core: ["Core Details"],
+    reporting: ["Reporting", "Employment Details"],
+    address: ["Address", "Address Details"],
+    "next-of-kin": ["Next of Kin"],
+    dependants: ["Beneficiaries / Dependants"],
+    education: ["Education / Academic Qualification"],
+    documents: ["Supporting Documents"],
+  };
+  const htmlSections = Array.from(content.querySelectorAll("section"));
+  const missingHeadings = [];
+  const norm = (text) => String(text || "").trim().toLowerCase();
+  for (const configured of (Array.isArray(configuredSections) ? configuredSections : [])) {
+    const entries = Array.isArray(configured.fields) ? configured.fields : [];
+    if (!entries.length) continue;
+    const key = String(configured.key || "").trim();
+    const renderedFields = entries.map((field) =>
+      renderEmployeeFilledFormField(field.label, field.value, { date: field.type === "date" })
+    ).join("");
+    if (key.startsWith("custom:")) {
+      // Custom headings are intentionally separate. Their labels are escaped
+      // by the existing filled-form section helper.
+      content.insertAdjacentHTML("beforeend", renderEmployeeFilledFormSection(
+        configured.title || "Additional Details", renderedFields,
+        "Configured fields saved for this employee.",
+      ));
+      continue;
+    }
+    const titles = builtInSectionTitles[key] || [];
+    const target = htmlSections.find((section) => {
+      const heading = section.querySelector("h3");
+      return heading && titles.some((title) => norm(heading.textContent) === norm(title));
+    });
+    if (!target) {
+      // Never misplace a built-in heading field into a new top-level card.
+      missingHeadings.push(configured.title || key);
+      continue;
+    }
+    let row = target.querySelector(".row.g-3");
+    if (!row) {
+      row = document.createElement("div");
+      row.className = "row g-3 mt-3";
+      target.appendChild(row);
+    }
+    const group = document.createElement("div");
+    group.className = "contents";
+    group.dataset.bexhrConfiguredHeading = key;
+    group.innerHTML = renderedFields;
+    // Move field cards into the native section's grid, not into a new card.
+    while (group.firstChild) row.appendChild(group.firstChild);
+  }
+  if (missingHeadings.length) {
+    content.insertAdjacentHTML("afterbegin",
+      `<div class="alert alert-warning small mb-3">Some configured fields could not be placed under their approved headings: ${escapeHtml(missingHeadings.join(", "))}.</div>`);
+  }
+}
+
+// Standard BexHR tenant: match the currently accepted Core, Reporting,
+// Address and Next of Kin form. Alpatech retains its existing full layout.
+function renderStandardBexhrFilledForm(employee, relatedData, organizationHtml) {
+  const primary = relatedData.primaryManager || {};
+  const managerName = primary.hasPrimary ? primary.name : "--";
+  const managerEmail = primary.hasPrimary ? primary.email : "--";
+  const supporting = Array.isArray(primary.supporting) ? primary.supporting : [];
+  const addresses = Array.isArray(relatedData.addresses) ? relatedData.addresses : [];
+  const nextOfKin = Array.isArray(relatedData.nextOfKin) ? relatedData.nextOfKin : [];
+  const field = renderEmployeeFilledFormField;
+  const section = renderEmployeeFilledFormSection;
+  // Keep this projection aligned with the STANDARD four-tab employee form:
+  // Core (identity, employment and access), Reporting, Address, Next of Kin.
+  // Legacy Personal Email / Alternative Phone / extended Alpatech-only fields
+  // remain available to Alpatech but must not reappear in standard read-only.
+  return `
+    ${organizationHtml}
+    <div class="alert alert-info border mb-4"><div class="fw-semibold mb-1">Read-only HR review</div>
+      <div class="small">Approved saved biodata and reporting details. Edit Employee Profile only when a correction is authorised.</div></div>
+    ${section("Core Details", [
+      field("Employee Number", employee.employee_number),
+      field("Full Name", getEmployeeFilledFormFullName(employee)),
+      field("Work Email", employee.work_email),
+      field("Phone Number", employee.phone_number),
+      field("Date of Birth", employee.date_of_birth, { date: true }),
+      field("Sex / Gender", employee.gender),
+      field("Nationality", employee.nationality),
+      field("Town / Village / Community", employee.town),
+      field("NIN", employee.nin, { sensitive: true }),
+      field("Department / Position scope", getHrEmployeePositionScopePresentation(employee).label),
+      field("Job Title", employee.job_title),
+      field("Employment Date", employee.employment_date, { date: true }),
+      field("Last Working Day", employee.exit_date, { date: true }),
+      field("Status", formatStatusLabel(employee.status)),
+      field("System Role", formatEmployeeAccessRoleLabel(employee)),
+      field("Account Linkage", getEmployeeAccountLinkage(employee).label),
+    ].join(""), "Saved core biodata, employment and account information.")}
+    ${section("Reporting", [
+      field("Primary Line Manager", managerName),
+      field("Primary Approver Email", managerEmail),
+      ...(supporting.length ? [field("Additional Reporting Managers",
+          supporting.map((item) => `${item.name} (${item.type})`).join(", "))] : []),
+    ].join(""), "Saved authoritative primary and additional reporting assignments.")}
+    ${section("Address", renderEmployeeFilledFormList(addresses,
+      "No address records saved for this employee.", (address) => `
+        <div class="fw-semibold">${escapeHtml(address.address_type || "Address")}</div>
+        <div class="text-secondary small text-break">${escapeHtml([
+          address.address_line_1, address.address_line_2, address.city,
+          address.state_region, address.country, address.postal_code,
+        ].filter(Boolean).join(", ") || "--")}</div>`),
+      "Saved employee address records.")}
+    ${section("Next of Kin", renderEmployeeFilledFormList(nextOfKin,
+      "No next of kin record saved for this employee.", (kin) => `
+        <div class="fw-semibold">${escapeHtml(kin.full_name || "--")}</div>
+        <div class="text-secondary small">${escapeHtml(kin.relationship || "--")}</div>
+        <div class="text-secondary small">${escapeHtml(kin.phone_number || "--")}</div>
+        <div class="text-secondary small text-break">${escapeHtml(kin.email || "--")}</div>
+        <div class="text-secondary small text-break">${escapeHtml(kin.address || "--")}</div>`),
+      "Saved emergency contact information.")}
+  `;
+}
+
 // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
 // Build the complete read-only employee filled-form HTML.
 function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
@@ -35739,6 +35887,17 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
   const dependants = Array.isArray(relatedData.dependants) ? relatedData.dependants : [];
   const documents = Array.isArray(relatedData.documents) ? relatedData.documents : [];
 
+  if (!isAlpatechEmployeeFilledForm) {
+    const standardOrganizationHtml = `
+      <section class="border rounded-4 p-3 p-lg-4 bg-white mb-4">
+        <div class="small text-secondary text-uppercase fw-semibold mb-1">Company Details</div>
+        <h3 class="h4 fw-bold mb-1">${escapeHtml(organizationName)}</h3>
+        <div class="text-secondary small">${organizationAddress ? escapeHtml(organizationAddress) : "Company address not set"}</div>
+        ${organizationContactLines.length ? `<div class="text-secondary small mt-1">${escapeHtml(organizationContactLines.join(" • "))}</div>` : ""}
+      </section>`;
+    return renderStandardBexhrFilledForm(employee, relatedData, standardOrganizationHtml);
+  }
+
   return `
     ${employeeFilledFormHeaderHtml}
 
@@ -35817,8 +35976,8 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
         renderEmployeeFilledFormField("Job Title", employee.job_title),
         renderEmployeeFilledFormField("Employment Date", employee.employment_date, { date: true }),
         renderEmployeeFilledFormField("Last Working Day", employee.exit_date, { date: true }),
-        renderEmployeeFilledFormField("Primary Line Manager", employee.line_manager),
-        renderEmployeeFilledFormField("Primary Approver Email", employee.approver_email),
+        renderEmployeeFilledFormField("Primary Line Manager", relatedData.primaryManager?.hasPrimary ? relatedData.primaryManager.name : "--"),
+        renderEmployeeFilledFormField("Primary Approver Email", relatedData.primaryManager?.hasPrimary ? relatedData.primaryManager.email : "--"),
         renderEmployeeFilledFormField("HMO Provider", employee.hmo_provider),
         renderEmployeeFilledFormField("HMO Plan", employee.hmo_plan),
         renderEmployeeFilledFormField("HMO Number", employee.hmo_number),
@@ -35940,7 +36099,9 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
 
 // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
 // Open the filled-form modal for the selected employee.
+let employeeFilledFormRequestCounter = 0;
 async function viewEmployeeFilledForm(employeeId) {
+  const requestCounter = ++employeeFilledFormRequestCounter;
   const employeeKey = String(employeeId || "").trim();
 
   const employee = (state.employees || []).find(
@@ -35980,6 +36141,7 @@ async function viewEmployeeFilledForm(employeeId) {
     </div>
   `;
 
+  modal.dataset.employeeFilledFormId = employeeKey;
   modal.classList.remove("d-none");
   modal.setAttribute("aria-hidden", "false");
   document.body?.classList.add("hr-employee-details-modal-open");
@@ -35991,23 +36153,40 @@ async function viewEmployeeFilledForm(employeeId) {
   try {
     // The ordinary filled-form preview must not depend on a separate NIN RPC.
     // Never use the legacy row's raw NIN, even before the vault migration.
-    const [relatedData, ninResult] = await Promise.all([
+    const [relatedData, primaryManager, configuredSections, ninResult] = await Promise.all([
       loadEmployeeFilledFormRelatedData(employeeKey),
+      loadEmployeeFilledFormPrimaryManager(employeeKey),
+      window.BexHrGroupA?.readOnlyEmployeeDetails
+        ? window.BexHrGroupA.readOnlyEmployeeDetails(employeeKey)
+            .then((sections) => ({ sections, error: "" }))
+            .catch((error) => ({ sections: [], error: error.message || "Configured biodata could not be loaded." }))
+        : Promise.resolve({ sections: [], error: "Biodata configuration is not yet available." }),
       Promise.resolve()
         .then(() => getSupabaseClient().rpc("bexhr_p7_nin_read_for_hr", { p_employee_id: employeeKey }))
         .catch((error) => ({ data: null, error })),
     ]);
+    // A newer add/edit/delete refresh or a closed modal supersedes this load.
+    if (requestCounter !== employeeFilledFormRequestCounter ||
+        modal.classList.contains("d-none") ||
+        modal.dataset.employeeFilledFormId !== employeeKey) return;
     const verifiedNin = !ninResult?.error && /^\d{11}$/.test(String(ninResult?.data || ""))
       ? String(ninResult.data) : "";
     content.innerHTML = renderEmployeeFilledFormPreview(
       { ...employee, nin: verifiedNin },
-      relatedData,
+      { ...relatedData, primaryManager, configuredSections: configuredSections.sections },
     );
+    placeEmployeeFilledFormConfiguredFields(content, configuredSections.sections);
+    if (configuredSections.error) {
+      content.insertAdjacentHTML("afterbegin",
+        `<div class="alert alert-warning small mb-3">${escapeHtml(configuredSections.error)} The standard employee details are still available.</div>`);
+    }
     if (ninResult?.error) {
       content.insertAdjacentHTML("afterbegin",
         '<div class="alert alert-info small mb-3">Secure NIN viewing is temporarily unavailable. The other employee details are still available.</div>');
     }
   } catch (error) {
+    if (requestCounter !== employeeFilledFormRequestCounter ||
+        modal.classList.contains("d-none")) return;
     console.error("Error loading employee filled form:", error);
 
     content.innerHTML = `
@@ -36021,14 +36200,26 @@ async function viewEmployeeFilledForm(employeeId) {
 // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
 // Close the read-only employee filled-form modal.
 function closeEmployeeFilledFormModal() {
+  ++employeeFilledFormRequestCounter;
   const modal = document.getElementById("employeeFilledFormModal");
 
   if (!modal) return;
 
   modal.classList.add("d-none");
   modal.setAttribute("aria-hidden", "true");
+  delete modal.dataset.employeeFilledFormId;
   document.body?.classList.remove("hr-employee-details-modal-open");
 }
+
+// Any successful configured-field add/edit/delete refreshes an open preview
+// automatically. A later opening always reads the latest schema from Supabase.
+document.addEventListener("bexhr:biodata-fields-changed", (event) => {
+  const modal = document.getElementById("employeeFilledFormModal");
+  const employeeId = modal?.dataset.employeeFilledFormId;
+  if (!employeeId || modal.classList.contains("d-none")) return;
+  if (event.detail?.tenantId && String(event.detail.tenantId) !== String(getRequiredTenantIdForHrEmployeeData())) return;
+  void viewEmployeeFilledForm(employeeId);
+});
 
 // EMPLOYEE DIRECTORY COMPACT STATUS - STEP 1
 function getEmployeeDirectoryEmploymentStatusPresentation(status = "") {

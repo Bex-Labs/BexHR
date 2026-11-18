@@ -23,6 +23,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
 
     <link rel="stylesheet" href="../../css/styles.css" />
+    <link rel="stylesheet" href="../../css/bexhr-h12-workspace-switcher-polish.css?v=h12g4ui02" />
+    <link rel="stylesheet" href="../../css/bexhr-workspace-switcher-portal.css?v=20261114b" />
     <link rel="stylesheet" href="css/performance-appraisal.css?v=r14dpa1" />
 
     <script>
@@ -64,6 +66,37 @@
     </style>
   <!-- PRE-7B: reversible UI simplification; existing business data is preserved. -->
   <link rel="stylesheet" href="../../css/pre7b-simplification.css?v=h12g57sync20261112" />
+    <!-- BEXHR_H12_PA_NATIVE_WORKSPACE_SWITCHER_20261114: reuse the live HR/Manager switcher and floating portal. -->
+    <style id="bexPaH12NativeSwitcherStyle">
+      body.bex-pa-page #bexPaAuthSwitcherArea[hidden],
+      body.bex-pa-page #bexPaAuthSwitcherArea.d-none { display: none !important; }
+      body.bex-pa-page #bexPaAuthSwitcherArea { flex: 0 0 auto; position: relative; }
+      body.bex-pa-page #bexPaAuthSwitcherArea .bex-pa-auth-switcher-button {
+        display: flex; align-items: center; gap: .7rem; min-height: 48px;
+        padding: .5rem .85rem; border: 1px solid #d5e7e5;
+        background: linear-gradient(135deg, #fff 0%, #f5fbfa 100%);
+        border-radius: 16px; color: #153b46; cursor: pointer; font: inherit;
+        text-align: left; box-shadow: 0 2px 8px rgba(15, 23, 42, .035);
+      }
+      body.bex-pa-page #bexPaAuthSwitcherArea .bex-pa-auth-switcher-button:hover,
+      body.bex-pa-page #bexPaAuthSwitcherArea .bex-pa-auth-switcher-button[aria-expanded="true"] {
+        border-color: #8dcac3; background: #f8fdfc;
+        box-shadow: 0 4px 15px rgba(14, 116, 105, .08);
+      }
+      body.bex-pa-page .bex-pa-auth-switcher-icon {
+        width: 32px; height: 32px; display: inline-flex; align-items: center;
+        justify-content: center; flex: none; border-radius: 10px;
+        background: #e5f7f4; color: #0f766e;
+      }
+      body.bex-pa-page .bex-pa-auth-switcher-copy { display: flex; flex-direction: column; line-height: 1.3; }
+      body.bex-pa-page .bex-pa-auth-switcher-copy strong { font-size: .82rem; font-weight: 750; }
+      body.bex-pa-page .bex-pa-auth-switcher-copy small { font-size: .71rem; color: #667b86; }
+      body.bex-pa-page .bex-pa-auth-switcher-chevron { color: #81939d; font-size: .8rem; }
+      @media (max-width: 575.98px) {
+        body.bex-pa-page #bexPaAuthSwitcherArea .bex-pa-auth-switcher-button { padding: .45rem .6rem; }
+        body.bex-pa-page .bex-pa-auth-switcher-copy small { display: none; }
+      }
+    </style>
 </head>
 
 <body class="bex-pa-page bg-body-tertiary">
@@ -136,6 +169,15 @@
                 </div>
 
                 <div class="d-flex align-items-center gap-3">
+                    <!-- BEXHR_H12_PA_NATIVE_WORKSPACE_SWITCHER_20261114: shown only after live dual-workspace entitlement. -->
+                    <div id="bexPaAuthSwitcherArea" class="bex-pa-auth-switcher-area d-none" hidden>
+                        <button type="button" class="manager-modern-account-button bex-pa-auth-switcher-button"
+                            aria-label="Switch authorised HR and Manager workspaces" aria-haspopup="menu" aria-expanded="false">
+                            <span class="bex-pa-auth-switcher-icon" aria-hidden="true"><i class="bi bi-grid"></i></span>
+                            <span class="bex-pa-auth-switcher-copy"><strong>Workspaces</strong><small>HR &amp; Manager</small></span>
+                            <i class="bi bi-chevron-down bex-pa-auth-switcher-chevron" aria-hidden="true"></i>
+                        </button>
+                    </div>
                     <label class="visually-hidden" for="bexPaDevelopmentPersona">
                         Appraisal development persona
                     </label>
@@ -1640,6 +1682,17 @@
                                                     maxlength="1000"
                                                     placeholder="Add a concise evidence note or reference, if available."></textarea>
                                             </div>
+
+                                            <div class="col-12" data-bex-pa-evidence-input>
+                                                <label class="form-label fw-semibold" for="bexPaProgressUpdateFiles">
+                                                    Supporting evidence files (optional)
+                                                </label>
+                                                <input class="form-control" id="bexPaProgressUpdateFiles" type="file"
+                                                    accept=".pdf,.png,.jpg,.jpeg,.webp" multiple>
+                                                <div class="form-text">
+                                                    Up to 3 files, 10 MB each. Private to authorised appraisal participants.
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -2493,7 +2546,9 @@
     <script src="../../js/bexhr-organization-hierarchy.js"></script>
     <script src="../../js/bexhr-pa-position-root.js"></script>
     <script src="js/performance-appraisal-context.js"></script>
-    <script src="js/performance-appraisal.js?v=h12g57sync20261112"></script>
+    <script src="../../js/bexhr-workspace-switcher-portal.js?v=20261114b"></script>
+    <script src="js/bexhr-pa-native-workspace-switcher.js?v=h12pa20261114"></script>
+    <script src="js/performance-appraisal.js?v=h12pa20261114"></script>
   <script src="../../js/bexhr-record-scroll-h11.js"></script>
 </body>
 

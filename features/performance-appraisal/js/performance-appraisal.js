@@ -128,6 +128,10 @@
     lastError: null,
   };
 
+  // BEXHR_H12_PA_P1_MANAGER_NATURAL_KEY_SAVE_20261114
+  // Prevent duplicate requests for the same manager review in this tab.
+  const bexPaManagerSaveInFlight = new Set();
+
   function bexPaIsIntegratedPersistenceContext() {
     return Boolean(bexPaGetIntegratedContext());
   }
@@ -475,6 +479,34 @@
       );
     }
 
+    // PA manager review identity is (appraisal_id, tenant_id), not its
+    // display/payload id. Preserve the existing database primary key.
+    const isSingleManagerReview =
+      datasetName === "managerAppraisals" && rows.length === 1;
+    if (isSingleManagerReview) {
+      const row = rows[0];
+      const { data: existing, error: lookupError } =
+        await window.supabaseClient
+          .from(tableName)
+          .select("id,status,manager_employee_id")
+          .eq("tenant_id", bexPaPersistence.tenantId)
+          .eq("appraisal_id", row.appraisal_id)
+          .maybeSingle();
+      if (lookupError) throw lookupError;
+      if (existing?.status === "Submitted") {
+        throw new Error("This manager appraisal has already been submitted. Refresh before continuing.");
+      }
+      if (existing?.manager_employee_id &&
+          existing.manager_employee_id !== row.manager_employee_id) {
+        throw new Error("The saved manager reviewer differs. Refresh before continuing.");
+      }
+      if (existing?.id) {
+        row.id = existing.id;
+        row.payload = { ...row.payload, id: existing.id };
+        recordsToPersist[0].id = existing.id;
+      }
+    }
+
     const query = appendOnly
       ? window.supabaseClient
         .from(tableName)
@@ -482,7 +514,9 @@
       : window.supabaseClient
         .from(tableName)
         .upsert(rows, {
-          onConflict: "id",
+          onConflict: isSingleManagerReview
+            ? "appraisal_id,tenant_id"
+            : "id",
         });
 
     const { data, error } = await query.select("*");
@@ -1568,21 +1602,163 @@
   // BEXHR_GROUP_B_V14_PATCH: self-only RPC; no local title inference.
   // Null means unverified, which cannot grant personal appraisal mode.
   let bexPaPersonalAppraisalAllowed = null;
+  // BEXHR_H12_PA_MY_APPRAISAL_CANONICAL_PRIMARY_20261114: treat SETUP_NEEDED as unresolved, never as automatic permission.
+  let bexPaPersonalAppraisalPositionStatus = "";
+  let bexPaPersonalAppraisalVerifiedIdentity = null;
   async function bexPaVerifyPersonalAppraisalAccess(identity) {
     bexPaPersonalAppraisalAllowed = false;
+    bexPaPersonalAppraisalPositionStatus = "";
+    bexPaPersonalAppraisalVerifiedIdentity = null;
     const employeeId = String(identity?.employeeId || '').trim();
     if (!employeeId || !window.supabaseClient?.rpc) return;
     const contextId = String(bexPaGetIntegratedContext()?.employeeId || '').trim();
     if (contextId && contextId !== employeeId) return;
     try {
       const {data,error}=await window.supabaseClient.rpc('bexhr_p7b_my_organization_position',{p_employee_id:employeeId});
-      if(!error && data && ['CONFIGURED_ROOT','HIGHEST_OCCUPIED','HAS_OCCUPIED_PARENT','SETUP_NEEDED'].includes(data.status))
-        bexPaPersonalAppraisalAllowed = !['CONFIGURED_ROOT','HIGHEST_OCCUPIED','SETUP_NEEDED'].includes(data.status);
+      if (!error && data && ["CONFIGURED_ROOT", "HIGHEST_OCCUPIED", "HAS_OCCUPIED_PARENT", "SETUP_NEEDED"].includes(data.status)) {
+        bexPaPersonalAppraisalPositionStatus = data.status;
+        bexPaPersonalAppraisalVerifiedIdentity = { employeeId, tenantId: String(identity?.tenantId || "").trim() };
+        bexPaPersonalAppraisalAllowed = data.status === "HAS_OCCUPIED_PARENT";
+      }
     } catch (_) { /* On lookup failure do not grant a personal appraisal. */ }
   }
   function bexPaCanOpenPersonalAppraisal() {
     return !bexPaGetIntegratedContext() || bexPaPersonalAppraisalAllowed === true;
   }
+  // BEXHR_H12_PA_MY_APPRAISAL_CANONICAL_PRIMARY_20261114: separate PA participation from the organisation-title lookup.
+  // Only a server-issued, active-cycle PRIMARY_MANAGER appraisal AND exactly
+  // one matching live employee-level Primary reporting line restore My Appraisal.
+  // CONFIGURED_ROOT, HIGHEST_OCCUPIED, lookup errors, other tenants and missing
+  // records never enter this path. Reviewer snapshots are not modified.
+  async function bexPaVerifySetupNeededPersonalAppraisal() {
+    if (bexPaPersonalAppraisalPositionStatus !== "SETUP_NEEDED" ||
+        bexPaPersonalAppraisalAllowed === true) return false;
+
+    const verified = bexPaPersonalAppraisalVerifiedIdentity;
+    const employeeId = String(verified?.employeeId || "").trim();
+    const tenantId = String(verified?.tenantId || "").trim();
+    const contextId = String(bexPaGetIntegratedContext()?.employeeId || "").trim();
+    const client = window.supabaseClient;
+    if (!employeeId || !tenantId || !contextId || contextId !== employeeId ||
+        tenantId !== String(bexPaPersistence.tenantId || "").trim() ||
+        !client?.from) return false;
+
+    const cycleIds = [...bexPaGetActiveCycleIdSet()];
+    if (!cycleIds.length) return false;
+
+    // Query relational route columns rather than trusting JSON/UI payloads.
+    // This is a SELECT only; authenticated tenant RLS remains authoritative.
+    try {
+      const { data: appraisals, error: appraisalError } = await client
+        .from("pa_employee_appraisals")
+        .select("employee_id,cycle_id,manager_employee_id,manager_review_route")
+        .eq("tenant_id", tenantId)
+        .eq("employee_id", employeeId)
+        .in("cycle_id", cycleIds)
+        .limit(30);
+      if (appraisalError || !Array.isArray(appraisals)) return false;
+      const candidates = appraisals.filter(row =>
+        String(row.manager_review_route || "").toUpperCase() === "PRIMARY_MANAGER" &&
+        row.manager_employee_id &&
+        String(row.manager_employee_id) !== employeeId);
+      if (!candidates.length) return false;
+
+      const { data: lines, error: lineError } = await client
+        .from("employee_reporting_lines")
+        .select("manager_employee_id")
+        .eq("tenant_id", tenantId)
+        .eq("employee_id", employeeId)
+        .ilike("manager_type", "primary")
+        .ilike("status", "active")
+        .limit(3);
+      // A single CURRENT Primary is required, not merely an old snapshot.
+      if (lineError || !Array.isArray(lines) || lines.length !== 1) return false;
+      const managerId = String(lines[0].manager_employee_id || "").trim();
+      if (!managerId || managerId === employeeId) return false;
+      if (!candidates.some(row => String(row.manager_employee_id) === managerId)) return false;
+
+      bexPaPersonalAppraisalAllowed = true;
+      return true;
+    } catch (error) {
+      console.warn("[H12 PA] Unable to verify active personal appraisal and current Primary Manager:", error);
+      return false;
+    }
+  }
+
+  // BEXHR_H12_PA_SELF_APPRAISAL_PARITY_20261114: the current appraisal-cycle reviewer SNAPSHOT is authoritative
+  // for an in-flight appraisal. Do not require a direct SELECT of the employee's
+  // inbound reporting line: RLS may hide that row from Manager accounts.
+  // This never accepts CONFIGURED_ROOT/HIGHEST_OCCUPIED/unknown statuses and
+  // never derives self identity from sessionStorage alone.
+  async function bexPaReconcileOwnActiveAppraisal() {
+    if (!bexPaGetIntegratedContext() || !bexPaPersistence.ready ||
+        !window.supabaseClient?.rpc || !window.supabaseClient?.from) return false;
+
+    const employeeId = String(bexPaGetIntegratedContext()?.employeeId || "").trim();
+    const tenantId = String(bexPaPersistence.tenantId || "").trim();
+    const activeCycleIds = [...bexPaGetActiveCycleIdSet()];
+    if (!employeeId || !tenantId || activeCycleIds.length === 0) return false;
+    const client = window.supabaseClient;
+
+    try {
+      // The server chooses the employee behind the CURRENT authenticated user.
+      const { data: signedInEmployeeId, error: whoError } =
+        await client.rpc("pa_current_employee_id");
+      if (whoError || String(signedInEmployeeId || "").trim() !== employeeId) return false;
+
+      const { data: position, error: positionError } = await client.rpc(
+        "bexhr_p7b_my_organization_position", { p_employee_id: employeeId }
+      );
+      if (positionError || !["HAS_OCCUPIED_PARENT", "SETUP_NEEDED"].includes(
+        String(position?.status || "")
+      )) return false;
+
+      const { data: rows, error: appraisalError } = await client
+        .from("pa_employee_appraisals")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("employee_id", employeeId)
+        .in("cycle_id", activeCycleIds)
+        .limit(50);
+      if (appraisalError || !Array.isArray(rows)) return false;
+
+      // Relational columns are protected by the existing PA snapshots/triggers.
+      // Do not treat copied JSON payload, stored persona or UI state as authority.
+      const eligible = rows.filter(row =>
+        String(row.tenant_id || "") === tenantId &&
+        String(row.employee_id || "") === employeeId &&
+        activeCycleIds.includes(String(row.cycle_id || "")) &&
+        String(row.manager_review_route || "").toUpperCase() === "PRIMARY_MANAGER" &&
+        Boolean(row.manager_employee_id) &&
+        String(row.manager_employee_id) !== employeeId &&
+        row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+      );
+      if (!eligible.length) return false;
+
+      const restored = bexPaRestorePersistenceRecords("employeeAppraisals", eligible);
+      if (!restored.length) return false;
+      const byId = new Map(eligible.map(row => [String(row.id), row]));
+      for (const record of restored) {
+        const row = byId.get(String(record.id));
+        if (!row) continue;
+        // Honour immutable relational reviewer route, not editable payload text.
+        record.managerReviewRoute = "PRIMARY_MANAGER";
+        record.managerEmployeeId = String(row.manager_employee_id);
+        if (!bexPaState.employeeAppraisals.some(existing =>
+              String(existing.id) === String(record.id))) {
+          bexPaState.employeeAppraisals.push(record);
+        }
+      }
+      // This is PA workspace presentation only. Server RLS and PA guards still
+      // decide all read/write permissions independently of the switcher.
+      bexPaPersonalAppraisalAllowed = true;
+      return true;
+    } catch (error) {
+      console.warn("[H12 PA] Canonical personal-appraisal read unavailable:", error);
+      return false;
+    }
+  }
+
   let bexPaActiveMode = "";
 
   function bexPaGetActiveMode() {
@@ -2452,6 +2628,33 @@
       bexPaState.employeeAcknowledgements.some(ack => ack.appraisalId === appraisal.id && ack.status === "Acknowledged"));
   }
 
+  // BEXHR_H12_PA_P0_CYCLE_HISTORY_20261114: shared PA cycle presentation and
+  // client-side historical safeguards. Server-side write guards remain authoritative.
+  function bexPaIsHistoricalCycle(cycle) {
+    return ["Completed", "Closed"].includes(String(cycle?.status || "").trim());
+  }
+
+  function bexPaGetHistoricalCycleValidationError(cycleId) {
+    const cycle = bexPaState.cycles.find(item => item.id === cycleId);
+    return bexPaIsHistoricalCycle(cycle)
+      ? "This appraisal cycle has finished. Its goals are read-only historical records."
+      : "";
+  }
+
+  function bexPaApplyGoalHistoryBadge(badge, goal, cycle, alreadyHistorical = false) {
+    const completedCycle = bexPaIsHistoricalCycle(cycle);
+    const historical = completedCycle || alreadyHistorical;
+    const savedStatus = String(goal?.status || "Not recorded").trim();
+    badge.dataset.status = historical ? "historical" : savedStatus.toLowerCase();
+    badge.textContent = completedCycle
+      ? "Cycle completed"
+      : alreadyHistorical ? "Historical" : savedStatus;
+    if (historical) {
+      badge.title = `Goal status on record: ${savedStatus}. ${completedCycle ? "Appraisal cycle completed." : "Appraisal finalised."}`;
+      badge.setAttribute("aria-label", badge.title);
+    }
+  }
+
   function bexPaPopulateGoalCycles(field, parentCycleId = "") {
     if (!field) return;
     const selectedId = parentCycleId || field.value;
@@ -2464,6 +2667,7 @@
       const option = document.createElement("option");
       option.value = cycle.id;
       option.textContent = cycle.name;
+      option.disabled = bexPaIsHistoricalCycle(cycle);
       field.appendChild(option);
     });
     field.value = selectedId;
@@ -2473,7 +2677,9 @@
 
   function bexPaValidateGoalDates(goal, parent = null) {
     const cycle = bexPaState.cycles.find(item => item.id === goal.cycleId);
-    if (!cycle || cycle.status === "Closed") return "Select an open appraisal cycle.";
+    if (!cycle) return "Select a valid appraisal cycle.";
+    const historicalError = bexPaGetHistoricalCycleValidationError(cycle.id);
+    if (historicalError) return historicalError;
     if (parent && parent.cycleId !== cycle.id) return "The linked goal must belong to the same appraisal cycle.";
     const start = bexPaParseDate(goal.startDate);
     const due = bexPaParseDate(goal.dueDate);
@@ -2496,6 +2702,10 @@
   ) {
     if (!individualGoal) {
       return false;
+    }
+
+    if (bexPaGetHistoricalCycleValidationError(individualGoal.cycleId)) {
+      return true;
     }
 
     const appraisal =
@@ -2544,9 +2754,8 @@
       return true;
     }
 
-    return !bexPaIsIndividualGoalHistorical(
-      individualGoal,
-    );
+    return !bexPaGetHistoricalCycleValidationError(individualGoal.cycleId) &&
+      !bexPaIsIndividualGoalHistorical(individualGoal);
   }
 
   function bexPaApplyCycleAccess() {
@@ -2878,7 +3087,26 @@
     }
 
     const availableModes = bexPaGetAvailableWorkspaceModes();
-    const shouldShow = availableModes.length > 1;
+    // BEXHR_H12_PA_SWITCHER_CORRECT_LOCATION_20261114: same PA switcher on Manager, HR and Employee entry paths.
+    // Showing the chooser never grants another PA capability.
+    // BEXHR_H12_PA_HIGHEST_NO_CHOOSER_20261114: a verified highest authority has no personal PA reviewer.
+    // Suppress the one-card Manager Goals chooser; preserve every authorised
+    // multi-workspace chooser and ordinary Manager / employee switching.
+    const verifiedSelf = bexPaPersonalAppraisalVerifiedIdentity;
+    const isVerifiedHighestAuthority = Boolean(
+      verifiedSelf?.employeeId &&
+      verifiedSelf.employeeId === bexPaGetCurrentEmployeeId() &&
+      verifiedSelf.tenantId &&
+      verifiedSelf.tenantId === String(bexPaPersistence.tenantId || "").trim() &&
+      ["CONFIGURED_ROOT", "HIGHEST_OCCUPIED"].includes(
+        bexPaPersonalAppraisalPositionStatus
+      )
+    );
+    const highestWithOnlyManagerGoals =
+      isVerifiedHighestAuthority &&
+      availableModes.length === 1 &&
+      availableModes[0] === "primary-manager";
+    const shouldShow = availableModes.length > 1 && !highestWithOnlyManagerGoals;
     button.hidden = !shouldShow;
     button.classList.toggle("d-none", !shouldShow);
 
@@ -6671,10 +6899,11 @@
     bexPaSetOverviewSummaryCard(
       "completed",
       {
-        label: "Completed appraisals",
+        label: isHrAdminOverview ? "Acknowledged (all cycles)" : "Completed appraisals",
         value: completedCount,
-        detail:
-          "Completed appraisal records",
+        detail: isHrAdminOverview
+          ? "Acknowledged appraisal records across cycles"
+          : "Completed appraisal records",
       },
     );
   }
@@ -7723,6 +7952,9 @@
       return "Select a valid appraisal cycle.";
     }
 
+    const historicalError = bexPaGetHistoricalCycleValidationError(cycle.id);
+    if (historicalError) return historicalError;
+
     const goalStartDate = bexPaParseDate(
       goal.startDate,
     );
@@ -7985,6 +8217,9 @@
     if (!organisationGoal) {
       return 'Select a valid organisation goal.';
     }
+
+    const historicalError = bexPaGetHistoricalCycleValidationError(organisationGoal.cycleId);
+    if (historicalError) return historicalError;
 
     const deliverableStartDate = bexPaParseDate(
       deliverable.startDate,
@@ -8525,22 +8760,17 @@
       !selectedEmployee
         ? "Select employee first"
         : selectedDepartment
-          ? "No department link (optional)"
-          : "Whole organization - no department link";
+          ? "Standalone goal (department link optional)"
+          : "Whole organization - department-goal link not applicable";
 
     bexPaElements.individualGoalDepartmentGoal.appendChild(
       placeholder,
     );
 
-    const scopedDepartmentGoals =
-      bexPaIsPrimaryManagerMode()
-        ? bexPaState.departmentGoals.filter(
-          (departmentGoal) =>
-            bexPaCanManageDepartmentGoal(
-              departmentGoal,
-            ),
-        )
-        : bexPaState.departmentGoals;
+    // BEXHR_H12_PA_GOAL_LINK_AND_WHOLE_ORG_LABEL_20261114: attaching an existing department goal does not edit it.
+    // Match visible goals to the employee's department; existing Primary
+    // Manager ownership, department, cycle, dates and server controls still apply.
+    const scopedDepartmentGoals = bexPaState.departmentGoals;
 
     const availableDepartmentGoals =
       selectedDepartment
@@ -8591,8 +8821,12 @@
           document.createElement("option");
 
         option.value = departmentGoal.id;
+        const goalCycle = bexPaState.cycles.find(
+          (cycle) => String(cycle.id) === String(departmentGoal.cycleId),
+        );
         option.textContent =
-          `${departmentGoal.title} (${departmentGoal.department})`;
+          `${departmentGoal.title} (${departmentGoal.department})` +
+          (goalCycle ? ` - Cycle: ${goalCycle.name}` : "");
 
         bexPaElements.individualGoalDepartmentGoal.appendChild(
           option,
@@ -10145,7 +10379,7 @@
 
     heading.textContent =
       stage === "manager"
-        ? `Reporting managers covering ${values.department}`
+        ? `Reporting coverage for ${values.department}`
         : stage === "employee"
           ? usesManagerStep
             ? values.manager === "__top_level"
@@ -10176,7 +10410,7 @@
               : "Choose a department or Whole organization to view employees with PA work in your permitted scope."
             : "Choose a department or Whole organization to view its goals and latest updates."
           : stage === "manager"
-            ? "Choose a reporting manager to view the employees they cover in this scope."
+            ? "Choose a Primary Manager below. Whole-organisation supervisors appear separately from departmental reporting managers."
             : stage === "employee"
               ? scope === "progress"
                 ? "Click an employee to view their progress summaries, update history and report."
@@ -10243,6 +10477,11 @@
       grid.className =
         "bex-pa-story-choices";
 
+      // BEXHR_H12_PA_MANAGER_NAV_AND_COVERAGE_20261114: presentation split only; all existing filter choices
+      // and existing Primary Manager reporting lines remain unchanged.
+      const organisationGrid = document.createElement("div");
+      organisationGrid.className = "bex-pa-story-choices";
+
       choices.forEach(([value, text]) => {
         const button =
           document.createElement("button");
@@ -10284,6 +10523,16 @@
             ?.focus({ preventScroll: true });
         };
 
+        if (stage === "manager" && usesManagerStep && value !== "__unrecorded") {
+          const identity = bexPaManagerIdentity(value);
+          const isOrganisationSupervisor =
+            identity.positionScope.toLowerCase() === "organization" ||
+            bexPaIsWholeOrganizationJobTitle(identity.jobTitle);
+          if (isOrganisationSupervisor) {
+            organisationGrid.appendChild(button);
+            return;
+          }
+        }
         grid.appendChild(button);
       });
 
@@ -10301,7 +10550,29 @@
         grid.appendChild(empty);
       }
 
-      panel.appendChild(grid);
+      if (stage === "manager" && usesManagerStep && choices.length) {
+        if (grid.childElementCount) {
+          const title = document.createElement("h4");
+          title.className = "h6 mt-3 mb-2 fw-bold";
+          title.textContent = `Primary Manager coverage of ${values.department} employees`;
+          panel.append(title, grid);
+        }
+        if (organisationGrid.childElementCount) {
+          const outside = document.createElement("section");
+          outside.className = "mt-4 pt-3 border-top";
+          outside.setAttribute("aria-label", "Organisation-wide supervision");
+          const title = document.createElement("h4");
+          title.className = "h6 mb-2 fw-bold";
+          title.textContent = "Organisation-wide supervision";
+          const note = document.createElement("p");
+          note.className = "small text-body-secondary mb-3";
+          note.textContent = `These leaders supervise employees in ${values.department} through the reporting hierarchy; they do not occupy a ${values.department} departmental position.`;
+          outside.append(title, note, organisationGrid);
+          panel.appendChild(outside);
+        }
+      } else {
+        panel.appendChild(grid);
+      }
     }
 
     list.before(panel);
@@ -10325,7 +10596,9 @@
         cycle: bexPaState.cycles.find(cycle => cycle.id === goal.cycleId)?.name || "Not recorded",
         goal: goal.title, progress: latest ? `${latest.progressPercentage}%` : "No update",
         status: latest?.status || "Not started", lastUpdated: latest?.createdAt || "",
-        summary: latest?.updateText || "No progress update submitted", evidence: latest?.evidence || "", count: updates.length };
+        summary: latest?.updateText || "No progress update submitted", evidence: latest?.evidence || "",
+        progressUpdateId: latest?.id || "", evidenceFileCount: latest ? "Checking" : 0,
+        count: updates.length };
     }).sort((a,b) => a.employee.localeCompare(b.employee) || a.department.localeCompare(b.department) || a.goal.localeCompare(b.goal));
   }
 
@@ -10335,9 +10608,50 @@
       if (/^[\s]*[=+\-@]/.test(text)) text = "'" + text;
       return '"' + text.replaceAll('"','""') + '"';
     };
-    return [["Employee","Department","Cycle","Goal","Progress","Status","Last updated","Summary","Evidence","Update count"],
-      ...rows.map(row => [row.employee,row.department,row.cycle,row.goal,row.progress,row.status,row.lastUpdated,row.summary,row.evidence,row.count])]
+    return [["Employee","Department","Cycle","Goal","Progress","Status","Last updated","Summary","Evidence note","Evidence file count","Update count"],
+      ...rows.map(row => [row.employee,row.department,row.cycle,row.goal,row.progress,row.status,row.lastUpdated,row.summary,row.evidence,row.evidenceFileCount,row.count])]
       .map(row => row.map(cell).join(",")).join("\r\n");
+  }
+
+  async function bexPaPopulateProgressReportEvidenceCounts(rows, section, cells) {
+    const ids = [...new Set(rows.map(row => String(row.progressUpdateId || "").trim()).filter(Boolean))];
+    if (!ids.length || !section?.isConnected) return;
+    const updateDisplay = (fileCountFor) => {
+      if (!section.isConnected) return;
+      for (const row of rows) {
+        if (!row.progressUpdateId) continue;
+        const value = fileCountFor(row.progressUpdateId);
+        row.evidenceFileCount = value;
+        const cell = cells.get(row);
+        if (cell) cell.textContent = typeof value === "number"
+          ? `${value} file${value === 1 ? "" : "s"}`
+          : value;
+      }
+    };
+    if (!bexPaIsIntegratedPersistenceContext() || !bexPaPersistence.ready ||
+        !bexPaPersistence.tenantId || !window.supabaseClient) {
+      updateDisplay(() => "Unavailable");
+      return;
+    }
+    try {
+      const countByUpdateId = new Map(ids.map(id => [id, 0]));
+      for (let offset = 0; offset < ids.length; offset += 40) {
+        const { data, error } = await window.supabaseClient.from("pa_progress_evidence")
+          .select("progress_update_id")
+          .eq("tenant_id", bexPaPersistence.tenantId)
+          .eq("status", "ready")
+          .in("progress_update_id", ids.slice(offset, offset + 40));
+        if (error) throw error;
+        (data || []).forEach(item => {
+          const id = String(item.progress_update_id || "");
+          if (countByUpdateId.has(id)) countByUpdateId.set(id, countByUpdateId.get(id) + 1);
+        });
+      }
+      updateDisplay(id => countByUpdateId.get(id) || 0);
+    } catch (error) {
+      console.error("PA report evidence counts unavailable.", error);
+      updateDisplay(() => "Unavailable");
+    }
   }
 
   function bexPaRenderProgressReport() {
@@ -10355,7 +10669,7 @@
     exportButton.className = "btn btn-outline-primary btn-sm mb-3"; exportButton.textContent = "Download progress report (CSV)";
     exportButton.disabled = !rows.length;
     exportButton.onclick = () => {
-      const url = URL.createObjectURL(new Blob(["\uFEFF" + bexPaProgressCsv(bexPaProgressReportRows())], {type:"text/csv;charset=utf-8"}));
+      const url = URL.createObjectURL(new Blob(["\uFEFF" + bexPaProgressCsv(rows)], {type:"text/csv;charset=utf-8"}));
       const link = document.createElement("a"); link.href = url; link.download = `pa-progress-${new Date().toISOString().slice(0,10)}.csv`;
       link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     };
@@ -10364,10 +10678,13 @@
     const table=document.createElement("table"); table.className="table table-sm";
     const caption=document.createElement("caption"); caption.textContent="Latest employee progress for the current filters"; table.appendChild(caption);
     const head=document.createElement("thead");const tr=document.createElement("tr");
-    ["Employee","Department","Cycle","Goal","Progress / status","Last updated","Summary"].forEach(text=>{const th=document.createElement("th");th.scope="col";th.textContent=text;tr.appendChild(th);});head.appendChild(tr);table.appendChild(head);
+    ["Employee","Department","Cycle","Goal","Progress / status","Last updated","Summary","Evidence files"].forEach(text=>{const th=document.createElement("th");th.scope="col";th.textContent=text;tr.appendChild(th);});head.appendChild(tr);table.appendChild(head);
     const body=document.createElement("tbody");
-    rows.forEach(row=>{const tr=document.createElement("tr");[row.employee,row.department,row.cycle,row.goal,`${row.progress} / ${row.status}`,bexPaFormatGoalTime(row.lastUpdated),row.summary].forEach(text=>{const td=document.createElement("td");td.textContent=text;tr.appendChild(td);});body.appendChild(tr);});
+    const evidenceCells = new Map();
+    rows.forEach(row=>{const tr=document.createElement("tr");[row.employee,row.department,row.cycle,row.goal,`${row.progress} / ${row.status}`,bexPaFormatGoalTime(row.lastUpdated),row.summary].forEach(text=>{const td=document.createElement("td");td.textContent=text;tr.appendChild(td);});
+      const files=document.createElement("td");files.textContent=row.progressUpdateId ? "Checking..." : "—";tr.appendChild(files);evidenceCells.set(row, files);body.appendChild(tr);});
     table.appendChild(body);wrap.appendChild(table);section.appendChild(wrap);list.before(section);
+    bexPaPopulateProgressReportEvidenceCounts(rows, section, evidenceCells).catch(console.error);
   }
 
   // BEX_PA_DATE_INHERITANCE_V1
@@ -10894,21 +11211,26 @@
         updateText.textContent =
           `Update: ${progressUpdate.updateText}`;
 
+        // BEXHR_H12_PA_EVIDENCE_DISPLAY_ALIGNMENT_20261115: a note is NOT the same as an uploaded file.
+        const evidenceNote = String(progressUpdate.evidence || "").trim();
         const evidence = document.createElement("p");
         evidence.className = "mb-0 text-body-secondary";
-        evidence.textContent = progressUpdate.evidence
-          ? `Evidence: ${progressUpdate.evidence}`
-          : "Evidence: Not provided";
+        evidence.textContent = evidenceNote ? `Evidence note: ${evidenceNote}` : "";
+        evidence.hidden = !evidenceNote;
 
+        const evidenceActions = document.createElement("div");
+        evidenceActions.className = "mt-2";
         item.append(
           header,
           updateText,
           evidence,
+          evidenceActions,
         );
 
         bexPaElements.progressUpdatesList.appendChild(
           item,
         );
+        bexPaRenderProgressEvidenceActions(progressUpdate, individualGoal, evidenceActions);
       },
     );
   }
@@ -10987,6 +11309,262 @@
     );
   }
 
+  // BEXHR_H12_PA_P3_PRIVATE_PROGRESS_EVIDENCE_20261115
+  // Optional private files attached to an already-persisted progress update.
+  // The Zoe storage bucket and metadata RLS are authoritative for access.
+  const BEX_PA_EVIDENCE_BUCKET = "pa-progress-evidence";
+  const BEX_PA_EVIDENCE_MAX_FILES = 3;
+  const BEX_PA_EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
+  const BEX_PA_EVIDENCE_TYPES = Object.freeze({
+    "application/pdf": "pdf",
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+  });
+  let bexPaProgressSaveInFlight = false;
+
+  function bexPaEvidenceInputFiles() {
+    const field = document.getElementById("bexPaProgressUpdateFiles");
+    return field ? Array.from(field.files || []) : [];
+  }
+
+  function bexPaValidateEvidenceFiles(files) {
+    if (!Array.isArray(files) || files.length > BEX_PA_EVIDENCE_MAX_FILES) {
+      return "Attach up to 3 evidence files per progress update.";
+    }
+    for (const file of files) {
+      if (!BEX_PA_EVIDENCE_TYPES[file.type]) {
+        return "Evidence must be a PDF, PNG, JPG, or WebP file.";
+      }
+      if (file.size < 1 || file.size > BEX_PA_EVIDENCE_MAX_BYTES) {
+        return "Each evidence file must be between 1 byte and 10 MB.";
+      }
+      if (!String(file.name || "").trim() || file.name.length > 180) {
+        return "Evidence file names must be 1-180 characters.";
+      }
+    }
+    return "";
+  }
+
+  async function bexPaUploadEvidenceForProgress(update, files) {
+    if (files.length === 0) return { uploaded: 0, failed: 0 };
+    const fileError = bexPaValidateEvidenceFiles(files);
+    if (fileError) throw new Error(fileError);
+    if (!bexPaIsIntegratedPersistenceContext() ||
+        !bexPaPersistence.ready || !bexPaPersistence.tenantId ||
+        !window.supabaseClient || !window.crypto?.randomUUID) {
+      throw new Error("Evidence uploads require a signed-in PA workspace.");
+    }
+    const goal = bexPaState.individualGoals.find(row => row.id === update.individualGoalId);
+    if (!goal || !bexPaIsIndividualGoalOwnedByCurrentEmployee(goal) ||
+        bexPaIsIndividualGoalHistorical(goal)) {
+      throw new Error("Evidence cannot be added to this historical or unrelated goal.");
+    }
+    const tenantId = bexPaPersistence.tenantId;
+    const client = window.supabaseClient;
+    const queryReservations = () => client.from("pa_progress_evidence")
+      .select("id,slot,status,expires_at,storage_path")
+      .eq("tenant_id", tenantId)
+      .eq("progress_update_id", update.id);
+    let { data: existing, error: listError } = await queryReservations();
+    if (listError) throw listError;
+
+    // Reclaim only expired, unfinalized reservations; remove Storage FIRST.
+    // Storage/metadata policies prevent a completed attachment being removed.
+    let reclaimed = false;
+    for (const row of existing || []) {
+      if (row.status !== "pending" ||
+          !Number.isFinite(Date.parse(row.expires_at)) ||
+          Date.parse(row.expires_at) > Date.now()) continue;
+      const { error: removeError } = await client.storage
+        .from(BEX_PA_EVIDENCE_BUCKET).remove([row.storage_path]);
+      if (removeError) {
+        console.warn("PA expired evidence Storage cleanup needs attention.", removeError);
+        continue;
+      }
+      const { error: cancelError } = await client.from("pa_progress_evidence")
+        .delete().eq("id", row.id).eq("status", "pending");
+      if (cancelError) {
+        console.warn("PA expired reservation cleanup needs attention.", cancelError);
+      } else {
+        reclaimed = true;
+      }
+    }
+    if (reclaimed) {
+      ({ data: existing, error: listError } = await queryReservations());
+      if (listError) throw listError;
+    }
+
+    const occupied = new Set((existing || []).map(row => Number(row.slot)));
+    const slots = [1, 2, 3].filter(slot => !occupied.has(slot));
+    if (files.length > slots.length) {
+      throw new Error(`Only ${slots.length} evidence attachment slot(s) remain for this update.`);
+    }
+    let uploaded = 0;
+    let failed = 0;
+    for (const file of files) {
+      const slot = slots.shift();
+      const extension = BEX_PA_EVIDENCE_TYPES[file.type];
+      const storagePath = [
+        tenantId, update.employeeId, update.id,
+        `${window.crypto.randomUUID()}.${extension}`,
+      ].join("/");
+      let reservationId = null;
+      try {
+        // Reserve one of exactly three slots BEFORE any Storage bytes are sent.
+        const { data: reservation, error: reserveError } = await client
+          .from("pa_progress_evidence")
+          .insert({
+            tenant_id: tenantId,
+            employee_id: update.employeeId,
+            individual_goal_id: update.individualGoalId,
+            progress_update_id: update.id,
+            slot,
+            storage_path: storagePath,
+            file_name: file.name,
+            content_type: file.type,
+            size_bytes: file.size,
+            uploaded_by: bexPaPersistence.userId,
+          })
+          .select("id")
+          .single();
+        if (reserveError) throw reserveError;
+        if (!reservation?.id) throw new Error("PA evidence reservation returned no ID.");
+        reservationId = reservation.id;
+
+        const { error: storageError } = await client.storage
+          .from(BEX_PA_EVIDENCE_BUCKET)
+          .upload(storagePath, file, { contentType: file.type, upsert: false });
+        if (storageError) throw storageError;
+
+        // Definer RPC verifies MIME/size/owner from the actual Storage object.
+        const { data: finalized, error: finalizeError } = await client.rpc(
+          "bexhr_pa_evidence_finalize", { p_evidence_id: reservationId });
+        if (finalizeError) throw finalizeError;
+        if (finalized !== true) throw new Error("PA evidence finalization refused.");
+        uploaded += 1;
+      } catch (error) {
+        failed += 1;
+        console.error("PA evidence attachment failed; progress record is preserved.", error);
+        if (reservationId) {
+          // Compensating cleanup. Never delete metadata if Storage deletion failed.
+          // An interrupted session can leave a PENDING reservation, not an
+          // unrestricted object. Expired pending records are retried above.
+          const { error: removeError } = await client.storage
+            .from(BEX_PA_EVIDENCE_BUCKET).remove([storagePath]);
+          if (removeError) {
+            console.warn("PA evidence cleanup deferred: Storage remove failed.", removeError);
+          } else {
+            const { error: cancelError } = await client
+              .from("pa_progress_evidence")
+              .delete().eq("id", reservationId).eq("status", "pending");
+            if (cancelError) {
+              console.warn("PA evidence cleanup deferred: reservation remains.", cancelError);
+            }
+          }
+        }
+      }
+    }
+    return { uploaded, failed };
+  }
+
+  async function bexPaPopulateEvidenceForProgress(update, wrapper) {
+    if (!wrapper?.isConnected || !bexPaPersistence.ready ||
+        !bexPaIsIntegratedPersistenceContext() || !window.supabaseClient) return;
+    const client = window.supabaseClient;
+    const { data, error } = await client.from("pa_progress_evidence")
+      .select("id,slot,file_name,storage_path,content_type,size_bytes")
+      .eq("tenant_id", bexPaPersistence.tenantId)
+      .eq("progress_update_id", update.id)
+      .eq("status", "ready")
+      .order("slot", { ascending: true });
+    if (!wrapper.isConnected) return;
+    if (error) {
+      console.error("PA evidence list unavailable.", error);
+      return;
+    }
+    wrapper.querySelector("[data-bex-pa-evidence-files]")?.remove();
+    if (!data?.length) return;
+    const list = document.createElement("div");
+    list.dataset.bexPaEvidenceFiles = "true";
+    list.className = "d-flex flex-wrap gap-2 mt-2";
+    const label = document.createElement("span");
+    label.className = "small text-body-secondary w-100";
+    label.textContent = `Evidence files (${data.length}/${BEX_PA_EVIDENCE_MAX_FILES})`;
+    list.append(label);
+    for (const row of data) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn btn-sm btn-outline-secondary";
+      button.textContent = row.file_name;
+      button.title = "Download this private progress evidence file";
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          const { data: blob, error: downloadError } = await client.storage
+            .from(BEX_PA_EVIDENCE_BUCKET)
+            .download(row.storage_path);
+          if (downloadError) throw downloadError;
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = row.file_name;
+          link.rel = "noopener";
+          document.body.append(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 30000);
+        } catch (downloadError) {
+          console.error("PA private evidence download failed.", downloadError);
+          window.alert("This evidence file could not be downloaded with your current permissions.");
+        } finally {
+          button.disabled = false;
+        }
+      });
+      list.append(button);
+    }
+    wrapper.append(list);
+  }
+
+  function bexPaRenderProgressEvidenceActions(update, goal, wrapper) {
+    bexPaPopulateEvidenceForProgress(update, wrapper).catch(console.error);
+    if (!goal || !bexPaPersistence.ready || !bexPaIsIntegratedPersistenceContext() ||
+        !bexPaIsEmployeeMode() || !bexPaIsIndividualGoalOwnedByCurrentEmployee(goal) ||
+        bexPaIsIndividualGoalHistorical(goal)) return;
+    const choose = document.createElement("button");
+    choose.type = "button";
+    choose.className = "btn btn-sm btn-outline-primary mt-2";
+    choose.textContent = "Attach evidence";
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".pdf,.png,.jpg,.jpeg,.webp";
+    input.multiple = true;
+    input.hidden = true;
+    input.setAttribute("aria-label", "Choose private evidence files");
+    choose.addEventListener("click", () => input.click());
+    input.addEventListener("change", async () => {
+      const files = Array.from(input.files || []);
+      if (!files.length) return;
+      const error = bexPaValidateEvidenceFiles(files);
+      if (error) { window.alert(error); input.value = ""; return; }
+      choose.disabled = true;
+      choose.textContent = "Uploading evidence...";
+      try {
+        const result = await bexPaUploadEvidenceForProgress(update, files);
+        await bexPaPopulateEvidenceForProgress(update, wrapper);
+        if (result.failed) window.alert("Some attachments failed. The saved progress update is unchanged.");
+      } catch (uploadError) {
+        console.error("PA attachment retry failed.", uploadError);
+        window.alert("Evidence was not attached. The saved progress update is unchanged.");
+      } finally {
+        choose.disabled = false;
+        choose.textContent = "Attach evidence";
+        input.value = "";
+      }
+    });
+    wrapper.append(choose, input);
+  }
+
   function bexPaResetProgressUpdateForm() {
     bexPaElements.progressUpdateForm?.reset();
     bexPaClearProgressUpdateError();
@@ -11046,6 +11624,11 @@
       [bexPaElements.progressUpdateEvidence, rememberedValues.evidence],
     ]);
 
+    const evidenceInput = document.getElementById("bexPaProgressUpdateFiles");
+    evidenceInput?.closest("[data-bex-pa-evidence-input]")?.classList.toggle(
+      "d-none",
+      !bexPaIsIntegratedPersistenceContext() || !bexPaPersistence.ready,
+    );
     bexPaElements.progressUpdateDialog?.showModal();
 
     window.requestAnimationFrame(() => {
@@ -11173,7 +11756,14 @@
     event.preventDefault();
     bexPaClearProgressUpdateError();
 
-    if (!bexPaCanAddProgressUpdates()) {
+    if (!bexPaCanAddProgressUpdates() || bexPaProgressSaveInFlight) {
+      return;
+    }
+
+    const evidenceFiles = bexPaEvidenceInputFiles();
+    const evidenceError = bexPaValidateEvidenceFiles(evidenceFiles);
+    if (evidenceError) {
+      bexPaShowProgressUpdateError(evidenceError);
       return;
     }
 
@@ -11190,6 +11780,9 @@
 
       individualGoalId:
         bexPaElements.progressUpdateIndividualGoal.value,
+
+      // BEXHR_H12_PA_P3_PROGRESS_CYCLE_ID_20261115: use the selected goal's canonical cycle.
+      cycleId: individualGoal?.cycleId || null,
 
       employeeId:
         bexPaGetCurrentEmployeeId(),
@@ -11245,6 +11838,10 @@
       },
     );
 
+    bexPaProgressSaveInFlight = true;
+    if (bexPaElements.progressUpdateSubmitButton) {
+      bexPaElements.progressUpdateSubmitButton.disabled = true;
+    }
     bexPaState.progressUpdates.push(
       progressUpdate,
     );
@@ -11272,17 +11869,39 @@
         }
       }
 
+      bexPaProgressSaveInFlight = false;
+      if (bexPaElements.progressUpdateSubmitButton) {
+        bexPaElements.progressUpdateSubmitButton.disabled = false;
+      }
       bexPaShowProgressUpdateError(
         "The progress update could not be saved. Please try again.",
       );
       return;
     }
+    let failedEvidenceFiles = 0;
+    if (evidenceFiles.length) {
+      try {
+        const attachmentResult = await bexPaUploadEvidenceForProgress(
+          progressUpdate,
+          evidenceFiles,
+        );
+        failedEvidenceFiles = attachmentResult.failed;
+      } catch (evidenceUploadError) {
+        console.error("PA progress saved but evidence upload failed.", evidenceUploadError);
+        failedEvidenceFiles = evidenceFiles.length;
+      }
+    }
+    bexPaProgressSaveInFlight = false;
+    if (bexPaElements.progressUpdateSubmitButton) {
+      bexPaElements.progressUpdateSubmitButton.disabled = false;
+    }
     bexPaRenderProgressUpdates();
     bexPaCloseProgressUpdateDialog();
 
     if (bexPaElements.announcement) {
-      bexPaElements.announcement.textContent =
-        `Progress update for ${individualGoal.title} was submitted successfully.`;
+      bexPaElements.announcement.textContent = failedEvidenceFiles
+        ? `Progress update for ${individualGoal.title} was saved, but ${failedEvidenceFiles} evidence file(s) could not be attached. Use Attach evidence on the saved update to retry.`
+        : `Progress update for ${individualGoal.title} was submitted successfully.`;
     }
   }
 
@@ -11416,15 +12035,24 @@
 
         const departmentLabel =
           document.createElement("span");
-          departmentLabel.textContent =
-          individualGoal.department ||
-          bexPaDisplayDepartmentLabel(departmentGoal);
+        // BEXHR_H12_PA_GOAL_LINK_AND_WHOLE_ORG_LABEL_20261114: the goal itself carries employee context. Passing a null
+        // department-goal parent previously mislabelled executives as missing
+        // a department. No stored record is changed here.
+        const ownDepartmentLabel = bexPaDisplayDepartmentLabel(individualGoal);
+        const wholeOrganizationGoal =
+          !String(individualGoal.departmentId || "").trim() &&
+          ownDepartmentLabel === "Whole organization";
+        departmentLabel.textContent = wholeOrganizationGoal
+          ? "Whole organization"
+          : String(individualGoal.department || "").trim() || ownDepartmentLabel;
 
         const parentGoalLabel =
           document.createElement("span");
         parentGoalLabel.textContent =
           departmentGoal?.title ||
-          "No department link";
+          (wholeOrganizationGoal
+            ? "Organization-wide individual goal (no department link required)"
+            : "Standalone individual goal (department link optional)");
 
         const cycleLabel =
           document.createElement("span");
@@ -11451,15 +12079,7 @@
         const status = document.createElement("span");
         status.className = "bex-pa-goal-status";
 
-        status.dataset.status =
-          isHistorical
-            ? "historical"
-            : individualGoal.status.toLowerCase();
-
-        status.textContent =
-          isHistorical
-            ? "Historical"
-            : individualGoal.status;
+        bexPaApplyGoalHistoryBadge(status, individualGoal, cycle, isHistorical);
 
         header.append(
           titleArea,
@@ -11487,6 +12107,7 @@
         if (
           bexPaCanEditIndividualGoals() &&
           bexPaIsIndividualGoalInPrimaryManagerScope(individualGoal) &&
+          !bexPaIsHistoricalCycle(cycle) &&
           !bexPaIsIndividualGoalDefinitionLocked(
             individualGoal,
           )
@@ -11849,10 +12470,7 @@
 
         const status = document.createElement("span");
         status.className = "bex-pa-goal-status";
-        status.dataset.status =
-          departmentGoal.status.toLowerCase();
-        status.textContent =
-          departmentGoal.status;
+        bexPaApplyGoalHistoryBadge(status, departmentGoal, cycle);
 
         header.append(
           titleArea,
@@ -11877,7 +12495,7 @@
         actions.className =
           "bex-pa-goal-item-actions";
 
-        if (bexPaCanManageDepartmentGoal(departmentGoal)) {
+        if (bexPaCanManageDepartmentGoal(departmentGoal) && !bexPaIsHistoricalCycle(cycle)) {
           actions.appendChild(
             bexPaCreateDepartmentGoalActionButton(
               departmentGoal.id,
@@ -12205,9 +12823,7 @@
 
       const status = document.createElement("span");
       status.className = "bex-pa-goal-status";
-      status.dataset.status =
-        deliverable.status.toLowerCase();
-      status.textContent = deliverable.status;
+      bexPaApplyGoalHistoryBadge(status, deliverable, cycle);
 
       header.append(
         titleArea,
@@ -12230,7 +12846,7 @@
       actions.className =
         "bex-pa-goal-item-actions";
 
-      if (bexPaCanManageGoalFramework()) {
+      if (bexPaCanManageGoalFramework() && !bexPaIsHistoricalCycle(cycle)) {
         actions.appendChild(
           bexPaCreateDeliverableActionButton(
             deliverable.id,
@@ -12501,9 +13117,7 @@
 
       const status = document.createElement("span");
       status.className = "bex-pa-goal-status";
-      status.dataset.status =
-        goal.status.toLowerCase();
-      status.textContent = goal.status;
+      bexPaApplyGoalHistoryBadge(status, goal, cycle);
 
       header.append(
         titleArea,
@@ -12527,7 +13141,7 @@
       actions.className =
         "bex-pa-goal-item-actions";
 
-      if (bexPaCanManageGoalFramework()) {
+      if (bexPaCanManageGoalFramework() && !bexPaIsHistoricalCycle(cycle)) {
         actions.appendChild(
           bexPaCreateOrganisationGoalActionButton(
             goal.id,
@@ -14705,7 +15319,7 @@
 
       if (readinessTitle) {
         readinessTitle.textContent =
-          "Overall appraisal completion";
+          bexPaIsHrAdminMode() ? "Active-cycle acknowledgement" : "Overall appraisal completion";
       }
 
       bexPaElements.overviewCompletionProgress
@@ -14722,6 +15336,60 @@
         )
         .map((cycle) => cycle.id),
     );
+
+    // No active cycle: show the most recent completed cycle visible to this
+    // authenticated PA workspace; do not misreport historical 100% as 0%.
+    if (activeCycleIds.size === 0) {
+      const scopedAppraisals = isEmployeeOverview || isManagerOverview || isHrStandardOverview
+        ? bexPaGetVisibleEmployeeAppraisals()
+        : bexPaState.employeeAppraisals;
+      const latestVisibleCompletedCycle = [...bexPaState.cycles]
+        .filter(cycle => String(cycle.status || "").trim() === "Completed")
+        .sort((a, b) =>
+          (Date.parse(b.completedAt || b.endDate || "") || 0) -
+          (Date.parse(a.completedAt || a.endDate || "") || 0)
+        )
+        .find(cycle => scopedAppraisals.some(appraisal => appraisal.cycleId === cycle.id));
+      const completedRecords = latestVisibleCompletedCycle
+        ? scopedAppraisals
+          .filter(appraisal => appraisal.cycleId === latestVisibleCompletedCycle.id)
+          .map(appraisal => ({
+            appraisal,
+            status: bexPaGetOperationalAppraisalStatus(appraisal),
+          }))
+        : [];
+      const counts = bexPaGetOperationalReportCounts(completedRecords);
+      const percent = counts.total > 0
+        ? Math.round((counts.acknowledged / counts.total) * 100)
+        : 0;
+      const label = latestVisibleCompletedCycle
+        ? `Last completed cycle: ${latestVisibleCompletedCycle.name}`
+        : "No active appraisal cycle";
+      if (readinessKicker) readinessKicker.textContent = "Appraisal history";
+      if (readinessTitle) readinessTitle.textContent = label;
+      if (bexPaElements.overviewCompletionPercentage) {
+        bexPaElements.overviewCompletionPercentage.textContent =
+          counts.total > 0 ? `${percent}%` : "—";
+      }
+      if (bexPaElements.overviewCompletionProgress) {
+        bexPaElements.overviewCompletionProgress.setAttribute("aria-valuenow", String(percent));
+        bexPaElements.overviewCompletionProgress.setAttribute(
+          "aria-valuetext",
+          counts.total > 0
+            ? `${counts.acknowledged} of ${counts.total} appraisals acknowledged in ${label}`
+            : "No active or visible completed appraisals"
+        );
+      }
+      if (bexPaElements.overviewCompletionBar) {
+        bexPaElements.overviewCompletionBar.style.width = `${percent}%`;
+      }
+      if (bexPaElements.overviewCompletionMessage) {
+        bexPaElements.overviewCompletionMessage.textContent = counts.total > 0
+          ? `${counts.acknowledged} of ${counts.total} appraisals acknowledged. Historical result; no active cycle is running.`
+          : "No active appraisal cycle is currently running.";
+      }
+      return;
+    }
 
     if (isManagerOverview) {
       const visibleActiveAppraisals =
@@ -18439,7 +19107,10 @@
       comment.maxLength = 1500;
       comment.value = saved?.comment || "";
       comment.readOnly = isReadOnly;
-      block.append(label, description, select, commentLabel, comment);
+      block.append(
+        label, description, select,
+        bexPaMakeOptionalCommentDisclosure(commentLabel, comment),
+      );
       section.appendChild(block);
       select.addEventListener("change", () => {
         summary.textContent = bexPaFormatProductivityScore(
@@ -18496,6 +19167,44 @@
   }
 
 
+  // BEXHR_H12_PA_P2_OPTIONAL_COMMENT_DISCLOSURE_20261114
+  // Presentation-only. Existing textarea IDs, values, ratings and form persistence stay intact.
+  function bexPaMakeOptionalCommentDisclosure(label, input) {
+    const details = document.createElement("details");
+    details.className = "mt-3 bex-pa-optional-comment";
+    details.dataset.bexPaOptionalComment = "true";
+    const summary = document.createElement("summary");
+    summary.className = "small fw-semibold text-body-secondary py-2";
+    const content = document.createElement("div");
+    content.className = "pt-2";
+    label.classList.remove("mt-3", "mt-2");
+    content.append(label, input);
+    details.append(summary, content);
+    const refreshLabel = () => {
+      summary.textContent = String(input.value || "").trim()
+        ? "Optional comment saved · view or edit"
+        : "Add optional comment";
+    };
+    refreshLabel();
+    details.open = Boolean(String(input.value || "").trim());
+    input.addEventListener("input", refreshLabel);
+    return details;
+  }
+
+  function bexPaRefreshOptionalCommentDisclosures(root) {
+    root?.querySelectorAll("details[data-bex-pa-optional-comment='true']")
+      .forEach((details) => {
+        const input = details.querySelector("textarea");
+        const summary = details.querySelector("summary");
+        if (!input || !summary) return;
+        const hasComment = Boolean(String(input.value || "").trim());
+        details.open = hasComment;
+        summary.textContent = hasComment
+          ? "Optional comment saved · view or edit"
+          : "Add optional comment";
+      });
+  }
+
   function bexPaCreateManagerRatingField(
     individualGoal,
     ratingScale,
@@ -18550,8 +19259,7 @@
     wrapper.append(
       ratingLabel,
       rating,
-      commentLabel,
-      comment,
+      bexPaMakeOptionalCommentDisclosure(commentLabel, comment),
     );
 
     return wrapper;
@@ -18830,6 +19538,7 @@
       managerAppraisal,
       isSubmitted,
     );
+    bexPaRefreshOptionalCommentDisclosures(bexPaElements.managerAppraisalSection);
 
     bexPaElements.managerAppraisalSection.classList.remove(
       "d-none",
@@ -18965,6 +19674,8 @@
       return;
     }
 
+    if (bexPaManagerSaveInFlight.has(appraisal.id)) return;
+
     const template =
       bexPaGetAppraisalTemplate(appraisal);
 
@@ -18975,7 +19686,7 @@
     const goals = bexPaGetSelfAppraisalGoals(appraisal);
 
     const managerAppraisal = {
-      id:
+      id: existingManagerAppraisal?.id ||
         `BEX-PA-MANAGER-APPRAISAL-${appraisal.id}`,
       appraisalId: appraisal.id,
       employeeId: appraisal.employeeId,
@@ -19058,6 +19769,14 @@
         managerAppraisal;
     }
 
+    // Lock both draft-save and submit until the single persistence call ends.
+    bexPaManagerSaveInFlight.add(appraisal.id);
+    const managerSaveButtons = [
+      bexPaElements.managerAppraisalForm?.querySelector(
+        "#bexPaSaveManagerAppraisalButton"),
+      bexPaElements.submitManagerAppraisalButton,
+    ].filter(Boolean);
+    managerSaveButtons.forEach((button) => { button.disabled = true; });
     try {
       await bexPaPersistDatasetMutation(
         "managerAppraisals",
@@ -19082,9 +19801,14 @@
       }
 
       bexPaShowManagerAppraisalError(
-        "The manager appraisal could not be saved. Please try again.",
+        /already been submitted|reviewer differs/i.test(error?.message || "")
+          ? error.message
+          : "The manager appraisal could not be saved. Please try again.",
       );
       return;
+    } finally {
+      bexPaManagerSaveInFlight.delete(appraisal.id);
+      managerSaveButtons.forEach((button) => { button.disabled = false; });
     }
     bexPaRenderManagerAppraisalDetail(appraisal);
     bexPaRenderEmployeeAppraisals();
@@ -20309,6 +21033,12 @@
         await bexPaVerifyPersonalAppraisalAccess(verifiedIdentity);
         if (!bexPaCanOpenPersonalAppraisal() && bexPaActiveMode === "employee") bexPaActiveMode = "";
         await bexPaHydrateRemoteState();
+        // BEXHR_H12_PA_NATIVE_WORKSPACE_SWITCHER_20261114: PA identity already verified; reuse native live menu.
+        if (window.BexHRPaNativeWorkspaceSwitcher?.init) {
+          void window.BexHRPaNativeWorkspaceSwitcher.init(verifiedIdentity).catch(error => {
+            console.warn("[H12 PA] Switcher bridge unavailable:", error);
+          });
+        }
       } catch (error) {
         bexPaPersistence.mode = "remote-error";
         bexPaPersistence.ready = false;
@@ -20357,6 +21087,14 @@
 
     await bexPaLoadGoalDirectory();
     await bexPaCompleteEligibleCycles();
+
+    // Reconcile only unresolved position setup using trusted current PA data.
+    if (hasIntegratedContext) await bexPaVerifySetupNeededPersonalAppraisal();
+    // BEXHR_H12_PA_SELF_APPRAISAL_PARITY_20261114: reconcile an authorised personal PA missed by the older
+    // inbound-reporting-line check, without widening reviewer privileges.
+    if (hasIntegratedContext && !bexPaHasEmployeeCapability()) {
+      await bexPaReconcileOwnActiveAppraisal();
+    }
 
     bexPaUpdateIntegratedWorkspaceLabel();
     bexPaEnsureIntegratedWorkspaceSwitchButton();

@@ -33224,3 +33224,57 @@ body.bexhr-has-sidebar button.dashboard-action-btn[aria-controls$="Collapse"]:no
 body.bexhr-has-sidebar [data-bexhr-doubleclick-heading="true"] {
   cursor: pointer;
 }
+
+/* BEXHR_H12_SINGLE_CLICK_COLLAPSE_VISIBLE_V4_20261113
+ * Restore accessible native Expand/Collapse buttons for HR, Manager, Employee.
+ * The Group D V3 accessibility-only CSS must no longer hide these controls.
+ * Deliberately leaves Platform Admin's existing double-click UI unchanged.
+ */
+body.bexhr-has-sidebar.bexhr-hr-visual-refresh button.dashboard-action-btn[aria-controls$="Collapse"],
+body.bexhr-has-sidebar.bexhr-manager-visual-refresh button.dashboard-action-btn[aria-controls$="Collapse"],
+body.bexhr-has-sidebar.bexhr-employee-visual-refresh button.dashboard-action-btn[aria-controls$="Collapse"] {
+  position: static !important;
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 116px !important;
+  max-width: none !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+  padding: .5rem .875rem !important;
+  margin: 0 !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  overflow: visible !important;
+  clip: auto !important;
+  clip-path: none !important;
+  white-space: nowrap !important;
+  pointer-events: auto !important;
+}
+body.bexhr-has-sidebar:is(.bexhr-hr-visual-refresh,.bexhr-manager-visual-refresh,.bexhr-employee-visual-refresh) [data-bexhr-doubleclick-heading="true"] {
+  cursor: auto !important;
+}
+
+/* BEXHR_H12_LEAVE_AUTHORITY_BOOT_GATE_20261114
+   Shared Employee / Manager / HR presentation safeguard.
+   Request Leave is not painted until position verification succeeds.
+*/
+html:not([data-bexhr-h12-leave-position="other"]) #ssLeaveSection .hr-self-service-request-card,
+html:not([data-bexhr-h12-leave-position="other"]) #leaveSection .dashboard-form-card:has(#leaveRequestForm),
+html:not([data-bexhr-h12-leave-position="other"]) #ssLeaveSection [data-ss-leave-view="request"],
+html:not([data-bexhr-h12-leave-position="other"]) #leaveSection [data-employee-leave-view="request"],
+html:not([data-bexhr-h12-leave-position="other"]) #ssLeaveRequestBlockNotice,
+html:not([data-bexhr-h12-leave-position="other"]) #leaveRequestBlockNotice {
+  display: none !important;
+}
+
+/* BEXHR_H12_SHARED_LEAVE_LOADER_HANDOFF_20261114
+ * Continue the already-present first-paint loader when the initial Leave card
+ * has not yet completed authority verification / visibility restoration.
+ * Does not affect a later manual workspace switch.
+ */
+body.bexhr-h12-leave-loader-hold #bexhrWorkspaceLoader {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}

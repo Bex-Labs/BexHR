@@ -1,0 +1,55 @@
+/* Scope: HR / Manager application header and two verified HR directory cards.
+ * Presentation only. Bootstrap modal/backdrop remains above headers.
+ * Keep header menu above cards; normal content remains below it. */
+body.bexhr-hr-visual-refresh .hr-modern-app-header,
+body.bexhr-manager-visual-refresh .manager-modern-app-header {
+  z-index: 1044 !important; /* below Bootstrap modal 1055 */
+  overflow: visible !important;
+}
+body.bexhr-hr-visual-refresh .bexhr-workspace-menu,
+body.bexhr-manager-visual-refresh .bexhr-workspace-menu {
+  z-index: 1045 !important;
+}
+/* Quiet verified organisation context lives inside the account button,
+   NOT in a separate standalone leadership badge. */
+.hr-modern-account-copy .bexhr-quiet-position,
+.manager-modern-account-copy .bexhr-quiet-position {
+  display: block !important;
+  min-width: 0;
+  max-width: 195px;
+  margin: 1px 0 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  white-space: nowrap;
+  line-height: 1.15;
+}
+.bexhr-quiet-position .bexhr-h11-leadership-icon,
+.bexhr-quiet-position .bexhr-h11-leadership-overline { display: none !important; }
+.bexhr-quiet-position .bexhr-h11-leadership-copy { display: block; line-height: 1.2; }
+.bexhr-quiet-position .bexhr-h11-leadership-detail {
+  display: block;
+  max-width: 195px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #617488;
+  font-weight: 550;
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+.bexhr-internal-pilot-hidden { display: none !important; }
+/* Native action controls are retired for these two HR cards only.
+   Never target sidebar groups, menus, filters, save buttons or other accordions. */
+#toggleEmployeeLifecycleCardBtn,
+#toggleEmployeeListCardBtn,
+.bexhr-retired-card-toggle { display: none !important; }
+#employeeLifecycleCardCollapse.d-none,
+#employeeListCardCollapse.d-none { display: block !important; }
+@media (max-width: 800px) {
+  .hr-modern-account-copy .bexhr-quiet-position,
+  .manager-modern-account-copy .bexhr-quiet-position,
+  .bexhr-quiet-position .bexhr-h11-leadership-detail { max-width: 115px; }
+  .bexhr-quiet-position .bexhr-h11-leadership-detail { font-size: 10px; }
+}
