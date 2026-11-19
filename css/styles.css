@@ -33278,3 +33278,220 @@ body.bexhr-h12-leave-loader-hold #bexhrWorkspaceLoader {
   visibility: visible !important;
   pointer-events: auto !important;
 }
+
+/* BEXHR_HR_UI_006_LEAVE_BALANCE_SPACING
+   Presentation only: distribute three metrics across the card. */
+
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(1),
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(1) {
+    text-align: left;
+}
+
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(2),
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(2) {
+    text-align: center;
+}
+
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(3),
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(3) {
+    text-align: right;
+}
+
+/* BEXHR_PAYROLL_UI_003_20261119
+   Remove Payroll tab fade/re-entry animation only.
+   No changes to navigation, payroll records, calculations,
+   payslip generation, permissions or refresh behaviour. */
+
+body.bexhr-employee-visual-refresh #payrollSection,
+body.bexhr-hr-visual-refresh #hrSelfServiceSection #ssPayrollSection,
+body.bexhr-manager-visual-refresh #managerSelfServiceSection #ssPayrollSection,
+body.bexhr-hr-visual-refresh #hrSelfServiceSection #ssPayrollSection .dashboard-section,
+body.bexhr-manager-visual-refresh #managerSelfServiceSection #ssPayrollSection .dashboard-section {
+    animation: none !important;
+    transition: none !important;
+}
+
+/* BEXHR_PLATFORM_UI_001_ACTIONS_20261119
+   Company Identity and User Access visual consolidation.
+   Existing operations, IDs and permissions remain unchanged. */
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+#tenantCreateForm.admin-company-form {
+    margin-top: 0.85rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+.admin-company-form-kicker {
+    display: none;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+.admin-company-form-intro {
+    padding: 0.85rem 0 1rem;
+    background: transparent;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+.admin-company-form-grid {
+    padding: 1.15rem 0;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+.admin-company-form-actions {
+    padding: 1rem 0;
+    background: transparent;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace hr {
+    margin: 1.5rem 0 !important;
+}
+
+body.bexhr-admin-visual-refresh
+#tenantRecordsTableWrapper,
+body.bexhr-admin-visual-refresh
+#profileTenantLinksTableWrapper {
+    border: 1px solid #e1e8ed;
+    border-radius: 14px;
+    background: #ffffff;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+.dashboard-table .bexhr-platform-actions-trigger,
+body.bexhr-admin-visual-refresh
+#profileTenantLinksTableBody
+.bexhr-platform-actions-trigger {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: auto !important;
+    min-width: 92px;
+    height: 38px !important;
+    padding: 0.45rem 0.8rem !important;
+    border: 1px solid #087f7a;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #087f7a;
+    font-size: 0.8rem;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+body.bexhr-admin-visual-refresh
+.bexhr-platform-actions-trigger:hover {
+    background: #edf9f7 !important;
+    color: #075f5b !important;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choices {
+    display: grid;
+    gap: 0.55rem;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-height: 44px;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid #e1e8ed;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #243447;
+    font-size: 0.84rem;
+    font-weight: 650;
+    text-align: left;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choice:hover {
+    background: #f5faf9;
+    border-color: #b8d8d2;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choice-danger {
+    color: #b42332;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choice-danger:hover {
+    background: #fff5f5;
+    border-color: #f2c7cd;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choice:disabled {
+    opacity: 0.45;
+}
+
+/* BEXHR_PLATFORM_UI_002_TEN_SCROLL_NO_DBLCLICK_20261119
+   Platform Admin presentation only.
+   Ten visible records before native inner scrolling.
+   Existing actions and security workflows preserved. */
+
+body.bexhr-admin-visual-refresh
+#toggleAdminCompanyIdentityCardBtn,
+body.bexhr-admin-visual-refresh
+#toggleAdminUserCompanyAssignmentCardBtn,
+body.bexhr-admin-visual-refresh
+#toggleAdminEmailSetupCardBtn {
+    display: none !important;
+}
+
+body.bexhr-admin-visual-refresh
+#tenantRecordsTableWrapper {
+    overflow-x: auto !important;
+    overscroll-behavior-y: auto !important;
+}
+
+body.bexhr-admin-visual-refresh
+#profileTenantLinksTableWrapper {
+    max-height: none !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    overscroll-behavior-y: auto !important;
+}
+
+body.bexhr-admin-visual-refresh
+#profileTenantLinksTableWrapper
+.admin-access-company-scroll {
+    max-height: none !important;
+    overflow-y: visible !important;
+    overscroll-behavior-y: auto !important;
+    scrollbar-width: thin;
+}
+
+body.bexhr-admin-visual-refresh
+#tenantRecordsTableWrapper[data-bexhr-ten-record-scroll="on"]
+thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8fafc;
+}
+
+@media print {
+    body.bexhr-admin-visual-refresh
+    #tenantRecordsTableWrapper,
+    body.bexhr-admin-visual-refresh
+    #profileTenantLinksTableWrapper
+    .admin-access-company-scroll {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+}

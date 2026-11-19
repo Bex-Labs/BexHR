@@ -14,7 +14,7 @@
 
   const LIMIT = 10;
   const TABLE_WRAPPER_SELECTOR = '[id$="TableWrapper"], .hr-batch-review-table-wrap';
-  const EXCLUDED_IDS = new Set(['employeeRecordsTableWrapper', 'hrEmployeeLifecycleTableWrapper']);
+  const EXCLUDED_IDS = new Set(['employeeRecordsTableWrapper', 'hrEmployeeLifecycleTableWrapper', 'profileTenantLinksTableWrapper']);
   const EXCLUDED_CONTAINERS = '.modal, [role="dialog"], .offcanvas, .dropdown-menu, .hr-employee-details-modal';
   const EXCLUDED_DATA_ROWS = '.d-none, [hidden], .hr-employee-directory-loading-row, .bexhr-table-placeholder, .hr-payroll-breakdown-row';
   const tracked = new Map();
