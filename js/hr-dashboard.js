@@ -36184,15 +36184,15 @@ async function viewEmployeeFilledForm(employeeId) {
             .catch((error) => ({ sections: [], error: error.message || "Configured biodata could not be loaded." }))
         : Promise.resolve({ sections: [], error: "Biodata configuration is not yet available." }),
       Promise.resolve()
-        .then(() => getSupabaseClient().rpc("bexhr_p7_nin_read_for_hr", { p_employee_id: employeeKey }))
+        .then(() => getSupabaseClient().from("employees").select("nin").eq("id", employeeKey).single())
         .catch((error) => ({ data: null, error })),
     ]);
     // A newer add/edit/delete refresh or a closed modal supersedes this load.
     if (requestCounter !== employeeFilledFormRequestCounter ||
         modal.classList.contains("d-none") ||
         modal.dataset.employeeFilledFormId !== employeeKey) return;
-    const verifiedNin = !ninResult?.error && /^\d{11}$/.test(String(ninResult?.data || ""))
-      ? String(ninResult.data) : "";
+    const verifiedNin = !ninResult?.error && /^\d{11}$/.test(String(ninResult?.data?.nin || ""))
+      ? String(ninResult.data.nin) : "";
     content.innerHTML = renderEmployeeFilledFormPreview(
       { ...employee, nin: verifiedNin },
       { ...relatedData, primaryManager, configuredSections: configuredSections.sections },
@@ -37057,14 +37057,12 @@ function syncP7NinEditHint() {
 let p7NinEditTicket = 0;
 async function loadP7HrNinForEmployeeEdit(employeeId, ticket) {
   try {
-    const { data, error } = await getSupabaseClient().rpc(
-      "bexhr_p7_nin_read_for_hr", { p_employee_id: employeeId },
-    );
+    const { data, error } = await getSupabaseClient().from("employees").select("nin").eq("id", employeeId).single();
     if (ticket !== p7NinEditTicket ||
         String(state.currentEditingEmployee?.id || "") !== String(employeeId)) return;
     if (error) throw error;
 
-    state.p7NinLoadedValue = String(data || "");
+    state.p7NinLoadedValue = String(data?.nin || "");
     state.p7NinEditStatus = "ready";
     if (state.dom.nin) {
       state.dom.nin.value = state.p7NinLoadedValue;
