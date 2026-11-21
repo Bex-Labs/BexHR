@@ -3859,23 +3859,27 @@ async function submitClearPaCycles() {
     const supabase =
       getSupabaseClient();
 
-    // Browser performs no individual PA deletes.
-    // PostgreSQL performs the PA clear transactionally.
-    const {
-      data,
-      error,
-    } = await supabase.rpc(
-      "admin_clear_tenant_pa_cycle_records",
+    // Server coordinates transactional PA clearing and Storage cleanup.
+    const { data, error } = await supabase.functions.invoke(
+      "admin-clear-pa-cycles",
       {
-        target_tenant_id:
-          String(
-            tenant.id || "",
-          ).trim(),
+        body: {
+          target_tenant_id: String(tenant.id || "").trim(),
+        },
       },
     );
 
     if (error) {
-      throw error;
+      let message = error.message || "PA clear request failed.";
+
+      if (error.context && typeof error.context.json === "function") {
+        try {
+          const details = await error.context.json();
+          if (details?.message) message = details.message;
+        } catch (_) {}
+      }
+
+      throw new Error(message);
     }
 
     const result =
@@ -3884,12 +3888,13 @@ async function submitClearPaCycles() {
         : data;
 
     if (
-      result &&
-      result.success === false
+      !result ||
+      result.success !== true ||
+      result.storage_cleanup_pending !== false
     ) {
       throw new Error(
-        result.message ||
-        "Performance Appraisal cycle records could not be cleared.",
+        result?.message ||
+        "PA records or evidence cleanup could not be confirmed.",
       );
     }
 
