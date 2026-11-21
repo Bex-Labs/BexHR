@@ -106,13 +106,37 @@
       const isAncestor = ancestry.ancestors.some((ancestor) =>
         id(ancestor.id) === managerPositionId,
       );
+      // A Secondary Manager may also support a different department or branch.
+      // Unlike Primary, Secondary does not assign the formal reporting parent.
+      // The candidate must occupy a configured position with an HR/Manager role;
+      // self, same-position and downward/descendant relationships are excluded.
+      // The caller also excludes existing Primary and Secondary assignments.
+      if (norm(kind) === 'secondary') {
+        if (managerPositionId === targetPositionId) {
+          return result('configured', false, 'SAME_POSITION_NOT_SUPERVISORY');
+        }
+        const managerConfigured = links.some((row) =>
+          id(row?.tenant_id) === tenant &&
+          id(row?.job_title_id) === managerPositionId,
+        );
+        if (!managerConfigured) {
+          return result('configured', false, 'MANAGER_POSITION_NOT_CONFIGURED');
+        }
+        const managerAncestry = model.walkAncestors(managerPositionId);
+        if (managerAncestry.code !== 'OK') {
+          return result('configured', false, 'MANAGER_' + managerAncestry.code);
+        }
+        const managerBelowTarget = managerAncestry.ancestors.some((ancestor) =>
+          id(ancestor.id) === targetPositionId,
+        );
+        if (managerBelowTarget) {
+          return result('configured', false, 'CANNOT_REPORT_TO_DESCENDANT');
+        }
+        return result('configured', true,
+          isAncestor ? 'CONFIGURED_ANCESTOR' : 'CONFIGURED_SUPPORTING_MANAGER');
+      }
       if (!isAncestor) {
         return result('configured', false, 'NOT_AN_ANCESTOR_POSITION');
-      }
-      // Secondary managers supplement the direct reporting chain; they do not
-      // become a second formal parent or gain Primary decision rights.
-      if (norm(kind) === 'secondary') {
-        return result('configured', true, 'CONFIGURED_ANCESTOR');
       }
       const nearest = model.nearestOccupiedAncestor(employeeId);
       const allowed = nearest.code === 'PARENT_OCCUPIED' &&

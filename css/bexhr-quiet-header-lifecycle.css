@@ -53,3 +53,42 @@ body.bexhr-manager-visual-refresh .bexhr-workspace-menu {
   .bexhr-quiet-position .bexhr-h11-leadership-detail { max-width: 115px; }
   .bexhr-quiet-position .bexhr-h11-leadership-detail { font-size: 10px; }
 }
+
+
+/* REDESIGN37_HR_UI_001_STICKY_PEOPLE
+   Keep the People application header sticky across Directory,
+   Add Employee, Import Employees, and Employee Lifecycle.
+   Other HR workspaces retain their existing behaviour.
+*/
+body.bexhr-hr-visual-refresh[data-hr-navigation-task^="people."] .hr-modern-app-header {
+    position: sticky !important;
+    top: 0.75rem !important;
+    z-index: 1044 !important;
+}
+
+@media (max-width: 767.98px) {
+    body.bexhr-hr-visual-refresh[data-hr-navigation-task^="people."] .hr-modern-app-header {
+        top: 0 !important;
+    }
+}
+
+/* REDESIGN37_HR_UI_002_REMOVE_CARD_COLLAPSE
+   HR dashboard presentation only.
+
+   Retire card Collapse/Expand controls throughout HR.
+   Preserve sidebar navigation and internal workspace tabs.
+   Preserve all existing form, save, refresh, payroll and
+   reporting functionality.
+*/
+
+/* Remove card Collapse/Expand controls. */
+body.bexhr-hr-visual-refresh .dashboard-section-card button[aria-controls$="Collapse"]:not([role="tab"]),
+body.bexhr-hr-visual-refresh #toggleBankDirectoryCardBtn {
+    display: none !important;
+}
+
+/* Keep ordinary working-card content visible.
+   Do not override explicit hidden states or parent navigation.
+   The employee form retains its existing mobile lifecycle.
+*/
+/* HR-UI-002 V2: Card visibility is controlled by the targeted JavaScript. */

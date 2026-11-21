@@ -558,78 +558,37 @@ function forceManagerDashboardToTopAfterRefresh() {
 // Release the shared branded loader only after the exact Manager workspace,
 // tenant branding, profile, navigation, title, and subtitle are restored.
 // Longer team, leave, schedule, and self-service data loads continue progressively.
+// REDESIGN37_HR_UI_004_SELF_SERVICE_FIRST_PAINT
+// Manager shares the same Self-Service first-paint readiness as HR.
+let managerSelfServiceFirstPaintReleaseStarted = false;
 function revealRestoredManagerWorkspace() {
-  // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
-  // Give fast Manager restores the same deliberate loader timing as HR.
-  // BEXHR_H12_MANAGER_NATIVE_LOADER_READY_20261114
-  // Keep the existing Manager loader until the selected Leave card is ready.
-  const leaveFirstPaintDeadline = Date.now() + 10000;
+  if (managerSelfServiceFirstPaintReleaseStarted) return;
+  managerSelfServiceFirstPaintReleaseStarted = true;
 
   const releaseWorkspace = () => {
-    const restoringOwnLeave =
-      getRememberedManagerWorkspace() === 'selfservice' &&
-      getRememberedManagerSelfServiceTask() === 'leave' &&
-      !document.documentElement.classList.contains('bexhr-pa-return');
-
-    if (restoringOwnLeave) {
-      const host = document.getElementById('managerSelfServiceSection');
-      const leave = document.getElementById('ssLeaveSection');
-      const position = document.documentElement.getAttribute('data-bexhr-h12-leave-position');
-      const view = leave?.dataset.ssLeaveView;
-
-      const cardId = {
-        request: 'ssLeaveRequestForm',
-        balances: 'ssLeaveBalancesCardCollapse',
-        history: 'ssLeaveHistoryCardCollapse',
-        decision: 'ssLatestDecisionCardCollapse'
-      }[view];
-
-      const card = cardId ? document.getElementById(cardId) : null;
-
-      const isVisible = element => Boolean(
-        element &&
-        !element.closest('.d-none') &&
-        element.getClientRects().length > 0
-      );
-
-      const ready =
-        (position === 'highest' || position === 'other') &&
-        (position !== 'highest' || view !== 'request') &&
-        isVisible(host) &&
-        isVisible(leave) &&
-        isVisible(card);
-
-      if (!ready && Date.now() < leaveFirstPaintDeadline) {
-        window.setTimeout(releaseWorkspace, 60);
-        return;
-      }
-
-      if (!ready) {
-        console.warn('[H12] Manager Leave first paint timed out; native loader released.');
-      }
-    }
     document.body?.classList.remove("manager-workspace-booting");
     document.body?.setAttribute("aria-busy", "false");
-
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: "auto",
-    });
-
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     updateManagerBackToTopButtonVisibility();
   };
 
-  const loaderElapsed = Number(window.performance?.now?.()) || 0;
-  const remainingLoaderTime = Math.max(0, 650 - loaderElapsed);
+  void (async () => {
+    const elapsed = Number(window.performance?.now?.()) || 0;
+    const remaining = Math.max(0, 650 - elapsed);
+    if (remaining) await new Promise(resolve => window.setTimeout(resolve, remaining));
 
-  if (remainingLoaderTime > 0) {
-    window.setTimeout(releaseWorkspace, remainingLoaderTime);
-    return;
-  }
-
-  releaseWorkspace();
+    await window.BexHRR37SelfServiceFirstPaint?.waitForReady?.({
+      surface: 'manager',
+      expected: getRememberedManagerWorkspace() === 'selfservice',
+      isInitialised: () => _managerSelfServiceInitialised,
+    });
+    releaseWorkspace();
+  })().catch(error => {
+    console.warn('[R37 UI-004] Manager first-paint guard failed:', error);
+    releaseWorkspace();
+  });
 }
+
 function restoreManagerWorkspaceAfterRefresh() {
   const workspace = getRememberedManagerWorkspace();
 

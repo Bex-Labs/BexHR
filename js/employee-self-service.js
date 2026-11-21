@@ -492,6 +492,34 @@
     decision: { label: "Latest Decision", icon: "bi-calendar2-check" },
   });
 
+  // REDESIGN37_HR_UI004_R1: remember selected Leave tab per user and tenant.
+  const SS_LEAVE_MEMORY_PREFIX = "bexhr:r37:ss-leave-view";
+
+  function ssLeaveStorageKey() {
+    const user = String(ssState.currentUser?.id || "").trim();
+    const tenant = String(ssState.currentProfile?.tenant_id || "").trim();
+    return user && tenant
+      ? `${SS_LEAVE_MEMORY_PREFIX}:${tenant}:${user}`
+      : "";
+  }
+
+  function readSsLeaveView() {
+    const key = ssLeaveStorageKey();
+    if (!key) return null;
+    try {
+      const view = sessionStorage.getItem(key);
+      return Object.prototype.hasOwnProperty.call(SS_LEAVE_VIEWS, view)
+        ? view : null;
+    } catch (_) { return null; }
+  }
+
+  function rememberSsLeaveView(view) {
+    const key = ssLeaveStorageKey();
+    if (!key) return;
+    try { sessionStorage.setItem(key, view); }
+    catch (_) { /* Storage is optional. */ }
+  }
+
   function normaliseSsLeaveView(view = "") {
     const key = String(view || "").trim().toLowerCase();
     return Object.hasOwn(SS_LEAVE_VIEWS, key) ? key : SS_LEAVE_VIEW_DEFAULT;
@@ -563,6 +591,7 @@
 
     ssState.activeLeaveView = resolved;
     section.dataset.ssLeaveView = resolved;
+    if (options.focus === true) rememberSsLeaveView(resolved);
 
     nodes.balanceCard?.classList.toggle("d-none", resolved !== "balances");
     nodes.decisionCard?.classList.toggle("d-none", resolved !== "decision");
@@ -671,7 +700,7 @@
 
     if (isLeave) {
       setSsLeaveView(
-        options.leaveView || ssState.activeLeaveView || SS_LEAVE_VIEW_DEFAULT,
+        ssState.activeLeaveView || options.leaveView || SS_LEAVE_VIEW_DEFAULT,
       );
       if (ssState.isInitialized && ssState.employeeRecord?.id) {
         void refreshSsLeaveEligibilityOnOpen();
@@ -3554,6 +3583,7 @@ ${isCancelledAudit
 
     ssState.currentUser = currentUser;
     ssState.currentProfile = currentProfile;
+    ssState.activeLeaveView = readSsLeaveView() || requestedLeaveView;
 
     cacheSsDomElements();
     ensureSsLeaveInlineTabs();

@@ -4401,3 +4401,299 @@ body.bex-pa-page .bex-pa-main > div {
     scrollbar-width: thin;
   }
 }
+
+/* BEXHR_PA_UI_001_REPORT_LAYOUT_20261119
+   Shared Performance Appraisal progress report presentation.
+   No data, permissions, evidence or export logic changes. */
+
+.bex-pa-page #bexPaGeneratedProgressReport {
+    margin: 1rem !important;
+    padding: 1.3rem !important;
+    min-width: 0;
+    border: 1px solid #dce7eb !important;
+    border-radius: 20px !important;
+    background: linear-gradient(180deg, #ffffff 0%, #fafcfd 100%);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.045);
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1.2rem;
+    margin-bottom: 1.25rem;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__intro {
+    flex: 1 1 260px;
+    min-width: 0;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__kicker {
+    margin: 0 0 0.35rem;
+    color: #087f7a;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.075em;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__title {
+    margin: 0 0 0.4rem;
+    color: #152238;
+    font-size: clamp(1.15rem, 2vw, 1.4rem);
+    font-weight: 800;
+    line-height: 1.3;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__description {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.83rem;
+    line-height: 1.6;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__export {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    margin: 0 !important;
+    padding: 0.55rem 0.9rem;
+    border-radius: 10px;
+    font-weight: 700;
+    white-space: normal;
+    text-align: center;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.8rem;
+    margin-bottom: 1.4rem;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__metric {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    min-height: 88px;
+    padding: 1rem;
+    border: 1px solid #e0e9ed;
+    border-radius: 14px;
+    background: #f6fafb;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__metric-value {
+    color: #122238;
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__metric-label {
+    margin-top: 0.35rem;
+    color: #64748b;
+    font-size: 0.76rem;
+    font-weight: 650;
+    line-height: 1.35;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table-wrap {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #ffffff;
+    scrollbar-width: thin;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table {
+    width: 100%;
+    min-width: 1010px;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table thead th {
+    padding: 0.85rem 0.75rem;
+    border-bottom: 1px solid #dfe8ec;
+    background: #f1f6f8;
+    color: #526579;
+    font-size: 0.69rem;
+    font-weight: 800;
+    line-height: 1.35;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+    white-space: normal;
+    vertical-align: middle;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table tbody td {
+    min-width: 0;
+    padding: 0.95rem 0.75rem;
+    border-bottom: 1px solid #e8eef1;
+    background: #ffffff;
+    color: #334155;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table tbody tr:hover td {
+    background: #f8fbfc;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table th:nth-child(1) {
+    width: 13%;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table th:nth-child(2) {
+    width: 14%;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table th:nth-child(3) {
+    width: 9%;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table th:nth-child(4) {
+    width: 12%;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table th:nth-child(5) {
+    width: 15%;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table th:nth-child(6) {
+    width: 13%;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table th:nth-child(7) {
+    width: 15%;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table th:nth-child(8) {
+    width: 9%;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table tbody td:first-child {
+    color: #10263c;
+    font-weight: 750;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table tbody td:nth-child(5) {
+    font-weight: 700;
+}
+
+#bexPaGeneratedProgressReport .bex-pa-progress-report__table tbody td:last-child {
+    font-weight: 650;
+}
+
+@media (max-width: 767.98px) {
+    .bex-pa-page #bexPaGeneratedProgressReport {
+        margin: 0.75rem !important;
+        padding: 1rem !important;
+    }
+
+    #bexPaGeneratedProgressReport .bex-pa-progress-report__header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #bexPaGeneratedProgressReport .bex-pa-progress-report__metrics {
+        gap: 0.5rem;
+    }
+
+    #bexPaGeneratedProgressReport .bex-pa-progress-report__metric {
+        padding: 0.7rem;
+        min-height: 80px;
+    }
+}
+
+@media (max-width: 420px) {
+    #bexPaGeneratedProgressReport .bex-pa-progress-report__metrics {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* BEXHR_PA_UI_002_TEN_RECORD_SCROLL_20261119
+   PA lists begin at natural height.
+   JavaScript activates measured scrolling only after record 10.
+   All existing role permissions and data logic remain unchanged. */
+
+.bex-pa-page :is(
+    #bexPaOrganisationGoalsList,
+    #bexPaDeliverablesList,
+    #bexPaDepartmentGoalsList,
+    #bexPaIndividualGoalsList,
+    #bexPaProgressUpdatesList,
+    #bexPaTemplatesList,
+    #bexPaEmployeeAppraisalsList
+) {
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+.bex-pa-page #bexPaMainContent .table-responsive {
+    max-height: none !important;
+}
+
+.bex-pa-page #bexPaMainContent
+.table-responsive[data-bexhr-pa-ten-record-scroll="on"] thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f1f6f8;
+}
+
+@media print {
+    .bex-pa-page #bexPaMainContent .table-responsive,
+    .bex-pa-page #bexPaMainContent
+    [data-bexhr-pa-ten-record-scroll] {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+}
+
+/* BEXHR_PA_UI_003_NATIVE_WHEEL_SCROLL_20261119
+
+   Restore native mouse-wheel scroll chaining throughout
+   the Performance Appraisal workspace.
+
+   Preserve the existing 10-record threshold.
+   Preserve horizontal table scrolling.
+   Do not intercept wheel events.
+   Do not alter record data, permissions or actions.
+*/
+
+body.bex-pa-page #bexPaMainContent,
+body.bex-pa-page #bexPaMainContent .card,
+body.bex-pa-page #bexPaMainContent .card-body,
+body.bex-pa-page #bexPaMainContent .table-responsive,
+body.bex-pa-page #bexPaMainContent .bex-pa-report-table-wrap,
+body.bex-pa-page #bexPaMainContent [data-bexhr-pa-ten-record-scroll],
+body.bex-pa-page .bex-pa-sidebar {
+    overscroll-behavior-y: auto !important;
+}
+
+/* Retain native wheel movement inside longer PA record lists.
+   At either scroll boundary, normal page scrolling resumes. */
+
+body.bex-pa-page #bexPaOrganisationGoalsList,
+body.bex-pa-page #bexPaDeliverablesList,
+body.bex-pa-page #bexPaDepartmentGoalsList,
+body.bex-pa-page #bexPaIndividualGoalsList,
+body.bex-pa-page #bexPaProgressUpdatesList,
+body.bex-pa-page #bexPaTemplatesList,
+body.bex-pa-page #bexPaEmployeeAppraisalsList,
+body.bex-pa-page #bexPaGeneratedProgressReport .table-responsive {
+    overscroll-behavior-y: auto !important;
+}

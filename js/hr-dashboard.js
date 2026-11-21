@@ -299,7 +299,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
 
       shell.dataset.activePanel = requestedKey;
-
+      if (options.remember !== false) hrR40RememberSetupPanel(shell.id, requestedKey);
       // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
       // When an internal Setup tab owns an existing collapsible working card,
       // open that card immediately. Selecting a task must never require a
@@ -475,7 +475,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       formerParents.forEach(removeEmptyHrSetupLayoutContainer);
 
-      setHrSetupInternalWorkspacePanel(shell, defaultKey);
+      setHrSetupInternalWorkspacePanel(shell, defaultKey, { remember: false });
       return shell;
     }
 
@@ -626,7 +626,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
 
       shell.dataset.activePanel = requestedKey;
-
+      if (options.remember !== false) hrR40RememberSetupPanel(shell.id, requestedKey);
       const collapseToggle = Array.from(
         requestedCard.querySelectorAll("button[aria-controls]"),
       ).find((button) => {
@@ -752,7 +752,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         switcher.appendChild(button);
       });
 
-      setHrSetupFocusedCardTask(shell, defaultKey);
+      setHrSetupFocusedCardTask(shell, defaultKey, { remember: false });
       return shell;
     }
 
@@ -4379,6 +4379,86 @@ function getCurrentTenantContext() {
 
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
 // Only these top-level HR workspaces are safe to restore after browser refresh.
+    // BEXHR R40: nested Setup navigation state is scoped to signed-in user + tenant.
+    function hrR40SetupStorageKey(suffix) {
+      const userId = String(state.currentUser?.id || '').trim();
+      const tenant = getCurrentTenantContext();
+      const tenantId = String(tenant?.tenantId || state.currentProfile?.tenant_id || '').trim();
+      if (!userId || !tenantId) return '';
+      return `bexhr:r40:setup:${userId}:${tenantId}:${suffix}`;
+    }
+    function hrR40RememberSetupPanel(shellId, panelKey) {
+      const key = hrR40SetupStorageKey(`panel:${shellId}`);
+      if (!key || !panelKey) return;
+      try { sessionStorage.setItem(key, panelKey); } catch (_) { /* storage blocked */ }
+    }
+    function hrR40GetSetupPanel(shellId, fallback) {
+      const key = hrR40SetupStorageKey(`panel:${shellId}`);
+      if (!key) return fallback;
+      let stored = '';
+      try { stored = sessionStorage.getItem(key) || ''; }
+      catch (_) { return fallback; }
+      const shell = document.getElementById(shellId);
+      if (!shell) return fallback;
+      const selection = shellId === 'hrOrganizationInternalWorkspace'
+        ? hrR40GetOrgStep() || stored : stored;
+      const available = Array.from(shell.querySelectorAll(
+        '[data-hr-setup-workspace-button], [data-hr-setup-card-task-button]',
+      )).map((button) => button.dataset.hrSetupWorkspaceButton ||
+        button.dataset.hrSetupCardTaskButton || '');
+      return available.includes(selection) ? selection : fallback;
+    }
+    function hrR40RememberReportingPosition(positionId) {
+      const key = hrR40SetupStorageKey('position:reportingLines');
+      if (!key) return;
+      try {
+        if (positionId) sessionStorage.setItem(key, positionId);
+        else sessionStorage.removeItem(key);
+      } catch (_) { /* storage blocked */ }
+    }
+    function hrR40GetReportingPosition() {
+      const key = hrR40SetupStorageKey('position:reportingLines');
+      if (!key) return '';
+      try { return sessionStorage.getItem(key) || ''; }
+      catch (_) { return ''; }
+    }
+    function hrR40ClearSetupMemory() {
+      const suffixes = [
+        'panel:hrOrganizationInternalWorkspace',
+        'panel:hrPayrollRulesInternalWorkspace',
+        'panel:hrPaymentSetupInternalWorkspace',
+        'panel:hrCommunicationInternalWorkspace',
+        'position:reportingLines',
+        'step:organization',
+      ];
+      for (const suffix of suffixes) {
+        const key = hrR40SetupStorageKey(suffix);
+        if (!key) continue;
+        try { sessionStorage.removeItem(key); } catch (_) { /* storage blocked */ }
+      }
+    }
+    // R40 P7B: remember Reporting Structure steps without storing employee data.
+    function hrR40RememberOrgStep(step) {
+      const key = hrR40SetupStorageKey('step:organization');
+      if (!key) return;
+      const value = ['departments', 'jobTitles', 'reportingLines'].includes(step) ? step : '';
+      try {
+        if (value) sessionStorage.setItem(key, value);
+        else sessionStorage.removeItem(key);
+      } catch (_) { /* storage unavailable */ }
+    }
+    function hrR40GetOrgStep() {
+      const key = hrR40SetupStorageKey('step:organization');
+      if (!key) return '';
+      try {
+        const value = sessionStorage.getItem(key) || '';
+        return ['departments', 'jobTitles', 'reportingLines'].includes(value) ? value : '';
+      } catch (_) { return ''; }
+    }
+    window.BexHRR40OrgStepMemory = Object.freeze({
+      save: hrR40RememberOrgStep,
+      read: hrR40GetOrgStep,
+    });
 function isValidHrWorkspaceKey(workspace = "") {
   // HR REVIEW WORKSPACE SEPARATION - STEP 1P
   // Review is a real top-level HR workspace, safe to remember across refresh.
@@ -4485,6 +4565,7 @@ function getRememberedHrWorkspace() {
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
 // Clear remembered workspace on logout so the next login starts from Profile.
 function clearRememberedHrWorkspace() {
+  hrR40ClearSetupMemory();
   try {
     sessionStorage.removeItem(getHrWorkspaceMemoryKey());
   } catch (error) {
@@ -4878,14 +4959,20 @@ function getHrNavigationTaskTarget(taskKey = "") {
         state.dom.organizationSettingsCardCollapse,
         true,
       );
-      window.hrOpenOrganizationSetupPanel?.("organization");
+      window.hrOpenOrganizationSetupPanel?.(
+        hrR40GetSetupPanel('hrOrganizationInternalWorkspace', 'organization'),
+        { remember: false },
+      );
       return (
         state.dom.organizationSettingsCardCollapse?.closest(".dashboard-section-card") ||
         state.dom.organizationSettingsCardCollapse
       );
 
     case "setup.rules":
-      window.hrOpenPayrollRulesSetupPanel?.("allowances");
+      window.hrOpenPayrollRulesSetupPanel?.(
+        hrR40GetSetupPanel('hrPayrollRulesInternalWorkspace', 'allowances'),
+        { remember: false },
+      );
       openPayrollAllowanceCard();
       return (
         state.dom.payrollAllowanceCardCollapse?.closest(".dashboard-section-card") ||
@@ -4893,7 +4980,10 @@ function getHrNavigationTaskTarget(taskKey = "") {
       );
 
     case "setup.payment":
-      window.hrOpenPaymentSetupPanel?.("banks");
+      window.hrOpenPaymentSetupPanel?.(
+        hrR40GetSetupPanel('hrPaymentSetupInternalWorkspace', 'banks'),
+        { remember: false },
+      );
       openBankDirectoryCard();
       return (
         state.dom.bankDirectoryCardCollapse?.closest(".dashboard-section-card") ||
@@ -4906,7 +4996,10 @@ function getHrNavigationTaskTarget(taskKey = "") {
         state.dom.hrp85EmailIntegrationCardCollapse,
         true,
       );
-      window.hrOpenCommunicationSetupPanel?.("validation");
+      window.hrOpenCommunicationSetupPanel?.(
+        hrR40GetSetupPanel('hrCommunicationInternalWorkspace', 'validation'),
+        { remember: false },
+      );
       return state.dom.hrp85EmailIntegrationCard;
 
     case "selfservice.leave":
@@ -5039,6 +5132,26 @@ function restoreRememberedHrNavigationTask(workspace = "") {
 }
 
 function bindHrRedesignSidebarNavigation() {
+  // Remember only the position catalogue ID, never employee or payroll data.
+  document.addEventListener('change', (event) => {
+    if (event.target?.id === 'bexhrH6CChild') {
+      hrR40RememberReportingPosition(String(event.target.value || '').trim());
+    }
+  });
+  window.addEventListener('bexhr:organization-setup-updated', (event) => {
+    if (event?.detail?.loaded !== true) return;
+    const snapshotTenant = String(event.detail?.hierarchyPreview?.tenantId || '').trim();
+    const activeTenant = String(getCurrentTenantContext()?.tenantId || state.currentProfile?.tenant_id || '').trim();
+    if (!snapshotTenant || snapshotTenant !== activeTenant) return;
+    window.requestAnimationFrame(() => {
+      const selected = hrR40GetReportingPosition();
+      const field = document.getElementById('bexhrH6CChild');
+      if (!selected || !field || field.value === selected) return;
+      if (!Array.from(field.options).some((option) => option.value === selected)) return;
+      field.value = selected;
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  });
   Object.entries(HR_SIDEBAR_GROUPS).forEach(([groupKey, config]) => {
     const parent = document.getElementById(config.parentId);
     if (!parent) return;
@@ -5103,31 +5216,36 @@ function prepareRestoredHrWorkspaceDuringStartup() {
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1D
 // Reveal the dashboard only after startup work has had a chance to complete.
 // HR sees one controlled restore state instead of tab/content flicker.
+// REDESIGN37_HR_UI_004_SELF_SERVICE_FIRST_PAINT
+// Release the loader only when the remembered shared Leave/Payroll pane can
+// paint its selected card. The existing auth and workspace restoration run first.
+let hrSelfServiceFirstPaintReleaseStarted = false;
 function revealRestoredHrWorkspace() {
-  // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
-  // Fast authentication/profile restores can otherwise make the loader flash.
-  // Use a 650 ms minimum from navigation start; slower loads are never delayed.
+  if (hrSelfServiceFirstPaintReleaseStarted) return;
+  hrSelfServiceFirstPaintReleaseStarted = true;
+
   const releaseWorkspace = () => {
     document.body?.classList.remove("hr-workspace-booting");
     document.body?.setAttribute("aria-busy", "false");
-
-    window.scrollTo({
-      top: 0,
-      behavior: "auto",
-    });
-
+    window.scrollTo({ top: 0, behavior: "auto" });
     updateBackToTopButtonVisibility();
   };
 
-  const loaderElapsed = Number(window.performance?.now?.()) || 0;
-  const remainingLoaderTime = Math.max(0, 650 - loaderElapsed);
+  void (async () => {
+    const elapsed = Number(window.performance?.now?.()) || 0;
+    const remaining = Math.max(0, 650 - elapsed);
+    if (remaining) await new Promise(resolve => window.setTimeout(resolve, remaining));
 
-  if (remainingLoaderTime > 0) {
-    window.setTimeout(releaseWorkspace, remainingLoaderTime);
-    return;
-  }
-
-  releaseWorkspace();
+    await window.BexHRR37SelfServiceFirstPaint?.waitForReady?.({
+      surface: 'hr',
+      expected: getRememberedHrWorkspace() === 'selfservice',
+      isInitialised: () => _hrSelfServiceInitialised,
+    });
+    releaseWorkspace();
+  })().catch(error => {
+    console.warn('[R37 UI-004] HR first-paint guard failed:', error);
+    releaseWorkspace();
+  });
 }
 
 // DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
@@ -31590,6 +31708,77 @@ function getOrganizationJobTitleScopeValue() {
   return String(state.dom.organizationJobTitleScope?.value || "department").trim();
 }
 
+// R40 P7B: One visible Department / Scope selector; keep the existing form's
+// validated scope and department inputs as its single source of truth.
+function hrR40SyncUnifiedPositionScope() {
+  if (state.p7bDepartmentReportingEnabled !== true) return;
+  const scope = state.dom.organizationJobTitleScope;
+  const department = state.dom.organizationJobTitleDepartmentId;
+  const departmentField = state.dom.organizationJobTitleDepartmentField;
+  const form = state.dom.organizationJobTitleForm;
+  const scopeField = scope?.closest('.col-12');
+  if (!scope || !department || !departmentField || !form || !scopeField ||
+      !form.contains(scopeField) || !scopeField.parentElement) return;
+  const WHOLE = '__bexhr_whole_organisation__';
+  let unified = document.getElementById('bexhrR40UnifiedPositionScope');
+  if (!unified) {
+    const host = document.createElement('div');
+    host.id = 'bexhrR40UnifiedPositionScopeField';
+    host.className = 'col-12 col-md-6 col-xl-4';
+    const label = document.createElement('label');
+    label.className = 'form-label fw-semibold';
+    label.htmlFor = 'bexhrR40UnifiedPositionScope';
+    label.textContent = 'Department / Scope *';
+    unified = document.createElement('select');
+    unified.id = 'bexhrR40UnifiedPositionScope';
+    unified.className = 'form-select';
+    unified.required = true;
+    const help = document.createElement('div');
+    help.className = 'form-text';
+    help.textContent = 'Whole organisation is a company-wide position, not a department.';
+    host.append(label, unified, help);
+    scopeField.before(host);
+    unified.addEventListener('change', () => {
+      const chosen = String(unified.value || '').trim();
+      scope.value = chosen === WHOLE ? 'organization' : 'department';
+      department.value = chosen && chosen !== WHOLE ? chosen : '';
+      scope.dispatchEvent(new Event('change', { bubbles: true }));
+      department.dispatchEvent(new Event('change', { bubbles: true }));
+      updateOrganizationJobTitleSaveButtonState();
+    });
+    if (window.MutationObserver) {
+      new MutationObserver(() => window.requestAnimationFrame(hrR40SyncUnifiedPositionScope))
+        .observe(department, { childList: true });
+    }
+  }
+  scopeField.classList.add('d-none');
+  departmentField.classList.add('d-none');
+  if (!document.getElementById('bexhrR40TitleTableCleanup')) {
+    const style = document.createElement('style');
+    style.id = 'bexhrR40TitleTableCleanup';
+    style.textContent = '#hrOrganizationInternalWorkspace [data-hr-setup-workspace-panel="jobTitles"] th:nth-child(3), ' +
+      '#hrOrganizationInternalWorkspace [data-hr-setup-workspace-panel="jobTitles"] td[data-label="Reports to"] { display:none !important; }';
+    document.head.appendChild(style);
+  }
+  // Use the original tenant-filtered department options. No assumed departments.
+  const choices = Array.from(department.options).filter((opt) =>
+    !opt.disabled && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(opt.value || ''))
+  ).map((opt) => [String(opt.value), String(opt.textContent || '').trim()]);
+  const signature = JSON.stringify(choices);
+  if (unified.dataset.bexhrR40Options !== signature) {
+    unified.replaceChildren(
+      new Option('Choose department or Whole organisation', ''),
+      new Option('Whole organisation (no department)', WHOLE),
+      ...choices.map(([id, caption]) => new Option(caption, id)),
+    );
+    unified.dataset.bexhrR40Options = signature;
+  }
+  const selected = scope.value === 'organization' ? WHOLE : String(department.value || '').trim();
+  unified.value = Array.from(unified.options).some((opt) => opt.value === selected) ? selected : '';
+  unified.disabled = scope.disabled || !canCurrentUserMaintainOrganizationSetupData();
+  unified.classList.toggle('is-invalid',
+    scope.classList.contains('is-invalid') || department.classList.contains('is-invalid'));
+}
 function syncOrganizationJobTitleScopeControls() {
   const isWholeOrganization =
     getOrganizationJobTitleScopeValue() === "organization";
@@ -31618,6 +31807,25 @@ function syncOrganizationJobTitleReportsToControls() {
   const field = state.dom.organizationJobTitleReportsToField;
   const select = state.dom.organizationJobTitleReportsTo;
   if (!select) return;
+  // R40: reporting hierarchy is managed only in Reporting Lines when P7B is enabled.
+  // The protected hierarchy editor and the legacy fallback remain untouched.
+  if (state.p7bDepartmentReportingEnabled === true) {
+    hrR40SyncUnifiedPositionScope();
+    field?.classList.add('d-none');
+    select.disabled = true;
+    select.required = false;
+    select.value = '';
+    delete select.dataset.editingPositionId;
+    state.dom.removeOrganizationJobTitleLinkBtn?.classList.add('d-none');
+    document.getElementById('organizationJobTitlesSection')?.querySelector('details')?.classList.add('d-none');
+    if (!document.getElementById('bexhrR40TitleOnlyStyle')) {
+      const style = document.createElement('style');
+      style.id = 'bexhrR40TitleOnlyStyle';
+      style.textContent = '#organizationJobTitlesTableWrapper th:nth-child(3), #organizationJobTitlesTableWrapper td:nth-child(3) { display:none !important; }';
+      document.head.appendChild(style);
+    }
+    return;
+  }
   const whole = getOrganizationJobTitleScopeValue() === 'organization';
   const status = normalizeText(state.dom.organizationJobTitleStatus?.value || 'active');
   const needsReporting = status === 'active' &&
@@ -31688,8 +31896,8 @@ function isOrganizationJobTitleFormReadyForSubmit() {
   const hasStatus = Boolean(
     String(state.dom.organizationJobTitleStatus?.value || "").trim(),
   );
-  const requiresParent = (scope === 'organization' ||
-    state.p7bDepartmentReportingEnabled === true) &&
+  const requiresParent = (scope === 'organization' &&
+    state.p7bDepartmentReportingEnabled !== true) &&
     normalizeText(state.dom.organizationJobTitleStatus?.value || '') === 'active';
   const parentSelected = Boolean(String(state.dom.organizationJobTitleReportsTo?.value || '').trim());
 
@@ -31847,7 +32055,7 @@ function renderOrganizationJobTitlesTable() {
       "<td class=\"text-center\" data-label=\"Actions\">",
       "<div class=\"d-inline-flex align-items-center gap-2\">",
       "<button type=\"button\" class=\"btn btn-sm btn-outline-primary\" " +
-        "title=\"Edit title and reporting\" aria-label=\"Edit title and reporting\" " +
+        "title=\"Edit job title\" aria-label=\"Edit job title\" " +
         "onclick=\"window.hrEditOrganizationJobTitleRecord('" + safeJobTitleId + "')\">",
       "<i class=\"bi bi-pencil-square\"></i>",
       "</button>",
@@ -32360,7 +32568,7 @@ function validateOrganizationJobTitleForm() {
     ...(scope === "department"
       ? [state.dom.organizationJobTitleDepartmentId]
       : []),
-    ...((scope === 'organization' || state.p7bDepartmentReportingEnabled === true) &&
+    ...((scope === 'organization' && state.p7bDepartmentReportingEnabled !== true) &&
         normalizeText(state.dom.organizationJobTitleStatus?.value || '') === 'active'
       ? [state.dom.organizationJobTitleReportsTo]
       : []),
@@ -32469,8 +32677,10 @@ async function handleOrganizationJobTitleSave() {
 
   const isEditMode = Boolean(editingId);
   const payload = buildOrganizationJobTitlePayload(isEditMode);
-  const requiresPositionLink = (getOrganizationJobTitleScopeValue() === 'organization' ||
-    state.p7bDepartmentReportingEnabled === true) &&
+  // R40: active Phase 7B permits title creation without a reporting link.
+  // Existing links are preserved by the deployed atomic RPC when configuration=false.
+  const requiresPositionLink = (getOrganizationJobTitleScopeValue() === 'organization' &&
+    state.p7bDepartmentReportingEnabled !== true) &&
     normalizeText(payload.p_status) === 'active';
   const selectedParent = requiresPositionLink
     ? String(state.dom.organizationJobTitleReportsTo?.value || '').trim()

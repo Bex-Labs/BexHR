@@ -89,6 +89,8 @@
     }
   }
 
+  // Local-only R40 catalogue reconciliation: prepares an HR-reviewed title, not a write.
+  // Job titles are tenant-defined; no special Manager title is required.
   function filterSupervisorChoices() {
     if (rejectedSupervisorPositions.size === 0) return;
     for (const id of ['bexhrH6CParent', 'organizationJobTitleReportsTo']) {
@@ -290,6 +292,7 @@
       chartSelected = key === 'chart';
       const source = key === 'chart' ? 'reportingLines' : key;
       originalOpen(source, { focus: false });
+      if (!chartSelected) window.BexHRR40OrgStepMemory?.save(source);
       if (chartSelected) renderChart();
       showSelection();
       // Avoid forced scroll to the top of the entire HR dashboard.
@@ -298,13 +301,30 @@
     window.hrOpenOrganizationSetupPanel = function (key, options) {
       chartSelected = false;
       const result = originalOpen(key, options);
+      if (result && options?.remember !== false) {
+        if (GROUP.has(key)) window.BexHRR40OrgStepMemory?.save(key);
+        else if (key === 'organization' || key === 'auditHistory')
+          window.BexHRR40OrgStepMemory?.save('');
+      }
       showSelection();
       return result;
     };
-    groupTab.addEventListener('click', () => { chartSelected = false; queueMicrotask(showSelection); });
-    org.addEventListener('click', () => { chartSelected = false; queueMicrotask(showSelection); });
+    groupTab.addEventListener('click', () => {
+      chartSelected = false;
+      window.BexHRR40OrgStepMemory?.save('departments');
+      queueMicrotask(showSelection);
+    });
+    org.addEventListener('click', () => {
+      chartSelected = false;
+      window.BexHRR40OrgStepMemory?.save('');
+      queueMicrotask(showSelection);
+    });
     const audit = tabFor('auditHistory');
-    if (audit) audit.addEventListener('click', () => { chartSelected = false; queueMicrotask(showSelection); });
+    if (audit) audit.addEventListener('click', () => {
+      chartSelected = false;
+      window.BexHRR40OrgStepMemory?.save('');
+      queueMicrotask(showSelection);
+    });
 
     // Existing keyboard handling counts hidden tabs; restrict it to visible tabs.
     switcher.addEventListener('keydown', (event) => {

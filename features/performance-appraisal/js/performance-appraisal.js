@@ -10673,10 +10673,59 @@
       const link = document.createElement("a"); link.href = url; link.download = `pa-progress-${new Date().toISOString().slice(0,10)}.csv`;
       link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     };
-    section.append(title,summary,exportButton);
-    const wrap=document.createElement("div"); wrap.className="table-responsive";
-    const table=document.createElement("table"); table.className="table table-sm";
-    const caption=document.createElement("caption"); caption.textContent="Latest employee progress for the current filters"; table.appendChild(caption);
+    // BEXHR_PA_UI_001_REPORT_LAYOUT_20261119
+    // Presentation only. Existing rows, evidence counts and CSV remain intact.
+
+    title.className = "bex-pa-progress-report__title";
+    title.textContent = "Progress at a glance";
+
+    summary.className = "bex-pa-progress-report__description";
+    summary.textContent =
+      "Latest update per goal. Progress tracking remains separate from appraisal scoring.";
+
+    exportButton.className =
+      "btn btn-outline-primary btn-sm bex-pa-progress-report__export";
+
+    const reportHeader = document.createElement("div");
+    reportHeader.className = "bex-pa-progress-report__header";
+
+    const reportIntro = document.createElement("div");
+    reportIntro.className = "bex-pa-progress-report__intro";
+
+    const reportKicker = document.createElement("p");
+    reportKicker.className = "bex-pa-progress-report__kicker";
+    reportKicker.textContent = "PROGRESS OVERVIEW";
+
+    reportIntro.append(reportKicker, title, summary);
+    reportHeader.append(reportIntro, exportButton);
+
+    const reportMetrics = document.createElement("div");
+    reportMetrics.className = "bex-pa-progress-report__metrics";
+
+    [
+      ["Employees", new Set(rows.map(row => row.employeeId)).size],
+      ["Goals", rows.length],
+      ["Awaiting update", rows.filter(row => row.count === 0).length]
+    ].forEach(([label, value]) => {
+      const metric = document.createElement("div");
+      metric.className = "bex-pa-progress-report__metric";
+
+      const metricValue = document.createElement("strong");
+      metricValue.className = "bex-pa-progress-report__metric-value";
+      metricValue.textContent = String(value);
+
+      const metricLabel = document.createElement("span");
+      metricLabel.className = "bex-pa-progress-report__metric-label";
+      metricLabel.textContent = label;
+
+      metric.append(metricValue, metricLabel);
+      reportMetrics.appendChild(metric);
+    });
+
+    section.append(reportHeader, reportMetrics);
+    const wrap=document.createElement("div"); wrap.className="table-responsive bex-pa-progress-report__table-wrap";
+    const table=document.createElement("table"); table.className="table table-sm align-middle mb-0 bex-pa-progress-report__table";
+    const caption=document.createElement("caption"); caption.className="visually-hidden"; caption.textContent="Latest employee progress for the current filters"; table.appendChild(caption);
     const head=document.createElement("thead");const tr=document.createElement("tr");
     ["Employee","Department","Cycle","Goal","Progress / status","Last updated","Summary","Evidence files"].forEach(text=>{const th=document.createElement("th");th.scope="col";th.textContent=text;tr.appendChild(th);});head.appendChild(tr);table.appendChild(head);
     const body=document.createElement("tbody");
@@ -21672,4 +21721,199 @@
     "DOMContentLoaded",
     bexPaInitialiseAppraisalCycles,
   );
+})();
+/* BEXHR_PA_UI_002_TEN_RECORD_SCROLL_20261119
+   Presentation only. Ten visible records before inner scrolling.
+   Applies across authorised PA modes without changing data. */
+(function () {
+  "use strict";
+
+  const LIMIT = 10;
+
+  const LISTS = [
+    ["bexPaOrganisationGoalsList", ".bex-pa-goal-item"],
+    ["bexPaDeliverablesList", ".bex-pa-goal-item"],
+    ["bexPaDepartmentGoalsList", ".bex-pa-goal-item"],
+    ["bexPaIndividualGoalsList", ".bex-pa-goal-item"],
+    ["bexPaProgressUpdatesList", ".bex-pa-goal-item"],
+    ["bexPaTemplatesList", ".bex-pa-template-item"],
+    ["bexPaEmployeeAppraisalsList", ".bex-pa-appraisal-item"]
+  ];
+
+  const root = document.getElementById("bexPaMainContent");
+  if (!root) return;
+
+  let scheduled = false;
+  let printing = false;
+
+  function visible(element) {
+    if (!element || !element.isConnected) return false;
+
+    if (element.closest('.d-none, [hidden], [aria-hidden="true"]')) {
+      return false;
+    }
+
+    if (window.getComputedStyle(element).display === "none") {
+      return false;
+    }
+
+    return element.getClientRects().length > 0;
+  }
+
+  function setStyle(element, property, value) {
+    if (
+      element.style.getPropertyValue(property) !== value ||
+      element.style.getPropertyPriority(property) !== "important"
+    ) {
+      element.style.setProperty(property, value, "important");
+    }
+  }
+
+  function applyPolicy(container, records, isTable) {
+    if (!visible(container)) return;
+
+    const displayed = records.filter(visible);
+    const enableScroll = displayed.length > LIMIT;
+
+    let maxHeight = "none";
+
+    if (enableScroll) {
+      const tenth = displayed[LIMIT - 1];
+      const containerRect = container.getBoundingClientRect();
+      const tenthRect = tenth.getBoundingClientRect();
+
+      const scale = container.offsetWidth > 0
+        ? containerRect.width / container.offsetWidth
+        : 1;
+
+      const safeScale =
+        Number.isFinite(scale) && scale > 0 ? scale : 1;
+
+      const height = Math.ceil(
+        container.scrollTop +
+        (tenthRect.bottom - containerRect.top) / safeScale + 2
+      );
+
+      if (!Number.isFinite(height) || height < 48) return;
+
+      maxHeight = height + "px";
+    }
+
+    setStyle(container, "max-height", maxHeight);
+
+    setStyle(
+      container,
+      "overflow-y",
+      enableScroll ? "auto" : (isTable ? "auto" : "visible")
+    );
+
+    setStyle(
+      container,
+      "overflow-x",
+      isTable ? "auto" : (enableScroll ? "hidden" : "visible")
+    );
+
+    container.dataset.bexhrPaTenRecordScroll =
+      enableScroll ? "on" : "off";
+
+    if (!enableScroll && container.scrollTop !== 0) {
+      container.scrollTop = 0;
+    }
+
+    if (enableScroll && !container.hasAttribute("tabindex")) {
+      container.setAttribute("tabindex", "0");
+      container.dataset.bexhrPaScrollTabindex = "true";
+    }
+
+    if (
+      !enableScroll &&
+      container.dataset.bexhrPaScrollTabindex === "true"
+    ) {
+      container.removeAttribute("tabindex");
+      delete container.dataset.bexhrPaScrollTabindex;
+    }
+  }
+
+  function update() {
+    scheduled = false;
+    if (printing) return;
+
+    LISTS.forEach(([id, selector]) => {
+      const container = document.getElementById(id);
+      if (!container || !root.contains(container)) return;
+
+      const records = Array.from(
+        container.querySelectorAll(selector)
+      );
+
+      applyPolicy(container, records, false);
+    });
+
+    root.querySelectorAll(".table-responsive").forEach(wrapper => {
+      if (wrapper.closest('dialog, .modal, [role="dialog"]')) {
+        return;
+      }
+
+      const table = wrapper.querySelector("table");
+      const tbody = table?.tBodies?.[0];
+
+      if (!tbody) return;
+
+      const records = Array.from(tbody.rows).filter(row => {
+        if (row.querySelector('td[colspan]')) return false;
+        return true;
+      });
+
+      applyPolicy(wrapper, records, true);
+    });
+  }
+
+  function schedule() {
+    if (scheduled || printing) return;
+
+    scheduled = true;
+    window.requestAnimationFrame(update);
+  }
+
+  const observer = new MutationObserver(schedule);
+
+  observer.observe(root, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class", "hidden", "aria-hidden"]
+  });
+
+  window.addEventListener("resize", schedule);
+  window.addEventListener("load", schedule);
+  window.addEventListener("pageshow", schedule);
+
+  if (document.fonts?.ready) {
+    document.fonts.ready.then(schedule).catch(() => {});
+  }
+
+  // Printed reports must not be clipped by screen scroll limits.
+  window.addEventListener("beforeprint", () => {
+    printing = true;
+
+    root.querySelectorAll(
+      '[data-bexhr-pa-ten-record-scroll]'
+    ).forEach(container => {
+      container.style.removeProperty("max-height");
+      container.style.removeProperty("overflow-x");
+      container.style.removeProperty("overflow-y");
+    });
+  });
+
+  window.addEventListener("afterprint", () => {
+    printing = false;
+    schedule();
+  });
+
+  window.BexHrPaTenRecordScroll = Object.freeze({
+    limit: LIMIT,
+    refresh: schedule
+  });
+
+  schedule();
 })();

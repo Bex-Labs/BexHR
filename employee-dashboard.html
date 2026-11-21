@@ -89,6 +89,18 @@
   <link rel="stylesheet" href="css/pre7b-simplification.css?v=14d" />
   <!-- BEXHR_H11_LEADERSHIP_CONTEXT_20261113: verified position display only -->
   <link rel="stylesheet" href="css/bexhr-h11-leadership-header-chip.css?v=h11lead1">
+<!-- BEXHR_EMPLOYEE_UI_001_20261119
+     Employee Payroll History stays open.
+     Presentation only; authorised payroll functionality remains intact. -->
+<style id="bexhrEmployeeUi001">
+body.bexhr-employee-visual-refresh #togglePayrollHistoryCardBtn {
+    display: none !important;
+}
+
+body.bexhr-employee-visual-refresh #payrollHistoryCardCollapse.d-none {
+    display: block !important;
+}
+</style>
 </head>
 
 <body class="dashboard-page bexhr-has-sidebar bexhr-employee-visual-refresh employee-workspace-booting"
@@ -1781,6 +1793,8 @@
   <script src="js/bexhr-group-b-v13.js?v=13"></script>
   <!-- BEXHR_GROUP_B_V14_PATCH -->
   <script src="js/bexhr-group-b-v14-leave.js?v=14"></script>
+  <!-- REDESIGN37_HR_UI_004_SELF_SERVICE_FIRST_PAINT -->
+  <script src="js/bexhr-selfservice-firstpaint-r37.js?v=r37ui004"></script>
   <script src="js/employee-dashboard.js?v=h12g57sync20261112"></script>
 
   <script>

@@ -53,39 +53,49 @@ const EMPLOYEE_DASHBOARD_WORKSPACE_BOOT_KEY = "hrPayroll:lastEmployeeWorkspace:l
 // account identity, and the intended top-level workspace are ready.
 // Slower profile, request, image, leave, and payroll reads continue
 // progressively after the shell becomes visible.
+// REDESIGN37_HR_UI_004_SELF_SERVICE_FIRST_PAINT
+// Only the initial Employee Leave/Payroll refresh is gated; later navigation
+// and the existing employee data/authority requests are unchanged.
+let employeeSelfServiceFirstPaintReleaseStarted = false;
 function releaseEmployeeWorkspaceLoader() {
-  // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
-  // Keep fast Employee restores visible long enough to read as intentional.
+  if (employeeSelfServiceFirstPaintReleaseStarted) return;
+  employeeSelfServiceFirstPaintReleaseStarted = true;
+
   const releaseWorkspace = () => {
     const body = document.body;
     const loader = document.getElementById("bexhrWorkspaceLoader");
-    const firstPaintGate = document.getElementById(
-      "employeeWorkspaceFirstPaintGate",
-    );
+    const firstPaintGate = document.getElementById("employeeWorkspaceFirstPaintGate");
 
     body?.classList.remove("employee-workspace-booting");
     body?.removeAttribute("aria-busy");
     firstPaintGate?.remove();
 
     if (!loader) return;
-
     loader.setAttribute("aria-hidden", "true");
     loader.style.pointerEvents = "none";
-
-    window.setTimeout(() => {
-      loader.remove();
-    }, 220);
+    window.setTimeout(() => loader.remove(), 220);
   };
 
-  const loaderElapsed = Number(window.performance?.now?.()) || 0;
-  const remainingLoaderTime = Math.max(0, 650 - loaderElapsed);
+  void (async () => {
+    const elapsed = Number(window.performance?.now?.()) || 0;
+    const remaining = Math.max(0, 650 - elapsed);
+    if (remaining) await new Promise(resolve => window.setTimeout(resolve, remaining));
 
-  if (remainingLoaderTime > 0) {
-    window.setTimeout(releaseWorkspace, remainingLoaderTime);
-    return;
-  }
-
-  releaseWorkspace();
+    const currentSectionIsSelfService = Boolean(
+      state.currentUser?.id &&
+      (document.getElementById('leaveSection')?.classList.contains('d-none') === false ||
+       document.getElementById('payrollSection')?.classList.contains('d-none') === false)
+    );
+    await window.BexHRR37SelfServiceFirstPaint?.waitForReady?.({
+      surface: 'employee',
+      expected: currentSectionIsSelfService,
+      isInitialised: () => Boolean(state.employeeRecord?.id),
+    });
+    releaseWorkspace();
+  })().catch(error => {
+    console.warn('[R37 UI-004] Employee first-paint guard failed:', error);
+    releaseWorkspace();
+  });
 }
 
 /* =========================================================
@@ -228,6 +238,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
 
     await loadLatestEmployeeProfile();
+    state.employeeLeaveActiveView = readEmployeeLeaveView() || EMPLOYEE_LEAVE_VIEW_DEFAULT;
     // BEXHR_GROUP_B_V13_PATCH: read-only tenant position labels.
     await window.BexHRGroupBV13?.loadScope(getSupabaseClient(),state.currentProfile?.tenant_id);
     primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
@@ -1178,6 +1189,7 @@ function bindNavigationEvents() {
         // open that Leave pane rather than restoring a previously viewed pane.
         if (target === "leave") {
           state.employeeLeaveActiveView = "request";
+          rememberEmployeeLeaveView("request");
         }
 
         showSection(target);
@@ -1925,6 +1937,33 @@ const EMPLOYEE_LEAVE_VIEW_KEYS = new Set([
   "decision",
 ]);
 
+// REDESIGN37_HR_UI004_R1: remember Employee Leave tab on refresh.
+const EMPLOYEE_LEAVE_MEMORY_PREFIX = "bexhr:r37:employee-leave-view";
+
+function employeeLeaveStorageKey() {
+  const user = String(state.currentUser?.id || "").trim();
+  const tenant = String(state.currentProfile?.tenant_id || "").trim();
+  return user && tenant
+    ? `${EMPLOYEE_LEAVE_MEMORY_PREFIX}:${tenant}:${user}`
+    : "";
+}
+
+function readEmployeeLeaveView() {
+  const key = employeeLeaveStorageKey();
+  if (!key) return null;
+  try {
+    const view = sessionStorage.getItem(key);
+    return EMPLOYEE_LEAVE_VIEW_KEYS.has(view) ? view : null;
+  } catch (_) { return null; }
+}
+
+function rememberEmployeeLeaveView(view) {
+  const key = employeeLeaveStorageKey();
+  if (!key) return;
+  try { sessionStorage.setItem(key, view); }
+  catch (_) { /* Storage is optional. */ }
+}
+
 function normaliseEmployeeLeaveView(view = "") {
   const key = String(view || "").trim().toLowerCase();
   return EMPLOYEE_LEAVE_VIEW_KEYS.has(key)
@@ -1969,6 +2008,7 @@ function setEmployeeLeaveView(view = EMPLOYEE_LEAVE_VIEW_DEFAULT, options = {}) 
   state.employeeLeaveActiveView = resolved;
   section.classList.add("ss-leave-inline-mode");
   section.dataset.employeeLeaveView = resolved;
+  if (options.focus === true) rememberEmployeeLeaveView(resolved);
 
   nodes.balanceCard?.classList.toggle("d-none", resolved !== "balances");
   nodes.decisionCard?.classList.toggle("d-none", resolved !== "decision");
@@ -4555,6 +4595,15 @@ function getLeaveTypeEligibilityBlock(leaveType = {}) {
 function updateLeaveRequestBlockNotice() {
   const notice = state.dom.leaveRequestBlockNotice;
   if (!notice) return;
+
+  // BEXHR_EMPLOYEE_UI_001_20261119
+  // Hide only the temporary loading warning.
+  // Actual manager verification and submission blocking remain active.
+  if (state.leavePrimaryManagerReadinessStatus === "loading") {
+    notice.classList.add("d-none");
+    notice.textContent = "";
+    return;
+  }
 
   const block = getLeaveRequestPolicyBlock();
 

@@ -104,22 +104,74 @@
       }
     }
   }
+  // BEXHR_EMPLOYEE_UI_002_20261119
+  // Keep the last verified Employee Leave display during background checks.
+  // New identities and failed checks retain the original protective gate.
+  let employeePositionApplySequence = 0;
+
   async function apply(client, employeeId) {
     const id = String(employeeId || '').trim();
-    current = { id, highest: false, verified: false };
-    // BEXHR_H12_LEAVE_AUTHORITY_BOOT_GATE_20261114
-    document.documentElement.removeAttribute('data-bexhr-h12-leave-position');
-    if (!id || !client || typeof client.rpc !== 'function') { syncView(); return false; }
-    try {
-      const { data, error } = await client.rpc('bexhr_p7b_my_organization_position', { p_employee_id: id });
-      if (!error && data && checkStatuses.has(data.status) && current.id === id) {
-        current = { id, highest: data.status === 'CONFIGURED_ROOT' || data.status === 'HIGHEST_OCCUPIED', verified: true };
-      }
-    } catch (_) { /* Neutral UI on transient lookup error; leave server readiness remains authoritative. */ }
-    syncView();
-    if (current.verified) {
-      document.documentElement.setAttribute('data-bexhr-h12-leave-position', current.highest ? 'highest' : 'other');
+    const sequence = ++employeePositionApplySequence;
+
+    const keepVerifiedEmployeeView = Boolean(
+      id &&
+      current.id === id &&
+      current.verified &&
+      document.body?.classList.contains('bexhr-employee-visual-refresh')
+    );
+
+    if (!keepVerifiedEmployeeView) {
+      current = { id, highest: false, verified: false };
+      // BEXHR_H12_LEAVE_AUTHORITY_BOOT_GATE_20261114
+      document.documentElement.removeAttribute('data-bexhr-h12-leave-position');
     }
+
+    if (!id || !client || typeof client.rpc !== 'function') {
+      current = { id, highest: false, verified: false };
+      document.documentElement.removeAttribute('data-bexhr-h12-leave-position');
+      syncView();
+      return false;
+    }
+
+    let next = { id, highest: false, verified: false };
+
+    try {
+      const { data, error } = await client.rpc(
+        'bexhr_p7b_my_organization_position',
+        { p_employee_id: id }
+      );
+
+      if (!error && data && checkStatuses.has(data.status)) {
+        next = {
+          id,
+          highest: data.status === 'CONFIGURED_ROOT' ||
+                   data.status === 'HIGHEST_OCCUPIED',
+          verified: true
+        };
+      }
+    } catch (_) {
+      // A failed verification must not grant Leave access.
+    }
+
+    if (sequence !== employeePositionApplySequence ||
+        current.id !== id) {
+      return false;
+    }
+
+    current = next;
+    syncView();
+
+    if (current.verified) {
+      document.documentElement.setAttribute(
+        'data-bexhr-h12-leave-position',
+        current.highest ? 'highest' : 'other'
+      );
+    } else {
+      document.documentElement.removeAttribute(
+        'data-bexhr-h12-leave-position'
+      );
+    }
+
     return current.verified;
   }
   root.BexHRGroupBV14Leave = Object.freeze({ apply, isHighestCurrent, syncView });
