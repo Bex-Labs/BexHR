@@ -89,7 +89,7 @@ to authenticated;
 
 create table bex_pa_private.admin_pa_clear_jobs (
     id uuid primary key default gen_random_uuid(),
-    tenant_id uuid not null references public.tenants(id),
+    tenant_id uuid not null,
     actor_user_id uuid not null,
     status text not null default 'storage_pending'
         check (status in ('storage_pending', 'complete')),
