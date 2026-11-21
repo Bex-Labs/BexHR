@@ -1,0 +1,1 @@
+ALTER FUNCTION public.bexhr_p7b_preflight_highest_position(uuid) VOLATILE;
