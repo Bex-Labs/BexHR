@@ -1,0 +1,14 @@
+/* Group B: compact CEO/COO hierarchy workflow that follows existing BexHR forms. */
+.bexhr-bc-v3-executive { margin: 1rem 0 1.2rem; padding: 1rem 1.15rem; border: 1px solid #cde5e7; border-radius: 14px; background: #f7fcfc; }
+.bexhr-bc-v3-executive[hidden], .bexhr-bc-v3-panel[hidden] { display: none !important; }
+.bexhr-bc-v3-helper { margin: 0 0 .7rem; color: #42586a; font-size: .92rem; line-height: 1.5; }
+.bexhr-bc-v3-panel { margin-top: 1rem; border-top: 1px solid #d4e9e9; padding-top: 1rem; max-width: 44rem; }
+.bexhr-bc-v3-panel .form-control { min-height: 44px; }
+.bexhr-bc-v3-preview { margin: .85rem 0; border-left: 4px solid #0c9693; background: #eaf8f7; padding: .8rem; border-radius: 0 8px 8px 0; font-weight: 650; color: #214154; }
+.bexhr-bc-v3-confirm { display: flex; gap: .75rem; align-items: flex-start; line-height: 1.5; color: #304b5c; }
+.bexhr-bc-v3-confirm input { flex: 0 0 auto; margin-top: .25rem; }
+.bexhr-bc-v3-actions { display: flex; flex-wrap: wrap; gap: .7rem; margin: 1rem 0; }
+.bexhr-bc-v3-actions .btn { min-height: 44px; }
+.bexhr-bc-v3-status { font-size: .93rem; line-height: 1.45; }
+.bexhr-bc-v3-success { color: #086649; }
+.bexhr-bc-v3-error { color: #a02b24; }

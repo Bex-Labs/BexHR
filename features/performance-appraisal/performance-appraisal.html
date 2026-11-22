@@ -23,18 +23,14 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
 
     <link rel="stylesheet" href="../../css/styles.css" />
-    <link rel="stylesheet" href="css/performance-appraisal.css" />
+    <link rel="stylesheet" href="../../css/bexhr-h12-workspace-switcher-polish.css?v=h12g4ui02" />
+    <link rel="stylesheet" href="../../css/bexhr-workspace-switcher-portal.css?v=20261114b" />
+    <link rel="stylesheet" href="css/performance-appraisal.css?v=r14dpa1" />
 
     <script>
         (() => {
-            const navigationEntry =
-                window.performance
-                    .getEntriesByType("navigation")[0];
-
-            if (navigationEntry?.type !== "reload") {
-                return;
-            }
-
+            // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
+            // Show the same quiet loader on first entry and browser refresh.
             window.BexPaRefreshLoaderStartedAt =
                 window.performance.now();
 
@@ -50,6 +46,56 @@
             visibility: visible;
             pointer-events: auto;
         }
+    </style>
+
+    <style id="bexPaImmediateButtonFeedbackStyle">
+        button,
+        [role="button"] {
+            transition:
+                transform 80ms ease,
+                opacity 80ms ease,
+                filter 80ms ease;
+        }
+
+        button.bex-pa-action-pressed:not(:disabled),
+        [role="button"].bex-pa-action-pressed:not([aria-disabled="true"]) {
+            transform: translateY(1px) scale(0.99);
+            opacity: 0.88;
+            filter: brightness(0.97);
+        }
+    </style>
+  <!-- PRE-7B: reversible UI simplification; existing business data is preserved. -->
+  <link rel="stylesheet" href="../../css/pre7b-simplification.css?v=h12g57sync20261112" />
+    <!-- BEXHR_H12_PA_NATIVE_WORKSPACE_SWITCHER_20261114: reuse the live HR/Manager switcher and floating portal. -->
+    <style id="bexPaH12NativeSwitcherStyle">
+      body.bex-pa-page #bexPaAuthSwitcherArea[hidden],
+      body.bex-pa-page #bexPaAuthSwitcherArea.d-none { display: none !important; }
+      body.bex-pa-page #bexPaAuthSwitcherArea { flex: 0 0 auto; position: relative; }
+      body.bex-pa-page #bexPaAuthSwitcherArea .bex-pa-auth-switcher-button {
+        display: flex; align-items: center; gap: .7rem; min-height: 48px;
+        padding: .5rem .85rem; border: 1px solid #d5e7e5;
+        background: linear-gradient(135deg, #fff 0%, #f5fbfa 100%);
+        border-radius: 16px; color: #153b46; cursor: pointer; font: inherit;
+        text-align: left; box-shadow: 0 2px 8px rgba(15, 23, 42, .035);
+      }
+      body.bex-pa-page #bexPaAuthSwitcherArea .bex-pa-auth-switcher-button:hover,
+      body.bex-pa-page #bexPaAuthSwitcherArea .bex-pa-auth-switcher-button[aria-expanded="true"] {
+        border-color: #8dcac3; background: #f8fdfc;
+        box-shadow: 0 4px 15px rgba(14, 116, 105, .08);
+      }
+      body.bex-pa-page .bex-pa-auth-switcher-icon {
+        width: 32px; height: 32px; display: inline-flex; align-items: center;
+        justify-content: center; flex: none; border-radius: 10px;
+        background: #e5f7f4; color: #0f766e;
+      }
+      body.bex-pa-page .bex-pa-auth-switcher-copy { display: flex; flex-direction: column; line-height: 1.3; }
+      body.bex-pa-page .bex-pa-auth-switcher-copy strong { font-size: .82rem; font-weight: 750; }
+      body.bex-pa-page .bex-pa-auth-switcher-copy small { font-size: .71rem; color: #667b86; }
+      body.bex-pa-page .bex-pa-auth-switcher-chevron { color: #81939d; font-size: .8rem; }
+      @media (max-width: 575.98px) {
+        body.bex-pa-page #bexPaAuthSwitcherArea .bex-pa-auth-switcher-button { padding: .45rem .6rem; }
+        body.bex-pa-page .bex-pa-auth-switcher-copy small { display: none; }
+      }
     </style>
 </head>
 
@@ -123,6 +169,15 @@
                 </div>
 
                 <div class="d-flex align-items-center gap-3">
+                    <!-- BEXHR_H12_PA_NATIVE_WORKSPACE_SWITCHER_20261114: shown only after live dual-workspace entitlement. -->
+                    <div id="bexPaAuthSwitcherArea" class="bex-pa-auth-switcher-area d-none" hidden>
+                        <button type="button" class="manager-modern-account-button bex-pa-auth-switcher-button"
+                            aria-label="Switch authorised HR and Manager workspaces" aria-haspopup="menu" aria-expanded="false">
+                            <span class="bex-pa-auth-switcher-icon" aria-hidden="true"><i class="bi bi-grid"></i></span>
+                            <span class="bex-pa-auth-switcher-copy"><strong>Workspaces</strong><small>HR &amp; Manager</small></span>
+                            <i class="bi bi-chevron-down bex-pa-auth-switcher-chevron" aria-hidden="true"></i>
+                        </button>
+                    </div>
                     <label class="visually-hidden" for="bexPaDevelopmentPersona">
                         Appraisal development persona
                     </label>
@@ -191,7 +246,7 @@
                             </li>
 
                             <li class="nav-item">
-                                <button class="nav-link w-100 text-start" id="bexPaEmployeeAppraisalsNavButton"
+                                <button class="nav-link w-100 text-start d-none" hidden id="bexPaEmployeeAppraisalsNavButton"
                                     type="button" data-bex-pa-target="bexPaEmployeeAppraisalsSection">
                                     <i class="bi bi-clipboard2-check me-2" aria-hidden="true"></i>
                                     Employee Appraisals
@@ -300,21 +355,21 @@
                                     </div>
                                 </article>
 
-                                <article class="bex-pa-summary-card bex-pa-summary-card--review"
-                                    data-bex-pa-summary="awaiting-hr">
+                                <article class="bex-pa-summary-card bex-pa-summary-card--workflow"
+                                    data-bex-pa-summary="workflow">
                                     <div class="bex-pa-summary-icon" aria-hidden="true">
-                                        <i class="bi bi-inbox"></i>
+                                        <i class="bi bi-hourglass-split"></i>
                                     </div>
 
                                     <div class="bex-pa-summary-content">
                                         <p class="bex-pa-summary-label mb-1">
-                                            Awaiting HR review
+                                            Pending HR finalisation
                                         </p>
 
                                         <p class="display-6 bex-pa-summary-value mb-1 fw-bold">0</p>
 
                                         <p class="bex-pa-summary-detail mb-0">
-                                            Appraisals requiring HR attention
+                                            Submitted appraisals awaiting finalisation
                                         </p>
                                     </div>
                                 </article>
@@ -386,7 +441,8 @@
 
                             <section class="bex-pa-overview-operations d-none mb-4"
                                 id="bexPaOverviewOperations"
-                                aria-label="Appraisal operations">
+                                aria-label="Appraisal operations"
+                                style="display: grid; grid-template-columns: minmax(0, 1fr); align-items: start;">
 
                                 <article class="bex-pa-overview-panel"
                                     aria-labelledby="bexPaOverviewPriorityTitle">
@@ -890,7 +946,7 @@
                                                         </h2>
 
                                                         <p class="mb-0 small text-body-secondary">
-                                                            Link department priorities to organisation goals.
+                                                            Managers set department goals; organisation links are optional.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -934,7 +990,7 @@
                                                         </h2>
 
                                                         <p class="mb-0 small text-body-secondary">
-                                                            Assign employee goals linked to department priorities.
+                                                            Primary managers set employee goals; department links are optional.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1059,16 +1115,6 @@
                                                 <input class="form-control" id="bexPaOrganisationGoalTarget" type="text"
                                                     maxlength="150" placeholder="e.g. Increase to 90%" required />
                                             </div>
-
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaOrganisationGoalOwner">
-                                                    Responsible owner
-                                                </label>
-
-                                                <input class="form-control" id="bexPaOrganisationGoalOwner" type="text"
-                                                    maxlength="120" placeholder="e.g. Head of Operations" required />
-                                            </div>
-
                                             <div class="col-12 col-md-6">
                                                 <label class="form-label fw-semibold" for="bexPaOrganisationGoalStatus">
                                                     Status
@@ -1192,16 +1238,6 @@
                                                 <input class="form-control" id="bexPaDeliverableTarget" type="text"
                                                     maxlength="150" placeholder="e.g. Under 2 hours" required />
                                             </div>
-
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaDeliverableOwner">
-                                                    Responsible owner
-                                                </label>
-
-                                                <input class="form-control" id="bexPaDeliverableOwner" type="text"
-                                                    maxlength="120" placeholder="e.g. Customer Support Lead" required />
-                                            </div>
-
                                             <div class="col-12 col-md-6">
                                                 <label class="form-label fw-semibold" for="bexPaDeliverableStatus">
                                                     Status
@@ -1271,11 +1307,10 @@
                                             <div class="col-12">
                                                 <label class="form-label fw-semibold"
                                                     for="bexPaDepartmentGoalOrganisationGoal">
-                                                    Organisation goal
+                                                    Organisation goal (optional)
                                                 </label>
 
-                                                <select class="form-select" id="bexPaDepartmentGoalOrganisationGoal"
-                                                    required>
+                                                <select class="form-select" id="bexPaDepartmentGoalOrganisationGoal">
                                                     <option value="">
                                                         Select organisation goal
                                                     </option>
@@ -1287,9 +1322,9 @@
                                                     Appraisal cycle
                                                 </label>
 
-                                                <input class="form-control" id="bexPaDepartmentGoalCycle" type="text"
-                                                    readonly
-                                                    placeholder="Selected automatically from organisation goal" />
+                                                <select class="form-select" id="bexPaDepartmentGoalCycle" required>
+                                                    <option value="">Select appraisal cycle</option>
+                                                </select>
                                             </div>
 
                                             <div class="col-12">
@@ -1333,16 +1368,6 @@
                                                 <input class="form-control" id="bexPaDepartmentGoalTarget" type="text"
                                                     maxlength="150" placeholder="e.g. Under 24 hours" required />
                                             </div>
-
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label fw-semibold" for="bexPaDepartmentGoalOwner">
-                                                    Responsible owner
-                                                </label>
-
-                                                <input class="form-control" id="bexPaDepartmentGoalOwner" type="text"
-                                                    maxlength="120" placeholder="e.g. HR Operations Lead" required />
-                                            </div>
-
                                             <div class="col-12 col-md-6">
                                                 <label class="form-label fw-semibold" for="bexPaDepartmentGoalStatus">
                                                     Status
@@ -1434,19 +1459,18 @@
                                                 </div>
 
                                                 <div class="form-text">
-                                                    Select one employee. Department and department goals will be derived
-                                                    automatically.
+                                                    Select one direct report. Department comes from the employee record;
+                                                    linking a department goal is optional.
                                                 </div>
                                             </div>
 
                                             <div class="col-12">
                                                 <label class="form-label fw-semibold"
                                                     for="bexPaIndividualGoalDepartmentGoal">
-                                                    Department goal
+                                                    Department goal (optional)
                                                 </label>
 
-                                                <select class="form-select" id="bexPaIndividualGoalDepartmentGoal"
-                                                    required>
+                                                <select class="form-select" id="bexPaIndividualGoalDepartmentGoal">
                                                     <option value="">
                                                         Select department goal
                                                     </option>
@@ -1461,7 +1485,7 @@
 
                                                 <input class="form-control" id="bexPaIndividualGoalDepartment"
                                                     type="text" readonly
-                                                    placeholder="Selected automatically from department goal" />
+                                                    placeholder="Selected from employee" />
                                             </div>
 
                                             <div class="col-12 col-md-6">
@@ -1469,9 +1493,9 @@
                                                     Appraisal cycle
                                                 </label>
 
-                                                <input class="form-control" id="bexPaIndividualGoalCycle" type="text"
-                                                    readonly
-                                                    placeholder="Selected automatically from department goal" />
+                                                <select class="form-select" id="bexPaIndividualGoalCycle" required>
+                                                    <option value="">Select appraisal cycle</option>
+                                                </select>
                                             </div>
 
                                             <div class="col-12">
@@ -1658,6 +1682,17 @@
                                                     maxlength="1000"
                                                     placeholder="Add a concise evidence note or reference, if available."></textarea>
                                             </div>
+
+                                            <div class="col-12" data-bex-pa-evidence-input>
+                                                <label class="form-label fw-semibold" for="bexPaProgressUpdateFiles">
+                                                    Supporting evidence files (optional)
+                                                </label>
+                                                <input class="form-control" id="bexPaProgressUpdateFiles" type="file"
+                                                    accept=".pdf,.png,.jpg,.jpeg,.webp" multiple>
+                                                <div class="form-text">
+                                                    Up to 3 files, 10 MB each. Private to authorised appraisal participants.
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -1683,9 +1718,6 @@
                                     </span>
 
                                     <div class="bex-pa-workspace-heading-copy">
-                                        <p class="bex-pa-workspace-heading-kicker mb-1">
-                                            Appraisal configuration
-                                        </p>
 
                                         <h1 class="bex-pa-workspace-heading-title mb-1" id="bexPaTemplatesTitle">
                                             Appraisal Templates
@@ -1700,13 +1732,13 @@
                                 <button class="btn btn-primary bex-pa-workspace-heading-action"
                                     id="bexPaCreateTemplateButton" type="button">
                                     <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>
-                                    Add Template
+                                    Configure Appraisal
                                 </button>
                             </div>
 
                             <section class="card border-0 shadow-sm bex-pa-template-library-card"
                                 aria-labelledby="bexPaTemplateListTitle">
-                                <div class="card-header bg-white py-3 py-lg-4">
+                                <div class="card-header bg-white py-3 py-lg-4 bex-pa-template-library-header">
                                     <div class="bex-pa-template-library-heading">
                                         <span class="bex-pa-template-library-icon" aria-hidden="true">
                                             <i class="bi bi-collection"></i>
@@ -1718,9 +1750,33 @@
                                             </h2>
 
                                             <p class="mb-0 small text-body-secondary">
-                                                Reusable assessment formats available for future appraisal cycles.
+                                                Active templates stay ready for future cycles. Drafts and archived templates are kept separately.
                                             </p>
                                         </div>
+                                    </div>
+
+                                    <div class="bex-pa-template-library-views" id="bexPaTemplateLibraryToolbar"
+                                        role="group" aria-label="Template library views">
+                                        <button class="bex-pa-template-view-button active" type="button"
+                                            data-bex-pa-template-view="active" aria-pressed="true">
+                                            <i class="bi bi-check-circle" aria-hidden="true"></i>
+                                            <span>Active</span>
+                                            <span class="bex-pa-template-view-count" data-bex-pa-template-count="active">0</span>
+                                        </button>
+
+                                        <button class="bex-pa-template-view-button" type="button"
+                                            data-bex-pa-template-view="draft" aria-pressed="false">
+                                            <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+                                            <span>Drafts</span>
+                                            <span class="bex-pa-template-view-count" data-bex-pa-template-count="draft">0</span>
+                                        </button>
+
+                                        <button class="bex-pa-template-view-button" type="button"
+                                            data-bex-pa-template-view="archive" aria-pressed="false">
+                                            <i class="bi bi-archive" aria-hidden="true"></i>
+                                            <span>Archive</span>
+                                            <span class="bex-pa-template-view-count" data-bex-pa-template-count="archive">0</span>
+                                        </button>
                                     </div>
                                 </div>
 
@@ -1741,7 +1797,7 @@
                                             </p>
 
                                             <h2 class="mb-0 h5 fw-bold" id="bexPaTemplateDialogTitle">
-                                                Add Appraisal Template
+                                                Configure Appraisal
                                             </h2>
                                         </div>
 
@@ -1777,11 +1833,7 @@
                                                 <textarea class="form-control" id="bexPaTemplateDescription" rows="4"
                                                     maxlength="1500"
                                                     placeholder="e.g. Annual performance review for all employees."
-                                                    required></textarea>
-
-                                                <div class="form-text">
-                                                    Briefly describe when this appraisal template should be used.
-                                                </div>
+                                                    ></textarea>
                                             </div>
 
                                             <div class="col-12">
@@ -1811,17 +1863,17 @@
                                                             </h3>
 
                                                             <p class="mb-0 small text-body-secondary">
-                                                                Add the rating options managers and employees will
-                                                                choose from.
+                                                                Choose the numeric scale managers will use. Scores are generated automatically. Existing appraisals retain their saved scale.
                                                             </p>
                                                         </div>
 
-                                                        <button class="btn btn-outline-primary btn-sm"
-                                                            id="bexPaAddTemplateRatingButton" type="button">
-                                                            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-                                                            Add Rating Option
-                                                        </button>
                                                     </div>
+                                                    <label class="form-label" for="bexPaTemplateScaleMaximum">Rating scale</label>
+                                                    <select class="form-select mb-3" id="bexPaTemplateScaleMaximum">
+                                                        <option value="5">Five-point scale (1–5)</option>
+                                                        <option value="10" selected>Ten-point scale (1–10)</option>
+                                                        <option value="legacy" disabled hidden>Existing custom scale</option>
+                                                    </select>
 
                                                     <div class="vstack gap-2" id="bexPaTemplateRatingsList">
                                                     </div>
@@ -2491,8 +2543,13 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../js/supabase-client.js"></script>
     <script src="../../js/session.js"></script>
+    <script src="../../js/bexhr-organization-hierarchy.js"></script>
+    <script src="../../js/bexhr-pa-position-root.js"></script>
     <script src="js/performance-appraisal-context.js"></script>
-    <script src="js/performance-appraisal.js"></script>
+    <script src="../../js/bexhr-workspace-switcher-portal.js?v=20261114b"></script>
+    <script src="js/bexhr-pa-native-workspace-switcher.js?v=h12pa20261114"></script>
+    <script src="js/performance-appraisal.js?v=h12pa20261114"></script>
+  <script src="../../js/bexhr-record-scroll-h11.js"></script>
 </body>
 
 </html>

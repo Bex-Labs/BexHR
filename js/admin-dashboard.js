@@ -12,26 +12,40 @@ try {
 // Presentation only. Releases the first-paint gate after the
 // existing authenticated Admin startup sequence completes.
 function releaseAdminWorkspaceLoader() {
-  const body = document.body;
-  const loader = document.getElementById("bexhrWorkspaceLoader");
-  const firstPaintGate = document.getElementById(
-    "adminWorkspaceFirstPaintGate",
-  );
+  // BEXHR UNIVERSAL WORKSPACE LOADER - US-01 TIMING
+  // Keep fast Admin restores visible long enough to read as intentional.
+  const releaseWorkspace = () => {
+    const body = document.body;
+    const loader = document.getElementById("bexhrWorkspaceLoader");
+    const firstPaintGate = document.getElementById(
+      "adminWorkspaceFirstPaintGate",
+    );
 
-  body?.classList.remove("admin-workspace-booting");
-  body?.removeAttribute("aria-busy");
+    body?.classList.remove("admin-workspace-booting");
+    body?.removeAttribute("aria-busy");
 
-  firstPaintGate?.remove();
+    firstPaintGate?.remove();
 
-  if (!loader) return;
+    if (!loader) return;
 
-  loader.setAttribute("aria-hidden", "true");
-  loader.style.opacity = "0";
-  loader.style.pointerEvents = "none";
+    loader.setAttribute("aria-hidden", "true");
+    loader.style.opacity = "0";
+    loader.style.pointerEvents = "none";
 
-  window.setTimeout(() => {
-    loader.remove();
-  }, 220);
+    window.setTimeout(() => {
+      loader.remove();
+    }, 220);
+  };
+
+  const loaderElapsed = Number(window.performance?.now?.()) || 0;
+  const remainingLoaderTime = Math.max(0, 650 - loaderElapsed);
+
+  if (remainingLoaderTime > 0) {
+    window.setTimeout(releaseWorkspace, remainingLoaderTime);
+    return;
+  }
+
+  releaseWorkspace();
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -72,8 +86,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     await refreshProfileTenantLinkingWorkspace();
 
     // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
-    // Workspace was already restored early. Re-assert top after async startup loads.
+    // Complete startup before restoring the remembered Admin position.
     forceAdminDashboardToTopAfterRefresh();
+
+    restoreAdminSavedLocationAfterData();
 
     // ADMIN WORKSPACE LOADER - v1.0.2
     // Existing authenticated Admin startup data is now ready.
@@ -206,15 +222,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
     window.adminOpenEmailSetupWorkspace = () => {
+      // BEXHR_GROUP_D_TEST_UI_DEACTIVATED_2026_11_10: stale help/deep links resolve to the safe Company Identity view.
       rememberAdminWorkspace("tenants");
       switchAdminWorkspace("tenants");
-      openAdminEmailSetupPanel();
+      openAdminCompanyIdentityPanel();
     };
 
     window.adminOpenUserAccessWorkspace = () => {
       rememberAdminWorkspace("tenants");
       switchAdminWorkspace("tenants");
       openAdminUserCompanyAssignmentPanel();
+
+      // BEXHR_PLATFORM_003_FRESH_ACCESS_20261119
+      // Re-read current authorised account, role and company data
+      // whenever Platform Admin opens User Access.
+      // Existing protected RPCs remain authoritative.
+      void refreshProfileTenantLinkingWorkspace();
     };
   } catch (error) {
     // ADMIN WORKSPACE LOADER - v1.0.2
@@ -391,6 +414,8 @@ function clearRememberedAdminWorkspace() {
   try {
     sessionStorage.removeItem(getAdminWorkspaceMemoryKey());
     sessionStorage.removeItem(ADMIN_DASHBOARD_WORKSPACE_BOOT_KEY);
+    sessionStorage.removeItem(getAdminCompaniesSubViewMemoryKey());
+    sessionStorage.removeItem(getAdminSavedLocationMemoryKey());
   } catch (error) {
     console.warn("Admin workspace memory could not be cleared.", error);
   }
@@ -418,6 +443,13 @@ function restoreAdminWorkspaceAfterRefresh() {
   const workspace = getRememberedAdminWorkspace();
 
   switchAdminWorkspace(workspace);
+
+  if (workspace === "tenants") {
+    switchAdminCompaniesSubWorkspace(
+      getRememberedAdminCompaniesSubView()
+    );
+  }
+
   forceAdminDashboardToTopAfterRefresh();
 
   window.requestAnimationFrame(() => {
@@ -970,34 +1002,6 @@ function bindAdminCardCollapseToggle(button, panel) {
     }
   });
 
-  // ADMIN COMPANY IDENTITY COLLAPSE RECOVERY - v1.0.0
-  // Company Identity now uses its authoritative custom card shell instead
-  // of the old Bootstrap .border wrapper.
-  //
-  // Keep .border as the fallback so Email Setup and User Access retain their
-  // existing double-click behaviour until their own visual refreshes are done.
-  const card = button.closest(
-    ".admin-company-identity-card, .border",
-  );
-
-  if (!card) return;
-
-  // ADMIN UI CLEANUP - STEP 1K RECOVERY
-  // Double-clicking a card closes it, but form controls and tables must not
-  // accidentally collapse while Admin is editing or selecting records.
-  card.addEventListener("dblclick", (event) => {
-    const interactiveTarget = event.target.closest(
-      "input, select, textarea, button, a, label, table",
-    );
-
-    if (interactiveTarget) return;
-
-    const isExpanded = !panel.classList.contains("d-none");
-
-    if (isExpanded) {
-      setAdminDashboardCardExpanded(button, panel, false);
-    }
-  });
 }
 
 function setAdminDashboardCardExpanded(button, panel, shouldExpand) {
@@ -1027,12 +1031,206 @@ function setAdminDashboardCardExpanded(button, panel, shouldExpand) {
 // Authentication remains at admin-dashboard.html through protectPage("admin").
 // Existing Company, Email and User Access workflows remain unchanged.
 // =========================================================
+/* BEXHR_PLATFORM_UI_005_LOCATION_MEMORY_20261119
+   Session-only Admin workspace, sub-workspace and position memory.
+   No company/user records or credentials are stored. */
+
+function getAdminCompaniesSubViewMemoryKey() {
+  return `${getAdminWorkspaceMemoryKey()}:companiesSubView`;
+}
+
+function getAdminSavedLocationMemoryKey() {
+  return `${getAdminWorkspaceMemoryKey()}:savedLocation`;
+}
+
+function getRememberedAdminCompaniesSubView() {
+  try {
+    return sessionStorage.getItem(
+      getAdminCompaniesSubViewMemoryKey()
+    ) === "access" ? "access" : "identity";
+  } catch {
+    return "identity";
+  }
+}
+
+function rememberAdminCompaniesSubView(view) {
+  try {
+    sessionStorage.setItem(
+      getAdminCompaniesSubViewMemoryKey(),
+      view === "access" ? "access" : "identity"
+    );
+  } catch {
+    // Storage unavailable: ordinary navigation still works.
+  }
+}
+
+function getAdminCurrentLocationKey() {
+  const workspace = getRememberedAdminWorkspace();
+
+  return workspace === "tenants"
+    ? `tenants:${getRememberedAdminCompaniesSubView()}`
+    : workspace;
+}
+
+function saveAdminLocationBeforeRefresh() {
+  if (!state.currentUser) return;
+
+  try {
+    if (!sessionStorage.getItem(getAdminWorkspaceMemoryKey())) {
+      return;
+    }
+
+    const view = getAdminCurrentLocationKey();
+    const expanded = [];
+
+    if (view === "tenants:access") {
+      const headers = document.querySelectorAll(
+        "#profileTenantLinksTableBody .admin-access-company-header-row"
+      );
+
+      headers.forEach((header, index) => {
+        const toggle = header.querySelector(
+          ".admin-access-company-toggle"
+        );
+
+        if (toggle?.getAttribute("aria-expanded") !== "true") {
+          return;
+        }
+
+        const content = document.getElementById(
+          toggle.getAttribute("aria-controls")
+        );
+
+        if (!content || content.classList.contains("d-none")) {
+          return;
+        }
+
+        const scroller = content.querySelector(
+          ".admin-access-company-scroll"
+        );
+
+        expanded.push({
+          index,
+          top: Math.max(0, Math.round(scroller?.scrollTop || 0))
+        });
+      });
+    }
+
+    sessionStorage.setItem(
+      getAdminSavedLocationMemoryKey(),
+      JSON.stringify({
+        view,
+        top: Math.max(0, Math.round(window.scrollY || 0)),
+        expanded
+      })
+    );
+  } catch {
+    // Location memory must never interrupt Admin operations.
+  }
+}
+
+function restoreAdminSavedLocationAfterData() {
+  let saved = null;
+
+  try {
+    saved = JSON.parse(
+      sessionStorage.getItem(getAdminSavedLocationMemoryKey()) ||
+      "null"
+    );
+  } catch {
+    return;
+  }
+
+  if (!saved || saved.view !== getAdminCurrentLocationKey()) {
+    return;
+  }
+
+  const entries = Array.isArray(saved.expanded)
+    ? saved.expanded
+    : [];
+
+  const buttons = Array.from(document.querySelectorAll(
+    "#profileTenantLinksTableBody " +
+    ".admin-access-company-header-row " +
+    ".admin-access-company-toggle"
+  ));
+
+  if (saved.view === "tenants:access") {
+    entries.forEach((entry) => {
+      if (
+        !Number.isInteger(entry.index) ||
+        entry.index < 0 ||
+        entry.index >= buttons.length
+      ) {
+        return;
+      }
+
+      const button = buttons[entry.index];
+
+      if (button.getAttribute("aria-expanded") !== "true") {
+        button.click();
+      }
+    });
+  }
+
+  const position = Number(saved.top);
+  const top = Number.isFinite(position)
+    ? Math.max(0, position)
+    : 0;
+
+  function applyPosition() {
+    if (saved.view === "tenants:access") {
+      entries.forEach((entry) => {
+        const button = buttons[entry.index];
+        if (!button) return;
+
+        const content = document.getElementById(
+          button.getAttribute("aria-controls")
+        );
+
+        const scroller = content?.querySelector(
+          ".admin-access-company-scroll"
+        );
+
+        if (scroller) {
+          const inner = Number(entry.top);
+
+          scroller.scrollTop = Number.isFinite(inner)
+            ? Math.max(0, inner)
+            : 0;
+        }
+      });
+    }
+
+    const root = document.documentElement;
+    const previous = root.style.scrollBehavior;
+
+    root.style.scrollBehavior = "auto";
+    window.scrollTo(0, top);
+    root.style.scrollBehavior = previous;
+
+    updateBackToTopButtonVisibility();
+  }
+
+  applyPosition();
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(applyPosition);
+  });
+
+  window.setTimeout(applyPosition, 240);
+  window.setTimeout(applyPosition, 380);
+}
+
 function switchAdminCompaniesSubWorkspace(subWorkspace = "identity") {
-  const validWorkspace = ["identity", "email", "access"].includes(
+  // BEXHR_GROUP_D_TEST_UI_DEACTIVATED_2026_11_10: obsolete email test panel is no longer a navigable workspace.
+  const validWorkspace = ["identity", "access"].includes(
     String(subWorkspace || "").trim(),
   )
     ? String(subWorkspace || "").trim()
     : "identity";
+
+  rememberAdminCompaniesSubView(validWorkspace);
 
   const workspaceMap = {
     identity: {
@@ -1298,6 +1496,16 @@ function bindEvents() {
   });
 
   window.addEventListener("scroll", updateBackToTopButtonVisibility);
+
+  window.addEventListener(
+    "pagehide",
+    saveAdminLocationBeforeRefresh
+  );
+
+  window.addEventListener(
+    "beforeunload",
+    saveAdminLocationBeforeRefresh
+  );
   updateBackToTopButtonVisibility();
 
   state.dom.adminTabProfileBtn?.addEventListener("click", () => {
@@ -3651,23 +3859,27 @@ async function submitClearPaCycles() {
     const supabase =
       getSupabaseClient();
 
-    // Browser performs no individual PA deletes.
-    // PostgreSQL performs the PA clear transactionally.
-    const {
-      data,
-      error,
-    } = await supabase.rpc(
-      "admin_clear_tenant_pa_cycle_records",
+    // Server coordinates transactional PA clearing and Storage cleanup.
+    const { data, error } = await supabase.functions.invoke(
+      "admin-clear-pa-cycles",
       {
-        target_tenant_id:
-          String(
-            tenant.id || "",
-          ).trim(),
+        body: {
+          target_tenant_id: String(tenant.id || "").trim(),
+        },
       },
     );
 
     if (error) {
-      throw error;
+      let message = error.message || "PA clear request failed.";
+
+      if (error.context && typeof error.context.json === "function") {
+        try {
+          const details = await error.context.json();
+          if (details?.message) message = details.message;
+        } catch (_) {}
+      }
+
+      throw new Error(message);
     }
 
     const result =
@@ -3676,12 +3888,13 @@ async function submitClearPaCycles() {
         : data;
 
     if (
-      result &&
-      result.success === false
+      !result ||
+      result.success !== true ||
+      result.storage_cleanup_pending !== false
     ) {
       throw new Error(
-        result.message ||
-        "Performance Appraisal cycle records could not be cleared.",
+        result?.message ||
+        "PA records or evidence cleanup could not be confirmed.",
       );
     }
 
@@ -4734,14 +4947,9 @@ function startAdminEmailRecipientEdit(recipientId) {
 }
 
 function openAdminEmailSetupPanel() {
-  // ADMIN COMPANIES SUB-WORKSPACE NAVIGATION - v1.0.0
-  switchAdminCompaniesSubWorkspace("email");
-
-  setAdminDashboardCardExpanded(
-    state.dom.toggleAdminEmailSetupCardBtn,
-    state.dom.adminEmailSetupCollapse,
-    true,
-  );
+  // BEXHR_GROUP_D_V2_COLLAPSE_AND_SESSION_2026_11_10: deny all obsolete test-email panel entry points,
+  // including legacy internal actions, without removing its backend code.
+  openAdminCompanyIdentityPanel();
 }
 
 // ADMIN DELETE ACTIONS - STEP 1
@@ -5423,16 +5631,19 @@ function renderProfileTenantLinks(records = []) {
 
       if (companyCompare !== 0) return companyCompare;
 
-      const roleCompare = String(a.role || "--")
-        .localeCompare(String(b.role || "--"), undefined, {
-          sensitivity: "base",
-        });
+      // BEXHR_PLATFORM_UI_004_ALPHABETICAL_USERS_20261119
+      // Sort by the authoritative displayed name, never by role.
+      // Applies equally to all onboarding methods and company groups.
+      const nameCompare = getProfileDisplayName(a).localeCompare(
+        getProfileDisplayName(b),
+        undefined,
+        { sensitivity: "base" },
+      );
 
-      if (roleCompare !== 0) return roleCompare;
+      if (nameCompare !== 0) return nameCompare;
 
-      return getProfileDisplayName(a).localeCompare(getProfileDisplayName(b), undefined, {
-        sensitivity: "base",
-      });
+      // Stable ordering when two users have identical names.
+      return String(a.id || "").localeCompare(String(b.id || ""));
     })
     .forEach((profile) => {
       const tenant = getTenantByTenantId(profile.tenant_id);
@@ -5704,7 +5915,7 @@ function renderProfileTenantLinks(records = []) {
     companyContentRow.innerHTML = `
       <td colspan="4" class="p-0">
         <div class="admin-access-company-panel">
-          <div class="admin-access-company-scroll" style="max-height: 360px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;">
+          <div id="adminAccessCompany${companyIndex}TableWrapper" class="admin-access-company-scroll" style="max-height: none; overflow-y: visible; overflow-x: hidden; overscroll-behavior: auto;">
             <div class="table-responsive">
               <table class="table align-middle mb-0 admin-access-company-inner-table">
                 <colgroup>
@@ -5757,6 +5968,8 @@ async function refreshProfileTenantLinkingWorkspace() {
     populateProfileTenantProfileOptions();
     populateProfileTenantTenantOptions();
     renderProfileTenantLinks(state.profilesForTenantLinking);
+    // BEXHR_PLATFORM_UI_002_TEN_SCROLL_NO_DBLCLICK_20261119
+    window.BexHrTenRecordScroll?.refresh?.();
 
     // ADMIN UI CLEANUP - STEP 1E
     // Keep Overview user/company link counts in sync after profile link refresh.
@@ -7791,3 +8004,212 @@ async function submitMfaReset() {
     setResetMfaLoading(false);
   }
 }
+
+/* BEXHR_PLATFORM_UI_001_ACTIONS_20261119
+   Presentation only.
+   Preserve all existing account, company and security actions. */
+(function () {
+  'use strict';
+
+  const targets = [
+    ['#tenantRecordsTableBody > tr', 4, 'Company actions'],
+    [
+      '#profileTenantLinksTableBody .admin-access-company-inner-table tbody > tr',
+      3,
+      'User actions'
+    ]
+  ];
+
+  function ensureChooser() {
+    let modal = document.getElementById('bexhrPlatformRowActionModal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'bexhrPlatformRowActionModal';
+    modal.className = 'modal fade';
+    modal.tabIndex = -1;
+    modal.setAttribute('aria-hidden', 'true');
+    modal.setAttribute(
+      'aria-labelledby',
+      'bexhrPlatformRowActionsTitle'
+    );
+
+    modal.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 rounded-4 shadow-lg">
+          <div class="modal-header border-0 pb-1">
+            <h2 class="modal-title fs-6 fw-bold"
+                id="bexhrPlatformRowActionsTitle">
+              Available actions
+            </h2>
+            <button type="button" class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Close"></button>
+          </div>
+          <div class="modal-body pt-2">
+            <div class="bexhr-platform-action-choices"
+                 data-platform-action-choices></div>
+          </div>
+        </div>
+      </div>`;
+
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openActions(buttons, trigger, title) {
+    const modal = ensureChooser();
+    const choices = modal.querySelector(
+      '[data-platform-action-choices]'
+    );
+
+    modal.querySelector(
+      '#bexhrPlatformRowActionsTitle'
+    ).textContent = title;
+
+    choices.replaceChildren();
+
+    buttons.forEach((source) => {
+      const action = document.createElement('button');
+      action.type = 'button';
+
+      action.className =
+        'btn bexhr-platform-action-choice ' +
+        (
+          source.classList.contains('btn-outline-danger')
+            ? 'bexhr-platform-action-choice-danger'
+            : ''
+        );
+
+      action.disabled = source.disabled;
+
+      const icon = source.querySelector('i');
+
+      if (icon) {
+        const copy = document.createElement('i');
+        copy.className = icon.className;
+        copy.setAttribute('aria-hidden', 'true');
+        action.appendChild(copy);
+      }
+
+      const label = document.createElement('span');
+
+      label.textContent =
+        source.title ||
+        source.getAttribute('aria-label') ||
+        'Account action';
+
+      action.appendChild(label);
+
+      action.addEventListener('click', () => {
+        if (!source.isConnected || source.disabled) return;
+
+        modal.addEventListener(
+          'hidden.bs.modal',
+          () => {
+            if (source.isConnected && !source.disabled) {
+              source.click();
+            }
+          },
+          { once: true }
+        );
+
+        bootstrap.Modal.getOrCreateInstance(modal).hide();
+      });
+
+      choices.appendChild(action);
+    });
+
+    bootstrap.Modal.getOrCreateInstance(modal).show(trigger);
+  }
+
+  function enhanceRow(row, minimum, title) {
+    if (row.dataset.bexhrPlatformActionReady === '1') {
+      return;
+    }
+
+    const cell = row.lastElementChild;
+
+    const toolbar = cell && Array.from(cell.children).find(
+      (node) => node.matches &&
+        node.matches('div.d-flex.gap-1')
+    );
+
+    if (!toolbar) return;
+
+    const originals = Array.from(toolbar.children).filter(
+      (node) =>
+        node.tagName === 'BUTTON' &&
+        node.type === 'button' &&
+        node.hasAttribute('onclick')
+    );
+
+    if (originals.length < minimum) return;
+
+    const trigger = document.createElement('button');
+
+    trigger.type = 'button';
+    trigger.className =
+      'btn btn-sm btn-outline-primary bexhr-platform-actions-trigger';
+
+    trigger.innerHTML =
+      '<span>Actions</span>' +
+      '<i class="bi bi-three-dots-vertical" aria-hidden="true"></i>';
+
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.setAttribute(
+      'aria-label',
+      'View available record actions'
+    );
+
+    trigger.addEventListener('click', () => {
+      openActions(originals, trigger, title);
+    });
+
+    toolbar.classList.add('d-none');
+    cell.appendChild(trigger);
+
+    row.dataset.bexhrPlatformActionReady = '1';
+  }
+
+  function scan() {
+    targets.forEach(([selector, minimum, title]) => {
+      document.querySelectorAll(selector).forEach((row) => {
+        enhanceRow(row, minimum, title);
+      });
+    });
+  }
+
+  function install() {
+    if (!window.bootstrap || !window.bootstrap.Modal) {
+      return;
+    }
+
+    [
+      'tenantRecordsTableBody',
+      'profileTenantLinksTableBody'
+    ].forEach((id) => {
+      const root = document.getElementById(id);
+      if (!root) return;
+
+      const observer = new MutationObserver(scan);
+
+      observer.observe(root, {
+        childList: true,
+        subtree: true
+      });
+    });
+
+    scan();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener(
+      'DOMContentLoaded',
+      install,
+      { once: true }
+    );
+  } else {
+    install();
+  }
+})();

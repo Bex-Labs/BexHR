@@ -13,6 +13,15 @@ try {
 ========================================================= */
 
 const PROFILE_IMAGES_BUCKET = "profile-images";
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+// Reuse the same short-lived signed URL during this browser tab session so
+// role/workspace switches do not generate a brand-new private Storage URL on
+// every page load. Cache entries remain user + file-path scoped and expire
+// before the 1-hour signed URL itself expires.
+const PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX =
+  "bexhr:profile-image:signed-url:v1";
+const PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS = 50 * 60 * 1000;
+const profileImageSignedUrlPromises = new Map();
 const PAYROLL_MODEL_GENERIC = "GENERIC";
 const PAYROLL_MODEL_REGULAR = "REGULAR";
 
@@ -44,25 +53,49 @@ const EMPLOYEE_DASHBOARD_WORKSPACE_BOOT_KEY = "hrPayroll:lastEmployeeWorkspace:l
 // account identity, and the intended top-level workspace are ready.
 // Slower profile, request, image, leave, and payroll reads continue
 // progressively after the shell becomes visible.
+// REDESIGN37_HR_UI_004_SELF_SERVICE_FIRST_PAINT
+// Only the initial Employee Leave/Payroll refresh is gated; later navigation
+// and the existing employee data/authority requests are unchanged.
+let employeeSelfServiceFirstPaintReleaseStarted = false;
 function releaseEmployeeWorkspaceLoader() {
-  const body = document.body;
-  const loader = document.getElementById("bexhrWorkspaceLoader");
-  const firstPaintGate = document.getElementById(
-    "employeeWorkspaceFirstPaintGate",
-  );
+  if (employeeSelfServiceFirstPaintReleaseStarted) return;
+  employeeSelfServiceFirstPaintReleaseStarted = true;
 
-  body?.classList.remove("employee-workspace-booting");
-  body?.removeAttribute("aria-busy");
-  firstPaintGate?.remove();
+  const releaseWorkspace = () => {
+    const body = document.body;
+    const loader = document.getElementById("bexhrWorkspaceLoader");
+    const firstPaintGate = document.getElementById("employeeWorkspaceFirstPaintGate");
 
-  if (!loader) return;
+    body?.classList.remove("employee-workspace-booting");
+    body?.removeAttribute("aria-busy");
+    firstPaintGate?.remove();
 
-  loader.setAttribute("aria-hidden", "true");
-  loader.style.pointerEvents = "none";
+    if (!loader) return;
+    loader.setAttribute("aria-hidden", "true");
+    loader.style.pointerEvents = "none";
+    window.setTimeout(() => loader.remove(), 220);
+  };
 
-  window.setTimeout(() => {
-    loader.remove();
-  }, 220);
+  void (async () => {
+    const elapsed = Number(window.performance?.now?.()) || 0;
+    const remaining = Math.max(0, 650 - elapsed);
+    if (remaining) await new Promise(resolve => window.setTimeout(resolve, remaining));
+
+    const currentSectionIsSelfService = Boolean(
+      state.currentUser?.id &&
+      (document.getElementById('leaveSection')?.classList.contains('d-none') === false ||
+       document.getElementById('payrollSection')?.classList.contains('d-none') === false)
+    );
+    await window.BexHRR37SelfServiceFirstPaint?.waitForReady?.({
+      surface: 'employee',
+      expected: currentSectionIsSelfService,
+      isInitialised: () => Boolean(state.employeeRecord?.id),
+    });
+    releaseWorkspace();
+  })().catch(error => {
+    console.warn('[R37 UI-004] Employee first-paint guard failed:', error);
+    releaseWorkspace();
+  });
 }
 
 /* =========================================================
@@ -157,11 +190,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     cacheDomElements();
     bindNavigationEvents();
+    bindEmployeeLeaveInlineTabs();
 
-    // EMPLOYEE PROFILE CARD HEIGHT SYNC - v1.0.0
-    // Presentation-only synchronisation between the natural
-    // Identity card and scrollable Account Details card.
-    initialiseEmployeeProfileHeightSync();
+    // R14C: natural card heights match the universal HR profile pattern.
 
     bindLeaveFormEvents();
     bindUtilityEvents();
@@ -192,15 +223,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     bindProfileImageEvents();
 
-    // EMPLOYEE PROFILE REVIEW - STEP 1B
-    // Keep the HR profile review compact by switching between read-only tabs.
-    bindEmployeeProfileReviewTabs();
-
-    // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
-    // Bind the formal employee correction request flow.
-    // This saves requests to Supabase and does not edit HR master data.
-    bindEmployeeProfileCorrectionRequestEvents();
-
     bindSyncEvents();
 
     const authResult = await window.SessionManager.protectPage("employee");
@@ -209,7 +231,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     state.currentUser = authResult.session.user;
     state.currentProfile = authResult.profile;
 
+    // BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+    // Start signing/preloading the already-authenticated profile image while
+    // the latest profile row is refreshed. A changed image path is primed again
+    // immediately after that refresh.
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
+
     await loadLatestEmployeeProfile();
+    state.employeeLeaveActiveView = readEmployeeLeaveView() || EMPLOYEE_LEAVE_VIEW_DEFAULT;
+    // BEXHR_GROUP_B_V13_PATCH: read-only tenant position labels.
+    await window.BexHRGroupBV13?.loadScope(getSupabaseClient(),state.currentProfile?.tenant_id);
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
 
     // ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
     // Apply final tenant-scoped Employee Dashboard branding after the signed-in
@@ -244,6 +276,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       authResult.session.user.email,
     );
 
+    // BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+    // The profile image no longer waits behind reporting-manager and profile-
+    // correction reads. It resolves independently as soon as employee identity
+    // is known and can finish while the rest of the workspace loads.
+    void renderEmployeeProfileImage();
+
     // Reveal the authenticated Employee workspace as soon as authentication,
     // tenant branding, profile identity, and the intended top-level workspace
     // are ready. Slower reporting, image, leave, request, and payroll data
@@ -256,12 +294,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // and tenant restriction independently.
     await loadEmployeeReportingManagers();
 
-    // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
-    // Load employee-visible correction request status after the employee row
-    // has been resolved. This is read-only and does not update HR master data.
-    await loadEmployeeProfileCorrectionRequests();
+    // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+    // Leave readiness uses its own narrow RPC so UI and database enforce the
+    // same active-Primary-Manager rule.
+    await loadEmployeeLeavePrimaryManagerReadiness();
 
-    await renderEmployeeProfileImage();
     await loadEmployeeLeaveBalances();
     await loadLeaveTypes();
     await loadEmployeeLeaveRequests();
@@ -294,6 +331,10 @@ const state = {
   employeeRecord: null,
   payrollRecords: [],
 
+  // BEXHR EMPLOYEE SELF-SERVICE COHESION - R-03
+  // UI-only active Leave pane. No business or employee data is stored here.
+  employeeLeaveActiveView: "request",
+
   // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
   // Employee-side read-only status history for correction requests submitted to HR.
   profileCorrectionRequests: [],
@@ -302,6 +343,13 @@ const state = {
   // Loaded leave requests are kept in memory so the Request Leave form
   // can block duplicate/overlapping active requests before insert.
   leaveRequests: [],
+
+  // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+  // Normal manager-approved Leave is available only when this employee has
+  // an active Primary Manager. This is hierarchy-driven, never title-driven.
+  leavePrimaryManagerReadinessStatus: "loading",
+  hasPrimaryManagerForLeave: false,
+
   isPayrollFiguresHidden: false,
   leaveRefreshTimer: null,
   pendingProfileImageFile: null,
@@ -896,8 +944,8 @@ function cacheDomElements() {
        Display-only bindings for existing employee state.
        No additional Supabase queries or access changes. */
     overviewProfileStatus: document.getElementById("overviewProfileStatus"),
-    overviewOpenRequestCount: document.getElementById(
-      "overviewOpenRequestCount",
+    overviewDepartmentValue: document.getElementById(
+      "overviewDepartmentValue",
     ),
     overviewLeaveRequestCount: document.getElementById(
       "overviewLeaveRequestCount",
@@ -1108,7 +1156,7 @@ function bindNavigationEvents() {
   });
 
   // EMPLOYEE OVERVIEW QUICK ACTIONS - v1.0.0
-  // Reuse the existing Employee workspace and correction-request flows.
+  // Reuse the existing Employee workspace routes without correction requests.
   document
     .querySelectorAll("[data-employee-overview-target]")
     .forEach((button) => {
@@ -1117,59 +1165,16 @@ function bindNavigationEvents() {
           button.getAttribute("data-employee-overview-target") || "",
         ).trim();
 
-        if (target === "requests") {
-          // BEXHR TICKET 5 - EMPLOYEE RAISE HR REQUEST QUICK ACTION
-          // Open the existing Profile workspace and Identity review area.
-          // Reveal the existing correction form without invoking its normal
-          // form-level auto-scroll, because this quick action should retain
-          // the wider HR Profile Review context.
+        if (target === "managers") {
           rememberEmployeeWorkspace("profile");
           showSection("profile");
-
-          const identityReviewTab = document.querySelector(
-            '[data-employee-profile-review-tab="identity"]',
-          );
-
-          identityReviewTab?.click();
-
-          const correctionPanel =
-            state.dom.profileCorrectionRequestPanel;
-
-          if (correctionPanel) {
-            correctionPanel.classList.remove("d-none");
-            populateEmployeeProfileCorrectionFieldOptions();
-          }
-
-          // Allow the Identity panel and correction form to finish rendering,
-          // then position the HR Profile Review heading below the sticky header.
           window.requestAnimationFrame(() => {
-            window.requestAnimationFrame(() => {
-              const reviewPanel = document.querySelector(
-                ".employee-profile-review-panel",
-              );
-
-              if (!reviewPanel) return;
-
-              const stickyHeader = document.querySelector(
-                ".employee-modern-app-header",
-              );
-
-              const headerHeight =
-                stickyHeader?.getBoundingClientRect().height || 0;
-
-              const reviewTop =
-                reviewPanel.getBoundingClientRect().top +
-                window.scrollY -
-                headerHeight -
-                16;
-
-              window.scrollTo({
-                top: Math.max(0, reviewTop),
-                behavior: "smooth",
-              });
-            });
+            const card = document.getElementById("employeeReportingManagersCard");
+            if (!card) return;
+            const headerHeight = document.querySelector(".employee-modern-app-header")?.getBoundingClientRect().height || 0;
+            const top = card.getBoundingClientRect().top + window.scrollY - headerHeight - 16;
+            window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
           });
-
           return;
         }
 
@@ -1178,6 +1183,15 @@ function bindNavigationEvents() {
         }
 
         rememberEmployeeWorkspace(target);
+
+        // BEXHR EMPLOYEE SELF-SERVICE COHESION - R-03
+        // The Overview action is explicitly "Request Leave", so it should
+        // open that Leave pane rather than restoring a previously viewed pane.
+        if (target === "leave") {
+          state.employeeLeaveActiveView = "request";
+          rememberEmployeeLeaveView("request");
+        }
+
         showSection(target);
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
@@ -1227,6 +1241,7 @@ function bindUtilityEvents() {
           "navProfileBtn",
           "navLeaveBtn",
           "navPayrollBtn",
+          "sidebarEmployeePerformanceAppraisalBtn",
         ]);
 
         if (!allowedTargets.has(targetButtonId)) {
@@ -1398,22 +1413,7 @@ function bindEmployeeLeaveBalancesCardEvents() {
     setEmployeeLeaveBalancesCardExpanded(!isExpanded);
   });
 
-  card.addEventListener("dblclick", (event) => {
-    // EMPLOYEE DASHBOARD FINAL QA - STEP 1R-A
-    // Ignore double-clicks inside the scrollable history records area.
-    // This prevents the card from collapsing while the employee is reviewing
-    // or selecting text from manager decision comments.
-    const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, .employee-leave-history-scroll-area, [contenteditable='true']",
-    );
-
-    if (ignoredTarget) return;
-
-    const isExpanded = !panel.classList.contains("d-none");
-    if (!isExpanded) return;
-
-    setEmployeeLeaveBalancesCardExpanded(false);
-  });
+  // H12 single-click contract: use visible native button only.
 }
 
 // EMPLOYEE UI CLEANUP - STEP 1N
@@ -1463,18 +1463,7 @@ function bindEmployeeLatestDecisionCardEvents() {
     setEmployeeLatestDecisionCardExpanded(!isExpanded);
   });
 
-  card.addEventListener("dblclick", (event) => {
-    const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, [contenteditable='true']",
-    );
-
-    if (ignoredTarget) return;
-
-    const isExpanded = !panel.classList.contains("d-none");
-    if (!isExpanded) return;
-
-    setEmployeeLatestDecisionCardExpanded(false);
-  });
+  // H12 single-click contract: use visible native button only.
 }
 
 // EMPLOYEE UI CLEANUP - STEP 1O-C
@@ -1530,23 +1519,7 @@ function bindEmployeeLeaveHistoryCardEvents() {
   // Make double-click responsive across the whole history card shell,
   // matching the existing employee card collapse pattern.
   // Interactive controls are ignored so Refresh History remains safe.
-  card.addEventListener("dblclick", (event) => {
-    const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, .employee-leave-history-scroll-area, [contenteditable='true']",
-    );
-
-    if (ignoredTarget) return;
-
-    const isExpanded = !panel.classList.contains("d-none");
-    if (!isExpanded) return;
-
-    // EMPLOYEE LEAVE UX WIRING - STEP 1B
-    // Double-click should behave exactly like pressing the visible Collapse
-    // button. The HTML layout-sync script already listens to that button click,
-    // so using button.click() avoids the tall blank card left by the direct
-    // collapse path.
-    button.click();
-  });
+  // H12 single-click contract: use visible native button only.
 }
 
 // EMPLOYEE UI CLEANUP - STEP 1B
@@ -1587,26 +1560,16 @@ function bindEmployeePayrollHistoryCardEvents() {
 
   if (!card || !button || !panel) return;
 
-  // Keep Payroll History collapsed by default on page load.
-  setEmployeePayrollHistoryCardExpanded(false);
+  // BEXHR EMPLOYEE SELF-SERVICE COHESION - R-03
+  // Payroll History is primary Employee payroll work, so it opens immediately.
+  setEmployeePayrollHistoryCardExpanded(true);
 
   button.addEventListener("click", () => {
     const isExpanded = !panel.classList.contains("d-none");
     setEmployeePayrollHistoryCardExpanded(!isExpanded);
   });
 
-  card.addEventListener("dblclick", (event) => {
-    const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, table, .dashboard-table-wrap, [contenteditable='true']",
-    );
-
-    if (ignoredTarget) return;
-
-    const isExpanded = !panel.classList.contains("d-none");
-    if (!isExpanded) return;
-
-    setEmployeePayrollHistoryCardExpanded(false);
-  });
+  // H12 single-click contract: use visible native button only.
 }
 
 // EMPLOYEE PROFILE REVIEW - STEP 1B
@@ -1704,6 +1667,7 @@ function stopLeaveAutoRefresh() {
 
 async function refreshEmployeeLeaveViewsSilently() {
   try {
+    await loadEmployeeLeavePrimaryManagerReadiness();
     await loadEmployeeLeaveRequests();
     await loadEmployeeLeaveBalances();
   } catch (error) {
@@ -1728,6 +1692,29 @@ function requestEmployeeLeaveLayoutSync() {
   window.setTimeout(() => {
     window.dispatchEvent(new Event("resize"));
   }, 50);
+}
+
+// BEXHR_GROUP_B_V15_PATCH: refresh saved gender and eligible balances on entry/focus.
+let employeeLeaveAutoRefreshPromise = null;
+async function refreshEmployeeLeaveEligibilityOnOpen() {
+  if (!state.currentUser?.id || !state.employeeRecord?.id) return false;
+  if (employeeLeaveAutoRefreshPromise) return employeeLeaveAutoRefreshPromise;
+  const userId = state.currentUser.id;
+  const task = (async () => {
+    await loadEmployeeRecord(userId, state.currentUser?.email || state.currentProfile?.email);
+    if (state.currentUser?.id !== userId) return false;
+    await Promise.all([loadEmployeeLeaveBalances(), loadLeaveTypes()]);
+    window.BexHRGroupBV14Leave?.syncView?.();
+    return true;
+  })();
+  employeeLeaveAutoRefreshPromise = task;
+  try { return await task; }
+  catch (error) {
+    console.warn('Employee leave auto-refresh failed:', error);
+    return false;
+  } finally {
+    if (employeeLeaveAutoRefreshPromise === task) employeeLeaveAutoRefreshPromise = null;
+  }
 }
 
 async function refreshEmployeeLeaveBalancesManually() {
@@ -1939,6 +1926,145 @@ function showInitialEmployeeDashboardSection() {
   }
 }
 
+// BEXHR EMPLOYEE SELF-SERVICE COHESION - R-03
+// Employee Leave now follows the same one-job / inline-subview model used by
+// HR and Manager Self-Service. Existing forms, IDs, handlers and data logic remain intact.
+const EMPLOYEE_LEAVE_VIEW_DEFAULT = "request";
+const EMPLOYEE_LEAVE_VIEW_KEYS = new Set([
+  "request",
+  "history",
+  "balances",
+  "decision",
+]);
+
+// REDESIGN37_HR_UI004_R1: remember Employee Leave tab on refresh.
+const EMPLOYEE_LEAVE_MEMORY_PREFIX = "bexhr:r37:employee-leave-view";
+
+function employeeLeaveStorageKey() {
+  const user = String(state.currentUser?.id || "").trim();
+  const tenant = String(state.currentProfile?.tenant_id || "").trim();
+  return user && tenant
+    ? `${EMPLOYEE_LEAVE_MEMORY_PREFIX}:${tenant}:${user}`
+    : "";
+}
+
+function readEmployeeLeaveView() {
+  const key = employeeLeaveStorageKey();
+  if (!key) return null;
+  try {
+    const view = sessionStorage.getItem(key);
+    return EMPLOYEE_LEAVE_VIEW_KEYS.has(view) ? view : null;
+  } catch (_) { return null; }
+}
+
+function rememberEmployeeLeaveView(view) {
+  const key = employeeLeaveStorageKey();
+  if (!key) return;
+  try { sessionStorage.setItem(key, view); }
+  catch (_) { /* Storage is optional. */ }
+}
+
+function normaliseEmployeeLeaveView(view = "") {
+  const key = String(view || "").trim().toLowerCase();
+  return EMPLOYEE_LEAVE_VIEW_KEYS.has(key)
+    ? key
+    : EMPLOYEE_LEAVE_VIEW_DEFAULT;
+}
+
+function getEmployeeLeaveViewNodes() {
+  const balanceCard = state.dom.employeeLeaveBalancesCard || null;
+  const decisionCard = state.dom.employeeLatestDecisionCard || null;
+  const requestCard =
+    state.dom.leaveRequestForm?.closest(".dashboard-section-card") || null;
+  const historyCard = state.dom.employeeLeaveHistoryCard || null;
+  const requestColumn = requestCard?.closest(".col-12") || null;
+  const historyColumn = historyCard?.closest(".col-12") || null;
+  const mainRow =
+    requestCard?.closest(".employee-leave-main-row") ||
+    historyCard?.closest(".employee-leave-main-row") ||
+    null;
+
+  return {
+    balanceCard,
+    decisionCard,
+    requestColumn,
+    historyColumn,
+    mainRow,
+  };
+}
+
+function setEmployeeLeaveView(view = EMPLOYEE_LEAVE_VIEW_DEFAULT, options = {}) {
+  const section =
+    state.dom.leaveSection || document.getElementById("leaveSection");
+
+  if (!section) return EMPLOYEE_LEAVE_VIEW_DEFAULT;
+
+  // BEXHR_GROUP_B_V14_PATCH: highest-position requests are not offered.
+  let resolved = normaliseEmployeeLeaveView(view);
+  if (resolved === "request" && window.BexHRGroupBV14Leave?.isHighestCurrent()) resolved = "balances";
+  const nodes = getEmployeeLeaveViewNodes();
+  const usesMainRow = resolved === "request" || resolved === "history";
+
+  state.employeeLeaveActiveView = resolved;
+  section.classList.add("ss-leave-inline-mode");
+  section.dataset.employeeLeaveView = resolved;
+  if (options.focus === true) rememberEmployeeLeaveView(resolved);
+
+  nodes.balanceCard?.classList.toggle("d-none", resolved !== "balances");
+  nodes.decisionCard?.classList.toggle("d-none", resolved !== "decision");
+  nodes.mainRow?.classList.toggle("d-none", !usesMainRow);
+  nodes.requestColumn?.classList.toggle("d-none", resolved !== "request");
+  nodes.historyColumn?.classList.toggle("d-none", resolved !== "history");
+  nodes.requestColumn?.classList.toggle(
+    "employee-leave-focused-column",
+    resolved === "request",
+  );
+  nodes.historyColumn?.classList.toggle(
+    "employee-leave-focused-column",
+    resolved === "history",
+  );
+
+  document
+    .querySelectorAll("#employeeLeaveInlineTabs [data-employee-leave-view]")
+    .forEach((button) => {
+      const active = button.dataset.employeeLeaveView === resolved;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+
+  if (resolved === "balances") {
+    setEmployeeLeaveBalancesCardExpanded(true);
+  } else if (resolved === "decision") {
+    setEmployeeLatestDecisionCardExpanded(true);
+  } else if (resolved === "history") {
+    setEmployeeLeaveHistoryCardExpanded(true);
+  }
+
+  if (options.focus === true) {
+    document
+      .querySelector(
+        `#employeeLeaveInlineTabs [data-employee-leave-view="${resolved}"]`,
+      )
+      ?.focus({ preventScroll: true });
+  }
+
+  requestEmployeeLeaveLayoutSync();
+  return resolved;
+}
+
+function bindEmployeeLeaveInlineTabs() {
+  document
+    .querySelectorAll("#employeeLeaveInlineTabs [data-employee-leave-view]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        setEmployeeLeaveView(button.dataset.employeeLeaveView, { focus: true });
+      });
+    });
+}
+
 function showSection(sectionName) {
   const isOverview = sectionName === "overview";
   const isProfile = sectionName === "profile";
@@ -1955,7 +2081,7 @@ function showSection(sectionName) {
       module: "Overview",
       title: "Employee Overview",
       subtitle:
-        "Review your profile, HR requests, leave activity, payroll information, and recent updates.",
+        "Review your profile, reporting line, leave activity, payroll information, and recent updates.",
     },
     profile: {
       module: "My Profile",
@@ -2039,6 +2165,19 @@ function showSection(sectionName) {
   if (isPayroll && state.dom.navPayrollBtn) {
     state.dom.navPayrollBtn.classList.remove("btn-outline-primary");
     state.dom.navPayrollBtn.classList.add("btn-primary");
+  }
+
+  // BEXHR EMPLOYEE SELF-SERVICE COHESION - R-03
+  // Primary Employee tasks open ready to work; no second disclosure step.
+  if (isLeave) {
+    setEmployeeLeaveView(
+      state.employeeLeaveActiveView || EMPLOYEE_LEAVE_VIEW_DEFAULT,
+    );
+    void refreshEmployeeLeaveEligibilityOnOpen();
+  }
+
+  if (isPayroll) {
+    setEmployeePayrollHistoryCardExpanded(true);
   }
 
   // CROSS-DASHBOARD SIDEBAR REPLICATION - EMPLOYEE STEP 1C-3
@@ -2179,9 +2318,24 @@ async function loadEmployeeRecord(userId, userEmail) {
     }
   }
 
+  // P7 Stage B: never retain a raw NIN from a legacy employees row in
+  // Employee Self Service state. Only a protected, authenticated four-digit
+  // suffix can be carried into a profile or correction-request display.
+  employee = { ...employee, nin: null };
+  try {
+    const { data: lastFour, error: ninMaskError } = await supabase.rpc(
+      "bexhr_p7_nin_last4_for_self",
+    );
+    if (!ninMaskError && /^\d{4}$/.test(String(lastFour || ""))) {
+      employee.nin = String(lastFour);
+    }
+  } catch (_ninMaskError) {
+    // Display is optional. No fallback to the raw employees.nin column.
+  }
   state.employeeRecord = employee;
   applyResolvedIdentity(employee);
   renderEmployeeRecord(employee);
+  void window.BexHRGroupBV14Leave?.apply(getSupabaseClient(),employee.id);
 }
 
 // EMPLOYEE ASSIGNED MANAGERS VISIBILITY - STEP 1
@@ -2220,6 +2374,7 @@ async function loadEmployeeReportingManagers() {
     state.reportingManagers = rows;
 
     renderEmployeeReportingManagers(rows);
+    if (state.employeeRecord) renderEmployeeRecord(state.employeeRecord);
   } catch (error) {
     console.error(
       "Error loading employee reporting managers:",
@@ -2237,6 +2392,138 @@ async function loadEmployeeReportingManagers() {
   }
 }
 
+// BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+// This narrow readiness check matches the database submission rule exactly:
+// an active Primary reporting line to an active same-tenant manager employee.
+function setEmployeeLeavePrimaryManagerReadiness(
+  readinessStatus = "ready",
+  hasPrimaryManager = false,
+) {
+  state.leavePrimaryManagerReadinessStatus = readinessStatus;
+  state.hasPrimaryManagerForLeave =
+    readinessStatus === "ready" && hasPrimaryManager === true;
+
+  updateLeaveRequestBlockNotice();
+  updateLeaveSubmitButtonState();
+}
+
+async function loadEmployeeLeavePrimaryManagerReadiness() {
+  setEmployeeLeavePrimaryManagerReadiness("loading", false);
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "get_employee_leave_primary_manager_readiness",
+    );
+
+    if (error) throw error;
+
+    const readiness = Array.isArray(data) ? data[0] : data;
+
+    if (!readiness || !readiness.employee_id) {
+      throw new Error(
+        "The signed-in employee could not be resolved for Leave readiness.",
+      );
+    }
+
+    setEmployeeLeavePrimaryManagerReadiness(
+      "ready",
+      readiness.has_primary_manager === true,
+    );
+
+    return state.hasPrimaryManagerForLeave;
+  } catch (error) {
+    console.warn(
+      "Unable to verify Primary Manager availability for Leave submission:",
+      error,
+    );
+    setEmployeeLeavePrimaryManagerReadiness("error", false);
+    return false;
+  }
+}
+
+function getEmployeeLeavePrimaryManagerBlock() {
+  if (state.leavePrimaryManagerReadinessStatus === "loading") {
+    return {
+      message:
+        "Leave request availability is being checked against your current Primary Manager assignment.",
+    };
+  }
+
+  if (state.leavePrimaryManagerReadinessStatus !== "ready") {
+    return {
+      message:
+        "Your Primary Manager assignment could not be verified. Refresh the page or contact HR before submitting leave.",
+    };
+  }
+
+  if (!state.hasPrimaryManagerForLeave) {
+    return {
+      message:
+        "Leave request submission is unavailable because no active Primary Manager is assigned. HR can update your reporting line when a higher reporting position is configured.",
+    };
+  }
+
+  return null;
+}
+
+// BEXHR R-14B LIVE REPORTING HIERARCHY REFRESH
+// Re-check Leave readiness whenever reporting relationships may have changed.
+// Focus/visibility covers changes made by another user/browser; storage and
+// the custom event make same-browser/same-page updates immediate.
+const EMPLOYEE_REPORTING_HIERARCHY_SYNC_STORAGE_KEY = "bexhrReportingHierarchySync";
+let employeeLeaveHierarchyRefreshInProgress = false;
+let employeeLeaveHierarchyRefreshQueued = false;
+
+async function refreshEmployeeLeaveReadinessFromHierarchyChange() {
+  if (!state.currentUser) return;
+
+  if (employeeLeaveHierarchyRefreshInProgress) {
+    employeeLeaveHierarchyRefreshQueued = true;
+    return;
+  }
+
+  employeeLeaveHierarchyRefreshInProgress = true;
+
+  try {
+    await loadEmployeeLeavePrimaryManagerReadiness();
+  } catch (error) {
+    console.warn("Employee Leave hierarchy refresh failed:", error);
+  } finally {
+    employeeLeaveHierarchyRefreshInProgress = false;
+
+    if (employeeLeaveHierarchyRefreshQueued) {
+      employeeLeaveHierarchyRefreshQueued = false;
+      void refreshEmployeeLeaveReadinessFromHierarchyChange();
+    }
+  }
+}
+
+window.addEventListener("bexhr:reporting-hierarchy-changed", () => {
+  void refreshEmployeeLeaveReadinessFromHierarchyChange();
+});
+
+window.addEventListener("storage", (event) => {
+  if (event.key !== EMPLOYEE_REPORTING_HIERARCHY_SYNC_STORAGE_KEY) return;
+  void refreshEmployeeLeaveReadinessFromHierarchyChange();
+});
+
+window.addEventListener("focus", () => {
+  void refreshEmployeeLeaveReadinessFromHierarchyChange();
+  if (!state.dom.leaveSection?.classList.contains('d-none')) {
+    void refreshEmployeeLeaveEligibilityOnOpen();
+  }
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    void refreshEmployeeLeaveReadinessFromHierarchyChange();
+    if (!state.dom.leaveSection?.classList.contains('d-none')) {
+      void refreshEmployeeLeaveEligibilityOnOpen();
+    }
+  }
+});
+
 
 // EMPLOYEE ASSIGNED MANAGERS VISIBILITY - STEP 1
 // Render authoritative reporting relationships in Primary-first order.
@@ -2252,18 +2539,12 @@ function renderEmployeeReportingManagers(reportingManagers = []) {
     ? [...reportingManagers]
     : [];
 
+  // Preserve the authoritative Primary-first ordering.
   rows.sort((left, right) => {
-    const leftType = normalizeText(left?.manager_type);
-    const rightType = normalizeText(right?.manager_type);
-
-    const priority = {
-      primary: 1,
-      secondary: 2,
-    };
-
+    const priority = { primary: 1, secondary: 2 };
     return (
-      (priority[leftType] || 3) -
-      (priority[rightType] || 3)
+      (priority[normalizeText(left?.manager_type)] || 3) -
+      (priority[normalizeText(right?.manager_type)] || 3)
     );
   });
 
@@ -2273,122 +2554,47 @@ function renderEmployeeReportingManagers(reportingManagers = []) {
   if (!rows.length) {
     list.classList.add("d-none");
     empty.classList.remove("d-none");
-    empty.textContent =
-      "No active reporting managers are currently assigned.";
+    empty.textContent = "No active reporting managers are currently assigned.";
     return;
   }
 
   empty.classList.add("d-none");
   list.classList.remove("d-none");
 
+  // R14D: concise employee-facing display: name + assigned relationship.
+  // The authoritative RPC, manager data, and reporting hierarchy are unchanged.
   rows.forEach((manager) => {
-    const managerType =
-      normalizeText(manager.manager_type) === "primary"
-        ? "Primary Manager"
-        : "Secondary Manager";
-
-    const fullName =
-      [
-        manager.manager_first_name,
-        manager.manager_last_name,
-      ]
-        .map((value) => String(value || "").trim())
-        .filter(Boolean)
-        .join(" ") ||
-      manager.manager_work_email ||
-      "Manager";
-
-    const jobTitle =
-      String(manager.manager_job_title || "").trim();
-
-    const department =
-      String(manager.manager_department || "").trim();
-
-    const workEmail =
-      String(manager.manager_work_email || "").trim();
-
-    const relationshipTone =
-      managerType === "Primary Manager"
-        ? "bexhr-status-pill--success"
-        : "bexhr-status-pill--neutral";
+    const isPrimary = normalizeText(manager?.manager_type) === "primary";
+    const managerType = isPrimary ? "Primary Manager" : "Secondary Manager";
+    const fullName = [manager?.manager_first_name, manager?.manager_last_name]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" ") || "Manager";
 
     const item = document.createElement("article");
-
-    item.className =
-      "border rounded-4 bg-light p-3";
-
+    item.className = "employee-reporting-compact__row";
     item.innerHTML = `
-      <div
-        class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3"
-      >
-        <div class="d-flex align-items-start gap-3 min-w-0">
-          <span
-            class="rounded-circle bg-white border d-inline-flex align-items-center justify-content-center flex-shrink-0"
-            style="width: 42px; height: 42px;"
-            aria-hidden="true"
-          >
-            <i class="bi bi-person-badge"></i>
-          </span>
-
-          <div class="min-w-0">
-            <div class="fw-semibold">
-              ${escapeHtml(fullName)}
-            </div>
-
-            ${jobTitle
-        ? `
-                  <div class="small text-secondary mt-1">
-                    ${escapeHtml(jobTitle)}
-                  </div>
-                `
-        : ""
-      }
-
-            ${department
-        ? `
-                  <div class="small text-secondary">
-                    ${escapeHtml(department)}
-                  </div>
-                `
-        : ""
-      }
-
-            ${workEmail
-        ? `
-                  <div class="small mt-2">
-                    <i
-                      class="bi bi-envelope me-1 text-secondary"
-                      aria-hidden="true"
-                    ></i>
-                    ${escapeHtml(workEmail)}
-                  </div>
-                `
-        : ""
-      }
-          </div>
-        </div>
-
-        <span
-          class="bexhr-status-pill ${relationshipTone} flex-shrink-0"
-        >
-          <i
-            class="bi ${managerType === "Primary Manager"
-        ? "bi-person-check-fill"
-        : "bi-people-fill"
-      }"
-            aria-hidden="true"
-          ></i>
-
-          <span>${escapeHtml(managerType)}</span>
+      <div class="employee-reporting-compact__identity">
+        <span class="employee-reporting-compact__avatar" aria-hidden="true">
+          <i class="bi bi-person" aria-hidden="true"></i>
         </span>
+        <span class="employee-reporting-compact__name">${escapeHtml(fullName)}</span>
       </div>
+      <span class="employee-reporting-compact__role ${isPrimary ? "employee-reporting-compact__role--primary" : "employee-reporting-compact__role--secondary"}">
+        ${escapeHtml(managerType)}
+      </span>
     `;
-
     list.appendChild(item);
   });
 }
 
 function getEmployeeManagerDisplayName(employee) {
+  const assignedPrimary = (Array.isArray(state.reportingManagers) ? state.reportingManagers : [])
+    .find((manager) => normalizeText(manager?.manager_type) === "primary");
+  if (assignedPrimary) {
+    return [assignedPrimary.manager_first_name, assignedPrimary.manager_last_name]
+      .map((part) => String(part || "").trim()).filter(Boolean).join(" ") || "--";
+  }
   return (
     employee.manager_name ||
     employee.line_manager_name ||
@@ -2467,6 +2673,20 @@ function setEmployeeProfileReviewField(field, value) {
 // EMPLOYEE PROFILE REVIEW - STEP 1A
 // Render HR-prepared employee data for employee review. This is display-only.
 function renderEmployeeHrProfileReview(employee = {}) {
+  // PRE-7B - Employee summary reflects the same approved core profile fields.
+  const fields = {
+    pre7bReviewWorkEmail: employee.work_email,
+    pre7bReviewPhone: employee.phone_number,
+    pre7bReviewDateOfBirth: employee.date_of_birth ? formatDate(employee.date_of_birth) : "",
+    pre7bReviewJobTitle: employee.job_title,
+    pre7bReviewDepartment: employee.department,
+    pre7bReviewEmploymentDate: employee.employment_date ? formatDate(employee.employment_date) : "",
+    pre7bReviewNationality: employee.nationality,
+    pre7bReviewTown: employee.town,
+  };
+  Object.entries(fields).forEach(([id, value]) =>
+    setEmployeeProfileReviewField(document.getElementById(id), value),
+  );
   setEmployeeProfileReviewField(
     state.dom.reviewEmployeeNumber,
     getEmployeeIdDisplayValue(employee),
@@ -2550,7 +2770,7 @@ function renderEmployeeHrProfileReview(employee = {}) {
 // NIN is shown only as the masked display value; the full NIN is never copied
 // into the correction request snapshot.
 function getEmployeeProfileCorrectionFieldOptions(employee = state.employeeRecord || {}) {
-  return [
+  const availableFields = [
     {
       category: "core",
       categoryLabel: "Core Details",
@@ -2650,6 +2870,12 @@ function getEmployeeProfileCorrectionFieldOptions(employee = state.employeeRecor
       currentValue: getMaskedEmployeeNin(employee.nin),
     },
   ];
+  // Compact standard BexHR biodata retired these fields. Keep the existing
+  // Alpatech correction choices and form unchanged.
+  return isCurrentEmployeeTenantAlpatechWorkspace()
+    ? availableFields
+    : availableFields.filter((field) =>
+        !["personal_email", "alternative_phone_number"].includes(field.fieldKey));
 }
 
 // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
@@ -3037,6 +3263,8 @@ function renderEmployeeProfileCorrectionRequestHistory(records = []) {
 // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
 // Load only the signed-in employee's own correction requests.
 async function loadEmployeeProfileCorrectionRequests() {
+  // R14C: Retired UI. Do not query historical correction records during employee startup.
+  return;
   const employee = state.employeeRecord || {};
   const list = state.dom.profileCorrectionRequestHistoryList;
 
@@ -3106,7 +3334,9 @@ async function refreshEmployeeProfileCorrectionRequestHistory() {
 // Save a formal correction request to Supabase.
 // Employees do not edit employees.* directly; HR reviews this request later.
 async function handleEmployeeProfileCorrectionRequestSubmit(event) {
-  event.preventDefault();
+  event?.preventDefault();
+  // R14C: Legacy helper retained only for source compatibility; submissions retired.
+  return;
 
   const selectedField = getSelectedEmployeeProfileCorrectionField();
   const employee = state.employeeRecord || {};
@@ -3262,12 +3492,6 @@ function bindEmployeeProfileCorrectionRequestEvents() {
 function renderEmployeeOverviewMetrics() {
   const employee = state.employeeRecord || null;
 
-  const correctionRequests = Array.isArray(
-    state.profileCorrectionRequests,
-  )
-    ? state.profileCorrectionRequests
-    : [];
-
   const leaveRequests = Array.isArray(state.leaveRequests)
     ? state.leaveRequests
     : [];
@@ -3284,28 +3508,8 @@ function renderEmployeeOverviewMetrics() {
       : "Unavailable";
   }
 
-  /* Open means HR work has not reached a terminal outcome.
-     Approved remains open until HR completes or closes the request. */
-  const terminalCorrectionStatuses = new Set([
-    "completed",
-    "closed",
-    "rejected",
-  ]);
-
-  const openCorrectionRequestCount = correctionRequests.filter(
-    (request) => {
-      const status = normalizeEmployeeProfileCorrectionStatus(
-        request?.status || "Pending",
-      );
-
-      return !terminalCorrectionStatuses.has(status);
-    },
-  ).length;
-
-  if (state.dom.overviewOpenRequestCount) {
-    state.dom.overviewOpenRequestCount.textContent = String(
-      openCorrectionRequestCount,
-    );
+  if (state.dom.overviewDepartmentValue) {
+    state.dom.overviewDepartmentValue.textContent = window.BexHRGroupBV13?.display(employee,'Unassigned') || 'Unassigned';
   }
 
   /* The card label says Leave Requests and its supporting copy says
@@ -3341,7 +3545,7 @@ function renderEmployeeRecord(employee) {
 
   const phone = getEmployeePhoneDisplayValue(employee);
   const role = employee.role || state.currentProfile?.role || "Employee";
-  const department = employee.department || "--";
+  const department = window.BexHRGroupBV13?.display(employee) || '--';
   const employeeId = getEmployeeIdDisplayValue(employee);
   const managerName = getEmployeeManagerDisplayName(employee);
   const jobTitle = employee.job_title || employee.position || role || "Employee";
@@ -3396,10 +3600,6 @@ function renderEmployeeRecord(employee) {
   if (state.dom.roleName) state.dom.roleName.value = role;
   if (state.dom.managerName) state.dom.managerName.value = managerName;
 
-  // EMPLOYEE PROFILE REVIEW - STEP 1A
-  // Populate the extended read-only HR profile review block.
-  renderEmployeeHrProfileReview(employee);
-
   renderEmployeeOverviewMetrics();
 }
 
@@ -3431,21 +3631,105 @@ async function loadLatestEmployeeProfile() {
   }
 }
 
-async function getSignedProfileImageUrl(filePath) {
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+function getProfileImageSignedUrlCacheKey(filePath) {
+  const userId = String(state.currentUser?.id || "anonymous").trim();
+  return `${PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX}:${userId}:${filePath}`;
+}
+
+function getCachedProfileImageSignedUrl(filePath) {
   if (!filePath) return null;
 
   try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.storage
-      .from(PROFILE_IMAGES_BUCKET)
-      .createSignedUrl(filePath, 3600);
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    const rawValue = window.sessionStorage.getItem(cacheKey);
+    if (!rawValue) return null;
 
-    if (error) throw error;
-    return data?.signedUrl || null;
+    const cached = JSON.parse(rawValue);
+    const signedUrl = String(cached?.signedUrl || "").trim();
+    const expiresAt = Number(cached?.expiresAt || 0);
+
+    if (!signedUrl || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      window.sessionStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    return signedUrl;
   } catch (error) {
-    console.error("Error creating signed profile image URL:", error);
     return null;
   }
+}
+
+function cacheProfileImageSignedUrl(filePath, signedUrl) {
+  if (!filePath || !signedUrl) return;
+
+  try {
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    window.sessionStorage.setItem(
+      cacheKey,
+      JSON.stringify({
+        signedUrl,
+        expiresAt: Date.now() + PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS,
+      }),
+    );
+  } catch (error) {
+    // Browser storage is an optimisation only. Profile rendering must still
+    // succeed when sessionStorage is restricted or unavailable.
+  }
+}
+
+function preloadProfileImageUrl(signedUrl) {
+  if (!signedUrl) return;
+
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = signedUrl;
+  } catch (error) {
+    // Preloading is best-effort only. The visible <img> remains authoritative.
+  }
+}
+
+function primeProfileImageSignedUrl(filePath) {
+  if (!filePath) return;
+
+  void getSignedProfileImageUrl(filePath).then((signedUrl) => {
+    if (signedUrl) preloadProfileImageUrl(signedUrl);
+  });
+}
+
+async function getSignedProfileImageUrl(filePath) {
+  if (!filePath) return null;
+
+  const cachedSignedUrl = getCachedProfileImageSignedUrl(filePath);
+  if (cachedSignedUrl) return cachedSignedUrl;
+
+  const requestKey = getProfileImageSignedUrlCacheKey(filePath);
+  const existingRequest = profileImageSignedUrlPromises.get(requestKey);
+  if (existingRequest) return existingRequest;
+
+  const signedUrlRequest = (async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.storage
+        .from(PROFILE_IMAGES_BUCKET)
+        .createSignedUrl(filePath, 3600);
+
+      if (error) throw error;
+
+      const signedUrl = data?.signedUrl || null;
+      if (signedUrl) cacheProfileImageSignedUrl(filePath, signedUrl);
+      return signedUrl;
+    } catch (error) {
+      console.error("Error creating signed profile image URL:", error);
+      return null;
+    } finally {
+      profileImageSignedUrlPromises.delete(requestKey);
+    }
+  })();
+
+  profileImageSignedUrlPromises.set(requestKey, signedUrlRequest);
+  return signedUrlRequest;
 }
 
 async function renderEmployeeProfileImage() {
@@ -4085,6 +4369,11 @@ function doesLeaveRequestTouchYear(request = {}, leaveYear) {
 // 2. Also block duplicate single-application leave types in the same year.
 // Rejected and Returned requests do not block a fresh request.
 function getLeaveRequestPolicyBlock() {
+  // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+  // A normal Pending Approval request requires a real Primary Manager.
+  const primaryManagerBlock = getEmployeeLeavePrimaryManagerBlock();
+  if (primaryManagerBlock) return primaryManagerBlock;
+
   const selectedLeaveType = getSelectedLeaveTypeDetails();
   const leaveYear = getSelectedLeaveRequestYear();
 
@@ -4307,6 +4596,15 @@ function updateLeaveRequestBlockNotice() {
   const notice = state.dom.leaveRequestBlockNotice;
   if (!notice) return;
 
+  // BEXHR_EMPLOYEE_UI_001_20261119
+  // Hide only the temporary loading warning.
+  // Actual manager verification and submission blocking remain active.
+  if (state.leavePrimaryManagerReadinessStatus === "loading") {
+    notice.classList.add("d-none");
+    notice.textContent = "";
+    return;
+  }
+
   const block = getLeaveRequestPolicyBlock();
 
   if (!block) {
@@ -4517,13 +4815,29 @@ async function handleLeaveRequestSubmit() {
 
   calculateLeaveDays();
 
+  // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+  // Re-read the reporting relationship immediately before submission so a
+  // recently assigned/removed Primary Manager is reflected without trusting
+  // stale browser state.
+  await loadEmployeeLeavePrimaryManagerReadiness();
+
   if (!validateLeaveRequestForm()) {
     return;
   }
 
   const supabase = getSupabaseClient();
 
+  // H12 Gate 6: take tenant identity only from authenticated profile/employee data.
+  // Never trust a manually edited browser tenant context for a leave write.
+  const profileTenantId = String(state.currentProfile?.tenant_id || "").trim();
+  const employeeTenantId = String(state.employeeRecord?.tenant_id || "").trim();
+  if (!profileTenantId || (employeeTenantId && employeeTenantId !== profileTenantId)) {
+    showPageAlert("danger", "Your authenticated company could not be verified for this leave request. Refresh and try again.");
+    return;
+  }
+
   const payload = {
+    tenant_id: profileTenantId,
     employee_id: getPreferredEmployeeReferenceId(),
     leave_type_id: state.dom.leaveType.value,
     start_date: state.dom.startDate.value,

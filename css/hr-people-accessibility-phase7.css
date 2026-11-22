@@ -1,0 +1,786 @@
+/*
+ * BexHR Phase 7A2 - Compact People tables + accessible Actions.
+ * Visual layout only: the Phase 7A Actions portal, permissions, lifecycle RPCs,
+ * salary, payroll, migration and PA processing remain unchanged.
+ *
+ * The previous 1535px media rule turned six employees into six tall cards.
+ * Keep an actual table; show an inner scrollbar only after ten displayed records.
+ * At high zoom, progressively hide redundant columns; the complete employee
+ * record remains available through the profile action.
+ */
+
+/* Preserve the non-obscuring People header on enlarged-text installations. */
+body.dashboard-page[data-hr-navigation-task^="people."] .hr-modern-app-header {
+  position: static !important;
+  top: auto !important;
+  inset-block-start: auto !important;
+}
+
+body.dashboard-page .hr-employee-directory-card,
+body.dashboard-page .hr-employee-lifecycle-card { min-width: 0; }
+
+/* The original collapse click handler and its target IDs are retained.
+   Restore a single-line chevron + label even with enlarged system text. */
+body.dashboard-page #employeeListCardHeader.hr-card-heading {
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+body.dashboard-page #employeeListCardHeader .hr-card-heading-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+body.dashboard-page #toggleEmployeeListCardBtn {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.4rem;
+  width: auto !important;
+  min-width: fit-content;
+  min-height: 44px;
+  padding: 0.55rem 0.8rem;
+  white-space: nowrap !important;
+  line-height: 1.2;
+}
+body.dashboard-page #toggleEmployeeListCardBtn .bi {
+  flex: 0 0 auto;
+  margin-right: 0 !important;
+}
+body.dashboard-page #toggleEmployeeListCardBtn span {
+  display: inline-block;
+  white-space: nowrap;
+}
+@media (max-width: 575.98px) {
+  body.dashboard-page #employeeListCardHeader.hr-card-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  body.dashboard-page #toggleEmployeeListCardBtn {
+    align-self: flex-start !important;
+  }
+}
+
+/* Toolbar stays concise and wraps rather than forcing a wider page. */
+body.dashboard-page .hr-employee-directory-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.9rem;
+}
+body.dashboard-page .hr-employee-directory-toolbar > * { min-width: 0; }
+body.dashboard-page .hr-employee-directory-search {
+  flex: 1 1 17rem;
+  min-width: min(100%, 16rem);
+  width: auto;
+  max-width: 100%;
+}
+body.dashboard-page .hr-employee-directory-search .form-control {
+  min-height: 44px;
+  font-size: 0.98rem;
+}
+
+/* The directory table remains a table, including at Windows enlarged text
+   and at browser zoom. This deliberately overrides old mobile-card rules. */
+body.dashboard-page #employeeRecordsTableWrapper.hr-employee-directory-wrapper {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  max-height: none !important;
+  overflow-x: clip !important;
+  overflow-y: visible !important;
+  overscroll-behavior: auto;
+  scrollbar-gutter: auto;
+  padding: 0 0.15rem 0.4rem;
+  border: 0;
+}
+/* From the 11th visible employee onward, bound the directory list. */
+body.dashboard-page #employeeRecordsTableWrapper.hr-employee-directory-wrapper.hr-people-scroll-enabled {
+  max-height: min(70vh, 740px) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-table {
+  display: table !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0 0.35rem;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-table thead {
+  display: table-header-group !important;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-table tbody {
+  display: table-row-group !important;
+  padding: 0 !important;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-table thead tr,
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row {
+  display: table-row !important;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-head {
+  position: static;
+  top: 0;
+  z-index: 5;
+}
+body.dashboard-page #employeeRecordsTableWrapper.hr-people-scroll-enabled .hr-employee-directory-head {
+  position: sticky;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-head th {
+  display: table-cell;
+  padding: 0.6rem 0.45rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  white-space: normal;
+  vertical-align: middle;
+  background: #f3f7fa;
+  color: #42586e;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row > td {
+  display: table-cell !important;
+  width: auto;
+  min-width: 0;
+  padding: 0.65rem 0.45rem !important;
+  border-top: 1px solid #e0e9f1;
+  border-bottom: 1px solid #e0e9f1;
+  background: #fff;
+  vertical-align: middle !important;
+  border-radius: 0;
+  box-shadow: none !important;
+  overflow-wrap: anywhere;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  text-align: left;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row > td.d-none {
+  display: none !important;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row > td::before {
+  content: none !important;
+  display: none !important;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row > td:first-child:not(.d-none),
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row > td.d-none + td {
+  border-left: 1px solid #e0e9f1;
+  border-radius: 12px 0 0 12px;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row > td:last-child {
+  border-right: 1px solid #e0e9f1;
+  border-radius: 0 12px 12px 0;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row:hover > td {
+  background: #f7fbfc;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-identity {
+  min-width: 0;
+  gap: 0.5rem;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-identity-copy { min-width: 0; }
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-name-button {
+  max-width: 100%;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  text-align: left;
+  font-size: 0.94rem;
+  line-height: 1.35;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-cell-primary,
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-cell-secondary,
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-start-date,
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-number {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 1.35;
+  font-size: 0.84rem;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-role-badge,
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-status-pill {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-actions-cell {
+  text-align: center !important;
+  white-space: normal;
+}
+body.dashboard-page #employeeRecordsTableWrapper .hr-employee-actions-cell::before {
+  content: none !important;
+  display: none !important;
+}
+/* Ordinary desktop column proportions, including Start Date. */
+body.dashboard-page #employeeRecordsTableWrapper th:nth-child(1) { width: 6%; }
+body.dashboard-page #employeeRecordsTableWrapper th:nth-child(2) { width: 21%; }
+body.dashboard-page #employeeRecordsTableWrapper th:nth-child(3) { width: 22%; }
+body.dashboard-page #employeeRecordsTableWrapper th:nth-child(4) { width: 18%; }
+body.dashboard-page #employeeRecordsTableWrapper th:nth-child(5) { width: 12%; }
+body.dashboard-page #employeeRecordsTableWrapper th:nth-child(6) { width: 10%; }
+body.dashboard-page #employeeRecordsTableWrapper th:nth-child(7) { width: 11%; }
+
+/* Preserve existing permission-aware buttons as a fallback if enhancement JS
+   does not run. Only an enhanced row hides them in favour of Actions. */
+body.dashboard-page .hr-employee-directory-row.hr-action-menu-ready .hr-employee-row-actions {
+  display: none !important;
+}
+body.dashboard-page .hr-employee-directory-row.hr-action-menu-ready .hr-employee-actions-cell {
+  overflow: visible;
+}
+.hr-people-actions-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  min-width: 88px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 0.48rem 0.55rem;
+  border: 1.5px solid #087f7a;
+  border-radius: 10px;
+  background: #fff;
+  color: #075a56;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.hr-people-actions-toggle:hover,
+.hr-people-actions-toggle[aria-expanded="true"] { background: #e8f6f4; }
+.hr-people-actions-portal[hidden] { display: none !important; }
+.hr-people-actions-portal {
+  position: fixed;
+  z-index: 20000;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  padding: 0.4rem;
+  border: 1px solid #b8c8d6;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 22px 46px rgba(16, 36, 56, 0.22);
+}
+.hr-people-actions-portal .hr-people-menu-item,
+.hr-people-actions-portal .hr-employee-action-btn {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.8rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border: 0 !important;
+  border-radius: 9px;
+  background: #fff !important;
+  box-shadow: none !important;
+  color: #1a364b !important;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+.hr-people-actions-portal .hr-people-menu-item > i { font-size: 1.1rem; flex: 0 0 1.3rem; }
+.hr-people-actions-portal .hr-people-menu-item > span {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+/* Base directory CSS hides labels on compact icon buttons. Once moved into the
+   Actions portal, ALL original button labels must be shown beside their icons. */
+body.dashboard-page #hrPeopleActionsPortal .hr-people-menu-item.hr-employee-action-btn > span {
+  display: inline !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  width: auto !important;
+  max-width: none !important;
+  overflow: visible !important;
+  white-space: normal !important;
+  color: inherit !important;
+  text-align: left;
+}
+body.dashboard-page #hrPeopleActionsPortal .hr-people-menu-item.hr-employee-action-btn > i {
+  flex: 0 0 1.3rem;
+}
+.hr-people-actions-portal .hr-people-menu-item:hover:not(:disabled) {
+  background: #e8f6f4 !important;
+}
+.hr-people-actions-portal .hr-people-menu-item:disabled { cursor: not-allowed; opacity: 0.55; }
+.hr-people-actions-toggle:focus-visible,
+.hr-people-actions-portal .hr-people-menu-item:focus-visible {
+  outline: 3px solid #0a6b66;
+  outline-offset: 3px;
+}
+
+/* Progressive column reduction beats giant cards at 150-200% zoom.
+   At each breakpoint, the complete record remains available in the profile. */
+@media (max-width: 1100px) {
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(3),
+  body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row > td:nth-child(3),
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(6),
+  body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row > td:nth-child(6) {
+    display: none !important;
+  }
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(1) { width: 8%; }
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(2) { width: 31%; }
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(4) { width: 24%; }
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(5) { width: 19%; }
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(7) { width: 18%; }
+}
+@media (max-width: 720px) {
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(4),
+  body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row > td:nth-child(4) {
+    display: none !important;
+  }
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(1) { width: 9%; }
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(2) { width: 43%; }
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(5) { width: 23%; }
+  body.dashboard-page #employeeRecordsTableWrapper th:nth-child(7) { width: 25%; }
+  body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row > td {
+    padding: 0.65rem 0.33rem !important;
+  }
+  body.dashboard-page #employeeRecordsTableWrapper .hr-employee-avatar {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+  }
+}
+@media (max-width: 480px) {
+  body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-head th {
+    font-size: 0.72rem;
+    padding: 0.45rem 0.25rem;
+  }
+  body.dashboard-page #employeeRecordsTableWrapper .hr-employee-directory-row > td {
+    font-size: 0.82rem;
+    padding: 0.6rem 0.25rem !important;
+  }
+  .hr-people-actions-toggle { min-width: 78px; font-size: 0.84rem; padding: 0.45rem 0.3rem; }
+}
+
+/* Dedicated Employee Lifecycle: the same compact, bounded-table treatment. */
+.hr-employee-lifecycle-card .card-body { min-width: 0; }
+.hr-employee-lifecycle-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.1rem;
+}
+.hr-employee-lifecycle-kicker {
+  color: #08716d;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.hr-employee-lifecycle-header h2 {
+  margin: 0.25rem 0;
+  color: #183248;
+  font-size: clamp(1.35rem, 2vw, 1.85rem);
+}
+.hr-employee-lifecycle-header p {
+  max-width: 50rem;
+  margin: 0;
+  color: #455970;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+.hr-employee-lifecycle-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(11rem, 15rem);
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #deeaef;
+  border-radius: 14px;
+  background: #f8fbfd;
+}
+.hr-lifecycle-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.hr-lifecycle-field label { color: #1b3b4b; font-size: 0.94rem; font-weight: 750; }
+.hr-lifecycle-field .form-control,
+.hr-lifecycle-field .form-select { min-height: 44px; font-size: 0.98rem; }
+.hr-lifecycle-count { margin: 0.85rem 0; color: #385264; font-size: 0.94rem; }
+.hr-lifecycle-table-wrapper {
+  max-height: none;
+  overflow-y: visible;
+  overflow-x: clip;
+  overscroll-behavior: auto;
+  scrollbar-gutter: auto;
+  border: 0;
+  border-radius: 0;
+  padding: 0 0.15rem 0.35rem;
+}
+/* Same threshold as Directory; searching and filtering updates this class. */
+.hr-lifecycle-table-wrapper.hr-people-scroll-enabled {
+  max-height: min(70vh, 740px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.hr-lifecycle-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0 0.45rem;
+  background: transparent;
+}
+.hr-lifecycle-table th {
+  position: static;
+  top: 0;
+  z-index: 2;
+  padding: 0.8rem 0.75rem;
+  background: #f3f7fa;
+  border-bottom: 0;
+  color: #42586e;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.3;
+}
+.hr-lifecycle-table td {
+  padding: 0.7rem 0.75rem;
+  border-top: 1px solid #e0e9f1;
+  border-bottom: 1px solid #e0e9f1;
+  background: #fff;
+  vertical-align: middle;
+  color: #213b50;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.hr-lifecycle-table-wrapper.hr-people-scroll-enabled .hr-lifecycle-table th { position: sticky; }
+.hr-lifecycle-table tbody tr > td:first-child {
+  border-left: 1px solid #e0e9f1;
+  border-radius: 12px 0 0 12px;
+}
+.hr-lifecycle-table tbody tr > td:last-child {
+  border-right: 1px solid #e0e9f1;
+  border-radius: 0 12px 12px 0;
+}
+.hr-lifecycle-table thead th:first-child { border-radius: 12px 0 0 12px; }
+.hr-lifecycle-table thead th:last-child { border-radius: 0 12px 12px 0; }
+.hr-lifecycle-table tbody tr:hover td { background: #f7fbfc; }
+.hr-lifecycle-table th:nth-child(1) { width: 34%; }
+.hr-lifecycle-table th:nth-child(2) { width: 30%; }
+.hr-lifecycle-table th:nth-child(3) { width: 14%; }
+.hr-lifecycle-table th:nth-child(4) { width: 22%; }
+.hr-lifecycle-person { display: flex; flex-direction: column; gap: 0.12rem; min-width: 0; }
+.hr-lifecycle-name {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #086d69;
+  font: inherit;
+  font-weight: 750;
+  font-size: 0.96rem;
+  line-height: 1.35;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.hr-lifecycle-name:hover { text-decoration: underline; }
+.hr-lifecycle-number,
+.hr-lifecycle-role,
+.hr-lifecycle-email,
+.hr-lifecycle-compact-role {
+  display: block;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.hr-lifecycle-number,
+.hr-lifecycle-email { color: #52667a; }
+.hr-lifecycle-role { color: #264258; font-weight: 600; }
+.hr-lifecycle-compact-role { display: none; color: #264258; }
+.hr-lifecycle-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0.28rem 0.6rem;
+  border: 1px solid #c1cbd6;
+  border-radius: 999px;
+  color: #334155;
+  background: #f1f5f9;
+  font-size: 0.85rem;
+  font-weight: 750;
+}
+.hr-lifecycle-status--active { border-color: #b7e2cf; color: #086544; background: #edf9f2; }
+.hr-lifecycle-status--exited { border-color: #e1c5c0; color: #83332c; background: #fff4f2; }
+.hr-lifecycle-action-cell { text-align: right; }
+.hr-lifecycle-operation {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0.5rem 0.8rem;
+  border: 1.5px solid #0b736d;
+  border-radius: 9px;
+  background: #fff;
+  color: #075c59;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 750;
+  cursor: pointer;
+  white-space: normal;
+}
+.hr-lifecycle-operation--offboard { border-color: #a43e36; color: #8b2f29; }
+.hr-lifecycle-operation--offboard:hover { background: #fff1f1; }
+.hr-lifecycle-operation--reactivate:hover { background: #e9f7f5; }
+.hr-lifecycle-readonly { color: #4f6172; font-size: 0.85rem; }
+.hr-lifecycle-empty {
+  padding: 1.5rem 1rem;
+  border: 1px dashed #b9cbd6;
+  border-radius: 12px;
+  color: #495d70;
+  text-align: center;
+}
+.hr-lifecycle-safety-note {
+  margin-top: 1.2rem;
+  padding: 0.8rem 1rem;
+  border-left: 4px solid #087f7a;
+  background: #f0faf8;
+  color: #264557;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.hr-lifecycle-name:focus-visible,
+.hr-lifecycle-operation:focus-visible,
+.hr-lifecycle-table-wrapper:focus-visible {
+  outline: 3px solid #0a6b66;
+  outline-offset: 2px;
+}
+@media (max-width: 1100px) {
+  .hr-lifecycle-table th:nth-child(2),
+  .hr-lifecycle-table td:nth-child(2) { display: none; }
+  .hr-lifecycle-compact-role { display: block; }
+  .hr-lifecycle-table th:nth-child(1) { width: 53%; }
+  .hr-lifecycle-table th:nth-child(3) { width: 18%; }
+  .hr-lifecycle-table th:nth-child(4) { width: 29%; }
+}
+@media (max-width: 740px) {
+  .hr-employee-lifecycle-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .hr-lifecycle-table td { padding: 0.68rem 0.48rem; }
+  .hr-lifecycle-table th { padding: 0.65rem 0.48rem; }
+  .hr-lifecycle-table th:nth-child(1) { width: 47%; }
+  .hr-lifecycle-table th:nth-child(3) { width: 20%; }
+  .hr-lifecycle-table th:nth-child(4) { width: 33%; }
+  .hr-lifecycle-email { font-size: 0.77rem; }
+  .hr-lifecycle-operation { padding: 0.45rem 0.5rem; }
+}
+@media (forced-colors: active) {
+  .hr-people-actions-toggle,
+  .hr-people-actions-portal,
+  .hr-people-menu-item,
+  .hr-lifecycle-operation,
+  .hr-lifecycle-table-wrapper { border: 1px solid CanvasText !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hr-employee-directory-row { transition: none !important; }
+}
+
+/* Phase 7A5: Lifecycle is the SAME six-column directory visual component.
+   Only the right-hand action is replaced with Offboard/Reactivate. */
+body.dashboard-page #hrEmployeeLifecycleTableWrapper.hr-lifecycle-table-wrapper {
+  max-height: none;
+  overflow-x: clip;
+  overflow-y: visible;
+  scrollbar-gutter: auto;
+  border: 0;
+  padding: 0 0.15rem 0.4rem;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper.hr-people-scroll-enabled {
+  max-height: min(70vh, 740px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table {
+  display: table !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0 0.35rem;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table thead { display: table-header-group !important; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table tbody { display: table-row-group !important; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table tr { display: table-row !important; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th {
+  display: table-cell !important;
+  position: static;
+  padding: 0.6rem 0.45rem;
+  background: #f3f7fa;
+  border: 0;
+  color: #42586e;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper.hr-people-scroll-enabled .hr-lifecycle-table th { position: sticky; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-row {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-row > td {
+  display: table-cell !important;
+  width: auto;
+  min-width: 0;
+  padding: 0.65rem 0.45rem !important;
+  border-top: 1px solid #e0e9f1;
+  border-bottom: 1px solid #e0e9f1;
+  background: #fff;
+  border-radius: 0;
+  box-shadow: none !important;
+  vertical-align: middle !important;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-row > td::before {
+  content: none !important;
+  display: none !important;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-row > td:first-child {
+  border-left: 1px solid #e0e9f1;
+  border-radius: 12px 0 0 12px;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-row > td:last-child {
+  border-right: 1px solid #e0e9f1;
+  border-radius: 0 12px 12px 0;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-row:hover > td { background: #f7fbfc; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-identity { min-width: 0; gap: 0.5rem; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-name-button {
+  max-width: 100%;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  font-size: 0.94rem;
+  line-height: 1.35;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-cell-primary,
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-cell-secondary,
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-start-date,
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-number {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-status-pill,
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-role-badge {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-action-cell { text-align: center !important; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(1) { width: 22%; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(2) { width: 23%; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(3) { width: 20%; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(4) { width: 13%; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(5) { width: 10%; }
+body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(6) { width: 12%; }
+@media (max-width: 1100px) {
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(2),
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table td:nth-child(2),
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(5),
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table td:nth-child(5) { display: none !important; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(1) { width: 36%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(3) { width: 27%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(4) { width: 19%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(6) { width: 18%; }
+}
+@media (max-width: 720px) {
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(3),
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table td:nth-child(3) { display: none !important; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(1) { width: 46%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(4) { width: 26%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(6) { width: 28%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-row > td { padding: 0.65rem 0.33rem !important; }
+}
+@media (max-width: 480px) {
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-employee-avatar { width: 34px; height: 34px; flex-basis: 34px; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-operation { font-size: 0.82rem; padding: 0.4rem 0.3rem; }
+}
+
+/* ================================================================
+   Phase 7A6 - Lifecycle operation button: single-line readable label
+   Presentation-only. Existing offboard/reactivate handlers unchanged.
+   A narrow action cell must never split Offboard into Offboar + d.
+   Match the compact single-line Directory Actions control, with an
+   accessible 44px minimum target and visible keyboard focus.
+   ================================================================ */
+body.dashboard-page #hrEmployeeLifecycleTableWrapper
+  .hr-lifecycle-row > td.hr-lifecycle-action-cell {
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+body.dashboard-page #hrEmployeeLifecycleTableWrapper
+  .hr-lifecycle-row > td.hr-lifecycle-action-cell .hr-lifecycle-operation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: auto;
+  min-width: min(100%, 6.25rem);
+  max-width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.54rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 750;
+  line-height: 1.2;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
+  word-break: keep-all !important;
+  hyphens: none !important;
+}
+/* At larger text/zoom, reserve enough space for both Reactivate and
+   Offboard rather than truncating or wrapping the action text. */
+@media (max-width: 1100px) {
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(1) { width: 35%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(3) { width: 26%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(4) { width: 18%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(6) { width: 21%; }
+}
+@media (max-width: 720px) {
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(1) { width: 44%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(4) { width: 22%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(6) { width: 34%; }
+}
+@media (max-width: 480px) {
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(1) { width: 43%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(4) { width: 21%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper .hr-lifecycle-table th:nth-child(6) { width: 36%; }
+  body.dashboard-page #hrEmployeeLifecycleTableWrapper
+    .hr-lifecycle-row > td.hr-lifecycle-action-cell .hr-lifecycle-operation {
+    font-size: 0.82rem;
+    padding-inline: 0.33rem;
+  }
+}

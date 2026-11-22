@@ -23,7 +23,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     state.currentUser = access.session.user;
     state.currentProfile = access.profile;
 
+    // BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+    // Start signing/preloading the authenticated manager image in parallel with
+    // the latest profile refresh. renderManagerProfile() reuses the same cached
+    // or in-flight URL instead of starting another Storage signing request.
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
+
     await loadLatestManagerProfile();
+    // BEXHR_GROUP_B_V13_PATCH: load tenant-owned position labels for read-only presentation.
+    await window.BexHRGroupBV13?.loadScope(getSupabaseClient(), state.currentProfile?.tenant_id);
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
 
     // ALPATECH TENANT BRANDING - MANAGER STEP 1D
     // Apply final tenant-scoped Manager Dashboard branding after the signed-in
@@ -96,6 +105,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 const PROFILE_IMAGES_BUCKET = "profile-images";
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+// Reuse the same short-lived signed URL during this browser tab session so
+// role/workspace switches do not generate a brand-new private Storage URL on
+// every page load. Cache entries remain user + file-path scoped and expire
+// before the 1-hour signed URL itself expires.
+const PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX =
+  "bexhr:profile-image:signed-url:v1";
+const PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS = 50 * 60 * 1000;
+const profileImageSignedUrlPromises = new Map();
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Stores only the active Manager workspace tab for refresh recovery.
 // No employee, leave, decision, comment, or team data is stored.
@@ -110,6 +128,7 @@ const state = {
   currentUser: null,
   currentProfile: null,
   currentManagerEmployeeRecord: null,
+  currentOrganizationPositionSummary: null,
 
   // MANAGER PROFILE UI CLEANUP - STEP 1A
   // Stores the last loaded/saved editable profile values.
@@ -490,9 +509,9 @@ function getRememberedManagerWorkspace() {
   if (isValidManagerWorkspaceKey(_managerWorkspaceInMemory)) return _managerWorkspaceInMemory;
 
   try {
+    // BEXHR_H12_MANAGER_QUIET_REFRESH_20261114: do not restore an unscoped boot key across accounts.
     const scopedWorkspace = sessionStorage.getItem(getManagerWorkspaceMemoryKey());
-    const bootWorkspace = sessionStorage.getItem(MANAGER_DASHBOARD_WORKSPACE_BOOT_KEY);
-    const workspace = scopedWorkspace || bootWorkspace || "dashboard";
+    const workspace = scopedWorkspace || "dashboard";
 
     return isValidManagerWorkspaceKey(workspace) ? workspace : "dashboard";
   } catch (error) {
@@ -507,6 +526,8 @@ function clearRememberedManagerWorkspace() {
   try {
     sessionStorage.removeItem(getManagerWorkspaceMemoryKey());
     sessionStorage.removeItem(MANAGER_DASHBOARD_WORKSPACE_BOOT_KEY);
+    sessionStorage.removeItem(getManagerFocusedTaskMemoryKey("team-task"));
+    sessionStorage.removeItem(getManagerFocusedTaskMemoryKey("self-service-task"));
   } catch (error) {
     console.warn("Manager workspace memory could not be cleared.", error);
   }
@@ -537,31 +558,45 @@ function forceManagerDashboardToTopAfterRefresh() {
 // Release the shared branded loader only after the exact Manager workspace,
 // tenant branding, profile, navigation, title, and subtitle are restored.
 // Longer team, leave, schedule, and self-service data loads continue progressively.
+// REDESIGN37_HR_UI_004_SELF_SERVICE_FIRST_PAINT
+// Manager shares the same Self-Service first-paint readiness as HR.
+let managerSelfServiceFirstPaintReleaseStarted = false;
 function revealRestoredManagerWorkspace() {
-  document.body?.classList.remove("manager-workspace-booting");
-  document.body?.setAttribute("aria-busy", "false");
+  if (managerSelfServiceFirstPaintReleaseStarted) return;
+  managerSelfServiceFirstPaintReleaseStarted = true;
 
-  window.scrollTo({
-    top: 0,
-    left: 0,
-    behavior: "auto",
+  const releaseWorkspace = () => {
+    document.body?.classList.remove("manager-workspace-booting");
+    document.body?.setAttribute("aria-busy", "false");
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    updateManagerBackToTopButtonVisibility();
+  };
+
+  void (async () => {
+    const elapsed = Number(window.performance?.now?.()) || 0;
+    const remaining = Math.max(0, 650 - elapsed);
+    if (remaining) await new Promise(resolve => window.setTimeout(resolve, remaining));
+
+    await window.BexHRR37SelfServiceFirstPaint?.waitForReady?.({
+      surface: 'manager',
+      expected: getRememberedManagerWorkspace() === 'selfservice',
+      isInitialised: () => _managerSelfServiceInitialised,
+    });
+    releaseWorkspace();
+  })().catch(error => {
+    console.warn('[R37 UI-004] Manager first-paint guard failed:', error);
+    releaseWorkspace();
   });
-
-  updateManagerBackToTopButtonVisibility();
 }
+
 function restoreManagerWorkspaceAfterRefresh() {
   const workspace = getRememberedManagerWorkspace();
 
-  switchManagerWorkspace(workspace);
-
-  // MANAGER PAYSLIP EMAIL DEEP LINK ROUTING - STEP 3A
-  // If a payslip email link or remembered workspace opens My Self-Service,
-  // initialise the shared self-service module immediately. Without this,
-  // the Manager workspace can show the shell but not load Payroll/Leave data.
   if (workspace === "selfservice") {
-    initManagerSelfServiceOnFirstOpen();
+    void initManagerSelfServiceOnFirstOpen(getRememberedManagerSelfServiceTask());
   }
 
+  switchManagerWorkspace(workspace);
   forceManagerDashboardToTopAfterRefresh();
 
   window.requestAnimationFrame(() => {
@@ -872,38 +907,9 @@ function renderManagerTeamWorkspaceSummary() {
 // Open one existing Team card and place its heading near the top of the viewport.
 // Existing collapse helpers and panel IDs remain the source of truth.
 function openManagerTeamWorkspacePanel(panelKey = "") {
-  const panelMap = {
-    pending: {
-      button: state.dom.togglePendingRequestsCardBtn,
-      panel: state.dom.pendingRequestsCardCollapse,
-      header: state.dom.pendingRequestsCardHeader,
-    },
-    processed: {
-      button: state.dom.toggleProcessedRequestsCardBtn,
-      panel: state.dom.processedRequestsCardCollapse,
-      header: state.dom.processedRequestsCardHeader,
-    },
-    schedule: {
-      button: state.dom.toggleTeamScheduleCardBtn,
-      panel: state.dom.teamScheduleCardCollapse,
-      header: state.dom.teamScheduleCardHeader,
-    },
-    employees: {
-      button: state.dom.toggleAssignedEmployeeRecordsCardBtn,
-      panel: state.dom.assignedEmployeeRecordsCardCollapse,
-      header: state.dom.assignedEmployeeRecordsCardHeader,
-    },
-  };
-
-  const target = panelMap[String(panelKey || "").trim().toLowerCase()];
-  if (!target?.button || !target?.panel || !target?.header) return;
-
-  setManagerCardExpanded(target.button, target.panel, true);
-
-  window.requestAnimationFrame(() => {
-    const card = target.header.closest(".dashboard-section-card") || target.header;
-    const top = card.getBoundingClientRect().top + window.scrollY - 20;
-    window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+  setManagerTeamTask(panelKey, {
+    remember: true,
+    scroll: true,
   });
 }
 
@@ -967,41 +973,22 @@ function bindManagerCardCollapseToggle(button, panel, header) {
     panel;
 
   button.addEventListener("click", toggleCardFromButton);
-  cardSurface.addEventListener("dblclick", collapseCardFromDoubleClick);
+  // H12 single-click contract: native collapse button is authoritative.
 }
 
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1I
 // After a manager decision, show the audit-history card automatically.
 // This confirms the decision moved from Pending Requests into Processed Decisions.
 function openProcessedRequestsCardAfterDecision() {
-  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1I-B
-  // After a decision, show the processed audit card exactly from the top:
-  // card heading visible, newest processed row visible, and inner scrollbar reset.
-  setManagerCardExpanded(
-    state.dom.toggleProcessedRequestsCardBtn,
-    state.dom.processedRequestsCardCollapse,
-    true,
-  );
+  // R-02 focused flow: after a decision, move directly to Decision History.
+  setManagerTeamTask("processed", {
+    remember: true,
+    scroll: true,
+  });
 
   if (state.dom.processedRequestsTableWrapper) {
     state.dom.processedRequestsTableWrapper.scrollTop = 0;
   }
-
-  window.requestAnimationFrame(() => {
-    const targetCard =
-      state.dom.processedRequestsCardHeader?.closest(".dashboard-section-card") ||
-      state.dom.processedRequestsCardHeader;
-
-    if (!targetCard) return;
-
-    const topWithBreathingRoom =
-      targetCard.getBoundingClientRect().top + window.scrollY - 24;
-
-    window.scrollTo({
-      top: Math.max(topWithBreathingRoom, 0),
-      behavior: "smooth",
-    });
-  });
 }
 
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
@@ -1301,17 +1288,22 @@ function notifyManagerTeamAssignmentChanges(nextTeamMembers = []) {
 // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
 // When the manager returns to the Team workspace, refresh the assignment view.
 // This catches HR reporting-line changes without needing a full page reload.
-async function refreshManagerTeamAssignmentsOnFocus() {
+async function refreshManagerTeamAssignmentsOnFocus(force = false) {
   if (document.hidden) return;
 
+  // Phase 7A12: the Overview must refresh along with Team. Previously only
+  // the Team tab was observed, leaving the Overview warning stale after exit.
   const isTeamWorkspaceVisible =
     state.dom.managerTeamSection &&
     !state.dom.managerTeamSection.classList.contains("d-none");
+  const isOverviewVisible =
+    state.dom.managerDashboardSection &&
+    !state.dom.managerDashboardSection.classList.contains("d-none");
 
-  if (!isTeamWorkspaceVisible) return;
+  if (!isTeamWorkspaceVisible && !isOverviewVisible) return;
 
   const now = Date.now();
-  const minimumRefreshGapMs = 15000;
+  const minimumRefreshGapMs = force ? 0 : 15000;
 
   if (
     state.isTeamAssignmentFocusRefreshInProgress ||
@@ -1324,12 +1316,24 @@ async function refreshManagerTeamAssignmentsOnFocus() {
   state.lastTeamAssignmentFocusRefreshAt = now;
 
   try {
-    await refreshManagerWorkspace();
+    if (window.SessionManager?.revalidateActiveProfile &&
+        !(await window.SessionManager.revalidateActiveProfile())) return;
+    await refreshManagerWorkspace({ quiet: true });
   } catch (error) {
     console.warn("Manager team assignment focus refresh failed:", error);
   } finally {
     state.isTeamAssignmentFocusRefreshInProgress = false;
   }
+}
+
+// BEXHR R-14B LIVE REPORTING HIERARCHY REFRESH
+// Manager team membership is database reporting-line state, so a hierarchy
+// change must refresh the active Team workspace without requiring F5.
+const MANAGER_REPORTING_HIERARCHY_SYNC_STORAGE_KEY = "bexhrReportingHierarchySync";
+
+async function refreshManagerWorkspaceFromHierarchySync(force = false) {
+  if (force) state.lastTeamAssignmentFocusRefreshAt = 0;
+  await refreshManagerTeamAssignmentsOnFocus(force);
 }
 
 // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
@@ -1414,6 +1418,7 @@ function bindManagerOperatingGuideFocusManagement() {
 
 function bindEvents() {
   bindManagerOperatingGuideFocusManagement();
+  bindManagerFocusedNavigation();
   state.dom.sidebarManagerPerformanceAppraisalBtn?.addEventListener(
     "click",
     () => {
@@ -1453,8 +1458,8 @@ function bindEvents() {
   // Data loads lazily on first open; subsequent opens simply show the section.
   state.dom.managerTabSelfServiceBtn?.addEventListener("click", () => {
     rememberManagerWorkspace("selfservice");
+    void initManagerSelfServiceOnFirstOpen(getRememberedManagerSelfServiceTask());
     switchManagerWorkspace("selfservice");
-    initManagerSelfServiceOnFirstOpen();
   });
 
   state.dom.managerProfileForm?.addEventListener("submit", async (event) => {
@@ -1507,15 +1512,51 @@ function bindEvents() {
   // Refresh the Team workspace when the manager returns to the browser tab.
   // If HR changed reporting lines while the manager was away, the dashboard
   // reloads the assignment list and shows a toast for added/removed employees.
-  window.addEventListener("focus", () => {
-    void refreshManagerTeamAssignmentsOnFocus();
+  // BEXHR_H12_MANAGER_QUIET_REFRESH_20261114: refresh after an actual absence, not every focus ping.
+  let managerLastAwayAt = 0;
+  const refreshManagerAfterReturn = () => {
+    if (!managerLastAwayAt) return;
+    const awayDurationMs = Date.now() - managerLastAwayAt;
+    managerLastAwayAt = 0;
+    if (awayDurationMs < 5000) return;
+    void refreshManagerWorkspaceFromHierarchySync();
+  };
+  window.addEventListener("blur", () => { managerLastAwayAt = Date.now(); });
+  window.addEventListener("focus", refreshManagerAfterReturn);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) managerLastAwayAt = Date.now();
+    else refreshManagerAfterReturn();
   });
 
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) {
-      void refreshManagerTeamAssignmentsOnFocus();
+  window.addEventListener("storage", (event) => {
+    if (event.key !== MANAGER_REPORTING_HIERARCHY_SYNC_STORAGE_KEY &&
+        event.key !== "bexhrEmployeeLifecycleSync") return;
+    if (event.key === "bexhrEmployeeLifecycleSync") {
+      let notice = null;
+      try { notice = JSON.parse(event.newValue || "null"); } catch (_) { return; }
+      if (!notice || String(notice.tenantId || "") !==
+          String(state.currentProfile?.tenant_id || "")) return;
     }
+    // No employee details are trusted from storage; reload from Supabase/RLS.
+    state.lastTeamAssignmentFocusRefreshAt = 0;
+    void refreshManagerWorkspaceFromHierarchySync(true);
   });
+
+  window.addEventListener("bexhr:reporting-hierarchy-changed", () => {
+    void refreshManagerWorkspaceFromHierarchySync(true);
+  });
+  window.addEventListener("bexhr:employee-lifecycle-changed", () => {
+    void refreshManagerWorkspaceFromHierarchySync(true);
+  });
+  // BEXHR_H12_MANAGER_QUIET_REFRESH_20261114: do not repeatedly reload the active Team workspace.
+  // Keep a quiet overview fallback for cross-device HR changes.
+  window.setInterval(() => {
+    const overviewVisible = Boolean(state.dom.managerDashboardSection) &&
+      !state.dom.managerDashboardSection.classList.contains("d-none");
+    if (!document.hidden && overviewVisible) {
+      void refreshManagerWorkspaceFromHierarchySync();
+    }
+  }, 120000);
 
   state.dom.teamSearchInput?.addEventListener("input", () => {
     applyTeamFilter();
@@ -1577,7 +1618,276 @@ function bindEvents() {
   );
 }
 
-function showManagerPerformanceAppraisalChooser() {
+function ensureManagerPerformanceAppraisalChooserStyles() {
+  if (document.getElementById("managerPerformanceAppraisalChooserStyles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "managerPerformanceAppraisalChooserStyles";
+  style.textContent = `
+    #managerPerformanceAppraisalChooser {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(15, 23, 42, 0.56);
+      backdrop-filter: blur(2px);
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-dialog {
+      width: min(880px, 100%);
+      max-height: min(720px, calc(100vh - 48px));
+      overflow: auto;
+      background: #ffffff;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 24px;
+      box-shadow: 0 28px 72px rgba(15, 23, 42, 0.28);
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-header {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 16px;
+      padding: 22px 24px;
+      background: linear-gradient(110deg, #ffffff 0%, #f8fbfc 56%, #d9f4f2 100%);
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-icon {
+      width: 46px;
+      height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 14px;
+      background: #e8f8f8;
+      border: 1px solid #b9e7e7;
+      color: #0f7f85;
+      font-size: 1.15rem;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-kicker {
+      margin: 0 0 4px;
+      color: #0f7f85;
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-title {
+      margin: 0;
+      color: #0f172a;
+      font-size: clamp(1.45rem, 3vw, 1.9rem);
+      line-height: 1.15;
+      font-weight: 800;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-description {
+      margin: 7px 0 0;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-close {
+      width: 38px;
+      height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #d9e2ec;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #64748b;
+      font-size: 1.25rem;
+      cursor: pointer;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      padding: 20px 24px 22px;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card {
+      min-width: 0;
+      min-height: 178px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      text-align: left;
+      padding: 18px;
+      border: 1px solid #dbe4ee;
+      border-radius: 18px;
+      background: #ffffff;
+      color: #0f172a;
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card:hover,
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card:focus-visible {
+      transform: translateY(-1px);
+      border-color: #8ed8d5;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.1);
+      outline: none;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card-icon {
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      margin-bottom: 14px;
+      background: #e4f8fb;
+      color: #0f7f85;
+      font-size: 1rem;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card--manager .manager-pa-chooser-card-icon {
+      background: #efeafe;
+      color: #6d4bd2;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card-title {
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card-copy {
+      color: #64748b;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      flex: 1;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-card-action {
+      margin-top: 16px;
+      color: #0f7f85;
+      font-size: 0.83rem;
+      font-weight: 800;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 24px;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-note {
+      margin: 0;
+      color: #64748b;
+      font-size: 0.82rem;
+    }
+
+    #managerPerformanceAppraisalChooser .manager-pa-chooser-footer-close {
+      min-height: 38px;
+      padding: 7px 14px;
+      border: 1px solid #94a3b8;
+      border-radius: 10px;
+      background: #ffffff;
+      color: #475569;
+      cursor: pointer;
+    }
+
+    @media (max-width: 640px) {
+      #managerPerformanceAppraisalChooser {
+        align-items: flex-end;
+        padding: 12px;
+      }
+
+      #managerPerformanceAppraisalChooser .manager-pa-chooser-dialog {
+        border-radius: 20px;
+      }
+
+      #managerPerformanceAppraisalChooser .manager-pa-chooser-header {
+        padding: 18px;
+      }
+
+      #managerPerformanceAppraisalChooser .manager-pa-chooser-grid {
+        grid-template-columns: 1fr;
+        padding: 16px 18px 18px;
+      }
+
+      #managerPerformanceAppraisalChooser .manager-pa-chooser-card {
+        min-height: 154px;
+      }
+
+      #managerPerformanceAppraisalChooser .manager-pa-chooser-footer {
+        align-items: flex-start;
+        padding: 14px 18px;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+async function isCurrentManagerExcludedFromActivePaCycle() {
+  const employeeId = String(
+    state.currentManagerEmployeeRecord?.id || "",
+  ).trim();
+
+  const tenantId = String(
+    state.currentProfile?.tenant_id || "",
+  ).trim();
+
+  if (!employeeId || !tenantId) {
+    return false;
+  }
+
+  try {
+    const supabase =
+      getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("pa_cycles")
+      .select("status, payload")
+      .eq("tenant_id", tenantId)
+      .ilike("status", "active");
+
+    if (error) {
+      throw error;
+    }
+
+    const activeCycles =
+      Array.isArray(data) ? data : [];
+
+    if (activeCycles.length === 0) {
+      return false;
+    }
+
+    // Match the PA page: exclude only when every Active cycle explicitly
+    // snapshots this employee as excluded. Missing snapshots mean eligible.
+    return activeCycles.every((cycle) => {
+      const excludedIds = cycle?.payload?.participationSnapshot?.excludedEmployeeIds;
+      return Array.isArray(excludedIds) && excludedIds.some(
+        (id) => String(id || "").trim() === employeeId,
+      );
+    });
+  } catch (error) {
+    console.error(
+      "PA highest-tier participation could not be resolved for the Manager chooser:",
+      error,
+    );
+
+    return false;
+  }
+}
+
+async function showManagerPerformanceAppraisalChooser() {
   const existingChooser = document.getElementById(
     "managerPerformanceAppraisalChooser",
   );
@@ -1585,6 +1895,14 @@ function showManagerPerformanceAppraisalChooser() {
   if (existingChooser) {
     existingChooser.remove();
   }
+
+  // BEXHR_GROUP_B_V13_PATCH: configured/highest-occupied head has no My Appraisal,
+  // even when no PA cycle exists. Existing PA snapshot check stays in force.
+  const employeeExcludedFromActivePaCycle =
+    await window.BexHRGroupBV13.isHighest(getSupabaseClient(), state.currentManagerEmployeeRecord) ||
+    await isCurrentManagerExcludedFromActivePaCycle();
+
+  ensureManagerPerformanceAppraisalChooserStyles();
 
   const overlay = document.createElement("div");
   overlay.id = "managerPerformanceAppraisalChooser";
@@ -1595,123 +1913,110 @@ function showManagerPerformanceAppraisalChooser() {
     "managerPerformanceAppraisalChooserTitle",
   );
 
-  Object.assign(overlay.style, {
-    position: "fixed",
-    inset: "0",
-    zIndex: "10000",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "24px",
-    background: "rgba(15, 23, 42, 0.48)",
-  });
+  const dialog = document.createElement("section");
+  dialog.className = "manager-pa-chooser-dialog";
 
-  const dialog = document.createElement("div");
+  const header = document.createElement("div");
+  header.className = "manager-pa-chooser-header";
 
-  Object.assign(dialog.style, {
-    width: "min(520px, 100%)",
-    background: "#ffffff",
-    borderRadius: "16px",
-    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.24)",
-    padding: "24px",
-  });
+  const icon = document.createElement("span");
+  icon.className = "manager-pa-chooser-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = '<i class="bi bi-clipboard2-check"></i>';
 
-  const title = document.createElement("h2");
-  title.id = "managerPerformanceAppraisalChooserTitle";
-  title.textContent = "Open Performance Appraisal";
-
-  Object.assign(title.style, {
-    margin: "0 0 8px",
-    fontSize: "20px",
-  });
-
-  const description = document.createElement("p");
-  description.textContent =
-    "Choose the Performance Appraisal workspace you want to open.";
-
-  Object.assign(description.style, {
-    margin: "0 0 24px",
-    color: "#475569",
-  });
-
-  const actions = document.createElement("div");
-
-  Object.assign(actions.style, {
-    display: "flex",
-    flexWrap: "wrap",
-    justifyContent: "flex-end",
-    gap: "12px",
-  });
+  const headingCopy = document.createElement("div");
+  headingCopy.innerHTML = `
+    <p class="manager-pa-chooser-kicker">Performance Appraisal</p>
+    <h2 class="manager-pa-chooser-title" id="managerPerformanceAppraisalChooserTitle">
+      Choose your appraisal workspace
+    </h2>
+    <p class="manager-pa-chooser-description">
+      Continue to the appraisal area that matches the work you need to do.
+    </p>
+  `;
 
   const closeButton = document.createElement("button");
   closeButton.type = "button";
-  closeButton.textContent = "Cancel";
+  closeButton.className = "manager-pa-chooser-close";
+  closeButton.setAttribute("aria-label", "Close appraisal workspace chooser");
+  closeButton.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
 
-  const employeeButton = document.createElement("button");
-  employeeButton.type = "button";
-  employeeButton.textContent = "My Appraisal";
+  const workspaceGrid = document.createElement("div");
+  workspaceGrid.className = "manager-pa-chooser-grid";
 
-  const managerButton = document.createElement("button");
-  managerButton.type = "button";
-  managerButton.textContent = "Manager Reviews";
+  const createWorkspaceCard = ({
+    mode,
+    title,
+    description,
+    iconClass,
+    extraClass = "",
+  }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `manager-pa-chooser-card ${extraClass}`.trim();
+    button.dataset.managerPaWorkspace = mode;
+    button.innerHTML = `
+      <span class="manager-pa-chooser-card-icon" aria-hidden="true">
+        <i class="${iconClass}"></i>
+      </span>
+      <span class="manager-pa-chooser-card-title">${title}</span>
+      <span class="manager-pa-chooser-card-copy">${description}</span>
+      <span class="manager-pa-chooser-card-action">Open workspace <span aria-hidden="true">↗</span></span>
+    `;
 
-  [closeButton, employeeButton, managerButton].forEach(
-    (button) => {
-      Object.assign(button.style, {
-        minHeight: "40px",
-        padding: "8px 16px",
-        borderRadius: "8px",
-        cursor: "pointer",
-      });
-    },
-  );
+    return button;
+  };
 
-  Object.assign(closeButton.style, {
-    border: "1px solid #cbd5e1",
-    background: "#ffffff",
+  const employeeButton = createWorkspaceCard({
+    mode: "employee",
+    title: "My Appraisal",
+    description:
+      "Open your own appraisal workspace and review your current appraisal progress.",
+    iconClass: "bi bi-person-check",
   });
 
-  Object.assign(employeeButton.style, {
-    border: "1px solid #0f6f8f",
-    background: "#ffffff",
-    color: "#0f6f8f",
+  const managerButton = createWorkspaceCard({
+    mode: "primary-manager",
+    title: "Manager PA Workspace",
+    description:
+      "Open team goals and progress, plus any appraisal reviews specifically assigned to you.",
+    iconClass: "bi bi-people",
+    extraClass: "manager-pa-chooser-card--manager",
   });
 
-  Object.assign(managerButton.style, {
-    border: "1px solid #0f6f8f",
-    background: "#0f6f8f",
-    color: "#ffffff",
-  });
+  const footer = document.createElement("div");
+  footer.className = "manager-pa-chooser-footer";
+
+  const footerNote = document.createElement("p");
+  footerNote.className = "manager-pa-chooser-note";
+  footerNote.innerHTML =
+    '<i class="bi bi-shield-check me-2" aria-hidden="true"></i>Available appraisal workspaces follow your assigned responsibilities.';
+
+  const footerCloseButton = document.createElement("button");
+  footerCloseButton.type = "button";
+  footerCloseButton.className = "manager-pa-chooser-footer-close";
+  footerCloseButton.textContent = "Close";
 
   const closeChooser = () => {
-    document.removeEventListener(
-      "keydown",
-      handleKeydown,
-    );
-
+    document.removeEventListener("keydown", handleKeydown);
     overlay.remove();
   };
 
-  closeButton.addEventListener(
-    "click",
-    closeChooser,
-  );
+  const openWorkspace = (mode) => {
+    closeChooser();
+    openManagerPerformanceAppraisal(mode);
+  };
 
-  employeeButton.addEventListener(
-    "click",
-    () => {
+  const handleKeydown = (event) => {
+    if (event.key === "Escape") {
       closeChooser();
-      openManagerPerformanceAppraisal("employee");
-    },
-  );
+    }
+  };
 
-  managerButton.addEventListener(
-    "click",
-    () => {
-      closeChooser();
-      openManagerPerformanceAppraisal("primary-manager");
-    },
-  );
+  closeButton.addEventListener("click", closeChooser);
+  footerCloseButton.addEventListener("click", closeChooser);
+  employeeButton.addEventListener("click", () => openWorkspace("employee"));
+  managerButton.addEventListener("click", () => openWorkspace("primary-manager"));
 
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) {
@@ -1719,35 +2024,53 @@ function showManagerPerformanceAppraisalChooser() {
     }
   });
 
-  const handleKeydown = (event) => {
-    if (event.key !== "Escape") {
-      return;
-    }
+  document.addEventListener("keydown", handleKeydown);
 
-    closeChooser();
-  };
+  header.append(icon, headingCopy, closeButton);
 
-  document.addEventListener(
-    "keydown",
-    handleKeydown,
-  );
+  const availableWorkspaceButtons = [];
 
-  actions.append(
-    closeButton,
-    employeeButton,
+  if (!employeeExcludedFromActivePaCycle) {
+    workspaceGrid.append(employeeButton);
+
+    availableWorkspaceButtons.push(
+      employeeButton,
+    );
+  }
+
+  workspaceGrid.append(managerButton);
+
+  availableWorkspaceButtons.push(
     managerButton,
   );
 
-  dialog.append(
-    title,
-    description,
-    actions,
-  );
+  workspaceGrid.style.gridTemplateColumns =
+    "repeat(auto-fit, minmax(240px, 1fr))";
 
+  workspaceGrid.style.maxWidth =
+    availableWorkspaceButtons.length === 2
+      ? "720px"
+      : "100%";
+
+  workspaceGrid.style.marginInline =
+    "auto";
+
+  footer.append(footerNote, footerCloseButton);
+  dialog.append(header, workspaceGrid, footer);
   overlay.append(dialog);
+
+  if (
+    availableWorkspaceButtons.length === 1
+  ) {
+    availableWorkspaceButtons[0].click();
+    return;
+  }
+
   document.body.append(overlay);
 
-  employeeButton.focus();
+  workspaceGrid
+    .querySelector("button")
+    ?.focus({ preventScroll: true });
 }
 
 async function openManagerPerformanceAppraisal(
@@ -1758,7 +2081,7 @@ async function openManagerPerformanceAppraisal(
   }
 
   if (mode === "auto") {
-    showManagerPerformanceAppraisalChooser();
+    await showManagerPerformanceAppraisalChooser();
     return;
   }
 
@@ -1766,6 +2089,11 @@ async function openManagerPerformanceAppraisal(
     mode !== "employee" &&
     mode !== "primary-manager"
   ) {
+    return;
+  }
+  if (mode === 'employee' &&
+      await window.BexHRGroupBV13.isHighest(getSupabaseClient(), state.currentManagerEmployeeRecord)) {
+    showPageAlert('warning','The highest occupied position does not have a personal appraisal.');
     return;
   }
 
@@ -2044,6 +2372,11 @@ function navigateFromManagerGuide(target = "dashboard") {
       return;
     }
 
+    if (target === "performance") {
+      openManagerPerformanceAppraisal();
+      return;
+    }
+
     if (target === "selfservice") {
       state.dom.managerTabSelfServiceBtn?.click();
       return;
@@ -2061,39 +2394,12 @@ function navigateFromManagerGuide(target = "dashboard") {
       return;
     }
 
-    const destinationMap = {
-      pending: {
-        toggle: state.dom.togglePendingRequestsCardBtn,
-        panel: state.dom.pendingRequestsCardCollapse,
-        header: state.dom.pendingRequestsCardHeader,
-      },
-      processed: {
-        toggle: state.dom.toggleProcessedRequestsCardBtn,
-        panel: state.dom.processedRequestsCardCollapse,
-        header: state.dom.processedRequestsCardHeader,
-      },
-      schedule: {
-        toggle: state.dom.toggleTeamScheduleCardBtn,
-        panel: state.dom.teamScheduleCardCollapse,
-        header: state.dom.teamScheduleCardHeader,
-      },
-      employees: {
-        toggle: state.dom.toggleAssignedEmployeeRecordsCardBtn,
-        panel: state.dom.assignedEmployeeRecordsCardCollapse,
-        header: state.dom.assignedEmployeeRecordsCardHeader,
-      },
-    };
-
-    const destination = destinationMap[target];
-    if (!destination) return;
-
-    openManagerGuideDestinationPanel(destination.toggle, destination.panel);
-
-    window.requestAnimationFrame(() => {
-      const card = destination.header?.closest(".dashboard-section-card") || destination.header;
-      card?.scrollIntoView({ behavior: "smooth", block: "start" });
-      destination.toggle?.focus({ preventScroll: true });
-    });
+    if (Object.hasOwn(MANAGER_TEAM_TASKS, target)) {
+      setManagerTeamTask(target, {
+        remember: true,
+        scroll: true,
+      });
+    }
   }, 220);
 }
 
@@ -2344,8 +2650,8 @@ async function submitLeaveDecisionFromModal() {
   }
 
   // SECONDARY MANAGER PENDING LEAVE VISIBILITY - STEP 1
-  // Submission remains Primary-Manager-only in the browser as well as in the
-  // existing database decision RPC.
+  // Submission requires fresh Primary or delegated Secondary authority; the
+  // protected database decision RPC is the final permission check.
   if (!canManagerDecideLeaveRequest(request)) {
     showPageAlert(
       "warning",
@@ -2367,6 +2673,9 @@ async function submitLeaveDecisionFromModal() {
   try {
     setDecisionModalLoading(true);
     setActionButtonLoading(state.pendingDecisionButton, true);
+
+    // Phase 7B: a newly revoked/expired delegation cannot rely on an old card.
+    await confirmFreshManagerLeaveAuthority(request);
 
     if (status === "Approved") {
       // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1D
@@ -2438,6 +2747,301 @@ ${errorMessage}`);
   }
 }
 
+// =========================================================
+// BEXHR UNIFIED FOCUSED WORKSPACE CORRECTION - R-02.1/R-02.2
+// Selected Manager tasks now start directly below the application header,
+// and shared Self-Service is prepared before it becomes visible.
+// MANAGER FOCUSED TASK NAVIGATION - R-02
+// Team and My Self-Service now follow the HR navigation model:
+// parent disclosure -> exact task -> one job per screen.
+// Existing cards, IDs, handlers, EmployeeSelfService, leave authority,
+// reporting-line visibility, PA capability checks, Supabase, and RLS remain authoritative.
+// =========================================================
+const MANAGER_TEAM_TASK_DEFAULT = "pending";
+const MANAGER_SELF_SERVICE_TASK_DEFAULT = "payroll";
+
+const MANAGER_TEAM_TASKS = Object.freeze({
+  pending: {
+    title: "Pending Leave Requests",
+    subtitle: "Review requests that need your attention and take only the actions allowed by your current Manager authority.",
+    moduleLabel: "Pending Requests",
+    headerId: "pendingRequestsCardHeader",
+    toggleId: "togglePendingRequestsCardBtn",
+    panelId: "pendingRequestsCardCollapse",
+    sidebarId: "sidebarManagerTeamPendingBtn",
+  },
+  processed: {
+    title: "Decision History",
+    subtitle: "Review completed leave outcomes and the available decision audit history.",
+    moduleLabel: "Decision History",
+    headerId: "processedRequestsCardHeader",
+    toggleId: "toggleProcessedRequestsCardBtn",
+    panelId: "processedRequestsCardCollapse",
+    sidebarId: "sidebarManagerTeamProcessedBtn",
+  },
+  schedule: {
+    title: "Team Leave Schedule",
+    subtitle: "Review approved absences, overlaps, and operational coverage for employees in your reporting scope.",
+    moduleLabel: "Team Schedule",
+    headerId: "teamScheduleCardHeader",
+    toggleId: "toggleTeamScheduleCardBtn",
+    panelId: "teamScheduleCardCollapse",
+    sidebarId: "sidebarManagerTeamScheduleBtn",
+  },
+  employees: {
+    title: "Assigned Employee Records",
+    subtitle: "Find employees in your reporting coverage and review the role-appropriate records available to you.",
+    moduleLabel: "Employee Records",
+    headerId: "assignedEmployeeRecordsCardHeader",
+    toggleId: "toggleAssignedEmployeeRecordsCardBtn",
+    panelId: "assignedEmployeeRecordsCardCollapse",
+    sidebarId: "sidebarManagerTeamEmployeesBtn",
+  },
+});
+
+const MANAGER_SELF_SERVICE_TASKS = Object.freeze({
+  leave: {
+    title: "My Leave",
+    subtitle: "Manage your own leave request, balances, latest decision, and leave history.",
+    moduleLabel: "Leave",
+    navButtonId: "ssNavLeaveBtn",
+    sectionId: "ssLeaveSection",
+    sidebarId: "sidebarManagerSelfServiceLeaveBtn",
+  },
+  payroll: {
+    title: "My Payroll",
+    subtitle: "Review your authorised payroll summary, payroll history, and payslip records.",
+    moduleLabel: "My Payroll",
+    navButtonId: "ssNavPayrollBtn",
+    sectionId: "ssPayrollSection",
+    sidebarId: "sidebarManagerSelfServicePayrollBtn",
+  },
+});
+
+function getManagerFocusedTaskMemoryKey(kind) {
+  return `${getManagerWorkspaceMemoryKey()}:${kind}`;
+}
+
+function rememberManagerFocusedTask(kind, taskKey) {
+  try {
+    sessionStorage.setItem(getManagerFocusedTaskMemoryKey(kind), taskKey);
+  } catch (error) {
+    console.warn("Manager focused task memory could not be saved.", error);
+  }
+}
+
+function getRequestedManagerSelfServiceTaskFromUrl() {
+  try {
+    const section = String(
+      new URLSearchParams(window.location.search || "").get("section") || "",
+    ).trim().toLowerCase();
+
+    return Object.hasOwn(MANAGER_SELF_SERVICE_TASKS, section) ? section : "";
+  } catch (error) {
+    console.warn("Manager self-service URL task could not be resolved.", error);
+    return "";
+  }
+}
+
+function getRememberedManagerFocusedTask(kind, taskMap, fallback) {
+  try {
+    const remembered = String(
+      sessionStorage.getItem(getManagerFocusedTaskMemoryKey(kind)) || "",
+    ).trim().toLowerCase();
+
+    return Object.hasOwn(taskMap, remembered) ? remembered : fallback;
+  } catch (error) {
+    console.warn("Manager focused task memory could not be read.", error);
+    return fallback;
+  }
+}
+
+function getRememberedManagerTeamTask() {
+  return getRememberedManagerFocusedTask(
+    "team-task",
+    MANAGER_TEAM_TASKS,
+    MANAGER_TEAM_TASK_DEFAULT,
+  );
+}
+
+function getRememberedManagerSelfServiceTask() {
+  const requestedTask = getRequestedManagerSelfServiceTaskFromUrl();
+  if (requestedTask) return requestedTask;
+
+  return getRememberedManagerFocusedTask(
+    "self-service-task",
+    MANAGER_SELF_SERVICE_TASKS,
+    MANAGER_SELF_SERVICE_TASK_DEFAULT,
+  );
+}
+
+function setManagerSidebarGroupExpanded(groupKey = "") {
+  document.querySelectorAll("[data-manager-sidebar-group]").forEach((group) => {
+    const key = String(group.dataset.managerSidebarGroup || "").trim();
+    const toggle = group.querySelector(".bexhr-manager-sidebar-group-toggle");
+    const subnav = group.querySelector(".bexhr-manager-sidebar-subnav");
+    const expanded = Boolean(groupKey) && key === groupKey;
+
+    toggle?.classList.toggle("is-expanded", expanded);
+    toggle?.setAttribute("aria-expanded", String(expanded));
+    if (subnav) subnav.hidden = !expanded;
+  });
+}
+
+function setManagerFocusedHeader(moduleLabel, title, subtitle) {
+  if (state.dom.managerModuleValue) {
+    state.dom.managerModuleValue.textContent = moduleLabel;
+  }
+  if (state.dom.managerModernPageTitle) {
+    state.dom.managerModernPageTitle.textContent = title;
+  }
+  if (state.dom.managerModernPageSubtitle) {
+    state.dom.managerModernPageSubtitle.textContent = subtitle;
+  }
+}
+
+function setManagerTeamTask(taskKey = MANAGER_TEAM_TASK_DEFAULT, options = {}) {
+  const normalised = String(taskKey || "").trim().toLowerCase();
+  const resolvedKey = Object.hasOwn(MANAGER_TEAM_TASKS, normalised)
+    ? normalised
+    : MANAGER_TEAM_TASK_DEFAULT;
+  const config = MANAGER_TEAM_TASKS[resolvedKey];
+  const shouldRemember = options.remember !== false;
+
+  state.dom.managerTeamSection?.classList.add("manager-team-focused-mode");
+  if (state.dom.managerTeamSection) {
+    state.dom.managerTeamSection.dataset.managerTeamTask = resolvedKey;
+  }
+
+  Object.entries(MANAGER_TEAM_TASKS).forEach(([key, task]) => {
+    const header = document.getElementById(task.headerId);
+    const card = header?.closest(".dashboard-section-card");
+    const isActive = key === resolvedKey;
+
+    card?.classList.toggle("d-none", !isActive);
+    document.getElementById(task.sidebarId)?.classList.toggle("active", isActive);
+
+    if (isActive) {
+      setManagerCardExpanded(
+        document.getElementById(task.toggleId),
+        document.getElementById(task.panelId),
+        true,
+      );
+    }
+  });
+
+  if (shouldRemember) {
+    rememberManagerFocusedTask("team-task", resolvedKey);
+  }
+
+  setManagerSidebarGroupExpanded("team");
+  setManagerFocusedHeader(
+    "Team / " + config.moduleLabel,
+    config.title,
+    config.subtitle,
+  );
+
+  if (options.scroll === true) {
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  }
+}
+
+function syncManagerSelfServiceTaskChrome(taskKey = MANAGER_SELF_SERVICE_TASK_DEFAULT, options = {}) {
+  const normalised = String(taskKey || "").trim().toLowerCase();
+  const resolvedKey = Object.hasOwn(MANAGER_SELF_SERVICE_TASKS, normalised)
+    ? normalised
+    : MANAGER_SELF_SERVICE_TASK_DEFAULT;
+  const config = MANAGER_SELF_SERVICE_TASKS[resolvedKey];
+
+  Object.entries(MANAGER_SELF_SERVICE_TASKS).forEach(([key, task]) => {
+    document.getElementById(task.sidebarId)?.classList.toggle("active", key === resolvedKey);
+  });
+
+  if (options.remember !== false) {
+    rememberManagerFocusedTask("self-service-task", resolvedKey);
+  }
+
+  setManagerSidebarGroupExpanded("selfservice");
+  setManagerFocusedHeader(
+    `My Self-Service / ${config.moduleLabel}`,
+    config.title,
+    config.subtitle,
+  );
+
+  return resolvedKey;
+}
+
+function applyManagerSelfServiceTask(taskKey = MANAGER_SELF_SERVICE_TASK_DEFAULT, options = {}) {
+  const resolvedKey = syncManagerSelfServiceTaskChrome(taskKey, options);
+  const config = MANAGER_SELF_SERVICE_TASKS[resolvedKey];
+
+  // BEXHR_GROUP_B_V16_PATCH: keep the visible content aligned with the selected Manager task.
+  // Highest occupants can review balances/history, but cannot open a request form.
+  if (typeof window.EmployeeSelfService?.show === "function") {
+    const highest = window.BexHRGroupBV14Leave?.isHighestCurrent?.() === true;
+    window.EmployeeSelfService.show(resolvedKey, {
+      leaveView: resolvedKey === "leave" ? (highest ? "balances" : "request") : undefined,
+    });
+    // BEXHR_GROUP_B_V17_PATCH: sync the verified top-level leave content after the focused
+    // navigation has become visible. This is presentation-only.
+    if (resolvedKey === "leave" && highest) {
+      window.requestAnimationFrame(() => window.BexHRGroupBV14Leave?.syncView?.());
+    }
+  } else {
+    document.getElementById(config.navButtonId)?.click();
+  }
+
+  if (options.scroll === true) {
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  }
+}
+
+function bindManagerFocusedNavigation() {
+  document.querySelectorAll("[data-manager-sidebar-group]").forEach((group) => {
+    const toggle = group.querySelector(".bexhr-manager-sidebar-group-toggle");
+    if (!toggle || toggle.dataset.managerGroupBound === "true") return;
+
+    toggle.dataset.managerGroupBound = "true";
+    toggle.addEventListener("click", () => {
+      const key = String(group.dataset.managerSidebarGroup || "").trim();
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      setManagerSidebarGroupExpanded(expanded ? "" : key);
+    });
+  });
+
+  document.querySelectorAll("[data-manager-team-task]").forEach((button) => {
+    if (button.dataset.managerTaskBound === "true") return;
+    button.dataset.managerTaskBound = "true";
+
+    button.addEventListener("click", () => {
+      rememberManagerWorkspace("team");
+      switchManagerWorkspace("team");
+      setManagerTeamTask(button.dataset.managerTeamTask, { scroll: true });
+    });
+  });
+
+  document.querySelectorAll("[data-manager-selfservice-task]").forEach((button) => {
+    if (button.dataset.managerTaskBound === "true") return;
+    button.dataset.managerTaskBound = "true";
+
+    button.addEventListener("click", () => {
+      const task = String(button.dataset.managerSelfserviceTask || "").trim().toLowerCase();
+      rememberManagerWorkspace("selfservice");
+      rememberManagerFocusedTask("self-service-task", task);
+
+      // Prepare the exact sub-section while the workspace is still hidden.
+      // This prevents Payroll/Leave from flashing before the requested task.
+      void initManagerSelfServiceOnFirstOpen(task);
+      switchManagerWorkspace("selfservice");
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  });
+}
+
 function switchManagerWorkspace(workspace) {
   const isDashboard = workspace === "dashboard";
   const isProfile = workspace === "profile";
@@ -2479,7 +3083,6 @@ function switchManagerWorkspace(workspace) {
 
   renderManagerModernWorkspaceHeader(workspace);
 
-  // Profile is opened from the account control, not the desktop sidebar.
   [
     { id: "sidebarManagerDashboardBtn", active: isDashboard },
     { id: "sidebarManagerTeamBtn", active: isTeam },
@@ -2488,26 +3091,88 @@ function switchManagerWorkspace(workspace) {
     const item = document.getElementById(id);
     if (item) item.classList.toggle("active", active);
   });
+
+  if (isTeam) {
+    setManagerTeamTask(getRememberedManagerTeamTask(), {
+      remember: false,
+      scroll: false,
+    });
+    return;
+  }
+
+  if (isSelfService) {
+    // BEXHR_GROUP_B_V16_PATCH: switching back to Manager Self-Service must restore the actual
+    // Leave/Payroll pane, not just the header and highlighted sidebar entry.
+    const requestedTask = getRememberedManagerSelfServiceTask();
+    syncManagerSelfServiceTaskChrome(requestedTask, { remember: false });
+    if (state.currentUser?.id) {
+      if (_managerSelfServiceInitialised) {
+        applyManagerSelfServiceTask(requestedTask, { remember: false, scroll: false });
+      } else if (!_managerSelfServiceInitPromise) {
+        void initManagerSelfServiceOnFirstOpen(requestedTask);
+      }
+    }
+    return;
+  }
+
+  setManagerSidebarGroupExpanded("");
 }
 
 // EMPLOYEE SELF-SERVICE - MANAGER
 // Lazily initialises the self-service module on the first time the Manager opens
 // the Self-Service tab. Subsequent clicks only remember/switch the workspace.
 let _managerSelfServiceInitialised = false;
+let _managerSelfServiceInitPromise = null;
 
-function initManagerSelfServiceOnFirstOpen() {
-  if (_managerSelfServiceInitialised) return;
+function initManagerSelfServiceOnFirstOpen(preferredTask = getRememberedManagerSelfServiceTask()) {
+  const task = Object.hasOwn(MANAGER_SELF_SERVICE_TASKS, preferredTask)
+    ? preferredTask
+    : MANAGER_SELF_SERVICE_TASK_DEFAULT;
+
+  syncManagerSelfServiceTaskChrome(task, { remember: true });
+
+  // BEXHR_GROUP_B_V16_PATCH: don't initialise a highest-position leave view on a hidden request.
+  const initialLeaveView = task === "leave"
+    ? (window.BexHRGroupBV14Leave?.isHighestCurrent?.() === true ? "balances" : "request")
+    : undefined;
+  window.EmployeeSelfService?.prepare?.(task, { leaveView: initialLeaveView });
+
+  if (_managerSelfServiceInitialised) {
+    applyManagerSelfServiceTask(task, { remember: true, scroll: false });
+    return Promise.resolve();
+  }
+
+  if (_managerSelfServiceInitPromise) {
+    return _managerSelfServiceInitPromise.then(() => {
+      // BEXHR_GROUP_B_V17_PATCH: an earlier async load must not override the latest selected tab.
+      applyManagerSelfServiceTask(getRememberedManagerSelfServiceTask(), { remember: false, scroll: false });
+    });
+  }
 
   if (!window.EmployeeSelfService) {
     console.warn("EmployeeSelfService module is not loaded.");
-    return;
+    return Promise.resolve();
   }
 
-  _managerSelfServiceInitialised = true;
-  window.EmployeeSelfService.init(state.currentUser, state.currentProfile).catch((err) => {
-    console.error("Manager self-service init error:", err);
-    _managerSelfServiceInitialised = false; // allow retry on next open
-  });
+  _managerSelfServiceInitPromise = window.EmployeeSelfService
+    .init(state.currentUser, state.currentProfile, {
+      initialSection: task,
+      leaveView: initialLeaveView,
+    })
+    .then(() => {
+      _managerSelfServiceInitialised = true;
+      // BEXHR_GROUP_B_V17_PATCH: use the latest route, not a stale async initial-section choice.
+      applyManagerSelfServiceTask(getRememberedManagerSelfServiceTask(), { remember: false, scroll: false });
+    })
+    .catch((err) => {
+      console.error("Manager self-service init error:", err);
+      _managerSelfServiceInitialised = false;
+    })
+    .finally(() => {
+      _managerSelfServiceInitPromise = null;
+    });
+
+  return _managerSelfServiceInitPromise;
 }
 
 function normalizeText(value) {
@@ -2723,21 +3388,105 @@ async function loadLatestManagerProfile() {
   }
 }
 
-async function getSignedProfileImageUrl(filePath) {
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+function getProfileImageSignedUrlCacheKey(filePath) {
+  const userId = String(state.currentUser?.id || "anonymous").trim();
+  return `${PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX}:${userId}:${filePath}`;
+}
+
+function getCachedProfileImageSignedUrl(filePath) {
   if (!filePath) return null;
 
   try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.storage
-      .from(PROFILE_IMAGES_BUCKET)
-      .createSignedUrl(filePath, 3600);
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    const rawValue = window.sessionStorage.getItem(cacheKey);
+    if (!rawValue) return null;
 
-    if (error) throw error;
-    return data?.signedUrl || null;
+    const cached = JSON.parse(rawValue);
+    const signedUrl = String(cached?.signedUrl || "").trim();
+    const expiresAt = Number(cached?.expiresAt || 0);
+
+    if (!signedUrl || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      window.sessionStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    return signedUrl;
   } catch (error) {
-    console.error("Error creating signed profile image URL:", error);
     return null;
   }
+}
+
+function cacheProfileImageSignedUrl(filePath, signedUrl) {
+  if (!filePath || !signedUrl) return;
+
+  try {
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    window.sessionStorage.setItem(
+      cacheKey,
+      JSON.stringify({
+        signedUrl,
+        expiresAt: Date.now() + PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS,
+      }),
+    );
+  } catch (error) {
+    // Browser storage is an optimisation only. Profile rendering must still
+    // succeed when sessionStorage is restricted or unavailable.
+  }
+}
+
+function preloadProfileImageUrl(signedUrl) {
+  if (!signedUrl) return;
+
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = signedUrl;
+  } catch (error) {
+    // Preloading is best-effort only. The visible <img> remains authoritative.
+  }
+}
+
+function primeProfileImageSignedUrl(filePath) {
+  if (!filePath) return;
+
+  void getSignedProfileImageUrl(filePath).then((signedUrl) => {
+    if (signedUrl) preloadProfileImageUrl(signedUrl);
+  });
+}
+
+async function getSignedProfileImageUrl(filePath) {
+  if (!filePath) return null;
+
+  const cachedSignedUrl = getCachedProfileImageSignedUrl(filePath);
+  if (cachedSignedUrl) return cachedSignedUrl;
+
+  const requestKey = getProfileImageSignedUrlCacheKey(filePath);
+  const existingRequest = profileImageSignedUrlPromises.get(requestKey);
+  if (existingRequest) return existingRequest;
+
+  const signedUrlRequest = (async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.storage
+        .from(PROFILE_IMAGES_BUCKET)
+        .createSignedUrl(filePath, 3600);
+
+      if (error) throw error;
+
+      const signedUrl = data?.signedUrl || null;
+      if (signedUrl) cacheProfileImageSignedUrl(filePath, signedUrl);
+      return signedUrl;
+    } catch (error) {
+      console.error("Error creating signed profile image URL:", error);
+      return null;
+    } finally {
+      profileImageSignedUrlPromises.delete(requestKey);
+    }
+  })();
+
+  profileImageSignedUrlPromises.set(requestKey, signedUrlRequest);
+  return signedUrlRequest;
 }
 
 function showPageAlert(type, message) {
@@ -2753,6 +3502,28 @@ function clearPageAlert() {
 
   state.dom.pageAlert.className = "alert d-none mb-4";
   state.dom.pageAlert.textContent = "";
+}
+
+// BEXHR_H12_MANAGER_TEAM_ONLY_ASSIGNMENT_NOTICE_20261114
+// Assignment warnings are relevant to Manager Team only, not My Leave,
+// Payroll, Profile or the overview. Verified reporting-line results drive them.
+function setManagerTeamAssignmentNotice(message = '', type = 'warning') {
+  const teamSection = state.dom.managerTeamSection;
+  if (!teamSection) return;
+  let notice = document.getElementById('managerTeamAssignmentNotice');
+  if (!message) {
+    notice?.remove();
+    return;
+  }
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.id = 'managerTeamAssignmentNotice';
+    notice.setAttribute('role', 'status');
+    teamSection.querySelector('.manager-team-workspace-intro')?.after(notice);
+    if (!notice.isConnected) teamSection.prepend(notice);
+  }
+  notice.className = 'alert alert-' + (type === 'info' ? 'info' : 'warning') + ' mb-3';
+  notice.textContent = String(message);
 }
 
 // MANAGER HEADER RESPONSIBILITY BADGE - v1.0.0
@@ -3735,47 +4506,52 @@ function publishManagerPerformanceAppraisalContext(
   const isEmployeeMode =
     mode === "employee";
 
+  // BEXHR PA WORKSPACE SWITCHING - US-06 DEFECT CLOSEOUT
+  // Keep the signed-in manager's existing reporting capability in context even
+  // when they enter through My Appraisal. Active mode still controls what the
+  // PA UI can do; this only lets the same PA page switch between permitted
+  // personal and manager-review workspaces without returning to the dashboard.
   const performanceAppraisalContext = {
     source: "bexhr",
     sourceDashboard: "manager-dashboard",
+    managerDisplayName: String(state.currentProfile?.full_name || "Current manager"),
+
+    managerJobTitle: String(
+      state.currentManagerEmployeeRecord?.job_title ||
+      state.currentManagerEmployeeRecord?.position ||
+      "",
+    ).trim(),
+
     issuedAt: new Date().toISOString(),
     persona: isEmployeeMode
       ? "employee"
       : "primary-manager",
 
-    managerEmployeeId: isEmployeeMode
-      ? ""
-      : employeeId,
-
     employeeId,
+    managerEmployeeId: employeeId,
 
-    managedEmployeeIds: isEmployeeMode
-      ? []
-      : [
-        ...new Set(
-          primaryEmployees.map(
-            (employee) => employee.id,
-          ),
+    managedEmployeeIds: [
+      ...new Set(
+        primaryEmployees.map(
+          (employee) => employee.id,
         ),
-      ],
+      ),
+    ],
 
     availableEmployees: isEmployeeMode
       ? []
       : primaryEmployees,
+    managerAvailableEmployees: primaryEmployees,
 
-    secondaryEmployeeIds: isEmployeeMode
-      ? []
-      : [
-        ...new Set(
-          secondaryEmployees.map(
-            (employee) => employee.id,
-          ),
+    secondaryEmployeeIds: [
+      ...new Set(
+        secondaryEmployees.map(
+          (employee) => employee.id,
         ),
-      ],
+      ),
+    ],
 
-    secondaryEmployees: isEmployeeMode
-      ? []
-      : secondaryEmployees,
+    secondaryEmployees,
   };
 
   window.BexHrPerformanceAppraisalContext =
@@ -4592,7 +5368,7 @@ function openManagerEmployeeDetails(employeeId = "") {
       .join("") || "TM";
 
   const jobTitle = String(employee.job_title || "--").trim();
-  const department = String(employee.department || "--").trim();
+  const department = window.BexHRGroupBV13?.display(employee) || '--';
   const relationship = String(
     employee.relationshipLabel || "Reporting relationship",
   ).trim();
@@ -5288,7 +6064,7 @@ function buildAssignedEmployeeRoleDepartmentHtml(member = {}) {
       ${escapeHtml(member.job_title || "--")}
     </div>
     <div class="text-secondary small mt-1">
-      ${escapeHtml(member.department || "--")}
+      ${escapeHtml(window.BexHRGroupBV13?.display(member) || '--')}
     </div>
   `;
 }
@@ -5356,13 +6132,15 @@ function notifyLeaveDecisionChanged() {
   }
 }
 
-async function refreshManagerWorkspace() {
-  setManagerCoverageModeLoading(true);
-
-  renderPendingRequestsLoadingState();
-  renderProcessedRequestsLoadingState();
-  renderTeamScheduleLoadingState();
-  renderTeamLoadingState();
+async function refreshManagerWorkspace({ quiet = false } = {}) {
+  // BEXHR_H12_MANAGER_QUIET_REFRESH_20261114: preserve visible cards during a background sync.
+  if (!quiet) {
+    setManagerCoverageModeLoading(true);
+    renderPendingRequestsLoadingState();
+    renderProcessedRequestsLoadingState();
+    renderTeamScheduleLoadingState();
+    renderTeamLoadingState();
+  }
 
   const teamLoaded = await loadAssignedTeamMembers();
 
@@ -5388,8 +6166,7 @@ async function loadAssignedTeamMembers() {
   );
 
   if (!state.currentUser?.id && !managerEmail) {
-    showPageAlert(
-      "warning",
+    setManagerTeamAssignmentNotice(
       "Your manager profile is missing a login identity and email, so assigned team members could not be resolved.",
     );
     renderTeamTable([]);
@@ -5408,10 +6185,18 @@ async function loadAssignedTeamMembers() {
     const managerEmployeeRecord = await loadCurrentManagerEmployeeRecord();
 
     state.currentManagerEmployeeRecord = managerEmployeeRecord;
+    // BEXHR_GROUP_B_V14_PATCH: role-agnostic self leave gate.
+    void window.BexHRGroupBV14Leave?.apply(getSupabaseClient(),managerEmployeeRecord?.id);
+    if (managerEmployeeRecord && state.dom.managerDepartment) {
+      state.dom.managerDepartment.textContent = window.BexHRGroupBV13?.display(managerEmployeeRecord) || '--';
+    }
+    if (managerEmployeeRecord && state.dom.managerProfileDepartment) {
+      state.dom.managerProfileDepartment.value = window.BexHRGroupBV13?.display(managerEmployeeRecord, '') || '';
+    }
+    state.currentOrganizationPositionSummary = null;
 
     if (!managerEmployeeRecord?.id) {
-      showPageAlert(
-        "warning",
+      setManagerTeamAssignmentNotice(
         "Your login could not be matched to an employee manager record. Please check employees.user_id or employees.work_email for this manager.",
       );
       renderTeamTable([]);
@@ -5426,9 +6211,35 @@ async function loadAssignedTeamMembers() {
     const reportingLineByEmployeeId =
       buildReportingLineByEmployeeId(reportingLineRows);
 
+    // BEXHR MANAGER COVERAGE EARLY RESOLUTION - R-05
+    // The reporting-line rows already contain the manager's authoritative
+    // Primary/Secondary relationship. Resolve the visible responsibility now,
+    // before slower employee/profile/access enrichment continues below.
+    // The existing full action-centre render still runs later as the final pass.
+    renderManagerCoverageModeFromReportingLines(reportingLineByEmployeeId);
+
     const assignedEmployeeIds = [...reportingLineByEmployeeId.keys()];
+    if (assignedEmployeeIds.length) state.currentOrganizationPositionSummary = null;
 
     if (!assignedEmployeeIds.length) {
+      // PHASE 7B: only a server-scoped self-position summary can identify
+      // top-level or highest occupied status. No CEO/COO title guesses.
+      const hierarchyStatusApi = window.BexHRManagerOrganizationStatus;
+      const currentManagerId = String(managerEmployeeRecord.id);
+      state.currentOrganizationPositionSummary = hierarchyStatusApi?.load
+        ? await Promise.race([
+            hierarchyStatusApi.load(supabase, currentManagerId),
+            new Promise((resolve) => setTimeout(() => resolve(null), 2000)),
+          ])
+        : null;
+      // Profile/session/tenant changes during the request must not leak a
+      // previous company or user's position label into the new workspace.
+      if (String(state.currentManagerEmployeeRecord?.id || '') !== currentManagerId ||
+          String(state.currentProfile?.tenant_id || '') !== String(managerEmployeeRecord.tenant_id || '')) {
+        state.currentOrganizationPositionSummary = null;
+        return false;
+      }
+      renderManagerCoverageModeFromReportingLines(reportingLineByEmployeeId);
       // MANAGER REPORTING-LINE CHANGE VISIBILITY - STEP 1N
       // If HR removes all reporting-line assignments while the manager has the
       // dashboard open, show a manager-facing toast and clear the visible team.
@@ -5437,9 +6248,10 @@ async function loadAssignedTeamMembers() {
       state.teamMembers = [];
       state.filteredTeamMembers = [];
 
-      showPageAlert(
-        "warning",
-        "No active reporting-line employees were found for this manager.",
+      const positionDisplay = getManagerOrganizationPositionPresentation();
+      setManagerTeamAssignmentNotice(
+        positionDisplay.description,
+        positionDisplay.kind === 'default' ? 'warning' : 'info',
       );
       renderTeamTable([]);
       renderSummaryTiles([]);
@@ -5620,14 +6432,15 @@ async function loadAssignedTeamMembers() {
     notifyManagerTeamAssignmentChanges(enrichedTeamMembers);
 
     state.teamMembers = enrichedTeamMembers;
+    // Clear the prior assignment notice only after the new team is confirmed.
+    if (enrichedTeamMembers.length) setManagerTeamAssignmentNotice();
 
     publishManagerPerformanceAppraisalContext();
 
     applyTeamFilter();
 
     if (!enrichedTeamMembers.length) {
-      showPageAlert(
-        "warning",
+      setManagerTeamAssignmentNotice(
         "No assigned employee records were returned for the active reporting lines. Please check employees RLS for manager team visibility.",
       );
       return false;
@@ -5682,6 +6495,8 @@ function setManagerCoverageModeLoading(isLoading) {
   if (!modeBadge) return;
 
   if (isLoading) {
+    // BEXHR_H12_MANAGER_QUIET_REFRESH_20261114: keep the last verified label visible while refreshing.
+    if (modeBadge.dataset.bexhrCoverageResolved === "true") return;
     modeBadge.className =
       "manager-coverage-mode-badge manager-coverage-mode-badge--loading";
 
@@ -5709,6 +6524,126 @@ function setManagerActionCentreText(elementId, value) {
   if (element) {
     element.textContent = String(value ?? "");
   }
+}
+
+// PHASE 7B: organisation position is independent of system role or title text.
+// The validated, tenant-bound read-only RPC supplies status for this manager only.
+// Missing API, unavailable data or transient errors must never be interpreted as a role.
+function getManagerOrganizationPositionPresentation() {
+  const helper = window.BexHRManagerOrganizationStatus;
+  if (!helper?.presentation) {
+    return {label: 'Manager', description: 'No employees currently report directly to you.',
+      decisionAuthority: 'A Primary Manager assignment is required for decisions', kind: 'default'};
+  }
+  return helper.presentation(state.currentOrganizationPositionSummary);
+}
+
+// BEXHR MANAGER COVERAGE EARLY RESOLUTION - R-05
+// Display-only first pass. It uses the same de-duplicated reporting-line rows
+// that later build state.teamMembers, so the label can settle as soon as the
+// reporting-line source of truth is known. No authority or data access changes.
+function renderManagerCoverageModeFromReportingLines(reportingLineByEmployeeId) {
+  const reportingLineRows = reportingLineByEmployeeId instanceof Map
+    ? [...reportingLineByEmployeeId.values()]
+    : [];
+
+  const relationshipLabels = reportingLineRows.map((row) =>
+    getReportingLineRelationshipLabel(row),
+  );
+
+  const hasPrimaryRelationship = relationshipLabels.some((label) =>
+    isPrimaryReportingManagerRelationship(label),
+  );
+
+  const hasSecondaryRelationship = relationshipLabels.some((label) =>
+    normalizeText(label).includes("secondary"),
+  );
+
+  let coverageMode = "Manager";
+  let coverageModeKey = "default";
+  let coverageDescription =
+    "Review team activity and reporting-line responsibilities.";
+  let decisionAuthority = "Reporting-line rules apply";
+
+  if (hasPrimaryRelationship && hasSecondaryRelationship) {
+    coverageMode = "Mixed Manager Coverage";
+    coverageModeKey = "mixed";
+    coverageDescription =
+      "Your scope includes Primary and Secondary reporting lines. Only assigned Primary requests or Secondary requests with a current temporary delegation may be decided.";
+    decisionAuthority = "Primary or actively delegated requests";
+  } else if (hasSecondaryRelationship) {
+    coverageMode = "Secondary Manager";
+    coverageModeKey = "secondary";
+    coverageDescription =
+      "You can monitor leave activity and team coverage. Secondary requests require an active temporary delegation from their Primary Manager before you can decide.";
+    decisionAuthority = "Active delegation required for decisions";
+  } else if (hasPrimaryRelationship) {
+    coverageMode = "Primary Manager";
+    coverageModeKey = "primary";
+    coverageDescription =
+      "You can review team coverage and decide pending requests for employees assigned to you as Primary Manager.";
+    decisionAuthority = "You can review and decide";
+  } else {
+    const positionDisplay = getManagerOrganizationPositionPresentation();
+    coverageMode = positionDisplay.label;
+    coverageDescription = positionDisplay.description;
+    decisionAuthority = positionDisplay.decisionAuthority;
+  }
+
+  const modeBadge = document.getElementById(
+    "managerCoverageModeBadge",
+  );
+
+  if (modeBadge) {
+    modeBadge.textContent = coverageMode;
+    modeBadge.className =
+      "manager-coverage-mode-badge " +
+      `manager-coverage-mode-badge--${coverageModeKey}`;
+    modeBadge.dataset.bexhrCoverageResolved = "true";
+    modeBadge.style.visibility = "visible";
+
+    setManagerCoverageModeLoading(false);
+  }
+
+  let headerCoverageLabel = coverageModeKey === "default" ? coverageMode : "Manager";
+
+  if (coverageModeKey === "mixed") {
+    headerCoverageLabel = "Mixed Manager Coverage";
+  } else if (coverageModeKey === "primary") {
+    headerCoverageLabel = "Primary Manager";
+  } else if (coverageModeKey === "secondary") {
+    headerCoverageLabel = "Secondary Manager";
+  }
+
+  renderManagerHeaderResponsibilityBadge(
+    headerCoverageLabel,
+    coverageModeKey || "manager",
+  );
+
+  if (state.dom.managerProfileAuthorityText) {
+    state.dom.managerProfileAuthorityText.textContent =
+      `${coverageMode} workspace member`;
+  }
+
+  if (state.dom.managerProfileAuthorityPill) {
+    state.dom.managerProfileAuthorityPill.dataset.managerAuthority =
+      coverageModeKey;
+  }
+
+  if (state.dom.managerProfileRole) {
+    state.dom.managerProfileRole.value = coverageMode;
+    state.dom.managerProfileRole.removeAttribute("placeholder");
+  }
+
+  setManagerActionCentreText(
+    "managerCoverageModeDescription",
+    coverageDescription,
+  );
+
+  setManagerActionCentreText(
+    "managerDecisionAuthority",
+    decisionAuthority,
+  );
 }
 
 function formatManagerActionCentreDate(value) {
@@ -5786,20 +6721,25 @@ function renderManagerActionCoverageCentre() {
     coverageMode = "Mixed Manager Coverage";
     coverageModeKey = "mixed";
     coverageDescription =
-      "Your scope contains Primary and Secondary reporting lines. Decision rights apply only to employees assigned to you as Primary Manager.";
-    decisionAuthority = "Primary assignments only";
+      "Your scope includes Primary and Secondary reporting lines. Only assigned Primary requests or Secondary requests with a current temporary delegation may be decided.";
+    decisionAuthority = "Primary or actively delegated requests";
   } else if (secondaryRelationshipCount > 0) {
     coverageMode = "Secondary Manager";
     coverageModeKey = "secondary";
     coverageDescription =
-      "You can monitor leave activity and team coverage. Pending decisions remain with each employee's Primary Manager.";
-    decisionAuthority = "Primary Manager action required";
+      "You can monitor leave activity and team coverage. Secondary requests require an active temporary delegation from their Primary Manager before you can decide.";
+    decisionAuthority = "Active delegation required for decisions";
   } else if (primaryRelationshipCount > 0) {
     coverageMode = "Primary Manager";
     coverageModeKey = "primary";
     coverageDescription =
       "You can review team coverage and decide pending requests for employees assigned to you as Primary Manager.";
     decisionAuthority = "You can review and decide";
+  } else {
+    const positionDisplay = getManagerOrganizationPositionPresentation();
+    coverageMode = positionDisplay.label;
+    coverageDescription = positionDisplay.description;
+    decisionAuthority = positionDisplay.decisionAuthority;
   }
 
   const modeBadge = document.getElementById(
@@ -5811,11 +6751,13 @@ function renderManagerActionCoverageCentre() {
     modeBadge.className =
       `manager-coverage-mode-badge ` +
       `manager-coverage-mode-badge--${coverageModeKey}`;
+    modeBadge.dataset.bexhrCoverageResolved = "true";
+    modeBadge.style.visibility = "visible";
 
     setManagerCoverageModeLoading(false);
   }
 
-  let headerCoverageLabel = "Manager";
+  let headerCoverageLabel = coverageModeKey === "default" ? coverageMode : "Manager";
 
   if (coverageModeKey === "mixed") {
     headerCoverageLabel = "Mixed Manager Coverage";
@@ -6211,7 +7153,7 @@ function renderTeamTable(teamMembers) {
 
     const workEmail = String(member.work_email || "--").trim();
     const jobTitle = String(member.job_title || "--").trim();
-    const department = String(member.department || "--").trim();
+    const department = window.BexHRGroupBV13?.display(member) || '--';
     const statusKey = normalizeText(member.teamStatusLabel || "");
 
     row.dataset.managerEmployeeId = employeeRecordId;
@@ -6272,10 +7214,30 @@ function renderTeamTable(teamMembers) {
 // Decision controls remain request-scoped. A Secondary Manager receives action
 // controls only when the protected readiness RPC confirms an active delegation.
 function canManagerDecideLeaveRequest(request = {}) {
-  return (
-    isPrimaryReportingManagerRelationship(request.managerRelationshipLabel) ||
-    request.canDecideLeaveRequest === true
-  );
+  // Neither a display label nor an executive/HR role confers leave authority.
+  // Readiness must explicitly confirm this Primary or delegated Secondary actor.
+  return window.BexHRLeaveAuthority?.canDecide(request) === true;
+}
+
+// Refresh the request-scoped server authority immediately before the final
+// transaction. Revocations and delegation expiry can occur after the queue
+// was rendered. The decision RPC still enforces authority and idempotency.
+async function confirmFreshManagerLeaveAuthority(request) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc("get_manager_leave_readiness");
+  if (error) throw error;
+  const fresh = Array.isArray(data)
+    ? data.find(item => String(item?.request_id || "") === String(request?.id || ""))
+    : null;
+  const snapshot = window.BexHRLeaveAuthority?.fromReadiness(fresh);
+  if (!snapshot || !canManagerDecideLeaveRequest(snapshot) ||
+      !String(snapshot.employeeRecordId || "").trim() ||
+      String(snapshot.employeeRecordId) !== String(request.employeeRecordId || "")) {
+    throw new Error(
+      "Leave approval access has changed or cannot be verified. Refresh the team leave requests before deciding.",
+    );
+  }
+  return true;
 }
 
 function getManagerDelegationContext() {
@@ -6853,8 +7815,12 @@ async function submitManagerLeaveDelegations(event) {
     showManagerLeaveDelegationNotice("warning", "Select the employee this temporary access should cover.");
     return;
   }
-  if (new Date(endsAt) <= new Date(startsAt)) {
-    showManagerLeaveDelegationNotice("warning", "The access end time must be after its start time.");
+  const startTimestamp = Date.parse(startsAt);
+  const endTimestamp = Date.parse(endsAt);
+  if (!Number.isFinite(startTimestamp) || !Number.isFinite(endTimestamp) ||
+      endTimestamp <= startTimestamp || endTimestamp <= Date.now() ||
+      endTimestamp > Date.now() + 90 * 24 * 60 * 60 * 1000) {
+    showManagerLeaveDelegationNotice("warning", "Choose valid dates: the end must follow the start, be in the future, and be no more than 90 days away.");
     return;
   }
 
@@ -6866,22 +7832,36 @@ async function submitManagerLeaveDelegations(event) {
   }
   try {
     const supabase = getSupabaseClient();
-    for (const delegateEmployeeId of selectedDelegateIds) {
-      const { error } = await supabase.rpc("create_manager_leave_delegation", {
-        p_delegate_employee_id: delegateEmployeeId,
-        p_scope_type: scopeType,
-        p_covered_employee_id: coveredEmployeeId,
-        p_starts_at: new Date(startsAt).toISOString(),
-        p_ends_at: new Date(endsAt).toISOString(),
-        p_reason: reason,
-      });
-      if (error) throw error;
+    const result = await window.BexHRLeaveAuthority.createIndividually(
+      selectedDelegateIds,
+      async delegateEmployeeId => {
+        const { error } = await supabase.rpc("create_manager_leave_delegation", {
+          p_delegate_employee_id: delegateEmployeeId,
+          p_scope_type: scopeType,
+          p_covered_employee_id: coveredEmployeeId,
+          p_starts_at: new Date(startTimestamp).toISOString(),
+          p_ends_at: new Date(endTimestamp).toISOString(),
+          p_reason: reason,
+        });
+        if (error) throw error;
+      },
+    );
+
+    // These are independent server transactions. Never imply an all-or-nothing
+    // grant if one Secondary Manager succeeded and another was rejected.
+    if (result.succeeded.length) {
+      await loadManagerLeaveDelegationContext();
+      await loadTeamLeaveVisibility();
+      populateManagerLeaveDelegationModal();
     }
-    showManagerLeaveDelegationNotice("success", `${selectedDelegateIds.length} temporary approval access record${selectedDelegateIds.length === 1 ? "" : "s"} created.`);
-    document.getElementById("managerLeaveDelegationForm")?.reset();
-    await loadManagerLeaveDelegationContext();
-    await loadTeamLeaveVisibility();
-    populateManagerLeaveDelegationModal();
+    if (result.failed.length) {
+      const firstFailure = result.failed[0].message;
+      const summary = `${result.succeeded.length} of ${selectedDelegateIds.length} temporary approvals granted. ${result.failed.length} failed: ${firstFailure}`;
+      showManagerLeaveDelegationNotice(result.succeeded.length ? "warning" : "danger", summary);
+    } else {
+      showManagerLeaveDelegationNotice("success", `${result.succeeded.length} temporary approval access record${result.succeeded.length === 1 ? "" : "s"} created.`);
+      document.getElementById("managerLeaveDelegationForm")?.reset();
+    }
   } catch (error) {
     showManagerLeaveDelegationNotice("danger", error?.message || "Temporary approval access could not be created.");
   } finally {
@@ -6934,8 +7914,8 @@ function initialiseManagerLeaveDelegationUi() {
 // MANAGER LEAVE READINESS IDENTITY RESOLUTION - v1.0.0
 // Read the minimum tenant-scoped readiness data through a protected RPC.
 // This avoids treating RLS-restricted Secondary Manager balance/profile reads
-// as missing data. The existing Primary-Manager-only decision RPC remains the
-// final authority for approve, reject, and return actions.
+// as missing data. The protected decision RPC remains the final authority
+// for Primary and actively delegated Secondary decisions.
 async function loadManagerLeaveReadinessRows() {
   try {
     const supabase = getSupabaseClient();

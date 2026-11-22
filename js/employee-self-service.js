@@ -38,6 +38,13 @@
       linkedUserId: null,
     },
     leaveRequests: [],
+
+    // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+    // Shared HR/Manager self-service uses the same hierarchy-driven rule as
+    // Employee Dashboard: own Leave submission requires an active Primary Manager.
+    leavePrimaryManagerReadinessStatus: "loading",
+    hasPrimaryManagerForLeave: false,
+
     payrollRecords: [],
     isPayrollFiguresHidden: false,
     returnedLeaveAmendmentRequestId: null,
@@ -265,6 +272,128 @@
     return null;
   }
 
+  // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+  function setSsLeavePrimaryManagerReadiness(
+    readinessStatus = "ready",
+    hasPrimaryManager = false,
+  ) {
+    ssState.leavePrimaryManagerReadinessStatus = readinessStatus;
+    ssState.hasPrimaryManagerForLeave =
+      readinessStatus === "ready" && hasPrimaryManager === true;
+
+    updateSsLeaveRequestBlockNotice();
+  }
+
+  async function loadSsLeavePrimaryManagerReadiness() {
+    setSsLeavePrimaryManagerReadiness("loading", false);
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.rpc(
+        "get_employee_leave_primary_manager_readiness",
+      );
+
+      if (error) throw error;
+
+      const readiness = Array.isArray(data) ? data[0] : data;
+
+      if (!readiness || !readiness.employee_id) {
+        throw new Error(
+          "The signed-in employee could not be resolved for Leave readiness.",
+        );
+      }
+
+      setSsLeavePrimaryManagerReadiness(
+        "ready",
+        readiness.has_primary_manager === true,
+      );
+
+      return ssState.hasPrimaryManagerForLeave;
+    } catch (error) {
+      console.warn(
+        "[SS] Unable to verify Primary Manager availability for Leave submission:",
+        error,
+      );
+      setSsLeavePrimaryManagerReadiness("error", false);
+      return false;
+    }
+  }
+
+  function getSsLeavePrimaryManagerBlock() {
+    if (ssState.leavePrimaryManagerReadinessStatus === "loading") {
+      return {
+        message:
+          "Leave request availability is being checked against your current Primary Manager assignment.",
+      };
+    }
+
+    if (ssState.leavePrimaryManagerReadinessStatus !== "ready") {
+      return {
+        message:
+          "Your Primary Manager assignment could not be verified. Refresh this Leave workspace or contact HR before submitting leave.",
+      };
+    }
+
+    if (!ssState.hasPrimaryManagerForLeave) {
+      return {
+        message:
+          "Leave request submission is unavailable because no active Primary Manager is assigned. HR can update your reporting line when a higher reporting position is configured.",
+      };
+    }
+
+    return null;
+  }
+
+  // BEXHR R-14B LIVE REPORTING HIERARCHY REFRESH
+  const SS_REPORTING_HIERARCHY_SYNC_STORAGE_KEY = "bexhrReportingHierarchySync";
+  let ssLeaveHierarchyRefreshInProgress = false;
+  let ssLeaveHierarchyRefreshQueued = false;
+
+  async function refreshSsLeaveReadinessFromHierarchyChange() {
+    if (!ssState.currentUser || !ssState.employeeRecord) return;
+
+    if (ssLeaveHierarchyRefreshInProgress) {
+      ssLeaveHierarchyRefreshQueued = true;
+      return;
+    }
+
+    ssLeaveHierarchyRefreshInProgress = true;
+
+    try {
+      await loadSsLeavePrimaryManagerReadiness();
+    } catch (error) {
+      console.warn("[SS] Leave hierarchy refresh failed:", error);
+    } finally {
+      ssLeaveHierarchyRefreshInProgress = false;
+
+      if (ssLeaveHierarchyRefreshQueued) {
+        ssLeaveHierarchyRefreshQueued = false;
+        void refreshSsLeaveReadinessFromHierarchyChange();
+      }
+    }
+  }
+
+  window.addEventListener("bexhr:reporting-hierarchy-changed", () => {
+    void refreshSsLeaveReadinessFromHierarchyChange();
+  });
+
+  window.addEventListener("storage", (event) => {
+    if (event.key !== SS_REPORTING_HIERARCHY_SYNC_STORAGE_KEY) return;
+    void refreshSsLeaveReadinessFromHierarchyChange();
+  });
+
+  window.addEventListener("focus", () => {
+    void refreshSsLeaveReadinessFromHierarchyChange();
+    void refreshSsLeaveEligibilityOnOpen();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      void refreshSsLeaveReadinessFromHierarchyChange();
+      void refreshSsLeaveEligibilityOnOpen();
+    }
+  });
+
   // -----------------------------------------------------------------------
   // DOM caching
   // -----------------------------------------------------------------------
@@ -350,9 +479,209 @@
   // -----------------------------------------------------------------------
   // Sub-navigation (Leave / Payroll)
   // -----------------------------------------------------------------------
-  function switchSsSubSection(section) {
-    const isLeave = section === "leave";
-    const isPayroll = section === "payroll";
+  // =======================================================
+  // BEXHR UNIFIED SELF-SERVICE LEAVE TABS - R-02.2
+  // One Leave job, four peer views. Existing forms, IDs, handlers,
+  // leave rules, payroll rules, Supabase queries, and permissions remain intact.
+  // =======================================================
+  const SS_LEAVE_VIEW_DEFAULT = "request";
+  const SS_LEAVE_VIEWS = Object.freeze({
+    request: { label: "Request Leave", icon: "bi-calendar2-plus" },
+    history: { label: "History", icon: "bi-clock-history" },
+    balances: { label: "Leave Balances", icon: "bi-pie-chart" },
+    decision: { label: "Latest Decision", icon: "bi-calendar2-check" },
+  });
+
+  // REDESIGN37_HR_UI004_R1: remember selected Leave tab per user and tenant.
+  const SS_LEAVE_MEMORY_PREFIX = "bexhr:r37:ss-leave-view";
+
+  function ssLeaveStorageKey() {
+    const user = String(ssState.currentUser?.id || "").trim();
+    const tenant = String(ssState.currentProfile?.tenant_id || "").trim();
+    return user && tenant
+      ? `${SS_LEAVE_MEMORY_PREFIX}:${tenant}:${user}`
+      : "";
+  }
+
+  function readSsLeaveView() {
+    const key = ssLeaveStorageKey();
+    if (!key) return null;
+    try {
+      const view = sessionStorage.getItem(key);
+      return Object.prototype.hasOwnProperty.call(SS_LEAVE_VIEWS, view)
+        ? view : null;
+    } catch (_) { return null; }
+  }
+
+  function rememberSsLeaveView(view) {
+    const key = ssLeaveStorageKey();
+    if (!key) return;
+    try { sessionStorage.setItem(key, view); }
+    catch (_) { /* Storage is optional. */ }
+  }
+
+  function normaliseSsLeaveView(view = "") {
+    const key = String(view || "").trim().toLowerCase();
+    return Object.hasOwn(SS_LEAVE_VIEWS, key) ? key : SS_LEAVE_VIEW_DEFAULT;
+  }
+
+  function getSsLeaveViewNodes() {
+    const balanceCard = ssState.dom.ssLeaveBalancesCardCollapse?.closest(".dashboard-section-card") || null;
+    const decisionCard = ssState.dom.ssLatestDecisionCardCollapse?.closest(".dashboard-section-card") || null;
+    const requestCard = ssState.dom.ssLeaveRequestForm?.closest(".dashboard-section-card") || null;
+    const historyCard = ssState.dom.ssLeaveHistoryCardCollapse?.closest(".dashboard-section-card") || null;
+    const requestColumn = requestCard?.closest(".col-12") || null;
+    const historyColumn = historyCard?.closest(".col-12") || null;
+    const mainRow = requestCard?.closest(".ss-leave-main-row") || historyCard?.closest(".ss-leave-main-row") || null;
+
+    return {
+      balanceCard,
+      decisionCard,
+      requestCard,
+      historyCard,
+      requestColumn,
+      historyColumn,
+      mainRow,
+    };
+  }
+
+  function ensureSsLeaveInlineTabs() {
+    const section = ssState.dom.ssLeaveSection;
+    if (!section) return null;
+
+    section.classList.add("ss-leave-inline-mode");
+
+    const existing = document.getElementById("ssLeaveInlineTabs");
+    if (existing) return existing;
+
+    const nav = document.createElement("nav");
+    nav.id = "ssLeaveInlineTabs";
+    nav.className = "ss-leave-inline-tabs";
+    nav.setAttribute("aria-label", "Leave workspace views");
+
+    Object.entries(SS_LEAVE_VIEWS).forEach(([key, config]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ss-leave-inline-tab";
+      button.dataset.ssLeaveView = key;
+      button.setAttribute("aria-selected", "false");
+      button.innerHTML = '<i class="bi ' + config.icon + '" aria-hidden="true"></i><span>' + config.label + '</span>';
+      button.addEventListener("click", () => {
+        setSsLeaveView(key, { focus: true });
+      });
+      nav.appendChild(button);
+    });
+
+    section.insertBefore(nav, section.firstChild);
+    return nav;
+  }
+
+  function setSsLeaveView(view = SS_LEAVE_VIEW_DEFAULT, options = {}) {
+    const section = ssState.dom.ssLeaveSection;
+    if (!section) return SS_LEAVE_VIEW_DEFAULT;
+
+    ensureSsLeaveInlineTabs();
+
+    // BEXHR_GROUP_B_V15_PATCH: an unapprovable top-level request cannot be an active view.
+    const highest = window.BexHRGroupBV14Leave?.isHighestCurrent?.() === true;
+    const requested = normaliseSsLeaveView(view);
+    const resolved = highest && requested === 'request' ? 'balances' : requested;
+    const nodes = getSsLeaveViewNodes();
+    const usesMainRow = resolved === "request" || resolved === "history";
+
+    ssState.activeLeaveView = resolved;
+    section.dataset.ssLeaveView = resolved;
+    if (options.focus === true) rememberSsLeaveView(resolved);
+
+    nodes.balanceCard?.classList.toggle("d-none", resolved !== "balances");
+    nodes.decisionCard?.classList.toggle("d-none", resolved !== "decision");
+    nodes.mainRow?.classList.toggle("d-none", !usesMainRow);
+    nodes.requestColumn?.classList.toggle("d-none", resolved !== "request");
+    nodes.historyColumn?.classList.toggle("d-none", resolved !== "history");
+    nodes.requestColumn?.classList.toggle("ss-leave-focused-column", resolved === "request");
+    nodes.historyColumn?.classList.toggle("ss-leave-focused-column", resolved === "history");
+
+    document.querySelectorAll("#ssLeaveInlineTabs [data-ss-leave-view]").forEach((button) => {
+      if (button.dataset.ssLeaveView === 'request') {
+        button.hidden = highest;
+        if (highest) button.style.setProperty('display', 'none', 'important');
+        else button.style.removeProperty('display');
+      }
+      const active = button.dataset.ssLeaveView === resolved;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+
+    if (resolved === "balances") {
+      setSsCardExpanded(
+        ssState.dom.ssToggleLeaveBalancesCardBtn,
+        ssState.dom.ssLeaveBalancesCardCollapse,
+        true,
+      );
+    } else if (resolved === "decision") {
+      setSsCardExpanded(
+        ssState.dom.ssToggleLatestDecisionCardBtn,
+        ssState.dom.ssLatestDecisionCardCollapse,
+        true,
+      );
+    } else if (resolved === "history") {
+      setSsCardExpanded(
+        ssState.dom.ssToggleLeaveHistoryCardBtn,
+        ssState.dom.ssLeaveHistoryCardCollapse,
+        true,
+      );
+    }
+
+    if (options.focus === true) {
+      document.querySelector('#ssLeaveInlineTabs [data-ss-leave-view="' + resolved + '"]')?.focus({ preventScroll: true });
+    }
+
+    scheduleSsLeaveMainCardHeightSync();
+    return resolved;
+  }
+
+  // BEXHR_GROUP_B_V15_PATCH: navigation/focus refreshes eligibility without touching balances.
+  let ssLeaveAutoRefreshPromise = null;
+  async function refreshSsLeaveEligibilityOnOpen() {
+    if (!ssState.isInitialized || ssState.activeSection !== 'leave' ||
+        !ssState.currentUser?.id || !ssState.employeeRecord?.id) return false;
+    if (ssLeaveAutoRefreshPromise) return ssLeaveAutoRefreshPromise;
+    const userId = ssState.currentUser.id;
+    const task = (async () => {
+      await loadSsEmployeeRecord(); // Re-read gender, not cached form state.
+      if (ssState.currentUser?.id !== userId) return false;
+      await Promise.all([loadSsLeaveBalances(), loadSsLeaveTypes()]);
+      window.BexHRGroupBV14Leave?.syncView?.();
+      return true;
+    })();
+    ssLeaveAutoRefreshPromise = task;
+    try { return await task; }
+    catch (error) {
+      console.warn('[SS] Automatic leave eligibility refresh failed:', error);
+      return false;
+    } finally {
+      if (ssLeaveAutoRefreshPromise === task) ssLeaveAutoRefreshPromise = null;
+    }
+  }
+
+  function prepareSsSubSection(section = "payroll", options = {}) {
+    if (!ssState.dom.ssLeaveSection || !ssState.dom.ssPayrollSection) {
+      cacheSsDomElements();
+    }
+
+    ensureSsLeaveInlineTabs();
+    return switchSsSubSection(section, options);
+  }
+
+  function switchSsSubSection(section, options = {}) {
+    const resolvedSection = section === "leave" ? "leave" : "payroll";
+    const isLeave = resolvedSection === "leave";
+    const isPayroll = resolvedSection === "payroll";
+
+    ssState.activeSection = resolvedSection;
+    ensureSsLeaveInlineTabs();
 
     ssState.dom.ssLeaveSection?.classList.toggle("d-none", !isLeave);
     ssState.dom.ssPayrollSection?.classList.toggle("d-none", !isPayroll);
@@ -369,35 +698,15 @@
         : "btn btn-outline-primary dashboard-action-btn";
     }
 
-    // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3
-    // Employee Dashboard behaviour:
-    // - Leave Balances stays closed by default.
-    // - Latest Leave Decision stays closed by default.
-    // - My Leave History opens so the employee/HR user can immediately
-    //   see submitted requests and manager decisions.
     if (isLeave) {
-      setSsCardExpanded(
-        ssState.dom.ssToggleLeaveBalancesCardBtn,
-        ssState.dom.ssLeaveBalancesCardCollapse,
-        false,
+      setSsLeaveView(
+        ssState.activeLeaveView || options.leaveView || SS_LEAVE_VIEW_DEFAULT,
       );
-
-      setSsCardExpanded(
-        ssState.dom.ssToggleLatestDecisionCardBtn,
-        ssState.dom.ssLatestDecisionCardCollapse,
-        false,
-      );
-
-      setSsCardExpanded(
-        ssState.dom.ssToggleLeaveHistoryCardBtn,
-        ssState.dom.ssLeaveHistoryCardCollapse,
-        true,
-      );
+      if (ssState.isInitialized && ssState.employeeRecord?.id) {
+        void refreshSsLeaveEligibilityOnOpen();
+      }
     }
 
-    // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3
-    // Payroll opens with Payroll History visible because this is where HR
-    // confirms their own authorised payslip records.
     if (isPayroll) {
       setSsCardExpanded(
         ssState.dom.ssTogglePayrollHistoryCardBtn,
@@ -405,6 +714,8 @@
         true,
       );
     }
+
+    return resolvedSection;
   }
 
   function bindSsNavigationEvents() {
@@ -470,12 +781,6 @@
         ssState.dom.ssLeaveSection ||
         document.getElementById("ssLeaveSection");
 
-      // MANAGER SELF-SERVICE PARITY - STEP 2C-2
-      // This shared self-service module runs inside HR and Manager dashboards.
-      // Resolve the active self-service host from the visible Leave section
-      // instead of hardcoding #hrSelfServiceSection. This preserves HR behaviour
-      // and makes Manager My Leave History use the same open/collapse/double-click
-      // height handling as HR.
       const selfServiceSection =
         leaveSection?.closest(".workspace-section") ||
         document.getElementById("hrSelfServiceSection") ||
@@ -496,6 +801,11 @@
         row.removeAttribute("data-ss-leave-card-height");
       };
 
+      if (leaveSection?.classList.contains("ss-leave-inline-mode")) {
+        clearHeight();
+        return;
+      }
+
       const isDesktop = window.matchMedia("(min-width: 1200px)").matches;
       const isHistoryExpanded = !historyPanel.classList.contains("d-none");
       const isSelfServiceHidden = selfServiceSection?.classList.contains("d-none");
@@ -511,7 +821,7 @@
       const measuredHeight = Math.ceil(requestCard.getBoundingClientRect().height);
 
       if (measuredHeight > 0) {
-        row.style.setProperty("--ss-leave-card-height", `${measuredHeight}px`);
+        row.style.setProperty("--ss-leave-card-height", String(measuredHeight) + "px");
         row.setAttribute("data-ss-leave-card-height", "true");
       }
     });
@@ -576,6 +886,7 @@
       // Reload the staff employee record first so HR/Manager Self-Service
       // immediately reflects gender changes after Refresh Balances.
       await loadSsEmployeeRecord();
+      await loadSsLeavePrimaryManagerReadiness();
 
       await loadSsLeaveBalances();
       await loadSsLeaveTypes();
@@ -736,28 +1047,8 @@
   // leave-history inner scroll area are ignored, so normal clicking/scrolling
   // does not accidentally collapse the card.
   function bindSsCardDoubleClickCollapse(btn, body) {
-    if (!btn || !body) return;
-
-    const card = body.closest(".dashboard-section-card");
-    if (!card) return;
-
-    if (card.dataset.ssDoubleClickCollapseBound === "true") return;
-    card.dataset.ssDoubleClickCollapseBound = "true";
-
-    card.addEventListener("dblclick", (event) => {
-      const ignoredTarget = event.target.closest(
-        "button, a, input, select, textarea, label, table, .employee-leave-history-scroll-area, [contenteditable='true']",
-      );
-
-      if (ignoredTarget) return;
-
-      const isExpanded = !body.classList.contains("d-none");
-      if (!isExpanded) return;
-
-      // Use the visible button path so double-click behaves exactly like
-      // pressing Collapse.
-      btn.click();
-    });
+    // H12 single-click contract: standard visible buttons already toggle.
+    return;
   }
 
   // -----------------------------------------------------------------------
@@ -1664,6 +1955,12 @@ ${isCancelledAudit
   // Leave policy block
   // -----------------------------------------------------------------------
   function getSsLeaveRequestPolicyBlock() {
+    // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+    // Check reporting authority before field-level Leave rules so the reason is
+    // visible even when the Request Leave form is still empty.
+    const primaryManagerBlock = getSsLeavePrimaryManagerBlock();
+    if (primaryManagerBlock) return primaryManagerBlock;
+
     const leaveTypeId = ssState.dom.ssLeaveType?.value || "";
     const startDate = ssState.dom.ssStartDate?.value || "";
     const endDate = ssState.dom.ssEndDate?.value || "";
@@ -1745,7 +2042,7 @@ ${isCancelledAudit
 
     const block = getSsLeaveRequestPolicyBlock();
 
-    if (block) {
+    if (block && ssState.leavePrimaryManagerReadinessStatus !== "loading") {
       notice.textContent = block.message;
       notice.classList.remove("d-none");
     } else {
@@ -1884,6 +2181,10 @@ ${isCancelledAudit
     }
 
     calculateSsLeaveDays();
+
+    // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
+    // Re-read reporting authority immediately before submit/resubmit.
+    await loadSsLeavePrimaryManagerReadiness();
 
     if (!validateSsLeaveRequestForm()) return;
 
@@ -3271,19 +3572,23 @@ ${isCancelledAudit
   // -----------------------------------------------------------------------
   // Public init
   // -----------------------------------------------------------------------
-  async function init(currentUser, currentProfile) {
+  async function init(currentUser, currentProfile, options = {}) {
     if (!currentUser) {
       console.warn("[SS] init() called without currentUser — aborting.");
       return;
     }
 
+    const requestedInitialSection = options.initialSection === "leave" ? "leave" : "payroll";
+    const requestedLeaveView = normaliseSsLeaveView(options.leaveView || SS_LEAVE_VIEW_DEFAULT);
+
     ssState.currentUser = currentUser;
     ssState.currentProfile = currentProfile;
+    ssState.activeLeaveView = readSsLeaveView() || requestedLeaveView;
 
     cacheSsDomElements();
+    ensureSsLeaveInlineTabs();
 
     if (!ssState.isInitialized) {
-      // Wire up events only on first open
       bindSsNavigationEvents();
       bindSsLeaveBalancesCardEvents();
       bindSsLatestDecisionCardEvents();
@@ -3294,61 +3599,27 @@ ${isCancelledAudit
       ssState.isInitialized = true;
     }
 
-    // SYSTEM-WIDE SELF-SERVICE PAYROLL FIRST-PAINT FIX - STEP 1G
-    // Self-Service defaults to Payroll for HR/Manager staff. Switch the visible
-    // sub-section before any async data loading starts so the page does not
-    // briefly show Leave Management before Payroll History appears.
-    // This is UI timing only; it does not change leave, payroll, payslip,
-    // authorisation, tenant filtering, or Alpatech branding logic.
-    switchSsSubSection("payroll");
+    // Establish the exact requested presentation before any async data load.
+    switchSsSubSection(requestedInitialSection, {
+      leaveView: requestedLeaveView,
+    });
 
-    // SYSTEM-WIDE SELF-SERVICE PAYROLL FIRST-PAINT FIX - STEP 1G
-    // Keep Payroll History visibly open during loading. The final init block
-    // below repeats this after data loads, so this only prevents first-paint flash.
-    setSsCardExpanded(
-      ssState.dom.ssTogglePayrollHistoryCardBtn,
-      ssState.dom.ssPayrollHistoryCardCollapse,
-      true,
-    );
-
-    // Load data
     clearSsAlert();
 
     await loadSsEmployeeRecord();
     await Promise.all([
+      loadSsLeavePrimaryManagerReadiness(),
       loadSsLeaveTypes(),
       loadSsLeaveBalances(),
       loadSsLeaveRequests(),
       loadSsPayroll(),
     ]);
 
-    // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1B
-    // HR users often enter My Self-Service from payslip email/payment context.
-    // Show Payroll first so their own authorised payslip records are immediately visible.
-    // Leave remains available through the Leave Management sub-tab.
-    switchSsSubSection("payroll");
-
-    // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1B
-    // Keep leave cards closed by default. This avoids the Leave workspace
-    // taking over the self-service page when HR is trying to check payroll.
-    setSsCardExpanded(
-      ssState.dom.ssToggleLeaveBalancesCardBtn,
-      ssState.dom.ssLeaveBalancesCardCollapse,
-      false,
-    );
-    setSsCardExpanded(
-      ssState.dom.ssToggleLeaveHistoryCardBtn,
-      ssState.dom.ssLeaveHistoryCardCollapse,
-      false,
-    );
-
-    // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1B
-    // Payroll History should be open when Payroll is the default sub-section.
-    setSsCardExpanded(
-      ssState.dom.ssTogglePayrollHistoryCardBtn,
-      ssState.dom.ssPayrollHistoryCardCollapse,
-      true,
-    );
+    // Respect any navigation change made while data was loading.
+    const finalSection = ssState.activeSection || requestedInitialSection;
+    switchSsSubSection(finalSection, {
+      leaveView: ssState.activeLeaveView || requestedLeaveView,
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -3356,5 +3627,8 @@ ${isCancelledAudit
   // -----------------------------------------------------------------------
   window.EmployeeSelfService = {
     init,
+    prepare: prepareSsSubSection,
+    show: prepareSsSubSection,
+    showLeaveView: setSsLeaveView,
   };
 })();

@@ -9045,7 +9045,7 @@ body.alpatech-workspace .hr-create-employee-card .hr-employee-form-chip--info {
 }
 
 #hrSetupSection section:has(#payrollEmployeeOverrideCardCollapse) > .card-body > :first-child .section-heading::before {
-  content: "Exception governance";
+  content: "One-off payroll";
 }
 
 #hrSetupSection section:has(#bankDirectoryCardCollapse) > .card-body > :first-child .section-heading::before {
@@ -9619,8 +9619,8 @@ body.alpatech-workspace .hr-create-employee-card .hr-employee-form-chip--info {
   /* Job title records */
   #organizationJobTitlesTableWrapper td:nth-child(1)::before { content: "Job title"; }
   #organizationJobTitlesTableWrapper td:nth-child(2)::before { content: "Department"; }
-  #organizationJobTitlesTableWrapper td:nth-child(3)::before { content: "Status"; }
-  #organizationJobTitlesTableWrapper td:nth-child(4)::before { content: "Updated"; }
+  #organizationJobTitlesTableWrapper td:nth-child(3)::before { content: "Reports to"; }
+  #organizationJobTitlesTableWrapper td:nth-child(4)::before { content: "Position status"; }
   #organizationJobTitlesTableWrapper td:nth-child(5)::before { content: "Action"; }
 
   /* Allowance records */
@@ -9654,14 +9654,14 @@ body.alpatech-workspace .hr-create-employee-card .hr-employee-form-chip--info {
   #payrollOtherDeductionRecordsTableWrapper td:nth-child(8)::before { content: "Updated"; }
   #payrollOtherDeductionRecordsTableWrapper td:nth-child(9)::before { content: "Action"; }
 
-  /* Employee override records */
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(1)::before { content: "Salary setup"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(2)::before { content: "Category"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(3)::before { content: "Element"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(4)::before { content: "Method"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(5)::before { content: "Override"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(6)::before { content: "Effective"; }
-  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(7)::before { content: "Status"; }
+  /* Payroll adjustment records */
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(1)::before { content: "Employee"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(2)::before { content: "Adjustment Type"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(3)::before { content: "Amount"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(4)::before { content: "Pay Period"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(5)::before { content: "Reason"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(6)::before { content: "Record Type"; }
+  #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(7)::before { content: "Lifecycle"; }
   #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(8)::before { content: "Updated"; }
   #payrollEmployeeOverrideRecordsTableWrapper td:nth-child(9)::before { content: "Action"; }
 
@@ -22364,7 +22364,10 @@ body.bexhr-hr-visual-refresh
 
 body.bexhr-hr-visual-refresh
   #payrollEmployeeOverrideRecordsTableWrapper
-  .hr-override-record-cell::before {
+  .hr-override-record-cell::before,
+body.bexhr-hr-visual-refresh
+  #payrollEmployeeOverrideRecordsTableWrapper
+  .hr-deduction-record-cell::before {
   display: none !important;
   content: none !important;
 }
@@ -23432,7 +23435,7 @@ body.bexhr-hr-visual-refresh .hr-payment-record-code {
   #organizationJobTitlesTableWrapper
   tbody
   td:nth-child(3)::before {
-  content: "Status";
+  content: "Reports to";
 }
 
 #hrSetupSection
@@ -23440,7 +23443,7 @@ body.bexhr-hr-visual-refresh .hr-payment-record-code {
   #organizationJobTitlesTableWrapper
   tbody
   td:nth-child(4)::before {
-  content: "Last updated";
+  content: "Position status";
 }
 
 #hrSetupSection
@@ -31984,4 +31987,1511 @@ body.bexhr-admin-visual-refresh
 #removeCompanyAccessModal .modal-header,
 #permanentDeleteUserModal .modal-header {
   align-items: flex-start;
+}
+
+/* =========================================================
+   BEXHR UNIVERSAL WORKSPACE LOADER - US-01
+
+   One quiet loader presentation for BexHR workspaces.
+
+   Presentation only:
+   - keeps existing loader IDs and boot-state visibility logic;
+   - does not change authentication, session, tenant, payroll, leave,
+     Performance Appraisal, Supabase, RLS, or workspace routing;
+   - supports both the current favicon loader markup and the older
+     shared loader mark used by existing personas.
+   ========================================================= */
+
+.bexhr-workspace-loader {
+  background: #fbfaf8 !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo) {
+  width: min(100%, 280px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.72rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+  backdrop-filter: none;
+  overflow: visible;
+  position: relative;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel::before,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo)::before {
+  content: "";
+  order: 2;
+  display: block;
+  width: min(190px, 72vw);
+  height: 3px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      #dfe7e6 0%,
+      #dfe7e6 38%,
+      #087f7a 48%,
+      #16b8ae 52%,
+      #dfe7e6 62%,
+      #dfe7e6 100%
+    );
+  background-size: 220% 100%;
+  animation: bexhrUniversalWorkspaceLoaderLine 1.15s linear infinite;
+  pointer-events: none;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel::after,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo)::after {
+  content: "Loading your workspace...";
+  order: 3;
+  position: static;
+  display: block;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: #667085;
+  opacity: 1;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel > * {
+  position: static;
+  z-index: auto;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-brand {
+  order: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  width: auto;
+  color: #172033;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  text-align: center;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-logo-shell {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-logo {
+  display: block;
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-mark {
+  width: 46px;
+  height: 46px;
+  display: block;
+  flex: 0 0 46px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background:
+    url("../assets/favicon/favicon.svg?v=20260801")
+    center / contain no-repeat !important;
+  box-shadow: none;
+  color: transparent !important;
+  font-size: 0 !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-brand-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-brand-copy strong {
+  color: #172033;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-brand-copy small,
+.bexhr-workspace-loader .bexhr-workspace-loader-progress,
+.bexhr-workspace-loader .bexhr-workspace-loader-spinner,
+.bexhr-workspace-loader .bexhr-workspace-loader-message,
+.bexhr-workspace-loader .bexhr-workspace-loader-status,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel > strong,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel > span:last-child {
+  display: none !important;
+}
+
+@keyframes bexhrUniversalWorkspaceLoaderLine {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .bexhr-workspace-loader {
+    padding: 1rem;
+  }
+
+  .bexhr-workspace-loader .bexhr-workspace-loader-panel,
+  .bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo) {
+    width: min(100%, 250px);
+    padding: 0;
+    border-radius: 0;
+    gap: 0.68rem;
+  }
+
+  .bexhr-workspace-loader .bexhr-workspace-loader-logo-shell {
+    width: 48px;
+    height: 48px;
+    flex-basis: 48px;
+  }
+
+  .bexhr-workspace-loader .bexhr-workspace-loader-logo,
+  .bexhr-workspace-loader .bexhr-workspace-loader-mark {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bexhr-workspace-loader .bexhr-workspace-loader-panel::before,
+  .bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo)::before {
+    animation: none !important;
+    background-position: 50% 0;
+  }
+}
+
+
+/* =========================================================
+   BEXHR UNIVERSAL WORKSPACE LOADER - US-01 FLOW CORRECTION
+
+   Use the existing loader progress element in normal document flow.
+   This prevents the loading line from inheriting older absolute
+   positioning above the centered BexHR identity.
+   ========================================================= */
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel::before,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo)::before {
+  content: none !important;
+  display: none !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-progress {
+  order: 2 !important;
+  display: block !important;
+  position: static !important;
+  inset: auto !important;
+  align-self: center !important;
+  width: min(132px, 40vw) !important;
+  height: 2px !important;
+  margin: 0.12rem auto 0 !important;
+  padding: 0 !important;
+  transform: none !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-spinner {
+  display: none !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-progress-line {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  height: 2px !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  border-radius: 999px !important;
+  background: #dfe7e6 !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-progress-line > span {
+  position: absolute !important;
+  inset: 0 auto 0 0 !important;
+  display: block !important;
+  width: 42% !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+  background: linear-gradient(
+    90deg,
+    #087f7a 0%,
+    #16b8ae 100%
+  ) !important;
+  animation:
+    bexhrWorkspaceLoaderProgress
+    1.35s
+    ease-in-out
+    infinite !important;
+}
+
+.bexhr-workspace-loader .bexhr-workspace-loader-panel::after,
+.bexhr-workspace-loader .bexhr-workspace-loader-panel:has(.bexhr-workspace-loader-logo)::after {
+  order: 3 !important;
+}
+
+/* =========================================================
+   BEXHR HR NAVIGATION ARCHITECTURE - US-02
+
+   Desktop-only grouped HR navigation.
+   - one expanded parent group at a time;
+   - child tasks remain visually subordinate to their parent;
+   - existing mobile/tablet workspace switcher remains authoritative below 992px;
+   - no business logic, permissions, data access, or tenant behaviour changes.
+   ========================================================= */
+
+body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-subnav[hidden] {
+  display: none !important;
+}
+
+/* Explicit desktop task navigation presents one job at a time without moving,
+   cloning, or rebuilding the existing source cards. */
+body.bexhr-hr-visual-refresh .bexhr-hr-task-hidden {
+  display: none !important;
+}
+
+@media (min-width: 992px) {
+  body.bexhr-hr-visual-refresh .bexhr-sidebar-nav {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.15rem;
+    scrollbar-width: thin;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-group {
+    min-width: 0;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-group-toggle {
+    min-width: 0;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-group-toggle > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-chevron {
+    width: 14px !important;
+    height: 14px !important;
+    margin-left: auto;
+    flex: 0 0 14px;
+    font-size: 0.7rem !important;
+    transition: transform 160ms ease, color 160ms ease;
+  }
+
+  body.bexhr-hr-visual-refresh
+    .bexhr-hr-sidebar-group-toggle.is-expanded
+    .bexhr-hr-sidebar-chevron {
+    transform: rotate(90deg);
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-subnav {
+    display: grid;
+    gap: 0.18rem;
+    margin: 0.2rem 0 0.45rem 2.35rem;
+    padding-left: 0.65rem;
+    border-left: 1px solid rgba(148, 163, 184, 0.22);
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-subitem {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 32px;
+    padding: 0.38rem 0.5rem;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 620;
+    line-height: 1.25;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-subitem i {
+    width: 15px;
+    flex: 0 0 15px;
+    text-align: center;
+    font-size: 0.78rem;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subnav {
+    border-left-color: rgba(148, 163, 184, 0.2);
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem {
+    color: #91a4b7;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem i {
+    color: #6f879f;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem:hover,
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem:focus-visible {
+    outline: none;
+    background: rgba(255, 255, 255, 0.075);
+    color: #ffffff;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem:hover i,
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem:focus-visible i {
+    color: #9ce8e2;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem.active {
+    background: rgba(22, 184, 174, 0.14);
+    color: #ffffff;
+    font-weight: 720;
+  }
+
+  body.bexhr-hr-visual-refresh:not(.alpatech-workspace)
+    .bexhr-hr-sidebar-subitem.active i {
+    color: #62ddd3;
+  }
+
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem {
+    color: #64748b;
+  }
+
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem i {
+    color: #7890a8;
+  }
+
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem:hover,
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem:focus-visible {
+    outline: none;
+    background: #eaf8fb;
+    color: #08446d;
+  }
+
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem.active {
+    background: rgba(11, 95, 149, 0.1);
+    color: #08446d;
+    font-weight: 720;
+  }
+
+  body.bexhr-hr-visual-refresh.alpatech-workspace
+    .bexhr-hr-sidebar-subitem.active i {
+    color: #0b5f95;
+  }
+
+  /* Sidebar footer now owns Sign Out on desktop. Keep the existing header
+     button in the DOM so mobile/tablet retain their current logout control. */
+  body.bexhr-hr-visual-refresh .hr-modern-logout-button {
+    display: none !important;
+  }
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-hr-visual-refresh .bexhr-hr-sidebar-subnav {
+    display: none !important;
+  }
+}
+
+/* =========================================================
+   BEXHR HR NAVIGATION ARCHITECTURE - US-02
+   PERFORMANCE APPRAISAL / HELP CONSISTENCY CORRECTION
+
+   Presentation only:
+   - Performance Appraisal chooser now uses the same HR product modal language
+     as the workspace guide;
+   - Help includes Performance Appraisal as a first-class destination;
+   - existing appraisal capability checks, routing, context publication,
+     tenant behaviour, role rules, Supabase calls, and persistence stay intact.
+   ========================================================= */
+
+.hr-performance-appraisal-chooser-modal {
+  z-index: 10000;
+}
+
+.hr-performance-appraisal-chooser-shell {
+  width: min(100%, 900px);
+  max-height: min(92vh, 720px);
+}
+
+.hr-performance-appraisal-option-grid {
+  margin-top: 0;
+}
+
+.hr-performance-appraisal-option-card {
+  min-height: 176px;
+}
+
+.hr-performance-appraisal-option-card .hr-guide-workspace-link {
+  margin-top: auto;
+}
+
+.hr-guide-workspace-card--performance {
+  grid-column: 1 / -1;
+  min-height: 112px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.9rem;
+}
+
+.hr-guide-workspace-card--performance .hr-guide-workspace-icon {
+  color: var(--hr-primary-dark);
+  background: rgba(var(--bexhr-accent-rgb), 0.1);
+}
+
+.hr-guide-workspace-card--performance .hr-guide-workspace-copy {
+  margin-top: 0;
+}
+
+.hr-guide-workspace-card--performance .hr-guide-workspace-link {
+  justify-self: end;
+  margin-top: 0;
+}
+
+.hr-performance-appraisal-option-grid .hr-guide-workspace-card--performance {
+  grid-column: auto;
+  min-height: 176px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.hr-performance-appraisal-option-grid
+  .hr-guide-workspace-card--performance
+  .hr-guide-workspace-copy {
+  margin-top: 0.7rem;
+}
+
+.hr-performance-appraisal-option-grid
+  .hr-guide-workspace-card--performance
+  .hr-guide-workspace-link {
+  align-self: flex-start;
+  justify-self: auto;
+  margin-top: auto;
+}
+
+@media (max-width: 767.98px) {
+  .hr-guide-workspace-card--performance {
+    min-height: 136px;
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .hr-guide-workspace-card--performance .hr-guide-workspace-copy {
+    margin-top: 0;
+  }
+
+  .hr-guide-workspace-card--performance .hr-guide-workspace-link {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: 0.25rem;
+  }
+
+  .hr-performance-appraisal-option-grid
+    .hr-guide-workspace-card--performance {
+    min-height: 136px;
+    display: flex;
+  }
+
+  .hr-performance-appraisal-option-grid
+    .hr-guide-workspace-card--performance
+    .hr-guide-workspace-copy {
+    margin-top: 0.7rem;
+  }
+
+  .hr-performance-appraisal-option-grid
+    .hr-guide-workspace-card--performance
+    .hr-guide-workspace-link {
+    margin-top: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hr-performance-appraisal-option-card {
+    transition: none;
+  }
+}
+
+/* =========================================================
+   BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+
+   - desktop continues to use the grouped US-02 sidebar;
+   - mobile/tablet get compact in-workspace People/Setup task navigation;
+   - Setup Payroll Rules and Payment Setup reuse the established internal
+     workspace tabs so only one existing working card is shown at a time;
+   - no existing form IDs, handlers, permissions, queries, or save logic change.
+   ========================================================= */
+
+body.bexhr-hr-visual-refresh .hr-focused-workspace-switcher {
+  display: none;
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-hr-visual-refresh .hr-focused-workspace-switcher {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+    border: 1px solid var(--bexhr-line, #e4eaf1);
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+  }
+
+  body.bexhr-hr-visual-refresh .hr-focused-workspace-task-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 0.48rem 0.72rem;
+    border: 1px solid #dbe4ed;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #526173;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 720;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  body.bexhr-hr-visual-refresh .hr-focused-workspace-task-btn.active,
+  body.bexhr-hr-visual-refresh .hr-focused-workspace-task-btn[aria-current="page"] {
+    border-color: rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.34);
+    background: rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.08);
+    color: var(--hr-primary-dark);
+  }
+
+  body.bexhr-hr-visual-refresh .hr-focused-workspace-task-btn:focus-visible {
+    outline: none;
+    border-color: var(--hr-primary-soft);
+    box-shadow: 0 0 0 0.2rem rgba(var(--bexhr-accent-rgb, 15, 159, 154), 0.14);
+  }
+}
+
+#hrSetupSection #hrPaymentSetupInternalWorkspace .hr-setup-internal-switcher {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#hrSetupSection :is(
+  #hrPayrollRulesInternalWorkspace,
+  #hrPaymentSetupInternalWorkspace
+) {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+#hrSetupSection :is(
+  #hrPayrollRulesInternalWorkspace,
+  #hrPaymentSetupInternalWorkspace
+) > .hr-setup-internal-panel-host > .hr-setup-internal-panel[hidden],
+#hrSetupSection :is(
+  #hrPayrollRulesInternalWorkspace,
+  #hrPaymentSetupInternalWorkspace
+) > .hr-setup-internal-panel-host > .hr-setup-internal-panel.d-none {
+  display: none !important;
+}
+
+#hrSetupSection :is(
+  #hrPayrollRulesInternalWorkspace,
+  #hrPaymentSetupInternalWorkspace
+) > .hr-setup-internal-panel-host > .hr-setup-internal-panel:not([hidden]):not(.d-none) {
+  display: block;
+  width: 100%;
+}
+
+@media (max-width: 767.98px) {
+  #hrSetupSection #hrPaymentSetupInternalWorkspace .hr-setup-internal-switcher {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================
+   BEXHR MANAGER FOCUSED NAVIGATION - R-02
+
+   Manager desktop navigation now mirrors the approved HR model:
+   parent disclosure -> exact task -> one focused work area.
+   Mobile/tablet keep the existing workspace and self-service switchers.
+   Presentation only: no reporting-line, leave approval, payroll, PA,
+   Supabase, tenant, session, or RLS behaviour changes.
+   ========================================================= */
+body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-subnav[hidden] {
+  display: none !important;
+}
+
+@media (min-width: 992px) {
+  body.bexhr-manager-visual-refresh .bexhr-sidebar-nav {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.15rem;
+    scrollbar-width: thin;
+  }
+
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-group,
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-group-toggle {
+    min-width: 0;
+  }
+
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-group-toggle > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-chevron {
+    width: 14px !important;
+    height: 14px !important;
+    margin-left: auto;
+    flex: 0 0 14px;
+    font-size: 0.7rem !important;
+    transition: transform 160ms ease, color 160ms ease;
+  }
+
+  body.bexhr-manager-visual-refresh
+    .bexhr-manager-sidebar-group-toggle.is-expanded
+    .bexhr-manager-sidebar-chevron {
+    transform: rotate(90deg);
+  }
+
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-subnav {
+    display: grid;
+    gap: 0.18rem;
+    margin: 0.2rem 0 0.45rem 2.35rem;
+    padding-left: 0.65rem;
+    border-left: 1px solid rgba(148, 163, 184, 0.22);
+  }
+
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-subitem {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 32px;
+    padding: 0.38rem 0.5rem;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #91a4b7;
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 620;
+    line-height: 1.25;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-subitem i {
+    width: 15px;
+    flex: 0 0 15px;
+    color: #6f879f;
+    text-align: center;
+    font-size: 0.78rem;
+  }
+
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-subitem:hover,
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-subitem:focus-visible {
+    outline: none;
+    background: rgba(255, 255, 255, 0.075);
+    color: #ffffff;
+  }
+
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-subitem:hover i,
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-subitem:focus-visible i,
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-subitem.active i {
+    color: #62ddd3;
+  }
+
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-subitem.active {
+    background: rgba(22, 184, 174, 0.14);
+    color: #ffffff;
+    font-weight: 720;
+  }
+
+  body.bexhr-manager-visual-refresh.alpatech-workspace .bexhr-manager-sidebar-subitem {
+    color: #64748b;
+  }
+
+  body.bexhr-manager-visual-refresh.alpatech-workspace .bexhr-manager-sidebar-subitem i {
+    color: #7890a8;
+  }
+
+  body.bexhr-manager-visual-refresh.alpatech-workspace .bexhr-manager-sidebar-subitem:hover,
+  body.bexhr-manager-visual-refresh.alpatech-workspace .bexhr-manager-sidebar-subitem:focus-visible,
+  body.bexhr-manager-visual-refresh.alpatech-workspace .bexhr-manager-sidebar-subitem.active {
+    background: rgba(11, 95, 149, 0.1);
+    color: #08446d;
+  }
+
+  body.bexhr-manager-visual-refresh.alpatech-workspace .bexhr-manager-sidebar-subitem.active i {
+    color: #0b5f95;
+  }
+
+  /* Desktop uses the sidebar's exact Leave / My Payroll routes.
+     Mobile/tablet retain the existing in-workspace switcher. */
+  body.bexhr-manager-visual-refresh
+    #managerSelfServiceSection
+    > .hr-self-service-nav-card {
+    display: none !important;
+  }
+}
+
+@media (max-width: 991.98px) {
+  body.bexhr-manager-visual-refresh .bexhr-manager-sidebar-subnav {
+    display: none !important;
+  }
+}
+
+/* The focused Team task opens immediately. The old card disclosure remains in
+   the DOM for handler compatibility but is no longer a second click. */
+body.bexhr-manager-visual-refresh
+  #managerTeamSection.manager-team-focused-mode
+  #togglePendingRequestsCardBtn,
+body.bexhr-manager-visual-refresh
+  #managerTeamSection.manager-team-focused-mode
+  #toggleProcessedRequestsCardBtn,
+body.bexhr-manager-visual-refresh
+  #managerTeamSection.manager-team-focused-mode
+  #toggleTeamScheduleCardBtn,
+body.bexhr-manager-visual-refresh
+  #managerTeamSection.manager-team-focused-mode
+  #toggleAssignedEmployeeRecordsCardBtn {
+  display: none !important;
+}
+
+/* =========================================================
+   BEXHR UNIFIED FOCUSED WORKSPACE CORRECTION - R-02.1/R-02.2
+
+   One navigation model across HR + Manager:
+   - sidebar selects the job;
+   - inline tabs divide one selected job;
+   - selected content starts immediately below the app header;
+   - Expand is not used to enter the primary task.
+   Presentation only: no leave/payroll/manager authority, RLS, Supabase,
+   PA permissions, calculations, or persistence behaviour changes.
+   ========================================================= */
+
+@media (min-width: 992px) {
+  body.bexhr-manager-visual-refresh
+    #managerTeamSection.manager-team-focused-mode
+    > .manager-team-workspace-intro {
+    display: none !important;
+  }
+
+  body.bexhr-hr-visual-refresh
+    #hrSelfServiceSection
+    > .hr-self-service-nav-card,
+  body.bexhr-manager-visual-refresh
+    #managerSelfServiceSection
+    > .hr-self-service-nav-card {
+    display: none !important;
+  }
+}
+
+.ss-leave-inline-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0 0 1.5rem;
+  padding: 0.45rem;
+  border: 1px solid #d8e4ec;
+  border-radius: 18px;
+  background: #f7fafc;
+}
+
+.ss-leave-inline-tab {
+  min-width: 0;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.68rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: transparent;
+  color: #475569;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 720;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.ss-leave-inline-tab i {
+  flex: 0 0 auto;
+  color: #64748b;
+}
+
+.ss-leave-inline-tab:hover,
+.ss-leave-inline-tab:focus-visible {
+  outline: none;
+  border-color: rgba(var(--bexhr-accent-rgb), 0.25);
+  background: #ffffff;
+  color: #0f766e;
+}
+
+.ss-leave-inline-tab.active {
+  border-color: rgba(var(--bexhr-accent-rgb), 0.48);
+  background: #ffffff;
+  color: #0f766e;
+  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.06);
+}
+
+.ss-leave-inline-tab.active i {
+  color: #0f9f95;
+}
+
+#ssLeaveSection.ss-leave-inline-mode #ssToggleLeaveBalancesCardBtn,
+#ssLeaveSection.ss-leave-inline-mode #ssToggleLatestDecisionCardBtn,
+#ssLeaveSection.ss-leave-inline-mode #ssToggleLeaveHistoryCardBtn {
+  display: none !important;
+}
+
+#ssLeaveSection.ss-leave-inline-mode .ss-leave-focused-column {
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 0 0 100% !important;
+}
+
+body #hrSelfServiceSection #ssLeaveSection.ss-leave-inline-mode .ss-leave-main-row,
+body #managerSelfServiceSection #ssLeaveSection.ss-leave-inline-mode .ss-leave-main-row {
+  --ss-leave-card-height: auto !important;
+}
+
+body #hrSelfServiceSection #ssLeaveSection.ss-leave-inline-mode .ss-leave-equal-card,
+body #managerSelfServiceSection #ssLeaveSection.ss-leave-inline-mode .ss-leave-equal-card {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+@media (max-width: 767.98px) {
+  .ss-leave-inline-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 479.98px) {
+  .ss-leave-inline-tabs {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* =========================================================
+   BEXHR EMPLOYEE SELF-SERVICE PARITY - R-03
+
+   Reuse the approved shared Leave inline-tab language on Employee.
+   Existing Employee leave cards, forms and handlers remain the source of truth.
+   ========================================================= */
+
+body.bexhr-employee-visual-refresh
+  #leaveSection.ss-leave-inline-mode
+  #toggleLeaveBalancesCardBtn,
+body.bexhr-employee-visual-refresh
+  #leaveSection.ss-leave-inline-mode
+  #toggleLatestDecisionCardBtn,
+body.bexhr-employee-visual-refresh
+  #leaveSection.ss-leave-inline-mode
+  #toggleLeaveHistoryCardBtn {
+  display: none !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #leaveSection.ss-leave-inline-mode
+  .employee-leave-focused-column {
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 0 0 100% !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #leaveSection.ss-leave-inline-mode
+  .employee-leave-main-row {
+  --employee-leave-card-height: auto !important;
+}
+
+body.bexhr-employee-visual-refresh
+  #leaveSection.ss-leave-inline-mode
+  .employee-leave-equal-card {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+/* History can contain many submissions. Keep records inside the selected task
+   rather than allowing the whole Employee dashboard to become a long card wall. */
+@media (min-width: 1200px) {
+  body.bexhr-employee-visual-refresh
+    #leaveSection.ss-leave-inline-mode[data-employee-leave-view="history"]
+    .employee-leave-equal-card {
+    height: min(70vh, 680px) !important;
+    min-height: 520px !important;
+    max-height: 680px !important;
+    overflow: hidden !important;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #leaveSection.ss-leave-inline-mode[data-employee-leave-view="history"]
+    .employee-leave-equal-card > .card-body {
+    display: flex;
+    flex-direction: column;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #leaveSection.ss-leave-inline-mode[data-employee-leave-view="history"]
+    #leaveHistoryCardCollapse {
+    display: flex !important;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body.bexhr-employee-visual-refresh
+    #leaveSection.ss-leave-inline-mode[data-employee-leave-view="history"]
+    .employee-leave-history-scroll-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto !important;
+  }
+}
+
+/* =========================================================
+   BEXHR R-10B ADD EMPLOYEE SINGLE-SCROLL CORRECTION
+   Desktop/tablet use the normal page scroll. Preserve the existing mobile
+   full-screen employee workspace and its controlled internal scroll.
+   Presentation only; employee form behaviour and persistence are unchanged.
+   ========================================================= */
+@media (min-width: 768px) {
+  .hr-create-employee-collapse:not(.d-none) {
+    display: block;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .hr-create-employee-collapse > .hr-create-employee-form {
+    min-height: 0;
+    overflow: visible;
+    overscroll-behavior: auto;
+    scroll-behavior: auto;
+    scrollbar-width: auto;
+    padding: 0.15rem 0 1rem;
+  }
+}
+
+/* =========================================================
+   BEXHR R-10C ADD EMPLOYEE SUBMIT FLOW CORRECTION
+   Desktop/tablet now use the normal page flow, so the save action follows
+   the currently visible employee section instead of being promoted above it.
+   Mobile full-screen behaviour remains unchanged. Presentation only; save,
+   validation, access, tenant, and Supabase behaviour are untouched.
+   ========================================================= */
+@media (min-width: 768px) {
+  .hr-create-employee-form > .row > .hr-create-employee-submit-wrap {
+    position: static;
+    top: auto;
+    z-index: auto;
+    order: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .hr-create-employee-collapse .hr-create-employee-submit-bar {
+    margin-bottom: 0;
+  }
+}
+
+/* =========================================================
+   BEXHR HR PA CHOOSER CARD BALANCE - v1.0.0
+   Two-option desktop chooser uses two equal columns.
+   Three-option, tablet and mobile layouts remain unchanged.
+   ========================================================= */
+@media (min-width: 992px) {
+  .hr-performance-appraisal-option-grid:has(> .hr-performance-appraisal-option-card:nth-child(2):last-child) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* PHASE 5E PAYROLL ADJUSTMENT RECORD LAYOUT
+   Phase 5 records render with the shared deduction-card classes.
+   Force the row/cell to fill the Payroll Adjustments records wrapper
+   so a single adjustment card does not collapse to content width.
+   Presentation only; no payroll or data behaviour changes.
+   ========================================================= */
+body.bexhr-hr-visual-refresh
+  #payrollEmployeeOverrideRecordsTableWrapper
+  .hr-deduction-record-row,
+body.bexhr-hr-visual-refresh
+  #payrollEmployeeOverrideRecordsTableWrapper
+  .hr-deduction-record-cell {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+body.bexhr-hr-visual-refresh
+  #payrollEmployeeOverrideRecordsTableWrapper
+  .hr-deduction-record-cell {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+body.bexhr-hr-visual-refresh
+  #payrollEmployeeOverrideRecordsTableWrapper
+  .hr-deduction-record-card {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* BEXHR_GROUP_B_V16_PATCH: read-only leave balance card typography and alignment.
+   HR, Manager and Employee use the same layout; no entitlement logic changes. */
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3,
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: .45rem;
+  row-gap: .4rem;
+  margin-left: 0;
+  margin-right: 0;
+  --bs-gutter-x: 0;
+}
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 > [class*="col-"],
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 > [class*="col-"] {
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 .small,
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 .info-tile-label,
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 .small,
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 .info-tile-label {
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  hyphens: none !important;
+  font-size: .77rem !important;
+  letter-spacing: -.015em;
+}
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 .fw-semibold,
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 .fw-bold,
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 .fw-bold {
+  white-space: nowrap;
+  line-height: 1.35;
+  margin-top: .2rem;
+}
+
+/* BEXHR_GROUP_B_V18_LEAVE_TABS: equal-width peer tabs whether Request Leave is present or hidden.
+   Presentation only. All leave approval, entitlement and history logic is untouched. */
+.ss-leave-inline-tabs > .ss-leave-inline-tab[hidden] {
+  display: none !important;
+}
+.ss-leave-inline-tabs > .ss-leave-inline-tab {
+  width: 100%;
+  box-sizing: border-box;
+}
+@media (min-width: 768px) {
+  /* Four visible peer tabs use the existing four-column grid.
+     When highest-position rules hide Request Leave, expand three peers
+     evenly to fill the whole row, leaving no empty fourth slot. */
+  .ss-leave-inline-tabs:has(> .ss-leave-inline-tab[hidden]) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* BEXHR_GROUP_D_V2_COLLAPSE_AND_SESSION_2026_11_10: consistent collapse-control dimensions across HR,
+   Manager, Employee and Platform Admin. Controls retain their own IDs,
+   aria-expanded state and existing click listeners. */
+body.bexhr-has-sidebar button.dashboard-action-btn[aria-controls$="Collapse"] {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 42px !important;
+  height: 42px !important;
+  max-height: 42px !important;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.84rem;
+  line-height: 1.2;
+  font-weight: 700;
+  border-radius: 10px;
+  white-space: nowrap !important;
+}
+@media (min-width: 768px) {
+  body.bexhr-has-sidebar button.dashboard-action-btn[aria-controls$="Collapse"] {
+    width: auto;
+    min-width: 116px;
+    align-self: flex-start !important;
+  }
+}
+/* BEXHR_GROUP_D_V3_DOUBLE_CLICK_TOGGLE_NO_VISIBLE_COLLAPSE_BUTTONS
+   Collapse buttons are not shown in the normal UI. Keep the exact DOM nodes
+   for existing JS handlers, and make them visible on keyboard focus so that
+   keyboard/screen-reader users can still operate the controls. */
+body.bexhr-has-sidebar button.dashboard-action-btn[aria-controls$="Collapse"]:not(:focus-visible) {
+  position: absolute !important;
+  width: 1px !important;
+  min-width: 1px !important;
+  max-width: 1px !important;
+  height: 1px !important;
+  min-height: 1px !important;
+  max-height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}
+body.bexhr-has-sidebar [data-bexhr-doubleclick-heading="true"] {
+  cursor: pointer;
+}
+
+/* BEXHR_H12_SINGLE_CLICK_COLLAPSE_VISIBLE_V4_20261113
+ * Restore accessible native Expand/Collapse buttons for HR, Manager, Employee.
+ * The Group D V3 accessibility-only CSS must no longer hide these controls.
+ * Deliberately leaves Platform Admin's existing double-click UI unchanged.
+ */
+body.bexhr-has-sidebar.bexhr-hr-visual-refresh button.dashboard-action-btn[aria-controls$="Collapse"],
+body.bexhr-has-sidebar.bexhr-manager-visual-refresh button.dashboard-action-btn[aria-controls$="Collapse"],
+body.bexhr-has-sidebar.bexhr-employee-visual-refresh button.dashboard-action-btn[aria-controls$="Collapse"] {
+  position: static !important;
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 116px !important;
+  max-width: none !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+  padding: .5rem .875rem !important;
+  margin: 0 !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  overflow: visible !important;
+  clip: auto !important;
+  clip-path: none !important;
+  white-space: nowrap !important;
+  pointer-events: auto !important;
+}
+body.bexhr-has-sidebar:is(.bexhr-hr-visual-refresh,.bexhr-manager-visual-refresh,.bexhr-employee-visual-refresh) [data-bexhr-doubleclick-heading="true"] {
+  cursor: auto !important;
+}
+
+/* BEXHR_H12_LEAVE_AUTHORITY_BOOT_GATE_20261114
+   Shared Employee / Manager / HR presentation safeguard.
+   Request Leave is not painted until position verification succeeds.
+*/
+html:not([data-bexhr-h12-leave-position="other"]) #ssLeaveSection .hr-self-service-request-card,
+html:not([data-bexhr-h12-leave-position="other"]) #leaveSection .dashboard-form-card:has(#leaveRequestForm),
+html:not([data-bexhr-h12-leave-position="other"]) #ssLeaveSection [data-ss-leave-view="request"],
+html:not([data-bexhr-h12-leave-position="other"]) #leaveSection [data-employee-leave-view="request"],
+html:not([data-bexhr-h12-leave-position="other"]) #ssLeaveRequestBlockNotice,
+html:not([data-bexhr-h12-leave-position="other"]) #leaveRequestBlockNotice {
+  display: none !important;
+}
+
+/* BEXHR_H12_SHARED_LEAVE_LOADER_HANDOFF_20261114
+ * Continue the already-present first-paint loader when the initial Leave card
+ * has not yet completed authority verification / visibility restoration.
+ * Does not affect a later manual workspace switch.
+ */
+body.bexhr-h12-leave-loader-hold #bexhrWorkspaceLoader {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+/* BEXHR_HR_UI_006_LEAVE_BALANCE_SPACING
+   Presentation only: distribute three metrics across the card. */
+
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(1),
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(1) {
+    text-align: left;
+}
+
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(2),
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(2) {
+    text-align: center;
+}
+
+#ssLeaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(3),
+#leaveBalancesGrid .info-tile > .row.g-3.mb-3 > .col-4:nth-child(3) {
+    text-align: right;
+}
+
+/* BEXHR_PAYROLL_UI_003_20261119
+   Remove Payroll tab fade/re-entry animation only.
+   No changes to navigation, payroll records, calculations,
+   payslip generation, permissions or refresh behaviour. */
+
+body.bexhr-employee-visual-refresh #payrollSection,
+body.bexhr-hr-visual-refresh #hrSelfServiceSection #ssPayrollSection,
+body.bexhr-manager-visual-refresh #managerSelfServiceSection #ssPayrollSection,
+body.bexhr-hr-visual-refresh #hrSelfServiceSection #ssPayrollSection .dashboard-section,
+body.bexhr-manager-visual-refresh #managerSelfServiceSection #ssPayrollSection .dashboard-section {
+    animation: none !important;
+    transition: none !important;
+}
+
+/* BEXHR_PLATFORM_UI_001_ACTIONS_20261119
+   Company Identity and User Access visual consolidation.
+   Existing operations, IDs and permissions remain unchanged. */
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+#tenantCreateForm.admin-company-form {
+    margin-top: 0.85rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+.admin-company-form-kicker {
+    display: none;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+.admin-company-form-intro {
+    padding: 0.85rem 0 1rem;
+    background: transparent;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+.admin-company-form-grid {
+    padding: 1.15rem 0;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+.admin-company-form-actions {
+    padding: 1rem 0;
+    background: transparent;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace hr {
+    margin: 1.5rem 0 !important;
+}
+
+body.bexhr-admin-visual-refresh
+#tenantRecordsTableWrapper,
+body.bexhr-admin-visual-refresh
+#profileTenantLinksTableWrapper {
+    border: 1px solid #e1e8ed;
+    border-radius: 14px;
+    background: #ffffff;
+}
+
+body.bexhr-admin-visual-refresh
+#adminCompanyIdentityWorkspace
+.dashboard-table .bexhr-platform-actions-trigger,
+body.bexhr-admin-visual-refresh
+#profileTenantLinksTableBody
+.bexhr-platform-actions-trigger {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: auto !important;
+    min-width: 92px;
+    height: 38px !important;
+    padding: 0.45rem 0.8rem !important;
+    border: 1px solid #087f7a;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #087f7a;
+    font-size: 0.8rem;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+body.bexhr-admin-visual-refresh
+.bexhr-platform-actions-trigger:hover {
+    background: #edf9f7 !important;
+    color: #075f5b !important;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choices {
+    display: grid;
+    gap: 0.55rem;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-height: 44px;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid #e1e8ed;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #243447;
+    font-size: 0.84rem;
+    font-weight: 650;
+    text-align: left;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choice:hover {
+    background: #f5faf9;
+    border-color: #b8d8d2;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choice-danger {
+    color: #b42332;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choice-danger:hover {
+    background: #fff5f5;
+    border-color: #f2c7cd;
+}
+
+#bexhrPlatformRowActionModal
+.bexhr-platform-action-choice:disabled {
+    opacity: 0.45;
+}
+
+/* BEXHR_PLATFORM_UI_002_TEN_SCROLL_NO_DBLCLICK_20261119
+   Platform Admin presentation only.
+   Ten visible records before native inner scrolling.
+   Existing actions and security workflows preserved. */
+
+body.bexhr-admin-visual-refresh
+#toggleAdminCompanyIdentityCardBtn,
+body.bexhr-admin-visual-refresh
+#toggleAdminUserCompanyAssignmentCardBtn,
+body.bexhr-admin-visual-refresh
+#toggleAdminEmailSetupCardBtn {
+    display: none !important;
+}
+
+body.bexhr-admin-visual-refresh
+#tenantRecordsTableWrapper {
+    overflow-x: auto !important;
+    overscroll-behavior-y: auto !important;
+}
+
+body.bexhr-admin-visual-refresh
+#profileTenantLinksTableWrapper {
+    max-height: none !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    overscroll-behavior-y: auto !important;
+}
+
+body.bexhr-admin-visual-refresh
+#profileTenantLinksTableWrapper
+.admin-access-company-scroll {
+    max-height: none !important;
+    overflow-y: visible !important;
+    overscroll-behavior-y: auto !important;
+    scrollbar-width: thin;
+}
+
+body.bexhr-admin-visual-refresh
+#tenantRecordsTableWrapper[data-bexhr-ten-record-scroll="on"]
+thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8fafc;
+}
+
+@media print {
+    body.bexhr-admin-visual-refresh
+    #tenantRecordsTableWrapper,
+    body.bexhr-admin-visual-refresh
+    #profileTenantLinksTableWrapper
+    .admin-access-company-scroll {
+        max-height: none !important;
+        overflow: visible !important;
+    }
 }

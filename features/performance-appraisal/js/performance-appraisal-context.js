@@ -18,6 +18,7 @@
 
     const allowedPersonas = [
       "hr-admin",
+      "hr-standard",
       "primary-manager",
       "employee",
     ];
@@ -27,14 +28,11 @@
     }
 
     const issuedAt = new Date(context.issuedAt);
-
     if (Number.isNaN(issuedAt.getTime())) {
       return false;
     }
 
-    const contextAge =
-      Date.now() - issuedAt.getTime();
-
+    const contextAge = Date.now() - issuedAt.getTime();
     if (
       contextAge < 0 ||
       contextAge > BEX_PA_CONTEXT_MAX_AGE_MS
@@ -56,8 +54,29 @@
       return false;
     }
 
+    if (
+      context.persona === "hr-standard" &&
+      (
+        !String(context.employeeId || "").trim() ||
+        context.hrStandardCapability !== true ||
+        context.hrAdminCapability === true
+      )
+    ) {
+      return false;
+    }
+
+    if (
+      context.persona === "hr-admin" &&
+      context.hrAdminCapability !== true
+    ) {
+      return false;
+    }
+
     return true;
   }
+
+  window.BexPaIsValidIntegratedContext =
+    bexPaIsValidIntegratedContext;
 
   try {
     const storedContext =

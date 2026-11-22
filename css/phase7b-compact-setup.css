@@ -1,0 +1,44 @@
+/* Phase 7B: non-intrusive, responsive organisation setup reminder. */
+#bexhrOrganizationSetupGuide.bexhr-setup-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 12px 16px;
+  margin: 0 0 20px;
+  border: 1px solid #bde6eb;
+  border-left: 4px solid #0d8794;
+  border-radius: 14px;
+  background: #effbfc;
+  color: #0b4657;
+  box-shadow: none;
+}
+.bexhr-setup-compact-copy {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.bexhr-setup-compact-title { font-size: 0.94rem; font-weight: 700; line-height: 1.35; }
+.bexhr-setup-compact-detail { font-size: 0.83rem; line-height: 1.35; color: #38677a; }
+.bexhr-setup-compact-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+.bexhr-setup-compact-progress { font-size: 0.78rem; white-space: nowrap; color: #4a6d78; }
+.bexhr-setup-compact-button { font-size: 0.82rem; padding: 6px 11px; border-radius: 8px; }
+.bexhr-structure-advanced > summary {
+  color: #3d6676;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 600;
+  list-style-position: inside;
+}
+.bexhr-structure-advanced > summary:focus-visible { outline: 2px solid #067e8d; outline-offset: 3px; }
+@media (max-width: 640px) {
+  #bexhrOrganizationSetupGuide.bexhr-setup-compact { padding: 12px; gap: 8px; }
+  .bexhr-setup-compact-copy { flex: 1 1 100%; }
+  .bexhr-setup-compact-actions { width: 100%; justify-content: space-between; }
+}
+
+/* Keep Edit-in-place visible below the existing sticky HR header. */
+#organizationJobTitleForm { scroll-margin-top: 245px; }

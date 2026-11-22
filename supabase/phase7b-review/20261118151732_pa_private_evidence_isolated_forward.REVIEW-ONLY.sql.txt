@@ -1,0 +1,391 @@
+-- Step144: isolated PA private bucket + metadata; do not push until forward-baseline replay and JWT tests.
+-- BexHR Step 118: isolated local Rymzq staging only. Guarded first-install.
+-- DO NOT execute from the BexHR repo's Supabase CLI (linked to Zoe production).
+-- Replaces the Step113/114 candidates. Bucket must be provisioned by Storage API.
+-- Original-repo PA reservation-first frontend was applied in Step114.
+-- Step116 ROLLBACK DDL rehearsal PASS; Step117 0 Storage policies/RLS PASS.
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '90s';
+
+DO $pa144_bucket$
+BEGIN
+ IF to_regclass('storage.buckets') IS NULL
+    OR to_regclass('storage.objects') IS NULL THEN
+  RAISE EXCEPTION 'STOP: Storage schema unavailable';
+ END IF;
+
+ IF NOT EXISTS(
+    SELECT 1 FROM storage.buckets
+    WHERE id='pa-progress-evidence'
+ ) THEN
+  INSERT INTO storage.buckets(
+    id,name,public,file_size_limit,allowed_mime_types
+  )
+  VALUES (
+    'pa-progress-evidence',
+    'pa-progress-evidence',
+    false,
+    10485760,
+    ARRAY[
+      'application/pdf',
+      'image/png',
+      'image/jpeg',
+      'image/webp'
+    ]::text[]
+  );
+ END IF;
+END;
+$pa144_bucket$;
+DO $guard$
+BEGIN
+  IF to_regclass('public.pa_progress_evidence') IS NOT NULL
+  THEN RAISE EXCEPTION 'STOP: Existing PA evidence metadata; cannot first-install'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM storage.buckets b
+    WHERE b.id='pa-progress-evidence' AND b.name='pa-progress-evidence'
+      AND b.public IS FALSE AND b.file_size_limit=10485760
+      AND b.allowed_mime_types @> ARRAY['application/pdf','image/png','image/jpeg','image/webp']::text[]
+      AND cardinality(b.allowed_mime_types)=4
+  ) THEN RAISE EXCEPTION 'STOP: Required private Storage API bucket missing/misconfigured'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_class WHERE oid='storage.objects'::regclass AND relrowsecurity IS TRUE
+  ) OR EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects'
+  ) THEN RAISE EXCEPTION 'STOP: storage.objects RLS/policy baseline changed'; END IF;
+  IF to_regnamespace('bexhr_private') IS NULL
+    OR to_regclass('public.pa_progress_updates') IS NULL
+    OR to_regclass('public.pa_individual_goals') IS NULL
+    OR to_regclass('public.employees') IS NULL
+    OR to_regclass('public.profiles') IS NULL
+    OR to_regclass('storage.objects') IS NULL
+    OR to_regprocedure('public.current_authenticated_profile_tenant_id()') IS NULL
+    OR to_regprocedure('public.pa_current_employee_id()') IS NULL
+  THEN RAISE EXCEPTION 'STOP: Required PA/Auth/Storage dependencies absent'; END IF;
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.pa_progress_updates'::regclass)
+  THEN RAISE EXCEPTION 'STOP: PA parent must have RLS enabled'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM (VALUES
+      ('storage','buckets','id'),('storage','buckets','name'),
+      ('storage','buckets','public'),('storage','buckets','file_size_limit'),
+      ('storage','buckets','allowed_mime_types'),('storage','objects','bucket_id'),
+      ('storage','objects','name'),('storage','objects','metadata'),
+      ('storage','objects','owner_id')
+    ) AS req(s,t,c)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM information_schema.columns i
+      WHERE i.table_schema=req.s AND i.table_name=req.t AND i.column_name=req.c
+    )
+  ) THEN RAISE EXCEPTION 'STOP: Required Storage version columns absent'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='pa_progress_updates'
+      AND column_name IN ('id','individual_goal_id') AND data_type <> 'text'
+  ) THEN RAISE EXCEPTION 'STOP: PA parent text-ID contract changed'; END IF;
+END;
+$guard$;
+
+CREATE TABLE public.pa_progress_evidence (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL,
+  employee_id uuid NOT NULL,
+  individual_goal_id text NOT NULL,
+  progress_update_id text NOT NULL
+    REFERENCES public.pa_progress_updates(id) ON DELETE CASCADE,
+  slot smallint NOT NULL CHECK (slot BETWEEN 1 AND 3),
+  storage_path text NOT NULL UNIQUE,
+  file_name text NOT NULL CHECK (char_length(btrim(file_name)) BETWEEN 1 AND 180),
+  content_type text NOT NULL CHECK (content_type IN
+    ('application/pdf','image/png','image/jpeg','image/webp')),
+  size_bytes bigint NOT NULL CHECK (size_bytes BETWEEN 1 AND 10485760),
+  uploaded_by uuid NOT NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','ready')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL DEFAULT (now() + interval '30 minutes'),
+  finalized_at timestamptz,
+  CONSTRAINT pa_evidence_unique_slot UNIQUE (progress_update_id,slot),
+  CONSTRAINT pa_evidence_storage_path_shape CHECK (
+    storage_path ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/[^/]+/[0-9a-f-]{36}[.](pdf|png|jpg|webp)$'
+  ),
+  CONSTRAINT pa_evidence_finalized_consistency CHECK (
+    (status='pending' AND finalized_at IS NULL)
+    OR (status='ready' AND finalized_at IS NOT NULL)
+  )
+);
+CREATE INDEX pa_evidence_tenant_progress_idx
+  ON public.pa_progress_evidence (tenant_id,progress_update_id);
+CREATE INDEX pa_evidence_expiring_idx
+  ON public.pa_progress_evidence (expires_at) WHERE status='pending';
+ALTER TABLE public.pa_progress_evidence ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pa_progress_evidence FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.pa_progress_evidence FROM PUBLIC,anon,authenticated;
+GRANT SELECT,INSERT,DELETE ON TABLE public.pa_progress_evidence TO authenticated;
+
+-- Reserve a slot before Storage upload. Caller-provided status/timing are ignored.
+-- Triggers deliberately check protected parent with definer rights; no API privileges.
+CREATE FUNCTION bexhr_private.bexhr_pa_evidence_reservation_guard()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $fn$
+DECLARE
+  v_now timestamptz := now();
+BEGIN
+  IF auth.uid() IS NULL OR NEW.uploaded_by IS DISTINCT FROM auth.uid()
+     OR NEW.tenant_id IS DISTINCT FROM public.current_authenticated_profile_tenant_id()
+     OR NEW.employee_id IS DISTINCT FROM public.pa_current_employee_id() THEN
+    RAISE EXCEPTION 'PA evidence reservation denied' USING ERRCODE='42501';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.pa_progress_updates p
+    WHERE p.id=NEW.progress_update_id AND p.tenant_id=NEW.tenant_id
+      AND p.employee_id=NEW.employee_id
+      AND p.individual_goal_id=NEW.individual_goal_id
+    FOR KEY SHARE
+  ) THEN RAISE EXCEPTION 'PA evidence parent mismatch' USING ERRCODE='23514'; END IF;
+  IF split_part(NEW.storage_path,'/',1) IS DISTINCT FROM NEW.tenant_id::text
+     OR split_part(NEW.storage_path,'/',2) IS DISTINCT FROM NEW.employee_id::text
+     OR split_part(NEW.storage_path,'/',3) IS DISTINCT FROM NEW.progress_update_id THEN
+    RAISE EXCEPTION 'PA evidence storage path mismatch' USING ERRCODE='23514';
+  END IF;
+  IF (NEW.content_type='application/pdf' AND right(NEW.storage_path,4)<>'.pdf')
+     OR (NEW.content_type='image/png' AND right(NEW.storage_path,4)<>'.png')
+     OR (NEW.content_type='image/jpeg' AND right(NEW.storage_path,4)<>'.jpg')
+     OR (NEW.content_type='image/webp' AND right(NEW.storage_path,5)<>'.webp') THEN
+    RAISE EXCEPTION 'PA evidence type/path mismatch' USING ERRCODE='23514';
+  END IF;
+  NEW.status := 'pending';
+  NEW.created_at := v_now;
+  NEW.expires_at := v_now + interval '30 minutes';
+  NEW.finalized_at := NULL;
+  RETURN NEW;
+END;
+$fn$;
+REVOKE ALL ON FUNCTION bexhr_private.bexhr_pa_evidence_reservation_guard()
+  FROM PUBLIC,anon,authenticated;
+CREATE TRIGGER bexhr_pa_evidence_reservation_guard
+BEFORE INSERT ON public.pa_progress_evidence
+FOR EACH ROW EXECUTE FUNCTION bexhr_private.bexhr_pa_evidence_reservation_guard();
+
+-- Do not permit metadata deletion while physical Storage object still exists.
+-- Storage objects must be removed through the Storage API, never SQL.
+CREATE FUNCTION bexhr_private.bexhr_pa_evidence_delete_guard()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $fn$
+BEGIN
+  IF EXISTS (SELECT 1 FROM storage.objects o
+             WHERE o.bucket_id='pa-progress-evidence' AND o.name=OLD.storage_path) THEN
+    RAISE EXCEPTION 'PA evidence Storage object must be removed first'
+      USING ERRCODE='23503';
+  END IF;
+  RETURN OLD;
+END;
+$fn$;
+REVOKE ALL ON FUNCTION bexhr_private.bexhr_pa_evidence_delete_guard()
+  FROM PUBLIC,anon,authenticated;
+CREATE TRIGGER bexhr_pa_evidence_delete_guard
+BEFORE DELETE ON public.pa_progress_evidence
+FOR EACH ROW EXECUTE FUNCTION bexhr_private.bexhr_pa_evidence_delete_guard();
+
+CREATE POLICY pa_evidence_read_parent_or_own_pending
+ON public.pa_progress_evidence FOR SELECT TO authenticated
+USING (
+  auth.uid() IS NOT NULL
+  AND tenant_id=public.current_authenticated_profile_tenant_id()
+  AND (
+    (status='pending' AND uploaded_by=auth.uid())
+    OR (status='ready' AND EXISTS (
+      SELECT 1 FROM public.pa_progress_updates p
+      WHERE p.id=pa_progress_evidence.progress_update_id
+        AND p.tenant_id=pa_progress_evidence.tenant_id
+        AND p.employee_id=pa_progress_evidence.employee_id
+        AND p.individual_goal_id=pa_progress_evidence.individual_goal_id
+    ))
+  )
+);
+CREATE POLICY pa_evidence_reserve_owner
+ON public.pa_progress_evidence FOR INSERT TO authenticated
+WITH CHECK (
+  auth.uid() IS NOT NULL AND status='pending' AND uploaded_by=auth.uid()
+  AND tenant_id=public.current_authenticated_profile_tenant_id()
+  AND employee_id=public.pa_current_employee_id()
+  AND EXISTS (
+    SELECT 1 FROM public.pa_progress_updates p
+    WHERE p.id=pa_progress_evidence.progress_update_id
+        AND p.tenant_id=pa_progress_evidence.tenant_id
+        AND p.employee_id=pa_progress_evidence.employee_id
+        AND p.individual_goal_id=pa_progress_evidence.individual_goal_id
+  )
+);
+CREATE POLICY pa_evidence_cancel_own_pending
+ON public.pa_progress_evidence FOR DELETE TO authenticated
+USING (
+  auth.uid() IS NOT NULL AND status='pending' AND uploaded_by=auth.uid()
+  AND tenant_id=public.current_authenticated_profile_tenant_id()
+);
+-- No direct authenticated UPDATE rights or UPDATE policy.
+
+-- Only the owner can finalize, and only when an actual Storage object matches.
+CREATE FUNCTION public.bexhr_pa_evidence_finalize(p_evidence_id uuid)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $fn$
+DECLARE
+  v public.pa_progress_evidence%ROWTYPE;
+  v_meta jsonb;
+  v_owner text;
+BEGIN
+  IF auth.uid() IS NULL OR p_evidence_id IS NULL THEN
+    RAISE EXCEPTION 'PA evidence finalize denied' USING ERRCODE='42501';
+  END IF;
+  SELECT * INTO v FROM public.pa_progress_evidence
+  WHERE id=p_evidence_id FOR UPDATE;
+  IF NOT FOUND OR v.status<>'pending' OR now()>v.expires_at
+     OR v.uploaded_by IS DISTINCT FROM auth.uid()
+     OR v.tenant_id IS DISTINCT FROM public.current_authenticated_profile_tenant_id()
+     OR v.employee_id IS DISTINCT FROM public.pa_current_employee_id() THEN
+    RAISE EXCEPTION 'PA evidence reservation expired or forbidden' USING ERRCODE='42501';
+  END IF;
+  SELECT o.metadata, o.owner_id INTO v_meta, v_owner FROM storage.objects o
+  WHERE o.bucket_id='pa-progress-evidence' AND o.name=v.storage_path;
+  IF NOT FOUND OR v_meta->>'mimetype' IS DISTINCT FROM v.content_type
+     OR coalesce(v_meta->>'size','') !~ '^[0-9]+$'
+     OR (v_meta->>'size')::bigint IS DISTINCT FROM v.size_bytes
+     OR v_owner IS DISTINCT FROM auth.uid()::text THEN
+    RAISE EXCEPTION 'PA evidence Storage MIME/size/owner verification failed'
+      USING ERRCODE='23514';
+  END IF;
+  UPDATE public.pa_progress_evidence
+    SET status='ready',finalized_at=now() WHERE id=p_evidence_id;
+  RETURN TRUE;
+END;
+$fn$;
+REVOKE ALL ON FUNCTION public.bexhr_pa_evidence_finalize(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.bexhr_pa_evidence_finalize(uuid) TO authenticated;
+
+-- Storage must be private, with a per-object hard limit and MIME allowlist.
+-- Step144: isolated SQL bucket seed; live file operations still require Storage API.
+-- Its restrictions were fail-closed verified at the start of this transaction.
+
+-- Every object INSERT requires a previously reserved unique slot.
+-- Quota is enforced BEFORE Storage upload by the DB unique slot constraint.
+CREATE POLICY pa_evidence_storage_insert_reserved_owner
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id='pa-progress-evidence' AND auth.uid() IS NOT NULL
+  AND name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/[^/]+/[0-9a-f-]{36}[.](pdf|png|jpg|webp)$'
+  AND EXISTS (
+    SELECT 1 FROM public.pa_progress_evidence e
+    WHERE e.storage_path=name AND e.status='pending'
+      AND e.expires_at>now() AND e.uploaded_by=auth.uid()
+      AND e.tenant_id=public.current_authenticated_profile_tenant_id()
+      AND e.employee_id=public.pa_current_employee_id()
+  )
+);
+CREATE POLICY pa_evidence_storage_read_visible_metadata
+ON storage.objects FOR SELECT TO authenticated
+USING (
+  bucket_id='pa-progress-evidence' AND auth.uid() IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM public.pa_progress_evidence e
+    WHERE e.storage_path=name
+      AND e.tenant_id=public.current_authenticated_profile_tenant_id()
+      AND (
+        (e.status='pending' AND e.uploaded_by=auth.uid())
+        OR (e.status='ready' AND EXISTS (
+          SELECT 1 FROM public.pa_progress_updates p
+          WHERE p.id=e.progress_update_id
+            AND p.tenant_id=e.tenant_id
+            AND p.employee_id=e.employee_id
+            AND p.individual_goal_id=e.individual_goal_id
+        ))
+      )
+  )
+);
+CREATE POLICY pa_evidence_storage_delete_own_pending
+ON storage.objects FOR DELETE TO authenticated
+USING (
+  bucket_id='pa-progress-evidence' AND auth.uid() IS NOT NULL
+  AND owner_id=auth.uid()::text
+  AND EXISTS (
+    SELECT 1 FROM public.pa_progress_evidence e
+    WHERE e.storage_path=name AND e.status='pending'
+      AND e.uploaded_by=auth.uid()
+      AND e.tenant_id=public.current_authenticated_profile_tenant_id()
+  )
+);
+
+DO $verify$
+BEGIN
+  IF (SELECT public FROM storage.buckets WHERE id='pa-progress-evidence') IS DISTINCT FROM false
+    OR (SELECT file_size_limit FROM storage.buckets WHERE id='pa-progress-evidence') IS DISTINCT FROM 10485760
+    OR NOT EXISTS (
+      SELECT 1 FROM pg_class WHERE oid='public.pa_progress_evidence'::regclass
+        AND relrowsecurity IS TRUE AND relforcerowsecurity IS TRUE
+    )
+    OR has_table_privilege('anon','public.pa_progress_evidence','SELECT')
+    OR has_table_privilege('authenticated','public.pa_progress_evidence','UPDATE')
+    OR has_function_privilege('anon','public.bexhr_pa_evidence_finalize(uuid)','EXECUTE')
+    OR (SELECT count(*) FROM pg_policies
+        WHERE schemaname='storage' AND tablename='objects'
+          AND policyname IN ('pa_evidence_storage_insert_reserved_owner',
+           'pa_evidence_storage_read_visible_metadata',
+           'pa_evidence_storage_delete_own_pending')) <> 3
+    OR EXISTS (SELECT 1 FROM pg_policies
+        WHERE schemaname='storage' AND tablename='objects'
+          AND policyname NOT IN ('pa_evidence_storage_insert_reserved_owner',
+           'pa_evidence_storage_read_visible_metadata',
+           'pa_evidence_storage_delete_own_pending'))
+  THEN RAISE EXCEPTION 'STOP: PA evidence ACL/Storage/RLS verification failed'; END IF;
+END;
+$verify$;
+DO $pa144_all_gates$
+DECLARE n text; f oid;
+BEGIN
+
+ IF to_regprocedure('public.bexhr_p7b_workspace_access()') IS NULL THEN
+  RAISE EXCEPTION 'STOP: H11 workspace RPC absent';
+ END IF;
+
+ FOREACH n IN ARRAY ARRAY[
+  'bexhr_h12_has_hr_standard_workspace_access',
+  'bexhr_h12_hr_standard_directory',
+  'bexhr_h12_hr_standard_processed_leave',
+  'bexhr_h12_hr_standard_reporting_summary',
+  'bexhr_h12_native_hr_employee_roster',
+  'bexhr_h12_native_hr_profile_linkage',
+  'bexhr_h12_workspace_entitlements'
+ ] LOOP
+
+  f:=to_regprocedure(format('public.%I()',n));
+
+  IF f IS NULL
+     OR has_function_privilege('anon',f,'EXECUTE') IS NOT FALSE
+     OR has_function_privilege('authenticated',f,'EXECUTE') IS NOT TRUE
+     OR has_function_privilege('service_role',f,'EXECUTE') IS NOT TRUE THEN
+   RAISE EXCEPTION 'STOP: H12 ACL drift %',n;
+  END IF;
+
+ END LOOP;
+
+ IF to_regclass('public.pa_progress_evidence') IS NULL
+    OR (
+      SELECT relrowsecurity AND relforcerowsecurity
+      FROM pg_class
+      WHERE oid='public.pa_progress_evidence'::regclass
+    ) IS NOT TRUE
+    OR (
+      SELECT public FROM storage.buckets
+      WHERE id='pa-progress-evidence'
+    ) IS NOT FALSE
+    OR (
+      SELECT count(*)
+      FROM pg_policies
+      WHERE schemaname='storage'
+        AND tablename='objects'
+        AND policyname LIKE 'pa_evidence_storage_%'
+    )<>3 THEN
+
+   RAISE EXCEPTION 'STOP: PA RLS/private bucket failure';
+
+ END IF;
+
+END;
+$pa144_all_gates$;
+COMMIT;
+SELECT 'PASS|PA_ISOLATED_COMMITTED';
+

@@ -1,0 +1,64 @@
+/* BEXHR_H12_MANAGER_APP_WORKSPACES_20261114
+   Shared visual language with the existing account and PA switchers.
+   This adds a Manager navigation trigger only; HR and PA permission
+   enforcement continues in their existing modules. */
+body.bexhr-manager-visual-refresh .bexhr-h12-manager-app-workspaces-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  min-height: 42px;
+  padding: .5rem .8rem;
+  border: 1px solid #d5e7e5;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #fff 0%, #f5fbfa 100%);
+  color: #0f766e;
+  font-family: inherit;
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+body.bexhr-manager-visual-refresh .bexhr-h12-manager-app-workspaces-button:hover,
+body.bexhr-manager-visual-refresh .bexhr-h12-manager-app-workspaces-button:focus-visible,
+body.bexhr-manager-visual-refresh .bexhr-h12-manager-app-workspaces-button[aria-expanded="true"] {
+  background: #f1faf8;
+  border-color: #8dcac3;
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, .09);
+}
+body.bexhr-manager-visual-refresh .bexhr-h12-manager-app-workspaces-button .bi { font-size: 1rem; }
+#bexhrH12ManagerAppWorkspacesMenu.bexhr-workspace-menu {
+  position: fixed !important;
+  inset: auto;
+  right: auto !important;
+  z-index: 1048 !important;
+  margin: 0 !important;
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+}
+#bexhrH12ManagerAppWorkspacesMenu .bexhr-workspace-menu-option {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+#bexhrH12ManagerAppWorkspacesMenu .bexhr-workspace-menu-option:hover,
+#bexhrH12ManagerAppWorkspacesMenu .bexhr-workspace-menu-option:focus-visible {
+  background: #f1faf8;
+}
+body.modal-open #bexhrH12ManagerAppWorkspacesMenu { display: none !important; }
+@media (max-width: 767.98px) {
+  body.bexhr-manager-visual-refresh .bexhr-h12-manager-app-workspaces-button {
+    padding: .45rem;
+    width: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+  body.bexhr-manager-visual-refresh .bexhr-h12-manager-app-workspaces-label { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #bexhrH12ManagerAppWorkspacesMenu .bexhr-workspace-menu-option { transition: none; }
+}

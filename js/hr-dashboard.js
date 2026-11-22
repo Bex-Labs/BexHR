@@ -1,3 +1,4 @@
+// Group E - user-facing payroll adjustment copy - 2026-11-10. No persisted marker changed.
 // DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
 // Browser refresh can restore the previous scroll position before the dashboard
 // finishes restoring the active workspace. Keep browser restoration manual so
@@ -16,6 +17,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     hideUnsupportedPayrollAllowanceTypeOptions();
 
     bindEvents();
+
+    // EDIT ACTION FIRST-CLICK RELIABILITY: expose the existing guarded
+    // employee Edit action before any asynchronous startup requests.
+    // It previously registered only after every People/Payroll fetch.
+    // Existing People-maintenance role check is unchanged.
+    window.hrEditEmployee = (employeeId) => {
+      if (!canCurrentUserMaintainPeopleData()) {
+        showHrPeopleAccessDeniedMessage();
+        return;
+      }
+
+      startEmployeeEdit(employeeId);
+    };
 
     // PAYROLL WORKSPACE LAYOUT - HR/PAYROLL STANDARD STEP 2A
     // Keep the Payroll workspace in the correct operational order:
@@ -176,7 +190,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const payrollSetupHeader = createSetupWorkspaceGroupHeader(
         "setupPayrollGroupHeader",
         "Payroll Rules & Deductions",
-        "Maintain allowance components, statutory deductions, other deductions, and employee-specific payroll overrides.",
+        "Maintain allowance components, statutory deductions, other deductions, and employee-specific payroll adjustments.",
         "bi bi-sliders",
       );
 
@@ -233,6 +247,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         ...payrollSetupCards,
         paymentSetupHeader,
         ...paymentSetupCards,
+        // BEXHR_GROUP_D_TEST_UI_DEACTIVATED_2026_11_10: test-only email section stays present in DOM but not in Setup navigation.
         communicationSetupHeader,
         ...communicationSetupCards,
       ].forEach((card) => {
@@ -284,6 +299,36 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
 
       shell.dataset.activePanel = requestedKey;
+      if (options.remember !== false) hrR40RememberSetupPanel(shell.id, requestedKey);
+      // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+      // When an internal Setup tab owns an existing collapsible working card,
+      // open that card immediately. Selecting a task must never require a
+      // second Expand click.
+      const focusedCard = requestedPanel.querySelector(
+        ":scope > .dashboard-section-card",
+      );
+
+      if (focusedCard) {
+        const collapseToggle = Array.from(
+          focusedCard.querySelectorAll("button[aria-controls]"),
+        ).find((button) => {
+          const controlId = String(button.getAttribute("aria-controls") || "").trim();
+          const collapsePanel = controlId ? document.getElementById(controlId) : null;
+          return Boolean(
+            collapsePanel &&
+            focusedCard.contains(collapsePanel) &&
+            controlId.endsWith("CardCollapse"),
+          );
+        });
+        const collapseId = String(
+          collapseToggle?.getAttribute("aria-controls") || "",
+        ).trim();
+        const collapsePanel = collapseId ? document.getElementById(collapseId) : null;
+
+        if (collapseToggle && collapsePanel) {
+          setDashboardCardExpanded(collapseToggle, collapsePanel, true);
+        }
+      }
 
       if (options.focus === true) {
         requestedButton.focus({ preventScroll: true });
@@ -430,7 +475,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       formerParents.forEach(removeEmptyHrSetupLayoutContainer);
 
-      setHrSetupInternalWorkspacePanel(shell, defaultKey);
+      setHrSetupInternalWorkspacePanel(shell, defaultKey, { remember: false });
       return shell;
     }
 
@@ -447,6 +492,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const jobTitlesSection =
         state.dom.organizationJobTitlesSection ||
         document.getElementById("organizationJobTitlesSection");
+      // BEXHR_H6E_REPORTING_LINES_TAB: use the EXISTING setup tab engine.
+      const reportingLinesSection = document.getElementById("bexhrHierarchyTemplateAssistant");
 
       const organizationShell = createHrSetupInternalWorkspace({
         shellId: "hrOrganizationInternalWorkspace",
@@ -472,6 +519,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             label: "Job Titles",
             iconClass: "bi bi-person-workspace",
             node: jobTitlesSection,
+          },
+          {
+            key: "reportingLines",
+            label: "Reporting Lines",
+            iconClass: "bi bi-diagram-3-fill",
+            node: reportingLinesSection,
           },
         ],
       });
@@ -531,6 +584,247 @@ document.addEventListener("DOMContentLoaded", async () => {
       window.hrOpenCommunicationSetupPanel = (panelKey, options = {}) =>
         setHrSetupInternalWorkspacePanel(
           communicationShell || document.getElementById("hrCommunicationInternalWorkspace"),
+          panelKey,
+          options,
+        );
+    }
+
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03 QA CORRECTION
+    // Payroll Rules and Payment Setup keep their existing cards in place.
+    // A lightweight internal switcher hides non-selected cards instead of
+    // moving them, so existing IDs, listeners, forms, and save logic stay intact.
+    function setHrSetupFocusedCardTask(shell, taskKey, options = {}) {
+      if (!shell) return false;
+
+      const requestedKey = String(taskKey || "").trim();
+      const buttons = Array.from(
+        shell.querySelectorAll("[data-hr-setup-card-task-button]"),
+      );
+      const cards = Array.from(
+        document.querySelectorAll(`[data-hr-setup-card-task-group="${shell.id}"]`),
+      );
+      const requestedButton = buttons.find(
+        (button) => button.dataset.hrSetupCardTaskButton === requestedKey,
+      );
+      const requestedCard = cards.find(
+        (card) => card.dataset.hrSetupCardTaskPanel === requestedKey,
+      );
+
+      if (!requestedButton || !requestedCard) return false;
+
+      buttons.forEach((button) => {
+        const isActive = button === requestedButton;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", String(isActive));
+        button.setAttribute("tabindex", isActive ? "0" : "-1");
+      });
+
+      cards.forEach((card) => {
+        const isActive = card === requestedCard;
+        card.hidden = !isActive;
+        card.classList.toggle("d-none", !isActive);
+      });
+
+      shell.dataset.activePanel = requestedKey;
+      if (options.remember !== false) hrR40RememberSetupPanel(shell.id, requestedKey);
+      const collapseToggle = Array.from(
+        requestedCard.querySelectorAll("button[aria-controls]"),
+      ).find((button) => {
+        const controlId = String(button.getAttribute("aria-controls") || "").trim();
+        const collapsePanel = controlId ? document.getElementById(controlId) : null;
+        return Boolean(
+          collapsePanel &&
+          requestedCard.contains(collapsePanel) &&
+          controlId.endsWith("CardCollapse")
+        );
+      });
+      const collapseId = String(
+        collapseToggle?.getAttribute("aria-controls") || "",
+      ).trim();
+      const collapsePanel = collapseId ? document.getElementById(collapseId) : null;
+
+      if (collapseToggle && collapsePanel) {
+        setDashboardCardExpanded(collapseToggle, collapsePanel, true);
+      }
+
+      if (options.focus === true) {
+        requestedButton.focus({ preventScroll: true });
+      }
+
+      return true;
+    }
+
+    function createHrSetupFocusedCardTaskSwitcher({
+      shellId,
+      accessibleLabel,
+      items,
+      defaultKey,
+    }) {
+      const existingShell = document.getElementById(shellId);
+      if (existingShell) return existingShell;
+
+      const validItems = Array.isArray(items)
+        ? items.filter((item) => item?.key && item?.label && item?.card)
+        : [];
+
+      if (validItems.length !== items.length || validItems.length < 2) {
+        console.warn(`HR Setup focused card switcher sources are incomplete: ${shellId}`);
+        return null;
+      }
+
+      const uniqueCards = new Set(validItems.map((item) => item.card));
+      if (uniqueCards.size !== validItems.length) {
+        console.warn(`HR Setup focused card switcher sources overlap: ${shellId}`);
+        return null;
+      }
+
+      const firstCard = validItems[0].card;
+      const insertionParent = firstCard.parentElement;
+      if (!insertionParent) {
+        console.warn(`HR Setup focused card switcher has no insertion parent: ${shellId}`);
+        return null;
+      }
+
+      const shell = document.createElement("div");
+      shell.id = shellId;
+      shell.className = "hr-setup-internal-workspace hr-setup-focused-card-switcher";
+
+      const switcher = document.createElement("div");
+      switcher.className = "hr-setup-internal-switcher";
+      switcher.setAttribute("role", "tablist");
+      switcher.setAttribute("aria-label", accessibleLabel);
+      switcher.style.gridTemplateColumns =
+        `repeat(${validItems.length}, minmax(0, 1fr))`;
+
+      shell.appendChild(switcher);
+      insertionParent.insertBefore(shell, firstCard);
+
+      validItems.forEach((item) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "hr-setup-internal-tab";
+        button.dataset.hrSetupCardTaskButton = item.key;
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", "false");
+        button.setAttribute("tabindex", "-1");
+        button.innerHTML = `
+          <i class="${item.iconClass}" aria-hidden="true"></i>
+          <span>${item.label}</span>
+        `;
+
+        item.card.dataset.hrSetupCardTaskGroup = shellId;
+        item.card.dataset.hrSetupCardTaskPanel = item.key;
+
+        button.addEventListener("click", () => {
+          setHrSetupFocusedCardTask(shell, item.key, { focus: true });
+        });
+
+        button.addEventListener("keydown", (event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+            return;
+          }
+
+          event.preventDefault();
+          const buttons = Array.from(
+            shell.querySelectorAll("[data-hr-setup-card-task-button]"),
+          );
+          const currentIndex = buttons.indexOf(button);
+          let nextIndex = currentIndex;
+
+          if (event.key === "ArrowLeft") {
+            nextIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+          } else if (event.key === "ArrowRight") {
+            nextIndex = (currentIndex + 1) % buttons.length;
+          } else if (event.key === "Home") {
+            nextIndex = 0;
+          } else if (event.key === "End") {
+            nextIndex = buttons.length - 1;
+          }
+
+          const nextButton = buttons[nextIndex];
+          setHrSetupFocusedCardTask(
+            shell,
+            nextButton?.dataset.hrSetupCardTaskButton,
+            { focus: true },
+          );
+        });
+
+        switcher.appendChild(button);
+      });
+
+      setHrSetupFocusedCardTask(shell, defaultKey, { remember: false });
+      return shell;
+    }
+
+    function enhanceHrFocusedSetupRuleAndPaymentWorkspaces() {
+      const allowanceCard =
+        state.dom.payrollAllowanceCardCollapse?.closest(".dashboard-section-card");
+      const deductionsCard =
+        state.dom.payrollStatutoryCardCollapse?.closest(".dashboard-section-card");
+      const overrideCard =
+        state.dom.payrollEmployeeOverrideCardCollapse?.closest(".dashboard-section-card");
+
+      const payrollRulesShell = createHrSetupFocusedCardTaskSwitcher({
+        shellId: "hrPayrollRulesInternalWorkspace",
+        accessibleLabel: "Payroll Rules workspace",
+        defaultKey: "allowances",
+        items: [
+          {
+            key: "allowances",
+            label: "Allowances",
+            iconClass: "bi bi-plus-circle",
+            card: allowanceCard,
+          },
+          {
+            key: "deductions",
+            label: "Deductions",
+            iconClass: "bi bi-dash-circle",
+            card: deductionsCard,
+          },
+          {
+            key: "overrides",
+            label: "Payroll Adjustments",
+            iconClass: "bi bi-person-gear",
+            card: overrideCard,
+          },
+        ],
+      });
+
+      window.hrOpenPayrollRulesSetupPanel = (panelKey, options = {}) =>
+        setHrSetupFocusedCardTask(
+          payrollRulesShell || document.getElementById("hrPayrollRulesInternalWorkspace"),
+          panelKey,
+          options,
+        );
+
+      const bankDirectoryCard =
+        state.dom.bankDirectoryCardCollapse?.closest(".dashboard-section-card");
+      const employeeBankDetailsCard =
+        state.dom.employeeBankDetailsCardCollapse?.closest(".dashboard-section-card");
+
+      const paymentSetupShell = createHrSetupFocusedCardTaskSwitcher({
+        shellId: "hrPaymentSetupInternalWorkspace",
+        accessibleLabel: "Payment Setup workspace",
+        defaultKey: "banks",
+        items: [
+          {
+            key: "banks",
+            label: "Bank Directory",
+            iconClass: "bi bi-bank",
+            card: bankDirectoryCard,
+          },
+          {
+            key: "accounts",
+            label: "Employee Bank Accounts",
+            iconClass: "bi bi-credit-card-2-front",
+            card: employeeBankDetailsCard,
+          },
+        ],
+      });
+
+      window.hrOpenPaymentSetupPanel = (panelKey, options = {}) =>
+        setHrSetupFocusedCardTask(
+          paymentSetupShell || document.getElementById("hrPaymentSetupInternalWorkspace"),
           panelKey,
           options,
         );
@@ -746,8 +1040,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       const jobTitlesPanel = shell.querySelector(
         '[data-hr-setup-workspace-panel="jobTitles"]',
       );
+      const reportingLinesPanel = shell.querySelector(
+        '[data-hr-setup-workspace-panel="reportingLines"]',
+      );
 
-      if (!organizationPanel || !departmentsPanel || !jobTitlesPanel) {
+      if (!organizationPanel || !departmentsPanel || !jobTitlesPanel || !reportingLinesPanel) {
         console.warn("Manage Organization internal panels are incomplete.");
         return false;
       }
@@ -774,6 +1071,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         .getElementById("organizationJobTitleRecordsHeader")
         ?.closest(".mt-4");
 
+      // H6E: show company summary on its own tab, not above Reporting Lines.
+      const summaryGrid = organizationContainer.querySelector('.hr-setup-summary-grid');
+      if (summaryGrid && !organizationPanel.contains(summaryGrid)) {
+        organizationPanel.insertBefore(summaryGrid, organizationForm || null);
+      }
       if (organizationForm && !organizationPanel.contains(organizationForm)) {
         organizationPanel.appendChild(organizationForm);
       }
@@ -815,8 +1117,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Move existing source nodes only after Setup cards are in their final group order.
     enhanceHrPrimarySetupInternalWorkspaces();
 
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+    // Payroll Rules and Payment Setup now use the same one-panel-at-a-time
+    // model already established for Organization and Communication.
+    enhanceHrFocusedSetupRuleAndPaymentWorkspaces();
+
     // HR ORGANIZATION INTERNAL WORKSPACE COMPLETION INITIALISATION - v1.0.0
     completeHrOrganizationInternalWorkspace();
+
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+    // Desktop uses the US-02 grouped sidebar; mobile/tablet get a compact
+    // in-workspace task switcher that routes through the same task keys.
+    ensureHrFocusedWorkspaceTaskSwitchers();
 
     // DESCRIPTION ITEM 4 - STEP 2B
     // Start long HR/payroll working cards collapsed by default.
@@ -840,13 +1152,27 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
+    // BEXHR_H12_G4_NATIVE_PILOT_20261111: this is an authorised second workspace, not a role change.
+    state.h12NativeHrStandard = access.h12NativeHrStandard === true;
+    if (state.h12NativeHrStandard) {
+      document.body.dataset.h12NativeHrStandard = "pilot_read_only";
+    }
     state.currentUser = access.session.user;
     state.currentProfile = access.profile;
+
+    // BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+    // Start signing/preloading the authenticated HR image while the latest
+    // profile row is refreshed. The visible profile renderer then reuses that
+    // same cached or in-flight private Storage URL.
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
 
     console.time("BexHR startup: loadLatestHrProfile");
     console.log("[BexHR STARTUP] 3 - before loadLatestHrProfile");
 
     await loadLatestHrProfile();
+    primeProfileImageSignedUrl(state.currentProfile?.profile_image_path);
+    // BEXHR_GROUP_A_20261108: non-blocking, tenant-verified field configuration.
+    void window.BexHrGroupA?.init({ client: getSupabaseClient(), profile: state.currentProfile });
 
     console.timeEnd("BexHR startup: loadLatestHrProfile");
     console.log("[BexHR STARTUP] 4 - loadLatestHrProfile completed");
@@ -901,7 +1227,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Initialise allowance workspace as part of HR payroll load.
     // =========================================================
     await refreshEmployeeWorkspace();
-
     // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
     // Load employee-submitted correction requests after employees are loaded,
     // so the queue can resolve employee names from state.employees.
@@ -1024,18 +1349,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateHrModernApplicationHeader(getRememberedHrWorkspace());
     renderHrModernOverview();
 
-    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
-    // Keep employee editing blocked for Payroll, Auditor, QA, and custom
-    // HR-routed roles. These roles may review People records but not maintain them.
-    window.hrEditEmployee = (employeeId) => {
-      if (!canCurrentUserMaintainPeopleData()) {
-        showHrPeopleAccessDeniedMessage();
-        return;
-      }
-
-      startEmployeeEdit(employeeId);
-    };
-
     // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
     // Expose read-only filled-form review actions used by the Employee List
     // and the read-only modal. This must sit beside the other global HR row
@@ -1096,6 +1409,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     // The backend decides whether to send an initial invite or resend a setup/recovery link.
     window.hrSendEmployeeLoginInvite = async (employeeId) => {
       await sendEmployeeLoginInviteForExistingRecord(employeeId);
+    };
+
+    // BEXHR PHASE 7 - LEAN OFFBOARDING
+    window.hrOffboardEmployee = (employeeId) => {
+      openEmployeeOffboardingModal(employeeId);
+    };
+    window.hrCloseEmployeeOffboarding = () => {
+      closeEmployeeOffboardingModal();
+    };
+    window.hrConfirmOffboardEmployee = async () => {
+      await submitEmployeeOffboarding();
+    };
+    window.hrReactivateEmployee = async (employeeId) => {
+      await reactivateEmployeeRecord(employeeId);
     };
 
     // EMPLOYEE BIODATA COMPLETION - STEP 6C-4C
@@ -1193,6 +1520,23 @@ document.addEventListener("DOMContentLoaded", async () => {
       startOrganizationJobTitleEdit(jobTitleId);
     };
 
+    // BEXHR R-14A SAFE ORGANIZATION SETUP DELETE
+    // Expose only the protected Tenant-Admin delete handlers used by the
+    // dynamically rendered Department / Job Title action buttons.
+    window.hrDeleteOrganizationDepartmentRecord = async (departmentId) => {
+      await deleteOrganizationDepartmentRecord(departmentId);
+    };
+
+    window.hrDeleteOrganizationJobTitleRecord = async (jobTitleId) => {
+      await deleteOrganizationJobTitleRecord(jobTitleId);
+    };
+
+    // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+    // Protected RPC remains the write authority; this is only the table action hook.
+    window.hrDeleteOrganizationPositionHierarchyRecord = async (jobTitleId) => {
+      await deleteOrganizationPositionHierarchyRecord(jobTitleId);
+    };
+
     // HR APPROVED LEAVE CANCELLATION UI - STEP 1A
     // Expose only the HR-side approved leave cancellation modal opener.
     // The backend RPC still enforces HR-only cancellation and balance restoration.
@@ -1230,6 +1574,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 const EMPLOYEE_DOCUMENTS_BUCKET = "employee-documents";
 const PROFILE_IMAGES_BUCKET = "profile-images";
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+// Reuse the same short-lived signed URL during this browser tab session so
+// role/workspace switches do not generate a brand-new private Storage URL on
+// every page load. Cache entries remain user + file-path scoped and expire
+// before the 1-hour signed URL itself expires.
+const PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX =
+  "bexhr:profile-image:signed-url:v1";
+const PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS = 50 * 60 * 1000;
+const profileImageSignedUrlPromises = new Map();
 
 // HRP-85 - STEP 1E CLEANUP
 // The validation email body is fixed so users cannot accidentally enter
@@ -1245,6 +1598,194 @@ const TENANT_CONTEXT_STORAGE_KEY = "hrPayrollTenantContext";
 // Remembers only the active HR workspace tab during browser refresh.
 // This must stay sessionStorage-based so logout/new sessions return to Profile.
 const HR_DASHBOARD_WORKSPACE_MEMORY_PREFIX = "hrPayroll:lastHrWorkspace:v2";
+// BEXHR HR NAVIGATION ARCHITECTURE - US-02
+// Remembers only the selected sidebar task during this browser session.
+// No employee, payroll, salary, bank, leave, or form data is stored.
+const HR_DASHBOARD_TASK_MEMORY_PREFIX = "hrPayroll:lastHrTask:v1";
+
+const HR_SIDEBAR_GROUPS = Object.freeze({
+  people: { parentId: "sidebarPeopleBtn", subnavId: "sidebarPeopleSubnav" },
+  reviews: { parentId: "sidebarReviewBtn", subnavId: "sidebarReviewsSubnav" },
+  payroll: { parentId: "sidebarPayrollBtn", subnavId: "sidebarPayrollSubnav" },
+  setup: { parentId: "sidebarSetupBtn", subnavId: "sidebarSetupSubnav" },
+  selfservice: { parentId: "sidebarSelfServiceBtn", subnavId: "sidebarSelfServiceSubnav" },
+});
+
+const HR_NAVIGATION_TASKS = Object.freeze({
+  "people.directory": { workspace: "employees", group: "people", title: "Employee Directory", subtitle: "Search, review, and maintain employee records.", module: "People" },
+  "people.add": { workspace: "employees", group: "people", title: "Add Employee", subtitle: "Create or maintain one employee profile using the existing employee form.", module: "People" },
+  "people.import": { workspace: "employees", group: "people", title: "Import Employees", subtitle: "Upload and review employee records using the existing batch import workflow.", module: "People" },
+  "people.lifecycle": { workspace: "employees", group: "people", title: "Employee Lifecycle", subtitle: "Offboard or reactivate employees through the protected HR workflow.", module: "People" },
+  "payroll.overview": { workspace: "payroll", group: "payroll", title: "Payroll Overview", subtitle: "Review payroll totals, status, and current processing readiness.", module: "Payroll" },
+  "payroll.salary": { workspace: "payroll", group: "payroll", title: "Salary Setup", subtitle: "Maintain employee salary setup records before payroll processing.", module: "Payroll" },
+  "payroll.run": { workspace: "payroll", group: "payroll", title: "Run Payroll", subtitle: "Select employees and a pay period, review BexHR calculations, then finalise payroll.", module: "Payroll" },
+  "payroll.records": { workspace: "payroll", group: "payroll", title: "Payroll Records", subtitle: "Review submitted and finalised payroll records.", module: "Payroll" },
+  "payroll.delivery": { workspace: "payroll", group: "payroll", title: "Payslips / Delivery", subtitle: "Review payslip delivery status and authorised payroll records.", module: "Payroll" },
+  "setup.organization": { workspace: "setup", group: "setup", title: "Organization", subtitle: "Maintain organization details, departments, job titles, and audit context.", module: "Setup" },
+  "setup.rules": { workspace: "setup", group: "setup", title: "Payroll Rules", subtitle: "Maintain payroll allowances, deductions, and one-period employee payroll adjustments.", module: "Setup" },
+  "setup.payment": { workspace: "setup", group: "setup", title: "Payment Setup", subtitle: "Maintain bank directory and employee payment account details.", module: "Setup" },
+  // BEXHR_GROUP_D_TEST_UI_DEACTIVATED_2026_11_10: test-only Communication task retired.
+  "selfservice.leave": { workspace: "selfservice", group: "selfservice", title: "My Leave", subtitle: "Manage your own leave requests, balances, and decision history.", module: "My Self-Service" },
+  "selfservice.payroll": { workspace: "selfservice", group: "selfservice", title: "My Payroll", subtitle: "Review your own authorised payroll records and payslips.", module: "My Self-Service" },
+});
+
+let _hrSidebarTaskRoutingInProgress = false;
+
+// BEXHR FOCUSED WORKSPACES - US-03 / US-04
+// People, Payroll, and Setup reuse their existing cards/forms while every entry
+// route resolves to one focused task instead of exposing a long workspace page.
+const HR_FOCUSED_WORKSPACE_TASK_SWITCHERS = Object.freeze({
+  employees: {
+    id: "hrPeopleTaskSwitcher",
+    label: "People sections",
+    className: "hr-focused-workspace-switcher--people",
+    taskKeys: ["people.directory", "people.add", "people.import", "people.lifecycle"],
+  },
+  payroll: {
+    id: "hrPayrollTaskSwitcher",
+    label: "Payroll sections",
+    className: "hr-focused-workspace-switcher--payroll",
+    taskKeys: [
+      "payroll.overview",
+      "payroll.salary",
+      "payroll.run",
+      "payroll.records",
+      "payroll.delivery",
+    ],
+  },
+  setup: {
+    id: "hrSetupTaskSwitcher",
+    label: "Setup sections",
+    className: "hr-focused-workspace-switcher--setup",
+    taskKeys: [
+      "setup.organization",
+      "setup.rules",
+      "setup.payment",
+    ],
+  },
+});
+
+function getDefaultHrNavigationTaskForWorkspace(workspace = "") {
+  const defaults = {
+    employees: "people.directory",
+    payroll: "payroll.overview",
+    setup: "setup.organization",
+  };
+
+  return defaults[String(workspace || "").trim()] || "";
+}
+
+function getHrFocusedWorkspaceSwitcherForTask(taskKey = "") {
+  const task = HR_NAVIGATION_TASKS[String(taskKey || "").trim()];
+  if (!task) return null;
+
+  const config = HR_FOCUSED_WORKSPACE_TASK_SWITCHERS[task.workspace];
+  return config ? document.getElementById(config.id) : null;
+}
+
+function createHrFocusedWorkspaceTaskSwitcher(workspace = "") {
+  const normalizedWorkspace = String(workspace || "").trim();
+  const config = HR_FOCUSED_WORKSPACE_TASK_SWITCHERS[normalizedWorkspace];
+  const section = getHrWorkspaceSectionForNavigationTask(
+    config?.taskKeys?.[0] || "",
+  );
+
+  if (!config || !section) return null;
+
+  const existing = document.getElementById(config.id);
+  if (existing) return existing;
+
+  const nav = document.createElement("nav");
+  nav.id = config.id;
+  nav.className = `hr-focused-workspace-switcher ${config.className}`;
+  nav.setAttribute("aria-label", config.label);
+
+  config.taskKeys.forEach((taskKey) => {
+    const task = HR_NAVIGATION_TASKS[taskKey];
+    if (!task) return;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "hr-focused-workspace-task-btn";
+    button.dataset.hrFocusedNavigationTask = taskKey;
+    button.innerHTML = `<span>${task.title}</span>`;
+    button.addEventListener("click", () => {
+      openHrNavigationTask(taskKey);
+    });
+    nav.appendChild(button);
+  });
+
+  section.insertBefore(nav, section.firstElementChild);
+  return nav;
+}
+
+function ensureHrFocusedWorkspaceTaskSwitchers() {
+  createHrFocusedWorkspaceTaskSwitcher("employees");
+  createHrFocusedWorkspaceTaskSwitcher("payroll");
+  createHrFocusedWorkspaceTaskSwitcher("setup");
+}
+
+function applyHrPeopleFocusedTaskCardVisibility(taskKey = "") {
+  const normalizedTaskKey = String(taskKey || "").trim();
+  const summaryCard =
+    state.dom.totalEmployeesValue?.closest(".dashboard-section-card");
+  const directoryCard =
+    state.dom.employeeListCardCollapse?.closest(".dashboard-section-card");
+  const employeeFormCard =
+    state.dom.employeeFormCardCollapse?.closest(".dashboard-section-card");
+  const importCard =
+    state.dom.batchEmployeeCsvImportPanel?.closest(".dashboard-section-card");
+  const lifecycleCard = document.getElementById("hrEmployeeLifecycleCard");
+
+  const activeCardByTask = {
+    "people.directory": directoryCard,
+    "people.add": employeeFormCard,
+    "people.import": importCard,
+    "people.lifecycle": lifecycleCard,
+  };
+  const activeCard = activeCardByTask[normalizedTaskKey];
+
+  if (!activeCard) return false;
+
+  [summaryCard, directoryCard, employeeFormCard, importCard, lifecycleCard]
+    .filter(Boolean)
+    .forEach((card) => {
+      card.classList.toggle("bexhr-hr-task-hidden", card !== activeCard);
+    });
+
+  return true;
+}
+
+function focusHrTransientPeopleEditWorkspace() {
+  const target =
+    state.dom.employeeFormCardCollapse?.closest(".dashboard-section-card") ||
+    state.dom.employeeCreateForm?.closest(".dashboard-section-card") ||
+    state.dom.employeeCreateForm;
+
+  if (!target) return false;
+
+  setHrSidebarGroupExpanded("people", true);
+  clearHrSidebarTaskActiveState();
+
+  if (state.dom.hrModernPageTitle) {
+    state.dom.hrModernPageTitle.textContent = "Edit Employee";
+  }
+
+  if (state.dom.hrModernPageSubtitle) {
+    state.dom.hrModernPageSubtitle.textContent =
+      "Update the selected employee using the existing employee profile form.";
+  }
+
+  if (state.dom.hrModuleValue) {
+    state.dom.hrModuleValue.textContent = "People";
+  }
+
+  if (!focusHrNavigationTaskView("people.add", target)) return false;
+
+  document.body.dataset.hrNavigationTask = "people.edit";
+  return true;
+}
+
 
 // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
 // Controlled Nigerian state list used by State of Origin and issuing-state fields.
@@ -2375,9 +2916,9 @@ function syncIdentificationDocumentNumberVisibility({ clearWhenHidden = false } 
 }
 
 // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
-// Show NIN for any selected means of identification.
-// It is required for National ID / NIN Slip and optional for other IDs.
-// If no means of identification is selected, hide and clear NIN.
+// R14B: NIN is an optional stand-alone HR field in Core Details.
+// It must remain visible without requiring the retired Means of Identification field.
+// Never clear a historical NIN merely because that retired field is blank.
 function syncNinFieldVisibility({ clearWhenHidden = false } = {}) {
   const selectedMeans = String(
     state.dom.meansOfIdentification?.value || "",
@@ -2388,7 +2929,7 @@ function syncNinFieldVisibility({ clearWhenHidden = false } = {}) {
   // - required for National ID / NIN Slip;
   // - optional but allowed for Passport, Driver's Licence, Voter's Card/PVC,
   //   Birth Certificate, and Other.
-  const shouldShowNin = Boolean(selectedMeans);
+  const shouldShowNin = true;
   const shouldRequireNin = isNinRequiredForMeansOfIdentification(selectedMeans);
 
   state.dom.ninFieldCol?.classList.toggle("d-none", !shouldShowNin);
@@ -2432,6 +2973,12 @@ const state = {
   currentProfileEditableBaseline: null,
   employees: [],
   filteredEmployees: [],
+
+  // BEXHR REPORTING HIERARCHY UX CONSISTENCY - R-12B
+  // Cached active Primary reporting lines let every HR manager picker use the
+  // same descendant-aware hierarchy rule without changing system roles.
+  primaryReportingLines: [],
+  primaryReportingHierarchyLoaded: false,
 
   // EMPLOYEE LIST STABLE ORDER - STEP 1
   // Keep the employee list serially ordered by Employee Number.
@@ -2482,6 +3029,11 @@ const state = {
   organizationDepartments: [],
   organizationJobTitles: [],
 
+  // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+  // Tenant-scoped whole-organization position ordering loaded under RLS.
+  organizationJobTitleHierarchy: [],
+  organizationPositionHierarchyLoaded: false,
+
   // COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
   // The protected RPC is the source of truth. Standard HR never loads this data.
   companyAdminAuditEvents: [],
@@ -2526,7 +3078,6 @@ const state = {
 
   payrollRecords: [],
   filteredPayrollRecords: [],
-
   // HR SAVE/EDIT BEHAVIOUR - PAYROLL RECORDS STEP 5
   // Tracks payroll records just submitted/updated in the current browser session
   // so they can be shown first after refresh.
@@ -2727,8 +3278,10 @@ function canCurrentUserMaintainPayrollSetupData() {
 
 function canCurrentUserMaintainPayrollMasterData() {
   // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
-  // Existing Payroll Master checks now follow the full Payroll Setup rule.
-  return canCurrentUserMaintainPayrollSetupData();
+  // H12 G4: keep ordinary HR salary authority; only the verified secondary
+  // HR Standard manager workspace receives the same salary-setup capability.
+  return canCurrentUserMaintainPayrollSetupData() ||
+    (state.h12NativeHrStandard === true && getCurrentHrBusinessRole() === "manager");
 }
 
 // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
@@ -2924,6 +3477,13 @@ const HR_REVIEW_MAINTENANCE_ROLES = new Set([
 
 function canCurrentUserMaintainHrReviewData() {
   return HR_REVIEW_MAINTENANCE_ROLES.has(getCurrentHrBusinessRole());
+}
+
+// H12 G4: approved Leave cancellation only, never Manager decisions or
+// unrelated HR Review actions. Backend entitlement + MFA is authoritative.
+function canCurrentUserCancelApprovedLeave() {
+  return canCurrentUserMaintainHrReviewData() ||
+    (state.h12NativeHrStandard === true && getCurrentHrBusinessRole() === "manager");
 }
 
 function showHrReviewAccessDeniedMessage(actionLabel = "change HR review records") {
@@ -3147,21 +3707,32 @@ function applyHrOrganizationSetupAccessControls() {
     state.dom.saveOrganizationDepartmentBtn,
     state.dom.cancelOrganizationDepartmentEditBtn,
 
+    state.dom.organizationJobTitleScope,
     state.dom.organizationJobTitleDepartmentId,
     state.dom.organizationJobTitleName,
     state.dom.organizationJobTitleStatus,
+    state.dom.organizationJobTitleReportsTo,
     state.dom.organizationJobTitleNotes,
     state.dom.saveOrganizationJobTitleBtn,
     state.dom.cancelOrganizationJobTitleEditBtn,
+    state.dom.removeOrganizationJobTitleLinkBtn,
+
+    state.dom.organizationPositionHierarchyJobTitleId,
+    state.dom.organizationPositionHierarchyParentId,
+    state.dom.saveOrganizationPositionHierarchyBtn,
   ];
 
   setHrControlsDisabled(controls, !canMaintain);
+  updateOrganizationPositionHierarchySaveButtonState();
 
   document
     .querySelectorAll(
       [
         '[onclick^="window.hrEditOrganizationDepartmentRecord"]',
+        '[onclick^="window.hrDeleteOrganizationDepartmentRecord"]',
         '[onclick^="window.hrEditOrganizationJobTitleRecord"]',
+        '[onclick^="window.hrDeleteOrganizationJobTitleRecord"]',
+        '[onclick^="window.hrDeleteOrganizationPositionHierarchyRecord"]',
       ].join(","),
     )
     .forEach((button) => {
@@ -3431,11 +4002,27 @@ function applyHrPayrollSetupAccessControls() {
   if (state.dom.savePayrollEmployeeOverrideBtn) {
     state.dom.savePayrollEmployeeOverrideBtn.innerHTML = `
       <i class="bi bi-lock me-2"></i>
-      <span id="savePayrollEmployeeOverrideBtnText">Employee Overrides Read Only</span>
+      <span id="savePayrollEmployeeOverrideBtnText">Payroll Adjustments Read Only</span>
     `;
     state.dom.savePayrollEmployeeOverrideBtnText =
       document.getElementById("savePayrollEmployeeOverrideBtnText");
   }
+  // H12 G4 secondary HR Standard: restore ONLY Salary Setup controls.
+  // Allowance, statutory, deductions, adjustments and operations remain locked.
+  if (state.h12NativeHrStandard === true && getCurrentHrBusinessRole() === "manager") {
+    applyPayrollMasterAccessControls();
+    if (state.dom.payrollMasterFormModeBadge) {
+      state.dom.payrollMasterFormModeBadge.textContent = "Salary Setup";
+      state.dom.payrollMasterFormModeBadge.className = "badge rounded-pill text-bg-light border px-3 py-2";
+    }
+    if (state.dom.savePayrollMasterBtn) {
+      state.dom.savePayrollMasterBtn.className = "btn btn-primary dashboard-action-btn";
+      state.dom.savePayrollMasterBtn.innerHTML = '<i class="bi bi-check2-circle me-2"></i><span id="savePayrollMasterBtnText">Save Salary Setup</span>';
+      state.dom.savePayrollMasterBtnText = document.getElementById("savePayrollMasterBtnText");
+      updatePayrollMasterSaveButtonState();
+    }
+  }
+
 }
 
 // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
@@ -3744,7 +4331,7 @@ function applyPayrollMasterAccessControls() {
         "btn btn-secondary dashboard-action-btn";
       state.dom.savePayrollMasterBtn.innerHTML = `
         <i class="bi bi-lock me-2"></i>
-        <span id="savePayrollMasterBtnText">Payroll Master Read Only</span>
+        <span id="savePayrollMasterBtnText">Salary Setup Read Only</span>
       `;
       state.dom.savePayrollMasterBtnText =
         document.getElementById("savePayrollMasterBtnText");
@@ -3792,12 +4379,92 @@ function getCurrentTenantContext() {
 
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
 // Only these top-level HR workspaces are safe to restore after browser refresh.
+    // BEXHR R40: nested Setup navigation state is scoped to signed-in user + tenant.
+    function hrR40SetupStorageKey(suffix) {
+      const userId = String(state.currentUser?.id || '').trim();
+      const tenant = getCurrentTenantContext();
+      const tenantId = String(tenant?.tenantId || state.currentProfile?.tenant_id || '').trim();
+      if (!userId || !tenantId) return '';
+      return `bexhr:r40:setup:${userId}:${tenantId}:${suffix}`;
+    }
+    function hrR40RememberSetupPanel(shellId, panelKey) {
+      const key = hrR40SetupStorageKey(`panel:${shellId}`);
+      if (!key || !panelKey) return;
+      try { sessionStorage.setItem(key, panelKey); } catch (_) { /* storage blocked */ }
+    }
+    function hrR40GetSetupPanel(shellId, fallback) {
+      const key = hrR40SetupStorageKey(`panel:${shellId}`);
+      if (!key) return fallback;
+      let stored = '';
+      try { stored = sessionStorage.getItem(key) || ''; }
+      catch (_) { return fallback; }
+      const shell = document.getElementById(shellId);
+      if (!shell) return fallback;
+      const selection = shellId === 'hrOrganizationInternalWorkspace'
+        ? hrR40GetOrgStep() || stored : stored;
+      const available = Array.from(shell.querySelectorAll(
+        '[data-hr-setup-workspace-button], [data-hr-setup-card-task-button]',
+      )).map((button) => button.dataset.hrSetupWorkspaceButton ||
+        button.dataset.hrSetupCardTaskButton || '');
+      return available.includes(selection) ? selection : fallback;
+    }
+    function hrR40RememberReportingPosition(positionId) {
+      const key = hrR40SetupStorageKey('position:reportingLines');
+      if (!key) return;
+      try {
+        if (positionId) sessionStorage.setItem(key, positionId);
+        else sessionStorage.removeItem(key);
+      } catch (_) { /* storage blocked */ }
+    }
+    function hrR40GetReportingPosition() {
+      const key = hrR40SetupStorageKey('position:reportingLines');
+      if (!key) return '';
+      try { return sessionStorage.getItem(key) || ''; }
+      catch (_) { return ''; }
+    }
+    function hrR40ClearSetupMemory() {
+      const suffixes = [
+        'panel:hrOrganizationInternalWorkspace',
+        'panel:hrPayrollRulesInternalWorkspace',
+        'panel:hrPaymentSetupInternalWorkspace',
+        'panel:hrCommunicationInternalWorkspace',
+        'position:reportingLines',
+        'step:organization',
+      ];
+      for (const suffix of suffixes) {
+        const key = hrR40SetupStorageKey(suffix);
+        if (!key) continue;
+        try { sessionStorage.removeItem(key); } catch (_) { /* storage blocked */ }
+      }
+    }
+    // R40 P7B: remember Reporting Structure steps without storing employee data.
+    function hrR40RememberOrgStep(step) {
+      const key = hrR40SetupStorageKey('step:organization');
+      if (!key) return;
+      const value = ['departments', 'jobTitles', 'reportingLines'].includes(step) ? step : '';
+      try {
+        if (value) sessionStorage.setItem(key, value);
+        else sessionStorage.removeItem(key);
+      } catch (_) { /* storage unavailable */ }
+    }
+    function hrR40GetOrgStep() {
+      const key = hrR40SetupStorageKey('step:organization');
+      if (!key) return '';
+      try {
+        const value = sessionStorage.getItem(key) || '';
+        return ['departments', 'jobTitles', 'reportingLines'].includes(value) ? value : '';
+      } catch (_) { return ''; }
+    }
+    window.BexHRR40OrgStepMemory = Object.freeze({
+      save: hrR40RememberOrgStep,
+      read: hrR40GetOrgStep,
+    });
 function isValidHrWorkspaceKey(workspace = "") {
   // HR REVIEW WORKSPACE SEPARATION - STEP 1P
   // Review is a real top-level HR workspace, safe to remember across refresh.
   // It stores only the workspace key, not employee, leave, payroll, salary,
   // bank, or decision data.
-  return ["dashboard", "profile", "employees", "review", "setup", "payroll", "selfservice"].includes(
+  return ["dashboard", "profile", "employees", "setup", "payroll", "selfservice"].includes(
     String(workspace || "").trim(),
   );
 }
@@ -3898,11 +4565,626 @@ function getRememberedHrWorkspace() {
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
 // Clear remembered workspace on logout so the next login starts from Profile.
 function clearRememberedHrWorkspace() {
+  hrR40ClearSetupMemory();
   try {
     sessionStorage.removeItem(getHrWorkspaceMemoryKey());
   } catch (error) {
     console.warn("HR workspace memory could not be cleared.", error);
   }
+
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Logout clears the remembered task together with the top-level workspace.
+  clearRememberedHrNavigationTask();
+}
+
+// BEXHR HR NAVIGATION ARCHITECTURE - US-02
+function isValidHrNavigationTask(taskKey = "") {
+  return Object.prototype.hasOwnProperty.call(
+    HR_NAVIGATION_TASKS,
+    String(taskKey || "").trim(),
+  );
+}
+
+function getHrNavigationTaskMemoryKey() {
+  const tenantContext = getCurrentTenantContext();
+  const userId = String(state.currentUser?.id || "anonymous").trim();
+  const tenantId = String(
+    tenantContext?.tenantId ||
+    state.currentProfile?.tenant_id ||
+    "no-tenant",
+  ).trim();
+
+  return `${HR_DASHBOARD_TASK_MEMORY_PREFIX}:${userId}:${tenantId}`;
+}
+
+function rememberHrNavigationTask(taskKey = "") {
+  const normalizedTaskKey = String(taskKey || "").trim();
+  if (!isValidHrNavigationTask(normalizedTaskKey)) return;
+
+  try {
+    sessionStorage.setItem(getHrNavigationTaskMemoryKey(), normalizedTaskKey);
+  } catch (error) {
+    console.warn("HR navigation task memory could not be saved.", error);
+  }
+}
+
+function getRememberedHrNavigationTask() {
+  try {
+    const taskKey = sessionStorage.getItem(getHrNavigationTaskMemoryKey()) || "";
+    return isValidHrNavigationTask(taskKey) ? taskKey : "";
+  } catch (error) {
+    console.warn("HR navigation task memory could not be read.", error);
+    return "";
+  }
+}
+
+function clearRememberedHrNavigationTask() {
+  try {
+    sessionStorage.removeItem(getHrNavigationTaskMemoryKey());
+  } catch (error) {
+    console.warn("HR navigation task memory could not be cleared.", error);
+  }
+}
+
+function setHrSidebarGroupExpanded(groupKey = "", shouldExpand = true) {
+  const requestedGroup = String(groupKey || "").trim();
+
+  Object.entries(HR_SIDEBAR_GROUPS).forEach(([key, config]) => {
+    const parent = document.getElementById(config.parentId);
+    const subnav = document.getElementById(config.subnavId);
+    const isExpanded = shouldExpand && key === requestedGroup;
+
+    parent?.classList.toggle("is-expanded", isExpanded);
+    parent?.setAttribute("aria-expanded", String(isExpanded));
+
+    if (subnav) {
+      subnav.hidden = !isExpanded;
+    }
+  });
+}
+
+function syncHrSidebarGroupForWorkspace(workspace = "") {
+  const groupByWorkspace = {
+    employees: "people",
+    review: "reviews",
+    payroll: "payroll",
+    setup: "setup",
+    selfservice: "selfservice",
+  };
+
+  const groupKey = groupByWorkspace[String(workspace || "").trim()] || "";
+  setHrSidebarGroupExpanded(groupKey, Boolean(groupKey));
+}
+
+function clearHrSidebarTaskActiveState() {
+  document
+    .querySelectorAll(
+      "[data-hr-navigation-task], [data-hr-focused-navigation-task]",
+    )
+    .forEach((button) => {
+      button.classList.remove("active");
+      button.removeAttribute("aria-current");
+    });
+}
+
+function setHrSidebarTaskActive(taskKey = "") {
+  const normalizedTaskKey = String(taskKey || "").trim();
+
+  document
+    .querySelectorAll(
+      "[data-hr-navigation-task], [data-hr-focused-navigation-task]",
+    )
+    .forEach((button) => {
+      const buttonTaskKey =
+        button.dataset.hrNavigationTask ||
+        button.dataset.hrFocusedNavigationTask ||
+        "";
+      const isActive = buttonTaskKey === normalizedTaskKey;
+      button.classList.toggle("active", isActive);
+
+      if (isActive) {
+        button.setAttribute("aria-current", "page");
+      } else {
+        button.removeAttribute("aria-current");
+      }
+    });
+}
+
+function updateHrNavigationTaskHeader(taskKey = "") {
+  const task = HR_NAVIGATION_TASKS[String(taskKey || "").trim()];
+  if (!task) return;
+
+  if (state.dom.hrModernPageTitle) {
+    state.dom.hrModernPageTitle.textContent = task.title;
+  }
+
+  if (state.dom.hrModernPageSubtitle) {
+    state.dom.hrModernPageSubtitle.textContent = task.subtitle;
+  }
+
+  if (state.dom.hrModuleValue) {
+    state.dom.hrModuleValue.textContent = task.module;
+  }
+}
+
+function resetHrNavigationTaskFocus() {
+  document
+    .querySelectorAll(".bexhr-hr-task-hidden")
+    .forEach((element) => element.classList.remove("bexhr-hr-task-hidden"));
+
+  delete document.body.dataset.hrNavigationTask;
+}
+
+function getHrWorkspaceSectionForNavigationTask(taskKey = "") {
+  const task = HR_NAVIGATION_TASKS[String(taskKey || "").trim()];
+  if (!task) return null;
+
+  const sectionsByWorkspace = {
+    employees: state.dom.hrEmployeesSection,
+    review: state.dom.hrReviewSection,
+    payroll: state.dom.hrPayrollSection,
+    setup: state.dom.hrSetupSection,
+    selfservice: state.dom.hrSelfServiceSection,
+  };
+
+  return sectionsByWorkspace[task.workspace] || null;
+}
+
+function getHrTaskDirectChild(section, node) {
+  if (!section || !node) return null;
+
+  let current = node;
+
+  while (current && current.parentElement && current.parentElement !== section) {
+    current = current.parentElement;
+  }
+
+  return current?.parentElement === section ? current : null;
+}
+
+function getHrNavigationTaskCompanionNodes(taskKey = "") {
+  switch (String(taskKey || "").trim()) {
+    case "setup.organization":
+      return [document.getElementById("setupOrganizationGroupHeader")];
+
+    case "setup.rules":
+      return [
+        document.getElementById("setupPayrollGroupHeader"),
+        document.getElementById("hrPayrollRulesInternalWorkspace"),
+        state.dom.payrollStatutoryCardCollapse?.closest(".dashboard-section-card"),
+        state.dom.payrollEmployeeOverrideCardCollapse?.closest(".dashboard-section-card"),
+      ];
+
+    case "setup.payment":
+      return [
+        document.getElementById("setupPaymentGroupHeader"),
+        document.getElementById("hrPaymentSetupInternalWorkspace"),
+        state.dom.employeeBankDetailsCardCollapse?.closest(".dashboard-section-card"),
+      ];
+
+    case "setup.communication":
+      return [document.getElementById("setupCommunicationGroupHeader")];
+
+    case "selfservice.leave":
+    case "selfservice.payroll":
+      return [document.getElementById("ssSelfServiceAlert")];
+
+    default:
+      return [];
+  }
+}
+
+function focusHrNavigationTaskView(taskKey = "", target = null) {
+  const normalizedTaskKey = String(taskKey || "").trim();
+  const section = getHrWorkspaceSectionForNavigationTask(normalizedTaskKey);
+  if (!section || !target) return false;
+
+  const visibleNodes = [
+    target,
+    getHrFocusedWorkspaceSwitcherForTask(normalizedTaskKey),
+    ...getHrNavigationTaskCompanionNodes(normalizedTaskKey),
+  ].filter(Boolean);
+
+  const visibleDirectChildren = new Set(
+    visibleNodes
+      .map((node) => getHrTaskDirectChild(section, node))
+      .filter(Boolean),
+  );
+
+  if (!visibleDirectChildren.size) return false;
+
+  resetHrNavigationTaskFocus();
+
+  Array.from(section.children).forEach((child) => {
+    if (!(child instanceof HTMLElement)) return;
+    child.classList.toggle(
+      "bexhr-hr-task-hidden",
+      !visibleDirectChildren.has(child),
+    );
+  });
+
+  // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03 QA CORRECTION
+  // People cards can share one legacy layout container. Direct-child focus is
+  // therefore not enough: hide the sibling People cards themselves as well.
+  if (HR_NAVIGATION_TASKS[normalizedTaskKey]?.workspace === "employees") {
+    applyHrPeopleFocusedTaskCardVisibility(normalizedTaskKey);
+  }
+
+  document.body.dataset.hrNavigationTask = normalizedTaskKey;
+  return true;
+}
+
+// BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+// Payroll Records and Payslips / Delivery share one existing card. Present them
+// as distinct tasks without duplicating the records table, delivery status,
+// send/export controls, IDs, listeners, or payroll/email business logic.
+function setHrPayrollRecordsTaskMode(mode = "records") {
+  const normalizedMode = mode === "delivery" ? "delivery" : "records";
+  const card = state.dom.payrollRecordsCard;
+  const collapse = state.dom.payrollRecordsCardCollapse;
+  const statusSection = document.getElementById("payslipEmailStatusSection");
+  const header = state.dom.payrollRecordsHeader;
+
+  if (!card || !collapse || !statusSection || !header) return false;
+
+  let separator = collapse.querySelector(
+    '[data-hr-payroll-delivery-separator="true"]',
+  );
+
+  if (!separator) {
+    const candidate = statusSection.previousElementSibling;
+    if (candidate?.tagName === "HR") {
+      separator = candidate;
+      separator.dataset.hrPayrollDeliverySeparator = "true";
+    }
+  }
+
+  const title = header.querySelector(".section-heading");
+  const subtitle = header.querySelector(".section-subtext");
+
+  if (normalizedMode === "delivery") {
+    statusSection.hidden = false;
+    if (separator) separator.hidden = true;
+
+    // Put delivery monitoring first so HR lands directly on payslip work.
+    collapse.insertBefore(statusSection, collapse.firstElementChild);
+
+    if (title) title.textContent = "Payslips / Delivery";
+    if (subtitle) {
+      subtitle.textContent =
+        "Review payslip delivery status, select authorised payroll records, and manage delivery evidence.";
+    }
+
+    if (state.dom.payslipEmailLogsCollapse?.classList.contains("d-none")) {
+      state.dom.togglePayslipEmailLogsBtn?.click();
+    }
+    // BEXHR_GROUP_D_V2_COLLAPSE_AND_SESSION_2026_11_10: In dedicated Payslips / Delivery, the outer
+    // card is the sole collapse control. Keep status details expanded, but
+    // hide the redundant inner toggle. In Payroll Records restore it.
+    state.dom.togglePayslipEmailLogsBtn?.classList.add("d-none");
+  } else {
+    state.dom.togglePayslipEmailLogsBtn?.classList.remove("d-none");
+    // Payroll Records stays records-focused. Keep delivery available through
+    // its dedicated Payroll option instead of extending this task vertically.
+    if (separator) {
+      separator.hidden = true;
+      collapse.appendChild(separator);
+    }
+
+    collapse.appendChild(statusSection);
+    statusSection.hidden = true;
+
+    if (title) title.textContent = "Payroll Records";
+    if (subtitle) {
+      subtitle.textContent =
+        "Search payroll records by employee, pay cycle, department, group, or status.";
+    }
+  }
+
+  card.dataset.hrPayrollRecordsMode = normalizedMode;
+  return true;
+}
+
+function getHrNavigationTaskTarget(taskKey = "") {
+  switch (String(taskKey || "").trim()) {
+    case "people.directory":
+      openEmployeeListCard();
+      return (
+        state.dom.employeeListCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.employeeListCardHeader ||
+        state.dom.employeeListCardCollapse
+      );
+
+    case "people.add":
+      openEmployeeFormCard();
+      return (
+        state.dom.employeeFormCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.employeeFormCardCollapse
+      );
+
+    case "people.import":
+      return document.getElementById("batchEmployeeImportCard");
+
+    case "people.lifecycle":
+      window.BexHrPeopleUxPhase7?.renderLifecycle?.();
+      return document.getElementById("hrEmployeeLifecycleCard");
+
+    case "review.corrections":
+      openProfileCorrectionRequestsCard();
+      return state.dom.profileCorrectionRequestsCard;
+
+    case "review.leave":
+      setDashboardCardExpanded(
+        state.dom.toggleManagerLeaveDecisionsBtn,
+        state.dom.managerLeaveDecisionsCollapse,
+        true,
+      );
+      return state.dom.recentManagerLeaveDecisionsCard;
+
+    case "payroll.overview":
+      return state.dom.payrollRecordCountValue?.closest(".dashboard-section-card");
+
+    case "payroll.salary":
+      openPayrollMasterCard();
+      return (
+        state.dom.payrollMasterCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.payrollMasterCardCollapse
+      );
+
+    case "payroll.run":
+      if (!canCurrentUserMaintainPayrollOperationsData()) return null;
+      openPayrollRecordCard();
+      return (
+        state.dom.payrollRecordCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.payrollRecordCardCollapse
+      );
+
+    case "payroll.records":
+      openPayrollRecordsCard();
+      setHrPayrollRecordsTaskMode("records");
+      return state.dom.payrollRecordsCard || state.dom.payrollRecordsCardCollapse;
+
+    case "payroll.delivery":
+      openPayrollRecordsCard();
+      setHrPayrollRecordsTaskMode("delivery");
+      return (
+        document.getElementById("payslipEmailStatusSection") ||
+        state.dom.payrollRecordsCard ||
+        state.dom.payrollRecordsCardCollapse
+      );
+
+    case "setup.organization":
+      setDashboardCardExpanded(
+        state.dom.toggleOrganizationSettingsCardBtn,
+        state.dom.organizationSettingsCardCollapse,
+        true,
+      );
+      window.hrOpenOrganizationSetupPanel?.(
+        hrR40GetSetupPanel('hrOrganizationInternalWorkspace', 'organization'),
+        { remember: false },
+      );
+      return (
+        state.dom.organizationSettingsCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.organizationSettingsCardCollapse
+      );
+
+    case "setup.rules":
+      window.hrOpenPayrollRulesSetupPanel?.(
+        hrR40GetSetupPanel('hrPayrollRulesInternalWorkspace', 'allowances'),
+        { remember: false },
+      );
+      openPayrollAllowanceCard();
+      return (
+        state.dom.payrollAllowanceCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.payrollAllowanceCardCollapse
+      );
+
+    case "setup.payment":
+      window.hrOpenPaymentSetupPanel?.(
+        hrR40GetSetupPanel('hrPaymentSetupInternalWorkspace', 'banks'),
+        { remember: false },
+      );
+      openBankDirectoryCard();
+      return (
+        state.dom.bankDirectoryCardCollapse?.closest(".dashboard-section-card") ||
+        state.dom.bankDirectoryCardCollapse
+      );
+
+    case "setup.communication":
+      setDashboardCardExpanded(
+        state.dom.toggleHrp85EmailIntegrationCardBtn,
+        state.dom.hrp85EmailIntegrationCardCollapse,
+        true,
+      );
+      window.hrOpenCommunicationSetupPanel?.(
+        hrR40GetSetupPanel('hrCommunicationInternalWorkspace', 'validation'),
+        { remember: false },
+      );
+      return state.dom.hrp85EmailIntegrationCard;
+
+    case "selfservice.leave":
+      window.EmployeeSelfService?.show?.("leave", { leaveView: "request" });
+      return document.getElementById("ssLeaveSection");
+
+    case "selfservice.payroll":
+      window.EmployeeSelfService?.show?.("payroll");
+      return document.getElementById("ssPayrollSection");
+
+    default:
+      return null;
+  }
+}
+
+function applyHrNavigationTask(taskKey = "", options = {}) {
+  const normalizedTaskKey = String(taskKey || "").trim();
+  if (normalizedTaskKey.startsWith("review.")) return false;
+  const task = HR_NAVIGATION_TASKS[normalizedTaskKey];
+  if (!task) return false;
+
+  setHrSidebarGroupExpanded(task.group, true);
+  setHrSidebarTaskActive(normalizedTaskKey);
+  updateHrNavigationTaskHeader(normalizedTaskKey);
+
+  const target = getHrNavigationTaskTarget(normalizedTaskKey);
+  if (!target) return false;
+
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Explicit sidebar tasks are focused views: show only the selected job's
+  // existing card/group and automatically open its working content.
+  if (!focusHrNavigationTaskView(normalizedTaskKey, target)) return false;
+
+  if (options.remember !== false) {
+    rememberHrNavigationTask(normalizedTaskKey);
+  }
+
+  if (options.scroll !== false) {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        scrollToDashboardTarget(target, getHrReviewNavigationOffset());
+      });
+    });
+  }
+
+  return true;
+}
+
+function getHrWorkspaceButtonForNavigationTask(taskKey = "") {
+  const task = HR_NAVIGATION_TASKS[String(taskKey || "").trim()];
+  if (!task) return null;
+
+  const buttonsByWorkspace = {
+    employees: state.dom.hrTabEmployeesBtn,
+    review: state.dom.hrTabReviewBtn,
+    payroll: state.dom.hrTabPayrollBtn,
+    setup: state.dom.hrTabSetupBtn,
+    selfservice: state.dom.hrTabSelfServiceBtn,
+  };
+
+  return buttonsByWorkspace[task.workspace] || null;
+}
+
+function openHrNavigationTask(taskKey = "") {
+  const normalizedTaskKey = String(taskKey || "").trim();
+  if (normalizedTaskKey.startsWith("review.")) return false;
+  const task = HR_NAVIGATION_TASKS[normalizedTaskKey];
+  if (!task) return false;
+
+  const pendingSelfServiceSection =
+    normalizedTaskKey === "selfservice.leave"
+      ? "leave"
+      : normalizedTaskKey === "selfservice.payroll"
+        ? "payroll"
+        : "";
+
+  if (pendingSelfServiceSection) {
+    _hrPendingSelfServiceSection = pendingSelfServiceSection;
+    window.EmployeeSelfService?.prepare?.(pendingSelfServiceSection, {
+      leaveView: pendingSelfServiceSection === "leave" ? "request" : undefined,
+    });
+  }
+
+  if (normalizedTaskKey === "payroll.run") {
+    if (!canCurrentUserMaintainPayrollOperationsData()) {
+      state.dom.runPayrollActionBtn?.click();
+      return false;
+    }
+
+    state.dom.runPayrollActionBtn?.click();
+    return applyHrNavigationTask(normalizedTaskKey);
+  }
+
+  const workspaceButton = getHrWorkspaceButtonForNavigationTask(normalizedTaskKey);
+  if (!workspaceButton) return false;
+
+  _hrSidebarTaskRoutingInProgress = true;
+
+  try {
+    workspaceButton.click();
+  } finally {
+    _hrSidebarTaskRoutingInProgress = false;
+  }
+
+  const applied = applyHrNavigationTask(normalizedTaskKey);
+  _hrPendingSelfServiceSection = "";
+  return applied;
+}
+
+function restoreRememberedHrNavigationTask(workspace = "") {
+  const normalizedWorkspace = String(workspace || "").trim();
+  const rememberedTaskKey = getRememberedHrNavigationTask();
+  const rememberedTask = HR_NAVIGATION_TASKS[rememberedTaskKey];
+  const fallbackTaskKey = getDefaultHrNavigationTaskForWorkspace(normalizedWorkspace);
+  const taskKey =
+    rememberedTask?.workspace === normalizedWorkspace
+      ? rememberedTaskKey
+      : fallbackTaskKey;
+  const task = HR_NAVIGATION_TASKS[taskKey];
+
+  if (!task || task.workspace !== normalizedWorkspace) {
+    clearHrSidebarTaskActiveState();
+    return false;
+  }
+
+  return applyHrNavigationTask(taskKey, {
+    remember: false,
+    scroll: false,
+  });
+}
+
+function bindHrRedesignSidebarNavigation() {
+  // Remember only the position catalogue ID, never employee or payroll data.
+  document.addEventListener('change', (event) => {
+    if (event.target?.id === 'bexhrH6CChild') {
+      hrR40RememberReportingPosition(String(event.target.value || '').trim());
+    }
+  });
+  window.addEventListener('bexhr:organization-setup-updated', (event) => {
+    if (event?.detail?.loaded !== true) return;
+    const snapshotTenant = String(event.detail?.hierarchyPreview?.tenantId || '').trim();
+    const activeTenant = String(getCurrentTenantContext()?.tenantId || state.currentProfile?.tenant_id || '').trim();
+    if (!snapshotTenant || snapshotTenant !== activeTenant) return;
+    window.requestAnimationFrame(() => {
+      const selected = hrR40GetReportingPosition();
+      const field = document.getElementById('bexhrH6CChild');
+      if (!selected || !field || field.value === selected) return;
+      if (!Array.from(field.options).some((option) => option.value === selected)) return;
+      field.value = selected;
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  });
+  Object.entries(HR_SIDEBAR_GROUPS).forEach(([groupKey, config]) => {
+    const parent = document.getElementById(config.parentId);
+    if (!parent) return;
+
+    parent.addEventListener("click", () => {
+      const isExpanded = parent.getAttribute("aria-expanded") === "true";
+      setHrSidebarGroupExpanded(groupKey, !isExpanded);
+    });
+  });
+
+  document
+    .querySelectorAll("[data-hr-navigation-task]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        openHrNavigationTask(button.dataset.hrNavigationTask || "");
+      });
+    });
+
+  [
+    state.dom.hrTabDashboardBtn,
+    state.dom.hrTabProfileBtn,
+    state.dom.hrTabEmployeesBtn,
+    state.dom.hrTabReviewBtn,
+    state.dom.hrTabSetupBtn,
+    state.dom.hrTabPayrollBtn,
+    state.dom.hrTabSelfServiceBtn,
+  ].forEach((button) => {
+    button?.addEventListener("click", () => {
+      if (_hrSidebarTaskRoutingInProgress) return;
+      clearRememberedHrNavigationTask();
+      clearHrSidebarTaskActiveState();
+    });
+  });
 }
 
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1B
@@ -3934,19 +5216,36 @@ function prepareRestoredHrWorkspaceDuringStartup() {
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1D
 // Reveal the dashboard only after startup work has had a chance to complete.
 // HR sees one controlled restore state instead of tab/content flicker.
+// REDESIGN37_HR_UI_004_SELF_SERVICE_FIRST_PAINT
+// Release the loader only when the remembered shared Leave/Payroll pane can
+// paint its selected card. The existing auth and workspace restoration run first.
+let hrSelfServiceFirstPaintReleaseStarted = false;
 function revealRestoredHrWorkspace() {
-  // BEXHR WORKSPACE LOADER - PEOPLE UI REFRESH STEP 1
-  // Release the first-paint gate immediately after the exact remembered
-  // workspace has been selected. Long data loads continue progressively.
-  document.body?.classList.remove("hr-workspace-booting");
-  document.body?.setAttribute("aria-busy", "false");
+  if (hrSelfServiceFirstPaintReleaseStarted) return;
+  hrSelfServiceFirstPaintReleaseStarted = true;
 
-  window.scrollTo({
-    top: 0,
-    behavior: "auto",
+  const releaseWorkspace = () => {
+    document.body?.classList.remove("hr-workspace-booting");
+    document.body?.setAttribute("aria-busy", "false");
+    window.scrollTo({ top: 0, behavior: "auto" });
+    updateBackToTopButtonVisibility();
+  };
+
+  void (async () => {
+    const elapsed = Number(window.performance?.now?.()) || 0;
+    const remaining = Math.max(0, 650 - elapsed);
+    if (remaining) await new Promise(resolve => window.setTimeout(resolve, remaining));
+
+    await window.BexHRR37SelfServiceFirstPaint?.waitForReady?.({
+      surface: 'hr',
+      expected: getRememberedHrWorkspace() === 'selfservice',
+      isInitialised: () => _hrSelfServiceInitialised,
+    });
+    releaseWorkspace();
+  })().catch(error => {
+    console.warn('[R37 UI-004] HR first-paint guard failed:', error);
+    releaseWorkspace();
   });
-
-  updateBackToTopButtonVisibility();
 }
 
 // DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
@@ -3972,6 +5271,11 @@ function restoreHrWorkspaceAfterRefresh() {
   const workspace = getRememberedHrWorkspace();
 
   switchHrWorkspace(workspace);
+
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Restore only the remembered UI task that belongs to this workspace.
+  // Existing refresh-top behaviour remains authoritative.
+  restoreRememberedHrNavigationTask(workspace);
 
   // DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
   // Run immediately and across the next paints because browsers can restore
@@ -4400,6 +5704,7 @@ function cacheDomElements() {
     hrOverviewPayrollReady: document.getElementById("hrOverviewPayrollReady"),
     hrOverviewPayrollReadyDetail: document.getElementById("hrOverviewPayrollReadyDetail"),
     hrOverviewMissingInformation: document.getElementById("hrOverviewMissingInformation"),
+    hrOverviewDepartmentsCount: document.getElementById("hrOverviewDepartmentsCount"),
     hrOverviewPayrollReadinessPercent: document.getElementById("hrOverviewPayrollReadinessPercent"),
     hrOverviewPayrollReadinessProgress: document.getElementById("hrOverviewPayrollReadinessProgress"),
     hrOverviewPayrollReadinessBar: document.getElementById("hrOverviewPayrollReadinessBar"),
@@ -4582,15 +5887,30 @@ function cacheDomElements() {
     // Cache Job Title management fields inside the Manage Organization card.
     organizationJobTitleForm: document.getElementById("organizationJobTitleForm"),
     editingOrganizationJobTitleId: document.getElementById("editingOrganizationJobTitleId"),
+    organizationJobTitleScope: document.getElementById("organizationJobTitleScope"),
+    organizationJobTitleDepartmentField: document.getElementById("organizationJobTitleDepartmentField"),
     organizationJobTitleDepartmentId: document.getElementById("organizationJobTitleDepartmentId"),
     organizationJobTitleName: document.getElementById("organizationJobTitleName"),
     organizationJobTitleStatus: document.getElementById("organizationJobTitleStatus"),
+    organizationJobTitleReportsTo: document.getElementById("organizationJobTitleReportsTo"),
+    organizationJobTitleReportsToField: document.getElementById("organizationJobTitleReportsToField"),
     saveOrganizationJobTitleBtn: document.getElementById("saveOrganizationJobTitleBtn"),
     organizationJobTitleSubmitLabel: document.getElementById("organizationJobTitleSubmitLabel"),
     cancelOrganizationJobTitleEditBtn: document.getElementById("cancelOrganizationJobTitleEditBtn"),
+    removeOrganizationJobTitleLinkBtn: document.getElementById("removeOrganizationJobTitleLinkBtn"),
     organizationJobTitlesEmptyState: document.getElementById("organizationJobTitlesEmptyState"),
     organizationJobTitlesTableWrapper: document.getElementById("organizationJobTitlesTableWrapper"),
     organizationJobTitlesTableBody: document.getElementById("organizationJobTitlesTableBody"),
+
+    // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+    organizationPositionHierarchyForm: document.getElementById("organizationPositionHierarchyForm"),
+    organizationPositionHierarchyJobTitleId: document.getElementById("organizationPositionHierarchyJobTitleId"),
+    organizationPositionHierarchyParentId: document.getElementById("organizationPositionHierarchyParentId"),
+    saveOrganizationPositionHierarchyBtn: document.getElementById("saveOrganizationPositionHierarchyBtn"),
+    organizationPositionHierarchySubmitLabel: document.getElementById("organizationPositionHierarchySubmitLabel"),
+    organizationPositionHierarchyEmptyState: document.getElementById("organizationPositionHierarchyEmptyState"),
+    organizationPositionHierarchyTableWrapper: document.getElementById("organizationPositionHierarchyTableWrapper"),
+    organizationPositionHierarchyTableBody: document.getElementById("organizationPositionHierarchyTableBody"),
 
     // COMPANY ADMIN ADMINISTRATIVE AUDIT HISTORY - PHASE 2I-C
     companyAdminAuditHistorySection: document.getElementById(
@@ -4674,8 +5994,6 @@ function cacheDomElements() {
     // It is required for National ID / NIN Slip, and optional for other IDs.
     ninFieldCol: document.getElementById("ninFieldCol"),
     nin: document.getElementById("nin"),
-
-    exitDate: document.getElementById("exitDate"),
     hmoProvider: document.getElementById("hmoProvider"),
     hmoPlan: document.getElementById("hmoPlan"),
     hmoNumber: document.getElementById("hmoNumber"),
@@ -4761,7 +6079,6 @@ function cacheDomElements() {
     // The Employment Status dropdown exists in the employee form, but it was
     // not cached here. Without this, buildEmployeePayload() falls back to
     // "active", so Inactive/Pending/Exited selections are not saved.
-    employmentStatus: document.getElementById("employmentStatus"),
 
     // ASSIGN LINE MANAGER - STEP 1E
     // System Role is saved on employee records and displayed in the employee list.
@@ -5576,33 +6893,7 @@ function collapseDashboardWorkingCardsByDefault() {
 // Allow HR to double-click inside an open card to collapse it.
 // Ignore form fields, buttons, links, and tables so normal data entry
 // and record actions are not interrupted.
-function bindDashboardCardDoubleClickCollapse(button, panel) {
-  if (!button || !panel) return;
-
-  const card = panel.closest(".dashboard-section-card");
-  if (!card) return;
-
-  card.addEventListener("dblclick", (event) => {
-    const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, table, [contenteditable='true']",
-    );
-
-    if (ignoredTarget) return;
-
-    const isExpanded = !panel.classList.contains("d-none");
-    if (!isExpanded) return;
-
-    setDashboardCardExpanded(button, panel, false);
-  });
-}
-
-// DESCRIPTION ITEM 4 - STEP 2B
-// Bind double-click collapse to all long HR/payroll working cards.
-function bindDashboardCardDoubleClickCollapseShortcuts() {
-  getDashboardWorkingCardPairs().forEach(([button, panel]) => {
-    bindDashboardCardDoubleClickCollapse(button, panel);
-  });
-}
+// H12 single-click: legacy card double-click helpers removed.
 
 // REMOVE GRADE LEVEL FIELD FROM EMPLOYEE DATA - STEP 3
 // Scroll with an offset so card headings remain visible after redirect.
@@ -5645,8 +6936,19 @@ function getHrReviewNavigationOffset() {
 // Review Overview navigation only. Existing card IDs, collapse state, refresh,
 // filters, tenant queries, role checks, decision saves, and leave RPC stay unchanged.
 function openHrReviewArea(targetId = "") {
-  const target = document.getElementById(String(targetId || "").trim());
+  const normalizedTargetId = String(targetId || "").trim();
+  const taskByTargetId = {
+    profileCorrectionRequestsCard: "review.corrections",
+    recentManagerLeaveDecisionsCard: "review.leave",
+  };
+  const taskKey = taskByTargetId[normalizedTargetId];
 
+  if (taskKey) {
+    applyHrNavigationTask(taskKey);
+    return;
+  }
+
+  const target = document.getElementById(normalizedTargetId);
   if (!target) return;
 
   window.requestAnimationFrame(() => {
@@ -6683,6 +7985,10 @@ function redirectToFullEmployeeListAfterEmployeeSave() {
   closeEmployeeFormCard();
   openEmployeeListCard();
 
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // A successful employee save deliberately lands on the focused Employee Directory.
+  applyHrNavigationTask("people.directory", { scroll: false });
+
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
       openEmployeeListCard();
@@ -6929,7 +8235,7 @@ function populatePayrollOtherDeductionMasterOptions() {
     option.textContent =
       `${fullName}${gradeSegment} — ` +
       `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${record.salary_effective_date || "--"} — ` +
+      `${formatPayrollMasterStartMonth(record.salary_effective_date)} — ` +
       `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
@@ -7037,6 +8343,7 @@ function showPayrollOtherDeductionValidationIssues(issues = []) {
 }
 
 function validatePayrollOtherDeductionForm() {
+  configurePayrollOtherDeductionPhase4Ui();
   clearPayrollOtherDeductionValidationState();
 
   const issues = [];
@@ -7055,8 +8362,10 @@ function validatePayrollOtherDeductionForm() {
     String(state.dom.payrollOtherDeductionAmount?.value || "").trim();
   const durationText =
     String(state.dom.payrollOtherDeductionDurationMonths?.value || "").trim();
-  const startDate =
-    String(state.dom.payrollOtherDeductionStartDate?.value || "").trim();
+  const startMonth = normalizePayrollDeductionStartMonth(
+    state.dom.payrollOtherDeductionStartDate?.value || "",
+  );
+  const startDate = payrollDeductionStartMonthToDate(startMonth);
   const status =
     String(state.dom.payrollOtherDeductionStatus?.value || "").trim();
 
@@ -7097,19 +8406,13 @@ function validatePayrollOtherDeductionForm() {
   }
 
   if (!startDate) {
-    issues.push("Select the deduction start date.");
+    issues.push("Select the deduction start month.");
     markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionStartDate);
     firstInvalidField ||= state.dom.payrollOtherDeductionStartDate;
   } else if (Number.isNaN(new Date(startDate).getTime())) {
-    issues.push("Deduction start date is not valid.");
+    issues.push("deduction start month is not valid.");
     markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionStartDate);
     firstInvalidField ||= state.dom.payrollOtherDeductionStartDate;
-  }
-
-  if (!status) {
-    issues.push("Select the deduction status.");
-    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionStatus);
-    firstInvalidField ||= state.dom.payrollOtherDeductionStatus;
   }
 
   const conflict = findPayrollOtherDeductionStartDateConflict({
@@ -7157,13 +8460,14 @@ function buildPayrollOtherDeductionPayload() {
       Number(state.dom.payrollOtherDeductionDurationMonths?.value || 0),
 
     start_date:
-      state.dom.payrollOtherDeductionStartDate?.value || null,
+      payrollDeductionStartMonthToDate(
+        state.dom.payrollOtherDeductionStartDate?.value || "",
+      ) || null,
 
     reference_number:
       String(state.dom.payrollOtherDeductionReferenceNumber?.value || "").trim() || null,
 
-    status:
-      String(state.dom.payrollOtherDeductionStatus?.value || "Active").trim(),
+    status: "Active", // Phase 4 lifecycle is derived from Start Month + Duration.
 
     notes:
       String(state.dom.payrollOtherDeductionNotes?.value || "").trim() || null,
@@ -7491,7 +8795,7 @@ function startPayrollOtherDeductionEdit(otherDeductionId) {
   }
 
   if (state.dom.payrollOtherDeductionStartDate) {
-    state.dom.payrollOtherDeductionStartDate.value = record.start_date || "";
+    state.dom.payrollOtherDeductionStartDate.value = normalizePayrollDeductionStartMonth(record.start_date);
   }
 
   if (state.dom.payrollOtherDeductionReferenceNumber) {
@@ -7543,7 +8847,355 @@ function exitPayrollOtherDeductionEditMode() {
 // HR DEDUCTION RECORDS MODERN CARDS - v1.0.1
 // Non-statutory deduction presentation only. Search, create/edit, Supabase,
 // tenant filtering, payroll calculation, status, and permission logic remain unchanged.
+// =========================================================
+// BEXHR PHASE 4C - DEDUCTIONS SIMPLIFICATION
+// Locked principle: HR enters business facts; BexHR derives technical state.
+// Recurring Other Deductions use Amount + Start Month + Duration.
+// Statutory deductions use BexHR-owned rule defaults; manual method/value/status
+// controls remain in the DOM only for backward-compatible storage/edit plumbing.
+// =========================================================
+function normalizePayrollDeductionStartMonth(value = "") {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+  if (!match) return "";
+
+  const month = Number(match[2]);
+  if (!Number.isInteger(month) || month < 1 || month > 12) return "";
+
+  return match[1] + "-" + match[2];
+}
+
+function payrollDeductionStartMonthToDate(value = "") {
+  const month = normalizePayrollDeductionStartMonth(value);
+  return month ? month + "-01" : "";
+}
+
+function formatPayrollDeductionStartMonth(value = "") {
+  const monthValue = normalizePayrollDeductionStartMonth(value);
+  if (!monthValue) return "—";
+
+  const [year, month] = monthValue.split("-");
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+
+  return monthNames[Number(month) - 1] + " " + year;
+}
+
+function setPayrollDeductionPhase4Label(field, text) {
+  if (!field?.id || typeof document === "undefined") return;
+
+  const label = document.querySelector('label[for="' + field.id + '"]');
+  if (!label) return;
+
+  label.textContent = text;
+  if (field.required) {
+    const marker = document.createElement("span");
+    marker.className = "text-danger";
+    marker.textContent = " *";
+    label.appendChild(marker);
+  }
+}
+
+function hidePayrollDeductionPhase4Control(field) {
+  if (!field) return;
+
+  field.required = false;
+  field.hidden = true;
+
+  const label = field.id && typeof document !== "undefined"
+    ? document.querySelector('label[for="' + field.id + '"]')
+    : null;
+  if (label) label.hidden = true;
+
+  const wrapper = field.closest?.(
+    ".col-12, .col-md-6, .col-md-4, .col-lg-6, .col-lg-4, .mb-3, .form-group",
+  );
+  if (wrapper) wrapper.classList.add("d-none");
+}
+
+function configurePayrollOtherDeductionPhase4Ui() {
+  const startMonthField = state.dom.payrollOtherDeductionStartDate;
+  const statusField = state.dom.payrollOtherDeductionStatus;
+
+  if (startMonthField) {
+    const existingMonth = normalizePayrollDeductionStartMonth(startMonthField.value);
+    startMonthField.type = "month";
+    if (existingMonth) startMonthField.value = existingMonth;
+    setPayrollDeductionPhase4Label(startMonthField, "Start Month");
+  }
+
+  if (statusField) {
+    statusField.value = "Active";
+    hidePayrollDeductionPhase4Control(statusField);
+  }
+}
+
+function configurePayrollStatutoryPhase4Ui() {
+  const startMonthField = state.dom.payrollStatutoryEffectiveDate;
+  const statusField = state.dom.payrollStatutoryStatus;
+  const methodField = state.dom.payrollStatutoryCalculationMethod;
+  const valueField = state.dom.payrollStatutoryDeductionValue;
+  const deductionType = String(
+    state.dom.payrollStatutoryDeductionType?.value || "",
+  ).trim();
+  const setup = getDefaultStatutoryDeductionSetup(deductionType);
+
+  if (startMonthField) {
+    const existingMonth = normalizePayrollDeductionStartMonth(startMonthField.value);
+    startMonthField.type = "month";
+    if (existingMonth) startMonthField.value = existingMonth;
+    setPayrollDeductionPhase4Label(startMonthField, "Start Month");
+  }
+
+  if (methodField) methodField.value = setup.method;
+  if (valueField) valueField.value = setup.value;
+  if (statusField) statusField.value = "Active";
+
+  hidePayrollDeductionPhase4Control(methodField);
+  hidePayrollDeductionPhase4Control(valueField);
+  hidePayrollDeductionPhase4Control(statusField);
+}
+
+function getPayrollOtherDeductionLifecycle(record = {}, referenceDateValue = "") {
+  const reference = String(referenceDateValue || "").trim() ||
+    new Date().toISOString().slice(0, 10);
+  const referenceMonth = getPayrollMonthIndexFromDateValue(reference);
+  const startMonth = getPayrollMonthIndexFromDateValue(record.start_date);
+  const durationMonths = Number(record.duration_months || 0);
+
+  if (referenceMonth === null || startMonth === null ||
+      !Number.isInteger(durationMonths) || durationMonths < 1) {
+    return "Unknown";
+  }
+
+  if (referenceMonth < startMonth) return "Upcoming";
+  if (referenceMonth >= startMonth + durationMonths) return "Completed";
+  return "Current";
+}
+
+function getPayrollStatutoryLifecycle(record = {}, referenceDateValue = "") {
+  const reference = String(referenceDateValue || "").trim() ||
+    new Date().toISOString().slice(0, 10);
+  const referenceMonth = getPayrollMonthIndexFromDateValue(reference);
+  const startMonth = getPayrollMonthIndexFromDateValue(record.effective_date);
+
+  if (referenceMonth === null || startMonth === null) return "Unknown";
+  return referenceMonth < startMonth ? "Upcoming" : "Current";
+}
+
+// PHASE 4D PAYROLL RULES UX CLEANUP
+// Keep business inputs simple while preserving historical storage fields.
+function formatPayrollSetupMonthForDisplay(value = "") {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})-(\d{2})/);
+  if (!match) return raw || "--";
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || month < 1 || month > 12) return raw;
+
+  return new Intl.DateTimeFormat("en", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+function ensurePhase4MonthPlaceholderStyles() {
+  if (document.getElementById("bexhrPhase4MonthPlaceholderStyles")) return;
+
+  const style = document.createElement("style");
+  style.id = "bexhrPhase4MonthPlaceholderStyles";
+  style.textContent = `
+    .bexhr-phase4-month-control {
+      position: relative;
+    }
+
+    .bexhr-phase4-month-input {
+      position: relative;
+      z-index: 2;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .bexhr-phase4-month-display {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.375rem 0.75rem;
+      background: var(--bs-body-bg, #fff);
+      border: var(--bs-border-width, 1px) solid var(--bs-border-color, #dee2e6);
+      border-radius: var(--bs-border-radius, 0.375rem);
+      color: var(--bs-body-color, #212529);
+      pointer-events: none;
+    }
+
+    .bexhr-phase4-month-display.is-empty {
+      color: var(--bs-secondary-color, #6c757d);
+    }
+
+    .bexhr-phase4-month-control:focus-within .bexhr-phase4-month-display {
+      border-color: var(--bs-primary-border-subtle, #86b7fe);
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+
+    .bexhr-phase4-month-display-icon {
+      flex: 0 0 auto;
+      color: var(--bs-body-color, #212529);
+    }
+  `;
+  document.head.appendChild(style);
+}
+function decoratePhase4StartMonthField(field) {
+  if (!field) return false;
+
+  field.type = "month";
+  field.required = true;
+  field.classList.add("bexhr-phase4-month-input");
+
+  let wrapper = field.parentElement?.classList.contains("bexhr-phase4-month-control")
+    ? field.parentElement
+    : null;
+
+  if (!wrapper) {
+    const parent = field.parentNode;
+    if (!parent) return false;
+
+    wrapper = document.createElement("div");
+    wrapper.className = "bexhr-phase4-month-control";
+    parent.insertBefore(wrapper, field);
+    wrapper.appendChild(field);
+  }
+
+  let display = wrapper.querySelector(".bexhr-phase4-month-display");
+
+  if (!display) {
+    wrapper.querySelector(".bexhr-phase4-month-placeholder")?.remove();
+
+    display = document.createElement("div");
+    display.className = "bexhr-phase4-month-display is-empty";
+    display.setAttribute("aria-hidden", "true");
+
+    const displayText = document.createElement("span");
+    displayText.className = "bexhr-phase4-month-display-text";
+    displayText.textContent = "Select start month";
+
+    const displayIcon = document.createElement("i");
+    displayIcon.className = "bi bi-calendar3 bexhr-phase4-month-display-icon";
+    displayIcon.setAttribute("aria-hidden", "true");
+
+    display.appendChild(displayText);
+    display.appendChild(displayIcon);
+    wrapper.appendChild(display);
+  }
+
+  const syncDisplay = () => {
+    const displayText = display.querySelector(".bexhr-phase4-month-display-text");
+    if (!displayText) return;
+
+    const value = String(field.value || "").trim();
+    const isEmpty = !value;
+
+    display.classList.toggle("is-empty", isEmpty);
+    displayText.textContent = isEmpty
+      ? "Select start month"
+      : formatPayrollSetupMonthForDisplay(value);
+  };
+
+  if (field.dataset.phase4dMonthDisplayBound !== "true") {
+    field.dataset.phase4dMonthDisplayBound = "true";
+    field.addEventListener("input", syncDisplay);
+    field.addEventListener("change", syncDisplay);
+
+    field.addEventListener("click", () => {
+      if (typeof field.showPicker === "function") {
+        try {
+          field.showPicker();
+        } catch (error) {
+          // Browser still retains its normal native-picker behaviour.
+        }
+      }
+    });
+
+    field.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === " ") && typeof field.showPicker === "function") {
+        event.preventDefault();
+        try {
+          field.showPicker();
+        } catch (error) {
+          // Browser still retains its normal native-picker behaviour.
+        }
+      }
+    });
+  }
+
+  syncDisplay();
+  return true;
+}
+function hidePhase4TechnicalFormField(field) {
+  if (!field) return false;
+
+  const container =
+    field.closest(".col-12, .col-md-6, .col-md-4, .mb-3, .form-group") ||
+    field.parentElement;
+
+  if (!container) return false;
+  container.classList.add("d-none");
+  container.dataset.phase4dHiddenTechnicalField = "true";
+  field.tabIndex = -1;
+  return true;
+}
+
+function applyPhase4dPayrollRulesUxCleanup() {
+  ensurePhase4MonthPlaceholderStyles();
+
+  const monthFields = [
+    state.dom.payrollMasterEffectiveDate,
+    state.dom.payrollAllowanceEffectiveDate,
+    state.dom.payrollStatutoryEffectiveDate,
+    state.dom.payrollOtherDeductionStartDate,
+  ];
+
+  const decoratedCount = monthFields.filter((field) =>
+    decoratePhase4StartMonthField(field),
+  ).length;
+
+  hidePhase4TechnicalFormField(state.dom.payrollOtherDeductionReferenceNumber);
+
+  if (state.dom.payrollStatutoryConfigSource) {
+    if (!String(state.dom.payrollStatutoryConfigSource.value || "").trim()) {
+      state.dom.payrollStatutoryConfigSource.value = "EMPLOYEE";
+    }
+    hidePhase4TechnicalFormField(state.dom.payrollStatutoryConfigSource);
+  }
+
+  return decoratedCount === monthFields.length;
+}
+
+function schedulePhase4dPayrollRulesUxCleanup(attempt = 0) {
+  const applied = applyPhase4dPayrollRulesUxCleanup();
+  if (!applied && attempt < 30) {
+    setTimeout(() => schedulePhase4dPayrollRulesUxCleanup(attempt + 1), 100);
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener(
+    "DOMContentLoaded",
+    () => schedulePhase4dPayrollRulesUxCleanup(),
+    { once: true },
+  );
+} else {
+  schedulePhase4dPayrollRulesUxCleanup();
+}
 function renderPayrollOtherDeductionRecords(records = []) {
+  configurePayrollOtherDeductionPhase4Ui();
   const tbody = state.dom.payrollOtherDeductionRecordsTableBody;
   if (!tbody) return;
 
@@ -7575,7 +9227,6 @@ function renderPayrollOtherDeductionRecords(records = []) {
     const totalAmount =
       record.total_deduction_amount ??
       Number(record.deduction_amount || 0) * durationMonths;
-    const referenceNumber = String(record.reference_number || "").trim();
     const notes = String(record.notes || "").trim();
 
     const row = document.createElement("tr");
@@ -7605,7 +9256,7 @@ function renderPayrollOtherDeductionRecords(records = []) {
             </div>
 
             <div class="hr-deduction-record-header-actions">
-              ${renderBexhrStatusPill(formatStatusLabel(record.status))}
+              ${renderBexhrStatusPill(getPayrollOtherDeductionLifecycle(record))}
 
               <button
                 type="button"
@@ -7641,29 +9292,12 @@ function renderPayrollOtherDeductionRecords(records = []) {
             </div>
 
             <div class="hr-deduction-record-detail">
-              <span class="hr-deduction-record-label">Start date</span>
-              <strong>${escapeHtml(formatDate(record.start_date))}</strong>
+              <span class="hr-deduction-record-label">Start month</span>
+              <strong>${escapeHtml(formatPayrollDeductionStartMonth(record.start_date))}</strong>
             </div>
 
-            <div class="hr-deduction-record-detail">
-              <span class="hr-deduction-record-label">Last updated</span>
-              <strong>${escapeHtml(formatDate(record.updated_at || record.created_at))}</strong>
-            </div>
-          </div>
 
-          ${referenceNumber || notes ? `
-            <footer class="hr-deduction-record-footer hr-deduction-record-footer--split">
-              ${referenceNumber ? `
-                <div class="hr-deduction-record-footer-item">
-                  <span class="hr-deduction-record-footer-icon" aria-hidden="true">
-                    <i class="bi bi-hash"></i>
-                  </span>
-                  <div>
-                    <span class="hr-deduction-record-label">Reference</span>
-                    <p>${escapeHtml(referenceNumber)}</p>
-                  </div>
                 </div>
-              ` : ""}
 
               ${notes ? `
                 <div class="hr-deduction-record-footer-item">
@@ -7677,7 +9311,6 @@ function renderPayrollOtherDeductionRecords(records = []) {
                 </div>
               ` : ""}
             </footer>
-          ` : ""}
         </article>
       </td>
     `;
@@ -7719,6 +9352,11 @@ async function handlePayrollOtherDeductionSave() {
 
   const startedAt = Date.now();
   const payload = buildPayrollOtherDeductionPayload();
+  const editingId = String(
+    state.currentEditingPayrollOtherDeduction?.id ||
+    state.dom.editingPayrollOtherDeductionId?.value ||
+    "",
+  ).trim();
 
   try {
     setPayrollOtherDeductionSaveLoading(true);
@@ -7730,12 +9368,6 @@ async function handlePayrollOtherDeductionSave() {
     // Use the same form for create and update.
     // Create mode inserts a new deduction setup.
     // Edit mode updates the existing setup row and does not change created_by.
-    const editingId = String(
-      state.currentEditingPayrollOtherDeduction?.id ||
-      state.dom.editingPayrollOtherDeductionId?.value ||
-      "",
-    ).trim();
-
     let data;
     let error;
 
@@ -7831,7 +9463,7 @@ async function handlePayrollOtherDeductionSave() {
       showDashboardToast(
         "warning",
         "Duplicate other deduction",
-        "This employee already has the same deduction type starting on that date.",
+        "This employee already has the same deduction type starting in that month.",
       );
 
       return;
@@ -7880,52 +9512,53 @@ function redirectToPayrollEmployeeOverrideRecordsAfterSave() {
   );
 }
 
+
+const BEXHR_PHASE5_ADJUSTMENT_MARKER = "BEXHR_PHASE5_ADJUSTMENT_V1";
+const BEXHR_PHASE5_ADJUSTMENT_ELEMENTS = new Set([
+  "BONUS",
+  "OVERTIME",
+  "OTHER_ALLOWANCE",
+  "OTHER",
+]);
+
+function isPayrollEmployeeAdjustmentRecord(record = {}) {
+  return (
+    String(record.notes || "").trim() === BEXHR_PHASE5_ADJUSTMENT_MARKER &&
+    BEXHR_PHASE5_ADJUSTMENT_ELEMENTS.has(String(record.override_element || "").trim()) &&
+    String(record.override_method || "").trim() === "FIXED_AMOUNT"
+  );
+}
+
+function getPayrollEmployeeAdjustmentCategory(element = "") {
+  const normalized = String(element || "").trim();
+  return normalized === "OTHER" ? "OTHER_DEDUCTION" : "EARNING";
+}
+
 function formatPayrollEmployeeOverrideCategory(value = "") {
   const labels = {
-    EARNING: "Earning",
-    STATUTORY_DEDUCTION: "Statutory Deduction",
-    OTHER_DEDUCTION: "Other Deduction",
-    PAYROLL_RULE: "Payroll Rule",
-    PAYROLL_STRUCTURE: "Payroll Structure",
+    EARNING: "Earning Adjustment",
+    OTHER_DEDUCTION: "Deduction Adjustment",
   };
 
-  return labels[value] || formatStatusLabel(value || "--");
+  return labels[value] || "Legacy adjustment";
 }
+
 
 function formatPayrollEmployeeOverrideElement(value = "") {
   const labels = {
-    BASIC_SALARY: "Basic Salary",
-    HOUSING_ALLOWANCE: "Housing Allowance",
-    TRANSPORT_ALLOWANCE: "Transport Allowance",
-    UTILITY_ALLOWANCE: "Utility Allowance",
-    MEDICAL_ALLOWANCE: "Medical Allowance",
-    OTHER_ALLOWANCE: "Other Allowance",
     BONUS: "Bonus",
     OVERTIME: "Overtime",
-    PAYE: "PAYE",
-    WHT: "WHT",
-    EMPLOYEE_PENSION: "Employee Pension",
-    EMPLOYER_PENSION: "Employer Pension",
-    NHF: "NHF",
-    UNION_DUES: "Union Dues",
-    COOPERATIVE: "Cooperative",
-    SALARY_ADVANCE: "Salary Advance",
-    GRADE_LEVEL_RULE: "Grade / Level Rule",
-    OTHER: "Other",
+    OTHER_ALLOWANCE: "Other Earning",
+    OTHER: "Other Deduction",
   };
 
   return labels[value] || formatStatusLabel(value || "--");
 }
 
-function formatPayrollEmployeeOverrideMethod(value = "") {
-  const labels = {
-    FIXED_AMOUNT: "Fixed Amount",
-    PERCENTAGE: "Percentage",
-    RULE_REPLACEMENT: "Rule Replacement",
-    EXEMPTION: "Exemption",
-  };
 
-  return labels[value] || formatStatusLabel(value || "--");
+function formatPayrollEmployeeOverrideMethod(value = "") {
+  if (String(value || "").trim() === "FIXED_AMOUNT") return "Amount";
+  return formatStatusLabel(value || "--");
 }
 
 function getPayrollEmployeeOverrideMasterContext(record = {}) {
@@ -7980,59 +9613,31 @@ const PAYROLL_EMPLOYEE_OVERRIDE_ELEMENTS_BY_CATEGORY = Object.freeze({
   ],
 });
 
-function populatePayrollEmployeeOverrideElementOptions(
-  preferredValue = "",
-  { preserveLegacyValue = false } = {},
-) {
+
+function populatePayrollEmployeeOverrideElementOptions(selectedValue = "") {
   const select = state.dom.payrollEmployeeOverrideElement;
   if (!select) return;
 
-  const category = String(
-    state.dom.payrollEmployeeOverrideCategory?.value || "",
-  ).trim();
-
-  const options =
-    PAYROLL_EMPLOYEE_OVERRIDE_ELEMENTS_BY_CATEGORY[category] || [];
+  const currentValue = String(selectedValue || select.value || "").trim();
+  const options = [
+    ["", "Select adjustment type"],
+    ["BONUS", "Bonus"],
+    ["OVERTIME", "Overtime"],
+    ["OTHER_ALLOWANCE", "Other Earning"],
+    ["OTHER", "Other Deduction"],
+  ];
 
   select.innerHTML = "";
-
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = category
-    ? "Select payroll element"
-    : "Select a category first";
-
-  select.appendChild(placeholder);
-
-  options.forEach(({ value, label }) => {
+  options.forEach(([value, label]) => {
     const option = document.createElement("option");
     option.value = value;
     option.textContent = label;
     select.appendChild(option);
   });
 
-  const savedValue = String(preferredValue || "").trim();
-
-  if (
-    preserveLegacyValue &&
-    savedValue &&
-    !options.some((option) => option.value === savedValue)
-  ) {
-    const legacyOption = document.createElement("option");
-    legacyOption.value = savedValue;
-    legacyOption.textContent = `${formatPayrollEmployeeOverrideElement(savedValue)} (historical)`;
-    select.appendChild(legacyOption);
-  }
-
-  select.value = savedValue;
-  select.disabled = !category;
-
-  updatePayrollEmployeeOverrideSaveButtonState();
+  select.value = BEXHR_PHASE5_ADJUSTMENT_ELEMENTS.has(currentValue) ? currentValue : "";
 }
 
-// EMPLOYEE OVERRIDE PAYROLL MASTER VERSION CLARITY
-// Keep every effective-dated Payroll Master version available for audit and
-// historical maintenance, while using the shared version-status calculation.
 function populatePayrollEmployeeOverrideMasterOptions() {
   const select = state.dom.payrollEmployeeOverrideMasterRecordId;
   if (!select) return;
@@ -8044,7 +9649,7 @@ function populatePayrollEmployeeOverrideMasterOptions() {
     : [];
 
   select.innerHTML =
-    `<option value="">Select payroll master record</option>`;
+    `<option value="">Select employee</option>`;
 
   if (!records.length) {
     select.innerHTML =
@@ -8074,9 +9679,9 @@ function populatePayrollEmployeeOverrideMasterOptions() {
         ? ` — ${gradeLabel}`
         : "";
 
-    const effectiveDate = String(
+    const startMonth = formatPayrollMasterStartMonth(
       record.salary_effective_date || "",
-    ).trim();
+    );
 
     const versionLabel =
       getPayrollMasterVersionLabel(record);
@@ -8089,7 +9694,7 @@ function populatePayrollEmployeeOverrideMasterOptions() {
     option.textContent =
       `${fullName}${gradeSegment} — ` +
       `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${effectiveDate || "--"} — ${versionLabel}`;
+      `${startMonth || "--"} — ${versionLabel}`;
 
     select.appendChild(option);
   });
@@ -8154,10 +9759,88 @@ function isPayrollEmployeeOverrideFormReadyForSubmit() {
   return hasRequiredFields && valueIsValid && dateRangeIsValid;
 }
 
+
+
+// PHASE 5B CONTROL WIRING
+// The Pay Period field uses the Phase 4 transparent native month input, so it
+// needs its own picker bridge and display synchronisation.
+function syncPayrollAdjustmentPayPeriodDisplay() {
+  const field = state.dom.payrollEmployeeOverrideEffectiveDate;
+  const wrapper = field?.closest?.(".bexhr-phase4-month-control");
+  const display = wrapper?.querySelector?.(".bexhr-phase4-month-display");
+  const displayText = display?.querySelector?.(".bexhr-phase4-month-display-text");
+  if (!field || !display || !displayText) return;
+
+  const value = String(field.value || "").trim();
+  display.classList.toggle("is-empty", !value);
+  displayText.textContent = value
+    ? formatPayrollSetupMonthForDisplay(value)
+    : "Select pay period";
+}
+
+function bindPayrollAdjustmentPayPeriodControl() {
+  const field = state.dom.payrollEmployeeOverrideEffectiveDate;
+  if (!field) return;
+
+  if (field.dataset.phase5PayPeriodBound !== "true") {
+    field.dataset.phase5PayPeriodBound = "true";
+
+    const sync = () => {
+      syncPayrollAdjustmentPayPeriodDisplay();
+      updatePayrollEmployeeOverrideSaveButtonState();
+    };
+
+    field.addEventListener("input", sync);
+    field.addEventListener("change", sync);
+
+    field.addEventListener("click", () => {
+      if (typeof field.showPicker === "function") {
+        try {
+          field.showPicker();
+        } catch (error) {
+          // Native browser click behaviour remains available as fallback.
+        }
+      }
+    });
+
+    field.addEventListener("keydown", (event) => {
+      if (
+        (event.key === "Enter" || event.key === " ") &&
+        typeof field.showPicker === "function"
+      ) {
+        event.preventDefault();
+        try {
+          field.showPicker();
+        } catch (error) {
+          // Native keyboard behaviour remains available as fallback.
+        }
+      }
+    });
+  }
+
+  syncPayrollAdjustmentPayPeriodDisplay();
+}
+
 function updatePayrollEmployeeOverrideSaveButtonState() {
-  setPrimaryActionButtonReadyState(
-    state.dom.savePayrollEmployeeOverrideBtn,
-    isPayrollEmployeeOverrideFormReadyForSubmit(),
+  syncPayrollAdjustmentPayPeriodDisplay();
+
+  const button = state.dom.savePayrollEmployeeOverrideBtn;
+  if (!button) return;
+
+  const hasEmployee = Boolean(
+    String(state.dom.payrollEmployeeOverrideMasterRecordId?.value || "").trim(),
+  );
+  const adjustmentType = String(state.dom.payrollEmployeeOverrideElement?.value || "").trim();
+  const amount = Number(state.dom.payrollEmployeeOverrideValue?.value || 0);
+  const payPeriod = String(state.dom.payrollEmployeeOverrideEffectiveDate?.value || "").trim();
+  const reason = String(state.dom.payrollEmployeeOverrideReason?.value || "").trim();
+
+  button.disabled = !(
+    hasEmployee &&
+    BEXHR_PHASE5_ADJUSTMENT_ELEMENTS.has(adjustmentType) &&
+    Number.isFinite(amount) && amount > 0 &&
+    /^\d{4}-\d{2}$/.test(payPeriod) &&
+    reason
   );
 }
 
@@ -8220,7 +9903,7 @@ function showPayrollEmployeeOverrideValidationIssues(issues = []) {
   if (!issues.length) return;
 
   const messageHtml = `
-    <div class="fw-semibold mb-2">Employee Payroll Override could not be saved.</div>
+    <div class="fw-semibold mb-2">Payroll Adjustment could not be saved.</div>
     <ul class="mb-0 ps-3">
       ${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}
     </ul>
@@ -8230,10 +9913,11 @@ function showPayrollEmployeeOverrideValidationIssues(issues = []) {
 
   showDashboardToast(
     "warning",
-    "Employee override validation failed",
-    issues[0] || "Please correct the highlighted Employee Override fields.",
+    "Payroll adjustment validation failed",
+    issues[0] || "Please correct the highlighted Payroll Adjustment fields.",
   );
 }
+
 
 function validatePayrollEmployeeOverrideForm() {
   clearPayrollEmployeeOverrideValidationState();
@@ -8241,228 +9925,99 @@ function validatePayrollEmployeeOverrideForm() {
   const issues = [];
   let firstInvalidField = null;
 
-  const editingId =
-    String(state.currentEditingPayrollEmployeeOverride?.id ||
-      state.dom.editingPayrollEmployeeOverrideId?.value ||
-      "").trim();
-
   const payrollMasterRecordId =
     String(state.dom.payrollEmployeeOverrideMasterRecordId?.value || "").trim();
-  const overrideCategory =
-    String(state.dom.payrollEmployeeOverrideCategory?.value || "").trim();
-  const overrideElement =
+  const adjustmentType =
     String(state.dom.payrollEmployeeOverrideElement?.value || "").trim();
-  const method =
-    String(state.dom.payrollEmployeeOverrideMethod?.value || "").trim();
-  const originalValueText =
-    String(state.dom.payrollEmployeeOverrideOriginalValue?.value || "").trim();
-  const overrideValueText =
+  const amountText =
     String(state.dom.payrollEmployeeOverrideValue?.value || "").trim();
-  const effectiveDate =
+  const payPeriod =
     String(state.dom.payrollEmployeeOverrideEffectiveDate?.value || "").trim();
-  const endDate =
-    String(state.dom.payrollEmployeeOverrideEndDate?.value || "").trim();
-  const status =
-    String(state.dom.payrollEmployeeOverrideStatus?.value || "").trim();
-  const ruleSnapshot =
-    String(state.dom.payrollEmployeeOverrideRuleSnapshot?.value || "").trim();
-  const approvalReference =
-    String(state.dom.payrollEmployeeOverrideApprovalReference?.value || "").trim();
   const reason =
     String(state.dom.payrollEmployeeOverrideReason?.value || "").trim();
 
   if (!payrollMasterRecordId) {
-    issues.push("Select the Payroll Master record for this override.");
+    issues.push("Select the employee for this adjustment.");
     markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideMasterRecordId);
     firstInvalidField ||= state.dom.payrollEmployeeOverrideMasterRecordId;
   }
 
-  if (!overrideCategory) {
-    issues.push("Select the override category.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideCategory);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideCategory;
-  }
-
-  if (!overrideElement) {
-    issues.push("Select the payroll element being overridden.");
+  if (!BEXHR_PHASE5_ADJUSTMENT_ELEMENTS.has(adjustmentType)) {
+    issues.push("Select a valid adjustment type.");
     markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideElement);
     firstInvalidField ||= state.dom.payrollEmployeeOverrideElement;
   }
 
-  if (!method) {
-    issues.push("Select the override method.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideMethod);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideMethod;
+  const amount = Number(amountText);
+  if (!amountText || !Number.isFinite(amount) || amount <= 0) {
+    issues.push("Adjustment amount must be greater than zero.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
   }
 
-  if (originalValueText) {
-    const originalValue = Number(originalValueText);
-
-    if (!Number.isFinite(originalValue) || originalValue < 0) {
-      issues.push("Original value snapshot must be zero or greater.");
-      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideOriginalValue);
-      firstInvalidField ||= state.dom.payrollEmployeeOverrideOriginalValue;
-    }
-  }
-
-  if (method === "FIXED_AMOUNT") {
-    const overrideValue = Number(overrideValueText);
-
-    if (!overrideValueText) {
-      issues.push("Enter the fixed override amount.");
-      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
-      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
-    } else if (!Number.isFinite(overrideValue) || overrideValue <= 0) {
-      issues.push("Fixed override amount must be greater than zero.");
-      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
-      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
-    }
-  }
-
-  if (method === "PERCENTAGE") {
-    const overrideValue = Number(overrideValueText);
-
-    if (!overrideValueText) {
-      issues.push("Enter the percentage override value.");
-      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
-      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
-    } else if (!Number.isFinite(overrideValue) || overrideValue <= 0 || overrideValue > 100) {
-      issues.push("Percentage override must be greater than zero and not more than 100.");
-      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
-      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
-    }
-  }
-
-  if (method === "RULE_REPLACEMENT" && !ruleSnapshot) {
-    issues.push("Rule Replacement requires a rule snapshot or replacement rule note.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideRuleSnapshot);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideRuleSnapshot;
-  }
-
-  if (!effectiveDate) {
-    issues.push("Select the override effective date.");
+  if (!/^\d{4}-\d{2}$/.test(payPeriod)) {
+    issues.push("Select the payroll month for this adjustment.");
     markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEffectiveDate);
     firstInvalidField ||= state.dom.payrollEmployeeOverrideEffectiveDate;
-  } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
-    issues.push("Override effective date is not valid.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEffectiveDate);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideEffectiveDate;
-  }
-
-  if (
-    effectiveDate &&
-    endDate &&
-    new Date(endDate).getTime() < new Date(effectiveDate).getTime()
-  ) {
-    issues.push("Override end date cannot be before the effective date.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEndDate);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideEndDate;
-  }
-
-  if (!approvalReference) {
-    issues.push("Enter the HR/payroll approval reference for this employee override.");
-    markPayrollEmployeeOverrideFieldInvalid(
-      state.dom.payrollEmployeeOverrideApprovalReference,
-    );
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideApprovalReference;
-  }
-
-  if (!status) {
-    issues.push("Select the override status.");
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideStatus);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideStatus;
   }
 
   if (!reason) {
-    issues.push("Enter the reason for this employee-specific override.");
+    issues.push("Enter the reason for this adjustment.");
     markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideReason);
     firstInvalidField ||= state.dom.payrollEmployeeOverrideReason;
   }
 
-  const conflict = findPayrollEmployeeOverrideEffectiveDateConflict({
-    payrollMasterRecordId,
-    overrideCategory,
-    overrideElement,
-    effectiveDate,
-    editingId,
-  });
-
-  if (conflict) {
-    issues.push(
-      `An employee override already exists for this Payroll Master, category, element, and ${formatDate(effectiveDate)}.`,
-    );
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideMasterRecordId);
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideCategory);
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideElement);
-    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEffectiveDate);
-    firstInvalidField ||= state.dom.payrollEmployeeOverrideEffectiveDate;
-  }
-
   if (issues.length) {
-    showPayrollEmployeeOverrideValidationIssues(issues);
-
-    if (firstInvalidField?.focus) {
-      firstInvalidField.focus();
-    }
-
+    showPageAlert("warning", issues.join("<br>"));
+    firstInvalidField?.focus();
     return false;
   }
 
   return true;
 }
 
+
+function getPayrollAdjustmentPeriodBounds(payPeriod = "") {
+  const value = String(payPeriod || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(value)) return { startDate: null, endDate: null };
+
+  const [yearText, monthText] = value.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  return {
+    startDate: `${value}-01`,
+    endDate: `${value}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
 function buildPayrollEmployeeOverridePayload() {
   const selectedMasterOption =
     state.dom.payrollEmployeeOverrideMasterRecordId?.selectedOptions?.[0] || null;
-
-  const method = String(state.dom.payrollEmployeeOverrideMethod?.value || "").trim();
-  const overrideValue = String(state.dom.payrollEmployeeOverrideValue?.value || "").trim();
-  const originalValue = String(state.dom.payrollEmployeeOverrideOriginalValue?.value || "").trim();
+  const adjustmentType =
+    String(state.dom.payrollEmployeeOverrideElement?.value || "").trim();
+  const payPeriod =
+    String(state.dom.payrollEmployeeOverrideEffectiveDate?.value || "").trim();
+  const period = getPayrollAdjustmentPeriodBounds(payPeriod);
 
   return {
     payroll_master_record_id:
       String(state.dom.payrollEmployeeOverrideMasterRecordId?.value || "").trim(),
-
     employee_id:
       String(selectedMasterOption?.dataset?.employeeId || "").trim() || null,
-
-    override_category:
-      String(state.dom.payrollEmployeeOverrideCategory?.value || "").trim(),
-
-    override_element:
-      String(state.dom.payrollEmployeeOverrideElement?.value || "").trim(),
-
-    override_method: method,
-
-    original_value_snapshot:
-      originalValue === "" ? null : Number(originalValue),
-
-    override_value:
-      method === "RULE_REPLACEMENT" || method === "EXEMPTION" || overrideValue === ""
-        ? null
-        : Number(overrideValue),
-
-    override_rule_snapshot:
-      String(state.dom.payrollEmployeeOverrideRuleSnapshot?.value || "").trim() || null,
-
-    effective_date:
-      state.dom.payrollEmployeeOverrideEffectiveDate?.value || null,
-
-    end_date:
-      state.dom.payrollEmployeeOverrideEndDate?.value || null,
-
-    approval_reference:
-      String(state.dom.payrollEmployeeOverrideApprovalReference?.value || "").trim() || null,
-
-    reason:
-      String(state.dom.payrollEmployeeOverrideReason?.value || "").trim(),
-
-    notes:
-      String(state.dom.payrollEmployeeOverrideNotes?.value || "").trim() || null,
-
-    status:
-      String(state.dom.payrollEmployeeOverrideStatus?.value || "Active").trim(),
-
+    override_category: getPayrollEmployeeAdjustmentCategory(adjustmentType),
+    override_element: adjustmentType,
+    override_method: "FIXED_AMOUNT",
+    original_value_snapshot: null,
+    override_value: Number(state.dom.payrollEmployeeOverrideValue?.value || 0),
+    override_rule_snapshot: null,
+    effective_date: period.startDate,
+    end_date: period.endDate,
+    approval_reference: null,
+    reason: String(state.dom.payrollEmployeeOverrideReason?.value || "").trim(),
+    notes: BEXHR_PHASE5_ADJUSTMENT_MARKER,
+    status: "Active",
     created_by: state.currentUser?.id || null,
     updated_by: state.currentUser?.id || null,
   };
@@ -8480,7 +10035,7 @@ function setPayrollEmployeeOverrideSaveLoading(isLoading) {
     button.disabled = true;
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-      Saving Employee Override...
+      Saving Adjustment...
     `;
     return;
   }
@@ -8527,6 +10082,7 @@ function syncPayrollEmployeeOverrideRuleSnapshotVisibility({
   }
 }
 
+
 function resetPayrollEmployeeOverrideForm() {
   state.currentEditingPayrollEmployeeOverride = null;
 
@@ -8536,47 +10092,31 @@ function resetPayrollEmployeeOverrideForm() {
 
   [
     state.dom.payrollEmployeeOverrideMasterRecordId,
-    state.dom.payrollEmployeeOverrideCategory,
     state.dom.payrollEmployeeOverrideElement,
-    state.dom.payrollEmployeeOverrideMethod,
-    state.dom.payrollEmployeeOverrideOriginalValue,
     state.dom.payrollEmployeeOverrideValue,
     state.dom.payrollEmployeeOverrideEffectiveDate,
-    state.dom.payrollEmployeeOverrideEndDate,
-    state.dom.payrollEmployeeOverrideApprovalReference,
-    state.dom.payrollEmployeeOverrideRuleSnapshot,
     state.dom.payrollEmployeeOverrideReason,
   ].forEach((field) => {
-    if (field) {
-      field.value = "";
-      field.classList.remove("is-invalid");
-    }
+    if (!field) return;
+    field.value = "";
+    field.classList.remove("is-invalid");
   });
 
-  // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3A
-  // Reset the Payroll Element dropdown to its safe create-mode state.
-  // No category means no element may be selected yet.
+  if (state.dom.payrollEmployeeOverrideCategory) state.dom.payrollEmployeeOverrideCategory.value = "";
+  if (state.dom.payrollEmployeeOverrideMethod) state.dom.payrollEmployeeOverrideMethod.value = "FIXED_AMOUNT";
+  if (state.dom.payrollEmployeeOverrideOriginalValue) state.dom.payrollEmployeeOverrideOriginalValue.value = "";
+  if (state.dom.payrollEmployeeOverrideEndDate) state.dom.payrollEmployeeOverrideEndDate.value = "";
+  if (state.dom.payrollEmployeeOverrideStatus) state.dom.payrollEmployeeOverrideStatus.value = "Active";
+  if (state.dom.payrollEmployeeOverrideApprovalReference) state.dom.payrollEmployeeOverrideApprovalReference.value = "";
+  if (state.dom.payrollEmployeeOverrideRuleSnapshot) state.dom.payrollEmployeeOverrideRuleSnapshot.value = "";
+  if (state.dom.payrollEmployeeOverrideNotes) state.dom.payrollEmployeeOverrideNotes.value = BEXHR_PHASE5_ADJUSTMENT_MARKER;
+
   populatePayrollEmployeeOverrideElementOptions();
 
-  syncPayrollEmployeeOverrideRuleSnapshotVisibility({
-    clearWhenHidden: true,
-  });
-
-  if (state.dom.payrollEmployeeOverrideStatus) {
-    state.dom.payrollEmployeeOverrideStatus.value = "Active";
-    state.dom.payrollEmployeeOverrideStatus.classList.remove("is-invalid");
-  }
-
-  if (state.dom.cancelPayrollEmployeeOverrideEditBtn) {
-    state.dom.cancelPayrollEmployeeOverrideEditBtn.classList.add("d-none");
-  }
+  state.dom.cancelPayrollEmployeeOverrideEditBtn?.classList.add("d-none");
 
   if (state.dom.savePayrollEmployeeOverrideBtn) {
-    state.dom.savePayrollEmployeeOverrideBtn.innerHTML = `
-      <i class="bi bi-save me-2"></i>
-      <span id="savePayrollEmployeeOverrideBtnText">Create Employee Override</span>
-    `;
-
+    state.dom.savePayrollEmployeeOverrideBtn.innerHTML =       '<i class="bi bi-save me-2"></i><span id="savePayrollEmployeeOverrideBtnText">Create Adjustment</span>';
     state.dom.savePayrollEmployeeOverrideBtnText =
       document.getElementById("savePayrollEmployeeOverrideBtnText");
   }
@@ -8607,7 +10147,7 @@ function renderPayrollEmployeeOverrideRecordsLoadingState() {
   state.dom.payrollEmployeeOverrideRecordsTableBody.innerHTML = `
     <tr>
       <td colspan="9" class="text-center text-secondary py-4">
-        Loading employee override records.
+        Loading payroll adjustments.
       </td>
     </tr>
   `;
@@ -8695,11 +10235,11 @@ async function loadPayrollEmployeeOverrides() {
 
     applyPayrollEmployeeOverrideSearch();
   } catch (error) {
-    console.error("Error loading employee payroll overrides:", error);
+    console.error("Error loading payroll adjustments:", error);
 
     showPageAlert(
       "danger",
-      error.message || "Employee payroll override records could not be loaded.",
+      error.message || "Payroll adjustment records could not be loaded.",
     );
 
     state.payrollEmployeeOverrides = [];
@@ -8708,9 +10248,17 @@ async function loadPayrollEmployeeOverrides() {
   }
 }
 
+
 async function refreshPayrollEmployeeOverrideWorkspace() {
   renderPayrollEmployeeOverrideRecordsLoadingState();
+
+  // PHASE 5B CONTROL WIRING
+  // Employee options already refresh here. Initialise the two new Phase 5
+  // business controls at the same lifecycle point so they are ready on first load.
   populatePayrollEmployeeOverrideMasterOptions();
+  populatePayrollEmployeeOverrideElementOptions();
+  bindPayrollAdjustmentPayPeriodControl();
+
   await loadPayrollEmployeeOverrides();
 }
 
@@ -8719,28 +10267,18 @@ function applyPayrollEmployeeOverrideSearch() {
     state.dom.payrollEmployeeOverrideSearchInput?.value || "",
   );
 
-  let rows = [...state.payrollEmployeeOverrides];
+  let rows = (state.payrollEmployeeOverrides || []).filter(isPayrollEmployeeAdjustmentRecord);
 
   if (searchTerm) {
     rows = rows.filter((record) => {
       const masterContext = getPayrollEmployeeOverrideMasterContext(record);
-
       const searchableText = [
         masterContext.fullName,
         masterContext.workEmail,
-        masterContext.gradeLabel,
-        formatPayrollEmployeeOverrideCategory(record.override_category),
         formatPayrollEmployeeOverrideElement(record.override_element),
-        formatPayrollEmployeeOverrideMethod(record.override_method),
-        record.original_value_snapshot,
-        record.override_value,
-        record.override_rule_snapshot,
-        record.approval_reference,
         record.reason,
-        record.status,
-      ]
-        .join(" ")
-        .toLowerCase();
+        record.effective_date,
+      ].map(normalizeText).join(" ");
 
       return searchableText.includes(searchTerm);
     });
@@ -8783,26 +10321,23 @@ function getPayrollEmployeeOverrideById(overrideId = "") {
 // DESCRIPTION ITEM 5 - STEP 4
 // Load an existing employee override into the same form for maintenance.
 function startPayrollEmployeeOverrideEdit(overrideId) {
-  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
-  // View-only payroll setup roles cannot open Employee Override edit mode.
   if (!canCurrentUserMaintainPayrollSetupData()) {
-    showHrPayrollSetupAccessDeniedMessage("Employee Payroll Overrides");
+    showHrPayrollSetupAccessDeniedMessage("Payroll Adjustments");
     return;
   }
 
   const record = getPayrollEmployeeOverrideById(overrideId);
 
-  if (!record) {
+  if (!record || !isPayrollEmployeeAdjustmentRecord(record)) {
     showPageAlert(
       "warning",
-      "The selected employee override record could not be found. Please refresh and try again.",
+      "The selected payroll adjustment could not be found or is a historical legacy override.",
     );
     return;
   }
 
   clearPageAlert();
   openPayrollEmployeeOverrideCard();
-
   state.currentEditingPayrollEmployeeOverride = record;
 
   if (state.dom.editingPayrollEmployeeOverrideId) {
@@ -8814,106 +10349,64 @@ function startPayrollEmployeeOverrideEdit(overrideId) {
       record.payroll_master_record_id || "";
   }
 
+  populatePayrollEmployeeOverrideElementOptions(record.override_element || "");
+
   if (state.dom.payrollEmployeeOverrideCategory) {
     state.dom.payrollEmployeeOverrideCategory.value =
-      record.override_category || "";
+      getPayrollEmployeeAdjustmentCategory(record.override_element);
   }
-
-  // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3B
-  // Rebuild the element choices from the saved category before selecting
-  // the saved element. Legacy values remain visible for historical records.
-  populatePayrollEmployeeOverrideElementOptions(
-    record.override_element || "",
-    { preserveLegacyValue: true },
-  );
 
   if (state.dom.payrollEmployeeOverrideMethod) {
-    const savedMethod = String(record.override_method || "").trim();
-
-    // EMPLOYEE OVERRIDE SIMPLIFICATION - STEP 3C
-    // Rule Replacement is no longer offered for new records, but an older
-    // saved record must remain visible and maintainable in edit mode.
-    const hasSavedMethodOption = Array.from(
-      state.dom.payrollEmployeeOverrideMethod.options,
-    ).some((option) => option.value === savedMethod);
-
-    if (savedMethod && !hasSavedMethodOption) {
-      const historicalMethodOption = document.createElement("option");
-      historicalMethodOption.value = savedMethod;
-      historicalMethodOption.textContent =
-        `${formatPayrollEmployeeOverrideMethod(savedMethod)} (historical)`;
-
-      state.dom.payrollEmployeeOverrideMethod.appendChild(
-        historicalMethodOption,
-      );
-    }
-
-    state.dom.payrollEmployeeOverrideMethod.value = savedMethod;
+    state.dom.payrollEmployeeOverrideMethod.value = "FIXED_AMOUNT";
   }
 
-  // Reveal Rule Snapshot only when this saved historical record
-  // uses the retired Rule Replacement method.
-  syncPayrollEmployeeOverrideRuleSnapshotVisibility();
-
   if (state.dom.payrollEmployeeOverrideOriginalValue) {
-    state.dom.payrollEmployeeOverrideOriginalValue.value =
-      record.original_value_snapshot ?? "";
+    state.dom.payrollEmployeeOverrideOriginalValue.value = "";
   }
 
   if (state.dom.payrollEmployeeOverrideValue) {
-    state.dom.payrollEmployeeOverrideValue.value =
-      record.override_value ?? "";
+    state.dom.payrollEmployeeOverrideValue.value = record.override_value ?? "";
   }
 
   if (state.dom.payrollEmployeeOverrideEffectiveDate) {
     state.dom.payrollEmployeeOverrideEffectiveDate.value =
-      record.effective_date || "";
+      String(record.effective_date || "").slice(0, 7);
   }
 
   if (state.dom.payrollEmployeeOverrideEndDate) {
-    state.dom.payrollEmployeeOverrideEndDate.value =
-      record.end_date || "";
+    state.dom.payrollEmployeeOverrideEndDate.value = record.end_date || "";
   }
 
   if (state.dom.payrollEmployeeOverrideStatus) {
-    state.dom.payrollEmployeeOverrideStatus.value =
-      record.status || "Active";
+    state.dom.payrollEmployeeOverrideStatus.value = "Active";
   }
 
   if (state.dom.payrollEmployeeOverrideApprovalReference) {
-    state.dom.payrollEmployeeOverrideApprovalReference.value =
-      record.approval_reference || "";
+    state.dom.payrollEmployeeOverrideApprovalReference.value = "";
   }
 
   if (state.dom.payrollEmployeeOverrideRuleSnapshot) {
-    state.dom.payrollEmployeeOverrideRuleSnapshot.value =
-      record.override_rule_snapshot || "";
+    state.dom.payrollEmployeeOverrideRuleSnapshot.value = "";
   }
 
   if (state.dom.payrollEmployeeOverrideReason) {
-    state.dom.payrollEmployeeOverrideReason.value =
-      record.reason || "";
+    state.dom.payrollEmployeeOverrideReason.value = record.reason || "";
   }
 
   if (state.dom.payrollEmployeeOverrideNotes) {
-    state.dom.payrollEmployeeOverrideNotes.value =
-      record.notes || "";
+    state.dom.payrollEmployeeOverrideNotes.value = BEXHR_PHASE5_ADJUSTMENT_MARKER;
   }
 
-  if (state.dom.cancelPayrollEmployeeOverrideEditBtn) {
-    state.dom.cancelPayrollEmployeeOverrideEditBtn.classList.remove("d-none");
-  }
+  state.dom.cancelPayrollEmployeeOverrideEditBtn?.classList.remove("d-none");
 
   if (state.dom.savePayrollEmployeeOverrideBtn) {
-    state.dom.savePayrollEmployeeOverrideBtn.innerHTML = `
-      <i class="bi bi-save me-2"></i>
-      <span id="savePayrollEmployeeOverrideBtnText">Update Employee Override</span>
-    `;
-
+    state.dom.savePayrollEmployeeOverrideBtn.innerHTML =
+      '<i class="bi bi-save me-2"></i><span id="savePayrollEmployeeOverrideBtnText">Update Adjustment</span>';
     state.dom.savePayrollEmployeeOverrideBtnText =
       document.getElementById("savePayrollEmployeeOverrideBtnText");
   }
 
+  syncPayrollAdjustmentPayPeriodDisplay();
   updatePayrollEmployeeOverrideSaveButtonState();
 
   scrollToDashboardTarget(
@@ -8927,24 +10420,22 @@ function startPayrollEmployeeOverrideEdit(overrideId) {
 // Exit edit mode without changing saved employee override records.
 function exitPayrollEmployeeOverrideEditMode() {
   resetPayrollEmployeeOverrideForm();
-
-  showPageAlert(
-    "info",
-    "Employee payroll override edit was cancelled.",
-  );
+  showPageAlert("info", "Payroll adjustment edit was cancelled.");
 }
 
 // HR EMPLOYEE OVERRIDE RECORDS MODERN CARDS - v1.0.1
 // Presentation-only replacement for the legacy nine-column override table.
 // Search, sorting, tenant filtering, create/edit/save behaviour, approval trace,
 // payroll calculations, Supabase operations, and role restrictions are preserved.
+
 function renderPayrollEmployeeOverrideRecords(records = []) {
   const tbody = state.dom.payrollEmployeeOverrideRecordsTableBody;
   if (!tbody) return;
 
+  const adjustmentRecords = (records || []).filter(isPayrollEmployeeAdjustmentRecord);
   tbody.innerHTML = "";
 
-  if (!records.length) {
+  if (!adjustmentRecords.length) {
     state.dom.payrollEmployeeOverrideRecordsEmptyState?.classList.remove("d-none");
     state.dom.payrollEmployeeOverrideRecordsTableWrapper?.classList.add("d-none");
     return;
@@ -8953,169 +10444,33 @@ function renderPayrollEmployeeOverrideRecords(records = []) {
   state.dom.payrollEmployeeOverrideRecordsEmptyState?.classList.add("d-none");
   state.dom.payrollEmployeeOverrideRecordsTableWrapper?.classList.remove("d-none");
 
-  const recordsToRender = sortPayrollEmployeeOverrideRecordsByLatestActivity(records);
-
-  recordsToRender.forEach((record) => {
+  sortPayrollEmployeeOverrideRecordsByLatestActivity(adjustmentRecords).forEach((record) => {
     const masterContext = getPayrollEmployeeOverrideMasterContext(record);
+    const amount = Number(record.override_value || 0);
+    const payPeriod = String(record.effective_date || "").slice(0, 7);
+    const payPeriodLabel = /^\d{4}-\d{2}$/.test(payPeriod)
+      ? new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" })
+        .format(new Date(`${payPeriod}-01T00:00:00Z`))
+      : "--";
+
     const row = document.createElement("tr");
-
-    const employeeName = String(masterContext.fullName || "Unknown Employee").trim();
-    const gradeLabel = String(masterContext.gradeLabel || "").trim();
-    const masterEffectiveDate = formatDate(masterContext.masterEffectiveDate);
-    const categoryLabel = formatPayrollEmployeeOverrideCategory(record.override_category);
-    const elementLabel = formatPayrollEmployeeOverrideElement(record.override_element);
-    const methodLabel = formatPayrollEmployeeOverrideMethod(record.override_method);
-    const overrideValue = formatPayrollEmployeeOverrideValue(record);
-    const originalValue =
-      record.original_value_snapshot === null ||
-        record.original_value_snapshot === undefined ||
-        String(record.original_value_snapshot).trim() === ""
-        ? "--"
-        : String(record.original_value_snapshot).trim();
-    const effectiveDate = formatDate(record.effective_date);
-    const endDate = record.end_date ? formatDate(record.end_date) : "Open-ended";
-    const updatedDate = formatDate(record.updated_at || record.created_at);
-    const approvalReference = String(record.approval_reference || "").trim();
-    const reason = String(record.reason || "").trim();
-    const notes = String(record.notes || "").trim();
-
-    const initials = employeeName
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part.charAt(0).toUpperCase())
-      .join("") || "EM";
-
-    const supportingContext = [
-      gradeLabel
-        ? `<span class="hr-override-context-pill"><i class="bi bi-diagram-3" aria-hidden="true"></i>${escapeHtml(gradeLabel)}</span>`
-        : "",
-      masterEffectiveDate && masterEffectiveDate !== "--"
-        ? `<span class="hr-override-context-pill"><i class="bi bi-calendar-check" aria-hidden="true"></i>Salary setup ${escapeHtml(masterEffectiveDate)}</span>`
-        : "",
-    ].filter(Boolean).join("");
-
-    const auditItems = [
-      approvalReference
-        ? `
-          <div class="hr-override-audit-item">
-            <span class="hr-override-audit-icon" aria-hidden="true">
-              <i class="bi bi-shield-check"></i>
-            </span>
-            <div>
-              <span class="hr-override-label">Approval reference</span>
-              <strong>${escapeHtml(approvalReference)}</strong>
-            </div>
-          </div>
-        `
-        : "",
-      reason
-        ? `
-          <div class="hr-override-audit-item">
-            <span class="hr-override-audit-icon" aria-hidden="true">
-              <i class="bi bi-chat-left-text"></i>
-            </span>
-            <div>
-              <span class="hr-override-label">Reason</span>
-              <strong>${escapeHtml(reason)}</strong>
-            </div>
-          </div>
-        `
-        : "",
-      notes
-        ? `
-          <div class="hr-override-audit-item">
-            <span class="hr-override-audit-icon" aria-hidden="true">
-              <i class="bi bi-journal-text"></i>
-            </span>
-            <div>
-              <span class="hr-override-label">Notes</span>
-              <strong>${escapeHtml(notes)}</strong>
-            </div>
-          </div>
-        `
-        : "",
-    ].filter(Boolean).join("");
-
-    row.className = "hr-override-record-row";
-
-    row.innerHTML = `
-      <td colspan="9" class="hr-override-record-cell">
-        <article class="hr-override-record-card">
-          <header class="hr-override-record-header">
-            <div class="hr-override-employee">
-              <span class="hr-override-avatar" aria-hidden="true">
-                ${escapeHtml(initials)}
-              </span>
-
-              <div class="hr-override-employee-copy">
-                <strong class="hr-override-employee-name">
-                  ${escapeHtml(employeeName)}
-                </strong>
-
-                ${supportingContext
-        ? `<div class="hr-override-context">${supportingContext}</div>`
-        : ""}
-              </div>
-            </div>
-
-            <div class="hr-override-header-actions">
-              <div class="hr-override-status">
-                ${renderBexhrStatusPill(formatStatusLabel(record.status))}
-              </div>
-
-              <button
-                type="button"
-                class="btn btn-sm btn-outline-primary hr-override-edit-btn"
-                title="Edit employee override"
-                aria-label="Edit override for ${escapeHtml(employeeName)}"
-                onclick="window.hrEditPayrollEmployeeOverrideRecord('${escapeHtml(record.id)}')"
-              >
-                <i class="bi bi-pencil-square" aria-hidden="true"></i>
-              </button>
-            </div>
-          </header>
-
-          <div class="hr-override-detail-band">
-            <div class="hr-override-detail hr-override-detail--element">
-              <span class="hr-override-label">Payroll element</span>
-              <strong>${escapeHtml(elementLabel)}</strong>
-              <span>${escapeHtml(categoryLabel)}</span>
-            </div>
-
-            <div class="hr-override-detail">
-              <span class="hr-override-label">Override method</span>
-              <strong>${escapeHtml(methodLabel)}</strong>
-            </div>
-
-            <div class="hr-override-detail hr-override-detail--value">
-              <span class="hr-override-label">Override value</span>
-              <strong>${escapeHtml(overrideValue)}</strong>
-              <span>Original: ${escapeHtml(originalValue)}</span>
-            </div>
-
-            <div class="hr-override-detail">
-              <span class="hr-override-label">Effective period</span>
-              <strong>${escapeHtml(effectiveDate)}</strong>
-              <span>Ends: ${escapeHtml(endDate)}</span>
-            </div>
-
-            <div class="hr-override-detail">
-              <span class="hr-override-label">Last updated</span>
-              <strong>${escapeHtml(updatedDate)}</strong>
-            </div>
-          </div>
-
-          ${auditItems
-        ? `<footer class="hr-override-audit">${auditItems}</footer>`
-        : ""}
-        </article>
-      </td>
-    `;
-
+    row.className = "hr-deduction-record-row";
+    row.innerHTML =       '<td colspan="9" class="hr-deduction-record-cell">' +
+      '<article class="hr-deduction-record-card">' +
+      '<header class="hr-deduction-record-header">' +
+      '<div><strong class="hr-deduction-record-name">' + escapeHtml(masterContext.fullName || "Unknown Employee") + '</strong></div>' +
+      '</header>' +
+      '<div class="hr-deduction-record-details">' +
+      '<div class="hr-deduction-record-detail"><span class="hr-deduction-record-label">Adjustment</span><strong>' + escapeHtml(formatPayrollEmployeeOverrideElement(record.override_element)) + '</strong></div>' +
+      '<div class="hr-deduction-record-detail hr-deduction-record-detail--accent"><span class="hr-deduction-record-label">Amount</span><strong>' + formatCurrency(amount, "NGN") + '</strong></div>' +
+      '<div class="hr-deduction-record-detail"><span class="hr-deduction-record-label">Pay Period</span><strong>' + escapeHtml(payPeriodLabel) + '</strong></div>' +
+      '</div>' +
+      (record.reason ? '<footer class="hr-deduction-record-footer"><div><span class="hr-deduction-record-label">Reason</span><p>' + escapeHtml(record.reason) + '</p></div></footer>' : '') +
+      '</article></td>';
     tbody.appendChild(row);
   });
 }
+
 async function handlePayrollEmployeeOverrideRecordsRefresh() {
   const button = state.dom.refreshPayrollEmployeeOverrideRecordsBtn;
   const startedAt = Date.now();
@@ -9136,7 +10491,7 @@ async function handlePayrollEmployeeOverrideSave() {
   // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
   // Auditor, QA, and custom HR-routed roles may review Employee Overrides only.
   if (!canCurrentUserMaintainPayrollSetupData()) {
-    showHrPayrollSetupAccessDeniedMessage("Employee Payroll Overrides");
+    showHrPayrollSetupAccessDeniedMessage("Payroll Adjustments");
     return;
   }
 
@@ -9149,6 +10504,11 @@ async function handlePayrollEmployeeOverrideSave() {
 
   const startedAt = Date.now();
   const payload = buildPayrollEmployeeOverridePayload();
+  const editingId = String(
+    state.currentEditingPayrollEmployeeOverride?.id ||
+    state.dom.editingPayrollEmployeeOverrideId?.value ||
+    "",
+  ).trim();
 
   try {
     setPayrollEmployeeOverrideSaveLoading(true);
@@ -9160,12 +10520,6 @@ async function handlePayrollEmployeeOverrideSave() {
     // Use the same form for create and update.
     // Create mode inserts a new override.
     // Edit mode updates the existing override and keeps created_by unchanged.
-    const editingId = String(
-      state.currentEditingPayrollEmployeeOverride?.id ||
-      state.dom.editingPayrollEmployeeOverrideId?.value ||
-      "",
-    ).trim();
-
     let data;
     let error;
 
@@ -9231,17 +10585,17 @@ async function handlePayrollEmployeeOverrideSave() {
 
     showPageAlert(
       "success",
-      `Employee payroll override was ${wasEditing ? "updated" : "created"} successfully from <strong>${escapeHtml(
+      `Payroll adjustment was ${wasEditing ? "updated" : "created"} successfully from <strong>${escapeHtml(
         payload.effective_date,
       )}</strong>.`,
     );
 
     showDashboardToast(
       "success",
-      wasEditing ? "Employee override updated" : "Employee override created",
+      wasEditing ? "Adjustment updated" : "Adjustment created",
       wasEditing
-        ? "The employee-specific payroll override has been updated and remains traceable."
-        : "The employee-specific payroll override has been saved and is now traceable.",
+        ? "The one-period payroll adjustment has been updated."
+        : "The one-period payroll adjustment has been saved.",
     );
 
     resetPayrollEmployeeOverrideForm();
@@ -9250,7 +10604,7 @@ async function handlePayrollEmployeeOverrideSave() {
       redirectToPayrollEmployeeOverrideRecordsAfterSave();
     }, 250);
   } catch (error) {
-    console.error("Error saving employee payroll override:", error);
+    console.error("Error saving payroll adjustment:", error);
 
     const message = String(error.message || "").toLowerCase();
 
@@ -9260,13 +10614,13 @@ async function handlePayrollEmployeeOverrideSave() {
     ) {
       showPageAlert(
         "warning",
-        "An active employee override already exists for this payroll master record, category, element, and effective date.",
+        "An adjustment of this type already exists for this employee and pay period.",
       );
 
       showDashboardToast(
         "warning",
-        "Duplicate employee override",
-        "Use a different effective date or maintain the existing override when edit mode is added.",
+        "Duplicate payroll adjustment",
+        "Choose a different pay period or update the existing adjustment.",
       );
 
       return;
@@ -9274,13 +10628,13 @@ async function handlePayrollEmployeeOverrideSave() {
 
     showPageAlert(
       "danger",
-      error.message || "Employee payroll override could not be saved.",
+      error.message || "Payroll adjustment could not be saved.",
     );
 
     showDashboardToast(
       "danger",
-      "Employee override save failed",
-      error.message || "The employee payroll override could not be saved.",
+      "Payroll adjustment save failed",
+      error.message || "The payroll adjustment could not be saved.",
     );
   } finally {
     await waitForMinimumLoadingFeedback(startedAt, 600);
@@ -9542,6 +10896,10 @@ function clearPayrollRecordsFiltersBeforeRedirect() {
 function redirectToPayrollRecordsAfterSave() {
   closePayrollRecordCard();
 
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Payroll save/update deliberately lands on the focused Payroll Records view.
+  applyHrNavigationTask("payroll.records", { scroll: false });
+
   // DESCRIPTION ITEM 4 - STEP 2C
   // Because Payroll Records now collapses by default, reopen it after
   // submit/update so the newly saved payroll record remains visible.
@@ -9735,6 +11093,9 @@ function alignHrReviewWorkspaceCardOrder() {
 }
 
 function bindEvents() {
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  bindHrRedesignSidebarNavigation();
+
   state.dom.logoutBtn?.addEventListener("click", async () => {
     // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
     // Logout must reset the next session to Profile.
@@ -9851,6 +11212,13 @@ function bindEvents() {
     switchHrWorkspace("employees");
     applyEmployeeSearch();
     syncSelectAllEmployeesForPayrollCheckbox();
+
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+    // Generic People entry points (mobile switcher, Help, Dashboard links)
+    // resolve to Employee Directory instead of reopening the legacy long page.
+    if (!_hrSidebarTaskRoutingInProgress) {
+      applyHrNavigationTask("people.directory", { scroll: false });
+    }
   });
 
   // HR REVIEW WORKSPACE SEPARATION - STEP 1P
@@ -9901,6 +11269,13 @@ function bindEvents() {
     applyHrPaymentSetupAccessControls();
 
     applyHrCommunicationSetupAccessControls();
+
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+    // Generic Setup entry points open Organization as the predictable first
+    // task instead of exposing every setup form in one long workspace.
+    if (!_hrSidebarTaskRoutingInProgress) {
+      applyHrNavigationTask("setup.organization", { scroll: false });
+    }
   });
 
   state.dom.hrTabPayrollBtn?.addEventListener("click", () => {
@@ -9927,12 +11302,18 @@ function bindEvents() {
     // Remember Payroll for refresh, but do not store payroll form or salary data.
     rememberHrWorkspace("payroll");
     switchHrWorkspace("payroll");
+
+    // BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+    // Generic/mobile Payroll entry lands on Overview instead of exposing the
+    // complete legacy Payroll page. Explicit sidebar tasks reapply themselves.
+    if (!_hrSidebarTaskRoutingInProgress) {
+      applyHrNavigationTask("payroll.overview", { scroll: false });
+    }
   });
 
   state.dom.hrTabSelfServiceBtn?.addEventListener("click", () => {
     rememberHrWorkspace("selfservice");
     switchHrWorkspace("selfservice");
-    initHrSelfServiceOnFirstOpen();
   });
 
   // PAYROLL WORKFLOW UX REPAIR - STEP 2
@@ -9940,6 +11321,13 @@ function bindEvents() {
   // Do not route HR to People for payroll operations.
   state.dom.runPayrollActionBtn?.addEventListener("click", () => {
     startRunPayrollSelectionFlow();
+
+    // BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+    // The Overview quick action and sidebar route both land on the same focused
+    // Run Payroll card instead of reopening the complete Payroll page.
+    if (canCurrentUserMaintainPayrollOperationsData()) {
+      applyHrNavigationTask("payroll.run", { scroll: false });
+    }
   });
 
   // RUN PAYROLL - STEP 4
@@ -9992,7 +11380,34 @@ function bindEvents() {
   });
 
   state.dom.cancelEditBtn?.addEventListener("click", () => {
+    const shouldReturnToEmployeeDirectory = Boolean(
+      state.currentEditingEmployee &&
+      !state.profileCorrectionRequestEditReturnContext
+    );
+
     exitEmployeeEditMode();
+
+    // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03 QA CORRECTION
+    // Cancel from a normal Employee Directory edit returns to the directory.
+    // The separate Clear Form action still only resets the current form.
+    if (shouldReturnToEmployeeDirectory) {
+      rememberHrWorkspace("employees");
+      switchHrWorkspace("employees");
+      applyHrNavigationTask("people.directory", { scroll: false });
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const employeeListCard =
+            state.dom.employeeListCardCollapse?.closest(".dashboard-section-card") ||
+            state.dom.employeeListCardHeader ||
+            state.dom.employeeListCardCollapse;
+
+          if (employeeListCard) {
+            scrollToDashboardTarget(employeeListCard, 16);
+          }
+        });
+      });
+    }
   });
 
   state.dom.refreshEmployeesBtn?.addEventListener("click", async () => {
@@ -10052,11 +11467,45 @@ function bindEvents() {
     }
   });
 
+  // PHASE 7A12: update People, Overview, payroll readiness, and hierarchy when
+  // another HR tab changes a record; also reconcile across separate sessions
+  // when this page returns to the foreground. Storage contains no PII.
+  window.addEventListener("storage", (event) => {
+    if (event.key !== HR_EMPLOYEE_LIFECYCLE_SYNC_STORAGE_KEY) return;
+    let detail = null;
+    try { detail = JSON.parse(event.newValue || "null"); } catch (_) { return; }
+    if (!detail || String(detail.tenantId || "") !==
+        String(state.currentProfile?.tenant_id || "")) return;
+    if (!document.hidden) {
+      void refreshHrAfterEmployeeLifecycleChange().catch((error) => {
+        console.warn("Cross-tab employee lifecycle refresh failed:", error);
+      });
+    }
+  });
+  window.addEventListener("focus", () => {
+    void checkForHrEmployeeLifecycleChanges();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) void checkForHrEmployeeLifecycleChanges();
+  });
+  window.setInterval(() => {
+    if (!document.hidden) void checkForHrEmployeeLifecycleChanges();
+  }, 30000);
+
   state.dom.employeeCreateForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await handleEmployeeSave();
   });
 
+  // BEXHR_GROUP_A_20261108: editable historical child records for Alpatech only.
+  state.dom.employeeCreateForm?.addEventListener('input', (event) => {
+    if (!window.BexHrGroupA?.alpatech) return;
+    const group = event.target.closest?.('[data-employee-form-section]')?.dataset.employeeFormSection;
+    if (group === 'education') state.groupAEducationTouched = true;
+    if (group === 'dependants') state.groupADependantsTouched = true;
+  });
+  state.dom.addEmployeeEducationRecordBtn?.addEventListener('click', () => { if(window.BexHrGroupA?.alpatech) state.groupAEducationTouched = true; });
+  state.dom.addEmployeeDependantRecordBtn?.addEventListener('click', () => { if(window.BexHrGroupA?.alpatech) state.groupADependantsTouched = true; });
   // EMPLOYEE BIODATA COMPLETION - STEP 6C-4A
   // Stage the visible Education form as a saved education row in the page state.
   // Supabase save wiring comes after this UI behaviour is confirmed.
@@ -10148,8 +11597,6 @@ function bindEvents() {
 
     state.dom.identificationIssueState,
     state.dom.nin,
-
-    state.dom.exitDate,
     state.dom.hmoProvider,
     state.dom.hmoPlan,
     state.dom.hmoNumber,
@@ -10203,7 +11650,6 @@ function bindEvents() {
     state.dom.lineManager,
     state.dom.employmentDate,
     state.dom.approverEmail,
-    state.dom.employmentStatus,
     state.dom.systemRole,
 
     // DESCRIPTION ITEM 3 - STEP 2B CLEANUP
@@ -10220,9 +11666,19 @@ function bindEvents() {
   // System Role changes affect custom-role visibility, HR role warning,
   // self-role protection, and save readiness.
   state.dom.systemRole?.addEventListener("change", () => {
+    if (!state.currentEditingEmployee) {
+      state.bexhrRoleChoiceTouched = true;
+      state.bexhrRoleAutoSuggested = false;
+    }
+    if (!state.currentEditingEmployee) syncHrNewEmployeeManagerRoleSuggestion();
     syncCustomSystemRoleVisibility();
     syncHrRoleAssignmentWarning();
     syncHrSelfRoleProtectionState();
+
+    // BEXHR REPORTING EDIT ROLE SEQUENCING - R-12C.2
+    // Manager eligibility depends on the employee's current System Role.
+    // Rebuild Primary/Secondary choices immediately when HR changes that role.
+    refreshHrReportingDepartmentChoices();
     updateEmployeeSaveButtonState();
   });
 
@@ -10263,6 +11719,17 @@ function bindEvents() {
   // job titles that fit the selected department.
   state.dom.department?.addEventListener("change", () => {
     populateJobTitleOptionsForDepartment("");
+    syncHrNewEmployeeManagerRoleSuggestion();
+    refreshHrReportingDepartmentChoices();
+  });
+
+  // BEXHR EXECUTIVE REPORTING CHOICE REFRESH - R-12C.3
+  // Whole-organization executive order depends on the selected approved Job Title.
+  // Rebuild reporting choices immediately when HR changes CEO/COO/title selection.
+  state.dom.jobTitle?.addEventListener("change", () => {
+    syncHrNewEmployeeManagerRoleSuggestion();
+    refreshHrReportingDepartmentChoices();
+    updateEmployeeSaveButtonState();
   });
 
   // EMPLOYEE BIODATA COMPLETION - STEP 3I
@@ -10270,6 +11737,10 @@ function bindEvents() {
   // immediately refreshes the employee save button state.
   state.dom.assignedLineManagerEmployeeId?.addEventListener("change", () => {
     applyAssignedLineManagerSelection();
+
+    // R-12C.5: the selected Primary Manager must never remain available as a
+    // Secondary Manager in the parent employee form.
+    refreshEmployeeSecondaryReportingManagerOptions();
     updateEmployeeSaveButtonState();
   });
 
@@ -10557,18 +12028,52 @@ function bindEvents() {
     resetOrganizationJobTitleForm();
   });
 
+  // Row Edit opens this same form; Cancel Edit returns it to Create mode.
+  state.dom.removeOrganizationJobTitleLinkBtn?.addEventListener("click", async () => {
+    const id = String(state.dom.editingOrganizationJobTitleId?.value || "").trim();
+    if (!id || !getOrganizationPositionHierarchyRecord(id)) return;
+    await deleteOrganizationPositionHierarchyRecord(id);
+  });
+
   // ORGANIZATION HR SETUP VALUES - STEP 4B-2
   // Keep Job Title button grey/disabled until required fields are complete.
   [
+    state.dom.organizationJobTitleScope,
     state.dom.organizationJobTitleDepartmentId,
     state.dom.organizationJobTitleName,
     state.dom.organizationJobTitleStatus,
+    state.dom.organizationJobTitleReportsTo,
   ].forEach((field) => {
     field?.addEventListener("input", updateOrganizationJobTitleSaveButtonState);
     field?.addEventListener("change", updateOrganizationJobTitleSaveButtonState);
   });
 
+  state.dom.organizationJobTitleScope?.addEventListener("change", () => {
+    syncOrganizationJobTitleScopeControls();
+  });
+  state.dom.organizationJobTitleStatus?.addEventListener('change', () => {
+    syncOrganizationJobTitleReportsToControls();
+    updateOrganizationJobTitleSaveButtonState();
+  });
+
+  syncOrganizationJobTitleScopeControls();
   updateOrganizationJobTitleSaveButtonState();
+
+  // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+  state.dom.organizationPositionHierarchyForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await handleOrganizationPositionHierarchySave();
+  });
+
+  state.dom.organizationPositionHierarchyJobTitleId?.addEventListener("change", () => {
+    syncOrganizationPositionHierarchyFormFromSelection();
+  });
+
+  state.dom.organizationPositionHierarchyParentId?.addEventListener("change", () => {
+    updateOrganizationPositionHierarchySaveButtonState();
+  });
+
+  updateOrganizationPositionHierarchySaveButtonState();
 
   state.dom.employeeDocumentsInput?.addEventListener("change", (event) => {
     addPendingFiles(event.target.files);
@@ -11072,7 +12577,7 @@ function bindEvents() {
   // DESCRIPTION ITEM 4 - STEP 2B
   // Add double-click collapse shortcuts after normal collapse buttons
   // have been bound. This is a helper only and does not change save logic.
-  bindDashboardCardDoubleClickCollapseShortcuts();
+  // H12 single-click: no whole-card double-click binding.
 
   state.dom.payrollSearchInput?.addEventListener("input", () => {
     applyPayrollSearch();
@@ -11208,7 +12713,15 @@ function bindEvents() {
   });
 
   state.dom.cancelPayrollEditBtn?.addEventListener("click", () => {
+    const shouldReturnToPayrollRecords = Boolean(state.currentEditingPayroll);
     exitPayrollEditMode();
+
+    // BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+    // Edit launched from Payroll Records. Cancel returns to that focused task
+    // instead of leaving HR on a reset Create Payroll Record screen.
+    if (shouldReturnToPayrollRecords) {
+      applyHrNavigationTask("payroll.records", { scroll: false });
+    }
   });
 
   // DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 5
@@ -11340,69 +12853,94 @@ function escapeBatchEmployeeCsvCell(value) {
 // Employee Number is optional:
 // - supplied values are preserved and validated;
 // - blank values are generated during employee creation.
-function downloadBatchEmployeeCsvImportTemplate() {
-  const headers = [
-    "First Name",
-    "Middle Name",
-    "Last Name",
-    "Employee Number",
-    "Work Email",
-    "Personal Email",
-    "Phone Number",
-    "Alternative Phone Number",
-    "Date Of Birth",
-    "Gender",
-    "Marital Status",
-    "Nationality",
-    "State Of Origin",
-    "Local Government Area",
-    "Town",
-    "Means Of Identification",
-    "Identification Document Number",
-    "Identification Issue State",
-    "NIN",
-    "Department",
-    "Job Title",
-    "Line Manager",
-    "Approver Email",
-    "Employment Date",
-    "Exit Date",
-    "HMO Provider",
-    "HMO Plan",
-    "HMO Number",
-    "Status",
-    "System Role",
+// PRE-7B - 20-field approved import interface; no dashboard roles or privileged fields.
+const PRE7B_EMPLOYEE_IMPORT_HEADERS = Object.freeze([
+  "First Name",
+  "Middle Name",
+  "Last Name",
+  "Employee Number",
+  "Work Email",
+  "Phone Number",
+  "Date Of Birth",
+  "Nationality",
+  "Town of Origin",
+  "Department",
+  "Job Title",
+  "Employment Date",
+  "Current Address Line 1",
+  "Current City",
+  "Current State Region",
+  "Current Country",
+  "Next Of Kin Full Name",
+  "Next Of Kin Relationship",
+  "Next Of Kin Phone Number",
+  "Next Of Kin Address"
+]);
 
-    // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
-    // Child biodata fields. These are saved after the employee row exists,
-    // because child tables require the created employee_id.
-    "Current Address Line 1",
-    "Current City",
-    "Current State Region",
-    "Current Country",
-    "Current Postal Code",
-    "Permanent Address Line 1",
-    "Permanent City",
-    "Permanent State Region",
-    "Permanent Country",
-    "Permanent Postal Code",
-    "Next Of Kin Full Name",
-    "Next Of Kin Relationship",
-    "Next Of Kin Phone Number",
-    "Next Of Kin Email",
-    "Next Of Kin Address",
-    "Education Institution",
-    "Education Qualification",
-    "Education Field Of Study",
-    "Education Graduation Year",
-    "Education Status",
-    "Highest Qualification",
-    "Dependant Full Name",
-    "Dependant Relationship",
-    "Dependant Date Of Birth",
-    "Dependant Phone Number",
-    "Dependant Coverage Type",
-  ];
+const GROUP_A_V6_COMPACT_IMPORT_HEADERS = Object.freeze([
+  "First Name", "Last Name", "Work Email", "Employee Number", "Phone Number",
+  "Department", "Job Title", "Employment Date", "Date Of Birth", "Nationality"
+]);
+
+const ALPATECH_LEGACY_IMPORT_HEADERS = Object.freeze([
+  "First Name",
+  "Middle Name",
+  "Last Name",
+  "Employee Number",
+  "Work Email",
+  "Personal Email",
+  "Phone Number",
+  "Alternative Phone Number",
+  "Date Of Birth",
+  "Gender",
+  "Marital Status",
+  "Nationality",
+  "State Of Origin",
+  "Local Government Area",
+  "Town of Origin",
+  "Means Of Identification",
+  "Identification Document Number",
+  "Identification Issue State",
+  "NIN",
+  "Department",
+  "Job Title",
+  "Employment Date",
+  "HMO Provider",
+  "HMO Plan",
+  "HMO Number",
+  "Current Address Line 1",
+  "Current City",
+  "Current State Region",
+  "Current Country",
+  "Current Postal Code",
+  "Permanent Address Line 1",
+  "Permanent City",
+  "Permanent State Region",
+  "Permanent Country",
+  "Permanent Postal Code",
+  "Next Of Kin Full Name",
+  "Next Of Kin Relationship",
+  "Next Of Kin Phone Number",
+  "Next Of Kin Email",
+  "Next Of Kin Address",
+  "Education Institution",
+  "Education Qualification",
+  "Education Field Of Study",
+  "Education Graduation Year",
+  "Education Status",
+  "Highest Qualification",
+  "Dependant Full Name",
+  "Dependant Relationship",
+  "Dependant Date Of Birth",
+  "Dependant Phone Number",
+  "Dependant Coverage Type"
+]);
+
+function downloadBatchEmployeeCsvImportTemplate() {
+  let headers;
+  try {
+    headers = window.BexHrGroupA.headers(GROUP_A_V6_COMPACT_IMPORT_HEADERS, ALPATECH_LEGACY_IMPORT_HEADERS);
+  } catch (error) { showPageAlert('warning', error.message); return; }
 
   const csvContent = headers
     .map(escapeBatchEmployeeCsvCell)
@@ -11529,7 +13067,8 @@ function buildBatchEmployeeInsertPayload(employee = {}, employeeNumber = "", ten
       String(employee.identification_document_number || "").trim() || null,
     identification_issue_state:
       String(employee.identification_issue_state || "").trim() || null,
-    nin: String(employee.nin || "").trim() || null,
+    // Stage A cutover: bulk CSV never writes NIN to the public employees row.
+    // NIN is entered only via the authorised individual-employee workflow.
 
     department: String(employee.department || "").trim(),
     job_title: String(employee.job_title || "").trim(),
@@ -11552,7 +13091,7 @@ function buildBatchEmployeeInsertPayload(employee = {}, employeeNumber = "", ten
     // the manual employee form. Existing mixed-case records are still handled
     // by the edit-mode normalisation above.
     system_role:
-      normaliseEmployeeSystemRoleForForm(employee.system_role) || null,
+      normaliseEmployeeSystemRoleForForm(employee.system_role) || "employee",
 
     // HRP-EMPNUM / HRP-80
     // Tenant-scope the batch row so RLS and data segmentation treat it
@@ -11949,6 +13488,13 @@ async function handleBatchEmployeeSubmit() {
       }
     }
 
+    // BEXHR_GROUP_A_20261108: imported custom fields are saved against created employee IDs.
+    let groupACustomWarning = '';
+    try {
+      const result = await window.BexHrGroupA.saveImported(createdRows, batchTenantId);
+      if (result.failures?.length) groupACustomWarning = result.failures.join('; ');
+    } catch (error) { groupACustomWarning = error.message; }
+    if (groupACustomWarning) childBiodataWarning = [childBiodataWarning, 'Custom biodata: ' + groupACustomWarning].filter(Boolean).join('; ');
     state.batchEmployeePreparedRows = [];
     if (state.dom.batchEmployeeCsvFile) state.dom.batchEmployeeCsvFile.value = "";
     if (state.dom.batchEmployeeReviewCount) {
@@ -12010,7 +13556,10 @@ async function handleBatchEmployeeSubmit() {
       `${createdRows.length} created; ${excludedRows.length} excluded.`,
     );
 
-    if (createdRows.length) redirectToFullEmployeeListAfterEmployeeSave();
+    if (createdRows.length) {
+      publishHrEmployeeLifecycleChange("", "batch_employees_created");
+      redirectToFullEmployeeListAfterEmployeeSave();
+    }
   } catch (error) {
     const errorMessage = String(error?.message || "").trim();
     console.error("Error creating batch employees:", error);
@@ -12059,10 +13608,13 @@ function setBatchEmployeeCsvImportLoading(isLoading) {
 // Normalise CSV headers so "Work Email", "work_email", and "work-email"
 // are treated safely as the same type of header.
 function normalizeBatchEmployeeCsvHeader(value = "") {
-  return String(value || "")
+  const header = String(value || "")
     .trim()
     .toLowerCase()
     .replace(/[\s_-]+/g, "");
+  // Permit the previous 20-field template's Town column as a single
+  // backwards-compatible alias. All retired 54-column fields remain rejected.
+  return header === "town" ? "townoforigin" : header;
 }
 
 // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1E
@@ -12318,7 +13870,7 @@ function buildBatchEmployeePreparedRowFromCsv(
 
   const stateOfOrigin = getBatchEmployeeCsvCell(row, headerMap, "State Of Origin");
   const localGovernmentArea = getBatchEmployeeCsvCell(row, headerMap, "Local Government Area");
-  const town = getBatchEmployeeCsvCell(row, headerMap, "Town");
+  const town = getBatchEmployeeCsvCell(row, headerMap, "Town of Origin");
 
   const meansOfIdentification = getBatchEmployeeCsvCell(row, headerMap, "Means Of Identification");
 
@@ -12333,9 +13885,8 @@ function buildBatchEmployeePreparedRowFromCsv(
       : "";
 
   const identificationIssueState = getBatchEmployeeCsvCell(row, headerMap, "Identification Issue State");
-  const nin = meansOfIdentification
-    ? getBatchEmployeeCsvCell(row, headerMap, "NIN")
-    : "";
+  // Stage A cutover: never extract a raw NIN from a CSV row.
+  // The import gate below rejects any non-empty legacy NIN column.
 
   const department = getBatchEmployeeCsvCell(row, headerMap, "Department");
   const jobTitle = getBatchEmployeeCsvCell(row, headerMap, "Job Title");
@@ -12345,14 +13896,11 @@ function buildBatchEmployeePreparedRowFromCsv(
   const rawEmploymentDate = getBatchEmployeeCsvCell(row, headerMap, "Employment Date");
   const employmentDate = normalizeBatchEmployeeCsvDate(rawEmploymentDate);
 
-  const rawExitDate = getBatchEmployeeCsvCell(row, headerMap, "Exit Date");
-  const exitDate = normalizeBatchEmployeeCsvDate(rawExitDate);
-
   const hmoProvider = getBatchEmployeeCsvCell(row, headerMap, "HMO Provider");
   const hmoPlan = getBatchEmployeeCsvCell(row, headerMap, "HMO Plan");
   const hmoNumber = getBatchEmployeeCsvCell(row, headerMap, "HMO Number");
 
-  const status = getBatchEmployeeCsvCell(row, headerMap, "Status") || "Active";
+  const status = "Active"; // Phase 7: lifecycle status is not imported from CSV.
   const systemRole = getBatchEmployeeCsvCell(row, headerMap, "System Role");
 
   // SYSTEM-WIDE BATCH EMPLOYEE CSV BIODATA ALIGNMENT - STEP 1B
@@ -12469,6 +14017,11 @@ function buildBatchEmployeePreparedRowFromCsv(
 
   if (incomingNameKey) seenNames.add(incomingNameKey);
 
+  // A CSV may name NIN Slip as the ID type, but must not carry the number.
+  // Secure individual-employee entry is required after creation.
+  if (isNinRequiredForMeansOfIdentification(meansOfIdentification)) {
+    warnings.push("NIN must be entered later in the secure employee form");
+  }
   if (!department) warnings.push("Department not provided");
   if (!jobTitle) warnings.push("Job Title not provided");
 
@@ -12480,10 +14033,6 @@ function buildBatchEmployeePreparedRowFromCsv(
 
   if (rawDateOfBirth && !dateOfBirth) {
     warnings.push("Date Of Birth was invalid and will be left blank");
-  }
-
-  if (rawExitDate && !exitDate) {
-    warnings.push("Exit Date was invalid and will be left blank");
   }
 
   const safePersonalEmail =
@@ -12618,7 +14167,7 @@ function buildBatchEmployeePreparedRowFromCsv(
     means_of_identification: meansOfIdentification || null,
     identification_document_number: identificationDocumentNumber || null,
     identification_issue_state: identificationIssueState || null,
-    nin: nin || null,
+    // NIN is intentionally absent from all prepared bulk-employee records.
 
     department: department || "",
     job_title: jobTitle || "",
@@ -12626,7 +14175,7 @@ function buildBatchEmployeePreparedRowFromCsv(
     approver_email: safeApproverEmail || null,
 
     employment_date: employmentDate || null,
-    exit_date: exitDate || null,
+    exit_date: null,
 
     hmo_provider: hmoProvider || null,
     hmo_plan: hmoPlan || null,
@@ -12835,6 +14384,8 @@ async function handleBatchEmployeeCsvImport() {
     const csvText = await file.text();
     const rows = parseBatchEmployeeCsvText(csvText);
 
+    // BEXHR_GROUP_A_20261108: fail closed until tenant configuration is loaded.
+    window.BexHrGroupA.headers(GROUP_A_V6_COMPACT_IMPORT_HEADERS, ALPATECH_LEGACY_IMPORT_HEADERS);
     // FLEXIBLE BATCH EMPLOYEE IMPORT - STEP 4
     // Only the minimum identity columns are mandatory. All other approved
     // template columns remain optional and can be completed after creation.
@@ -12865,11 +14416,58 @@ async function handleBatchEmployeeCsvImport() {
       return;
     }
 
+    // PRE-7B - Fail closed on unsupported, duplicate or legacy template columns.
+    // Explicitly prevents mass assignment of System Role, payroll/ID fields and
+    // obsolete child biodata, even when a CSV was crafted outside the UI.
+    const approvedHeaders = window.BexHrGroupA.acceptedHeaders(GROUP_A_V6_COMPACT_IMPORT_HEADERS, PRE7B_EMPLOYEE_IMPORT_HEADERS, ALPATECH_LEGACY_IMPORT_HEADERS);
+    const allowedHeaders = new Set(approvedHeaders.map(normalizeBatchEmployeeCsvHeader));
+    const uploadedHeaders = rows[headerRowIndex]
+      .map(normalizeBatchEmployeeCsvHeader).filter(Boolean);
+    if (
+      rows[headerRowIndex].some((name) => !normalizeBatchEmployeeCsvHeader(name)) ||
+      uploadedHeaders.some((name) => !allowedHeaders.has(name)) ||
+      new Set(uploadedHeaders).size !== uploadedHeaders.length
+    ) {
+      showPageAlert(
+        "warning",
+        "Import stopped: this CSV contains unsupported, retired or duplicate columns. Download this tenant's current Employee Template; values from old fields cannot be discarded silently.",
+      );
+      return;
+    }
+
     const headerMap = buildBatchEmployeeHeaderMap(rows[headerRowIndex]);
 
     const dataRows = rows
       .slice(headerRowIndex + 1)
       .filter((row) => row.some((cell) => String(cell || "").trim()));
+
+    // R14B: Never silently disregard values beyond the approved header width.
+    // Missing optional trailing cells are allowed; extra non-empty cells are not.
+    const approvedColumnCount = rows[headerRowIndex].length;
+    if (dataRows.some((row) => row.slice(approvedColumnCount).some((cell) => String(cell || "").trim()))) {
+      showPageAlert(
+        "warning",
+        "Import stopped: a CSV row has more values than the approved header columns. Check for misplaced commas or unapproved data.",
+      );
+      return;
+    }
+
+    // Phase 7 NIN Stage A security cutover: legacy templates may include the
+    // NIN header, but non-empty NIN values are never accepted or processed.
+    // Stop the entire import instead of silently dropping a sensitive value.
+    const ninCsvColumnIndex = uploadedHeaders.indexOf(
+      normalizeBatchEmployeeCsvHeader("NIN"),
+    );
+    if (
+      ninCsvColumnIndex !== -1 &&
+      dataRows.some((row) => String(row[ninCsvColumnIndex] ?? "").trim() !== "")
+    ) {
+      showPageAlert(
+        "warning",
+        "Import stopped: NIN values cannot be imported from CSV. Remove those values and use the secure employee form after creation.",
+      );
+      return;
+    }
 
     const preparedRows = [];
     const skippedRows = [];
@@ -12884,14 +14482,14 @@ async function handleBatchEmployeeCsvImport() {
     const seenEmployeeNumbers = new Set();
 
     dataRows.forEach((row, index) => {
-      const preparedRow = buildBatchEmployeePreparedRowFromCsv(
+      const preparedRow = window.BexHrGroupA.validateImportRow(buildBatchEmployeePreparedRowFromCsv(
         row,
         headerMap,
         headerRowIndex + index + 2,
         seenEmails,
         seenNames,
         seenEmployeeNumbers,
-      );
+      ), row, headerMap);
 
       if (preparedRow.skipped) {
         skippedRows.push(preparedRow);
@@ -13230,6 +14828,627 @@ function getSavedLineManagerOptionForEmployee(employee = {}) {
 // ASSIGN LINE MANAGER - STEP 1
 // Populate Assign Line Manager from existing active employee records.
 // This uses state.employees already loaded from Supabase, so no new table is needed.
+// The Edit form and the reporting shortcut must resolve the same selected
+// position, not a stale position ID left on the saved employee snapshot.
+function getHrReportingFormEmployee() {
+  const current = state.currentEditingEmployee || {};
+  const selectedDepartment = getSelectedEmployeeDepartmentValue();
+  const selectedTitle = state.dom.jobTitle?.value ?? current.job_title ?? "";
+  const positionUnchanged =
+    normalizeText(selectedDepartment) === normalizeText(current.department || "") &&
+    normalizeText(selectedTitle) === normalizeText(current.job_title || "");
+  return {
+    ...current,
+    id: current.id || state.dom.editingEmployeeId?.value || "",
+    // Keep the saved explicit position identity only while the form still
+    // refers to that position. Changed department/title must be re-resolved.
+    department_id: positionUnchanged ? (current.department_id || "") : "",
+    organization_job_title_id: positionUnchanged
+      ? (current.organization_job_title_id || "") : "",
+    job_title_id: positionUnchanged ? (current.job_title_id || "") : "",
+    tenant_id: current.tenant_id || state.currentProfile?.tenant_id || "",
+    department: selectedDepartment,
+    job_title: selectedTitle,
+    system_role:
+      getSelectedEmployeeSystemRoleValue() ||
+      current.system_role ||
+      "",
+  };
+}
+
+// BEXHR R-14B SYSTEM HIERARCHY RECONCILIATION
+// This mirrors only the broad DB direct-report rule. It does not assign a
+// replacement manager and does not use CEO/COO title strings.
+function isHrPrimaryReportCompatibleWithManagerPosition(manager = {}, employee = {}) {
+  // Phase 7B: position-change preflight must use the same predicate as the
+  // reporting dropdown and the final Save action.
+  return canHrPrimaryReportingManagerSitImmediatelyAboveEmployee(manager, employee);
+}
+
+function getHrInvalidPrimaryReportsForPendingManagerPosition(managerEmployeeId, pendingManager = {}) {
+  const managerKey = String(managerEmployeeId || "").trim();
+  if (!managerKey || !state.primaryReportingHierarchyLoaded) return [];
+
+  return (state.primaryReportingLines || [])
+    .filter((row) => String(row?.manager_employee_id || "").trim() === managerKey)
+    .map((row) => (state.employees || []).find((employee) => String(employee?.id || "").trim() === String(row?.employee_id || "").trim()))
+    .filter(Boolean)
+    .filter((employee) => !isHrPrimaryReportCompatibleWithManagerPosition(pendingManager, employee));
+}
+
+const HR_REPORTING_HIERARCHY_SYNC_STORAGE_KEY = "bexhrReportingHierarchySync";
+
+function publishHrReportingHierarchyChange(employeeId = "", reason = "reporting_hierarchy_changed") {
+  const detail = {
+    employeeId: String(employeeId || "").trim() || null,
+    reason: String(reason || "reporting_hierarchy_changed"),
+    changedAt: Date.now(),
+  };
+
+  window.dispatchEvent(new CustomEvent("bexhr:reporting-hierarchy-changed", { detail }));
+
+  try {
+    window.localStorage.setItem(
+      HR_REPORTING_HIERARCHY_SYNC_STORAGE_KEY,
+      JSON.stringify(detail),
+    );
+  } catch (error) {
+    console.warn("Unable to publish cross-tab reporting hierarchy refresh:", error);
+  }
+}
+
+// PHASE 7B PRIMARY/SECONDARY REPORTING: one tenant-specific position contract.
+// The database remains authoritative for saved relationships and privileges.
+// A configured position uses the organisation hierarchy; a departmental title
+// without a hierarchy link uses legacy eligibility ONLY until backend rollout.
+function getHrConfiguredReportingEligibility(manager, employee, kind = "secondary") {
+  const helper = globalThis.BexHRReportingPositionEligibility;
+  if (!helper || typeof helper.evaluate !== "function") {
+    // Fail closed in the real app if its required helper script did not load.
+    return { mode: "blocked", allowed: false, reason: "HIERARCHY_ENGINE_MISSING" };
+  }
+  return helper.evaluate({
+    kind,
+    tenantId: String(state.currentProfile?.tenant_id || "").trim(),
+    employee,
+    manager,
+    employees: state.employees || [],
+    positions: state.organizationJobTitles || [],
+    links: state.organizationJobTitleHierarchy || [],
+    departments: state.organizationDepartments || [],
+    loaded: state.organizationPositionHierarchyLoaded === true,
+    departmentReportingEnabled: state.p7bDepartmentReportingEnabled === true,
+    hierarchyCore: globalThis.BexHROrganizationHierarchy,
+  });
+}
+
+function isHrManagerInEmployeeDepartment(manager, employee) {
+  if (!manager || !employee) return false;
+  if (String(manager.id || "") === String(employee.id || "")) return false;
+  if (
+    manager.tenant_id &&
+    employee.tenant_id &&
+    manager.tenant_id !== employee.tenant_id
+  ) {
+    return false;
+  }
+
+  const configured = getHrConfiguredReportingEligibility(manager, employee, "secondary");
+  if (configured.mode !== "legacy") return configured.allowed;
+
+  // R-12C: whole-organization positions can manage across departments.
+  if (isHrWholeOrganizationEmployee(manager)) {
+    return true;
+  }
+
+  // BEXHR SIMPLIFIED REPORTING HIERARCHY - R-12C.5
+  // HR Admin is the single company-level parent for HR Standard and Manager
+  // roles. Reporting scope therefore cannot trap HR Admin inside the HR
+  // department when a Manager belongs to another department.
+  // This changes reporting eligibility only; it does not make HR Admin a
+  // whole-organization Job Title or change dashboard permissions.
+  if (getHrReportingRoleTier(manager) === 4) {
+    return true;
+  }
+
+  const key = (person) => {
+    const id = String(person.department_id || "").trim();
+    if (id) return "id:" + id;
+
+    const name = String(person.department || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+
+    if (!name) return "";
+
+    const matches = (state.organizationDepartments || []).filter(
+      (department) =>
+        (!person.tenant_id ||
+          !department.tenant_id ||
+          person.tenant_id === department.tenant_id) &&
+        String(department.department_name || "")
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, " ") === name,
+    );
+
+    if (matches.length > 1) return "";
+    return matches.length === 1
+      ? "id:" + matches[0].id
+      : "name:" + name;
+  };
+
+  const employeeKey = key(employee);
+  return Boolean(employeeKey && employeeKey === key(manager));
+}
+
+function preserveHrUnavailableManagerOption(select, managerId) {
+  const id = String(managerId || "").trim();
+  if (!select || !id || Array.from(select.options).some(option => option.value === id)) return;
+  const manager = (state.employees || []).find(person => String(person.id) === id);
+  const option = document.createElement("option");
+  option.value = id;
+  option.textContent = `${manager ? getEmployeeManagerDisplayName(manager) : "Saved manager"} — unavailable for this reporting scope; replace or remove`;
+  option.disabled = true;
+  option.selected = true;
+  option.dataset.managerName = manager ? getEmployeeManagerDisplayName(manager) : "Saved manager";
+  option.dataset.managerEmail = manager?.work_email || "";
+  select.appendChild(option);
+}
+
+// BEXHR REPORTING HIERARCHY UX CONSISTENCY - R-12B
+// One shared manager-candidate rule for Edit Employee and Manage Reporting Managers.
+// Reporting eligibility comes from the employee's system role, never job-title text.
+// Stored role "hr" covers both HR Standard and HR Admin; hr_access_level controls
+// their HR access tier without changing reporting-manager eligibility.
+const HR_REPORTING_MANAGER_ELIGIBLE_ROLES = new Set([
+  "manager",
+  "hr",
+  "hr_manager",
+]);
+
+function hasHrReportingManagerRole(employee = {}) {
+  const systemRole = normalizeText(
+    employee.system_role || employee.role || "",
+  );
+
+  return HR_REPORTING_MANAGER_ELIGIBLE_ROLES.has(systemRole);
+}
+
+// BEXHR REPORTING ROLE ORDER - R-12C.1
+// Normal departmental reporting follows the locked BexHR ladder:
+// HR Admin > HR Standard > Manager > Employee.
+// Whole-organization Manager positions are the deliberate exception: they may
+// sit above departmental roles and may themselves report only to another
+// whole-organization Manager. Primary graph checks still prevent cycles.
+function getHrReportingRoleTier(employee = {}) {
+  const systemRole = normalizeText(
+    employee.system_role || employee.role || "",
+  );
+
+  if (systemRole === "hr" || systemRole === "hr_manager") {
+    return formatEmployeeAccessRoleLabel(employee) === "HR Admin" ? 4 : 3;
+  }
+
+  if (systemRole === "manager") return 2;
+  return 1;
+}
+
+function isHrWholeOrganizationReportingManager(employee = {}) {
+  // Organisation position and application role are independent. HR/Manager
+  // login roles may occupy the same configured executive position.
+  return Boolean(
+    isHrWholeOrganizationEmployee(employee) &&
+    hasHrReportingManagerRole(employee)
+  );
+}
+
+// BEXHR PHASE 7B: CONFIGURED ORGANIZATION POSITION HIERARCHY.
+// Job Title is a position, not a login role. Never infer CEO, COO or any
+// executive order from a title string. The tenant's configured hierarchy is
+// authoritative, including an explicit root and vacancies between positions.
+function getHrEmployeeOrganizationPosition(employee = {}) {
+  if (!state.organizationPositionHierarchyLoaded ||
+      !isHrWholeOrganizationEmployee(employee)) return null;
+
+  const title = normalizeText(employee.job_title || "");
+  const tenantId = String(employee.tenant_id || state.currentProfile?.tenant_id || "").trim();
+  if (!title || !tenantId) return null;
+
+  const positions = (state.organizationJobTitles || []).filter((record) =>
+    normalizeText(record.job_title || "") === title &&
+    normalizeText(record.status || "active") === "active" &&
+    !String(record.department_id || "").trim() &&
+    (!record.tenant_id || String(record.tenant_id) === tenantId)
+  );
+  if (positions.length !== 1) return null;
+
+  const rows = (state.organizationJobTitleHierarchy || []).filter((record) =>
+    String(record.job_title_id || "") === String(positions[0].id) &&
+    String(record.tenant_id || "") === tenantId
+  );
+  if (rows.length !== 1) return null;
+
+  return {
+    id: String(positions[0].id),
+    tenantId,
+    parentId: String(rows[0].reports_to_job_title_id || "").trim(),
+  };
+}
+
+function isHrPositionOccupiedByActiveManager(positionId, tenantId) {
+  const position = getOrganizationJobTitleRecordById(positionId);
+  if (!position) return false;
+  return (state.employees || []).some((person) =>
+    String(person.tenant_id || "") === tenantId &&
+    normalizeText(person.status) === "active" &&
+    isHrWholeOrganizationReportingManager(person) &&
+    normalizeText(person.job_title || "") === normalizeText(position.job_title || "")
+  );
+}
+
+function getHrNearestOccupiedAncestorPositionId(employee = {}) {
+  const resolved = getHrEmployeeOrganizationPosition(employee);
+  if (!resolved) return "";
+  let nextId = resolved.parentId;
+  const seen = new Set([resolved.id]);
+
+  while (nextId && !seen.has(nextId)) {
+    seen.add(nextId);
+    if (isHrPositionOccupiedByActiveManager(nextId, resolved.tenantId)) {
+      return nextId;
+    }
+    const next = getOrganizationPositionHierarchyRecord(nextId);
+    if (!next || String(next.tenant_id || "") !== resolved.tenantId) {
+      return "";
+    }
+    nextId = String(next.reports_to_job_title_id || "").trim();
+  }
+  return "";
+}
+
+function isHrSameOrAncestorPosition(managerPositionId, employeePositionId, tenantId) {
+  let nextId = String(employeePositionId || "").trim();
+  const seen = new Set();
+  while (nextId && !seen.has(nextId)) {
+    if (nextId === managerPositionId) return true;
+    seen.add(nextId);
+    const next = getOrganizationPositionHierarchyRecord(nextId);
+    if (!next || String(next.tenant_id || "") !== tenantId) return false;
+    nextId = String(next.reports_to_job_title_id || "").trim();
+  }
+  return false;
+}
+
+// The closest occupied level to HR Admin is the lowest occupied organization
+// position: no *occupied* descendants in its tenant hierarchy. If executives
+// are all vacant, HR Admin is the acting highest level and has no Primary.
+function isHrLowestOccupiedOrganizationPosition(employee = {}) {
+  const position = getHrEmployeeOrganizationPosition(employee);
+  if (!position || !isHrWholeOrganizationReportingManager(employee) ||
+      !isHrPositionOccupiedByActiveManager(position.id, position.tenantId)) {
+    return false;
+  }
+  const rows = (state.organizationJobTitleHierarchy || []).filter(
+    (row) => String(row.tenant_id || "") === position.tenantId,
+  );
+  return !rows.some((row) => {
+    const otherId = String(row.job_title_id || "");
+    return otherId !== position.id &&
+      isHrSameOrAncestorPosition(position.id, otherId, position.tenantId) &&
+      isHrPositionOccupiedByActiveManager(otherId, position.tenantId);
+  });
+}
+
+function canHrReportingManagerSitAboveEmployee(manager, employee) {
+  if (!manager || !employee || !hasHrReportingManagerRole(manager)) return false;
+  const configured = typeof getHrConfiguredReportingEligibility === "function"
+    ? getHrConfiguredReportingEligibility(manager, employee, "secondary")
+    : { mode: "legacy", allowed: false };
+  if (configured.mode !== "legacy") return configured.allowed;
+  const managerWhole = isHrWholeOrganizationReportingManager(manager);
+  const employeeWhole = isHrWholeOrganizationEmployee(employee);
+
+  if (employeeWhole) {
+    if (!managerWhole) return false;
+    const targetPosition = getHrEmployeeOrganizationPosition(employee);
+    const managerPosition = getHrEmployeeOrganizationPosition(manager);
+    // Any highest occupied organization position (including an explicit root)
+    // reports to nobody, neither Primary nor Secondary.
+    if (!targetPosition || !managerPosition ||
+        !getHrNearestOccupiedAncestorPositionId(employee)) return false;
+    return targetPosition.tenantId === managerPosition.tenantId &&
+      isHrSameOrAncestorPosition(
+        managerPosition.id, targetPosition.id, targetPosition.tenantId,
+      );
+  }
+
+  // Secondary candidates may include a whole-organization Manager supporting
+  // a departmental employee. Existing role/department checks still apply.
+  if (managerWhole) return Boolean(getHrEmployeeOrganizationPosition(manager));
+
+  return getHrReportingRoleTier(manager) >= getHrReportingRoleTier(employee);
+}
+
+function isHrReportingManagerCandidate(manager, employee) {
+  if (!manager || !employee) return false;
+  return Boolean(
+    normalizeText(manager.status) === "active" &&
+    String(manager.work_email || "").trim() &&
+    isHrManagerInEmployeeDepartment(manager, employee) &&
+    hasHrReportingManagerRole(manager) &&
+    canHrReportingManagerSitAboveEmployee(manager, employee)
+  );
+}
+
+function canHrPrimaryReportingManagerSitImmediatelyAboveEmployee(manager, employee) {
+  if (!manager || !employee || !hasHrReportingManagerRole(manager)) return false;
+  const configured = typeof getHrConfiguredReportingEligibility === "function"
+    ? getHrConfiguredReportingEligibility(manager, employee, "primary")
+    : { mode: "legacy", allowed: false };
+  if (configured.mode !== "legacy") return configured.allowed;
+  const managerWhole = isHrWholeOrganizationReportingManager(manager);
+  const employeeWhole = isHrWholeOrganizationEmployee(employee);
+
+  if (employeeWhole) {
+    if (!managerWhole) return false;
+    const managerPosition = getHrEmployeeOrganizationPosition(manager);
+    const employeePosition = getHrEmployeeOrganizationPosition(employee);
+    if (!managerPosition || !employeePosition ||
+        managerPosition.tenantId !== employeePosition.tenantId) return false;
+    const nearestOccupiedParent = getHrNearestOccupiedAncestorPositionId(employee);
+    return Boolean(nearestOccupiedParent && managerPosition.id === nearestOccupiedParent);
+  }
+
+  const employeeTier = getHrReportingRoleTier(employee);
+  const managerTier = getHrReportingRoleTier(manager);
+  // No executive positions occupied -> HR Admin becomes highest and has no
+  // Primary. CEO present but COO vacant -> HR Admin reports to CEO (nearest
+  // occupied lower/parent tier, not a hardcoded title).
+  if (employeeTier === 4) {
+    return managerWhole && isHrLowestOccupiedOrganizationPosition(manager);
+  }
+  if (managerWhole) return false;
+  // HR Standard and departmental Managers are sibling branches below HR Admin.
+  if (employeeTier === 3 || employeeTier === 2) return managerTier === 4;
+  // Normal employees report directly to departmental Managers.
+  if (employeeTier === 1) return managerTier === 2;
+  return false;
+}
+
+function getHrPrimaryReportingDescendantIds(employeeId) {
+  const rootEmployeeId = String(employeeId || "").trim();
+  const descendantIds = new Set();
+
+  if (!rootEmployeeId) return descendantIds;
+
+  const childrenByManagerId = new Map();
+
+  (state.primaryReportingLines || []).forEach((row) => {
+    if (normalizeText(row?.manager_type || "") !== "primary") return;
+    if (normalizeText(row?.status || "active") !== "active") return;
+
+    const childEmployeeId = String(row?.employee_id || "").trim();
+    const managerEmployeeId = String(
+      row?.manager_employee_id || "",
+    ).trim();
+
+    if (!childEmployeeId || !managerEmployeeId) return;
+
+    if (!childrenByManagerId.has(managerEmployeeId)) {
+      childrenByManagerId.set(managerEmployeeId, new Set());
+    }
+
+    childrenByManagerId
+      .get(managerEmployeeId)
+      .add(childEmployeeId);
+  });
+
+  const queue = [rootEmployeeId];
+
+  while (queue.length) {
+    const managerEmployeeId = queue.shift();
+
+    (childrenByManagerId.get(managerEmployeeId) || []).forEach(
+      (childEmployeeId) => {
+        if (
+          childEmployeeId === rootEmployeeId ||
+          descendantIds.has(childEmployeeId)
+        ) {
+          return;
+        }
+
+        descendantIds.add(childEmployeeId);
+        queue.push(childEmployeeId);
+      },
+    );
+  }
+
+  return descendantIds;
+}
+
+function isHrPrimaryManagerHierarchySafe(
+  employeeId,
+  candidateManagerEmployeeId,
+) {
+  const employeeKey = String(employeeId || "").trim();
+  const candidateKey = String(
+    candidateManagerEmployeeId || "",
+  ).trim();
+
+  if (!employeeKey || !candidateKey) return true;
+  if (employeeKey === candidateKey) return false;
+
+  // Existing employees fail closed in the UI if hierarchy data could not load.
+  // The R-12 database trigger remains authoritative in every case.
+  if (!state.primaryReportingHierarchyLoaded) {
+    return false;
+  }
+
+  return !getHrPrimaryReportingDescendantIds(
+    employeeKey,
+  ).has(candidateKey);
+}
+
+function getHrReportingManagerCandidatesForEmployee(
+  employee,
+  {
+    primaryOnly = false,
+    excludedManagerIds = [],
+  } = {},
+) {
+  const employeeKey = String(employee?.id || "").trim();
+
+  const excludedIds = new Set(
+    (excludedManagerIds || [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean),
+  );
+
+  return (state.employees || [])
+    .filter((manager) => {
+      const managerId = String(manager?.id || "").trim();
+
+      if (
+        !managerId ||
+        excludedIds.has(managerId) ||
+        !isHrReportingManagerCandidate(manager, employee)
+      ) {
+        return false;
+      }
+
+      // BEXHR GLOBAL REPORTING DESCENDANT SAFETY - R-12C.5
+      // Descendants never appear as Primary or Secondary/Supporting Manager
+      // candidates. This is global, not employee-specific UI cleanup.
+      // Existing employees fail closed if hierarchy data is unavailable.
+      if (
+        employeeKey &&
+        !isHrPrimaryManagerHierarchySafe(
+          employeeKey,
+          managerId,
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        primaryOnly &&
+        !canHrPrimaryReportingManagerSitImmediatelyAboveEmployee(
+          manager,
+          employee,
+        )
+      ) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort((left, right) =>
+      getEmployeeManagerDisplayName(left).localeCompare(
+        getEmployeeManagerDisplayName(right),
+      ),
+    );
+}
+
+// BEXHR_H6B_ADOPTION_PREVIEW_V1: read-only HR Admin adoption review of existing reporting lines.
+// Uses already tenant-filtered state. Does not query/write data or grant authority.
+window.addEventListener('bexhr:h6b-adoption-review-request', () => {
+  const destination = document.getElementById('bexhrHierarchyAdoptionResults');
+  if (!destination) return;
+  const helper = window.BexHRHierarchyAdoptionPreview;
+  if (!helper || typeof helper.analyze !== 'function') {
+    destination.textContent = 'Existing-reporting review is unavailable. No changes were made.';
+    return;
+  }
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    destination.textContent = 'Only the authorised HR Admin can review company reporting adoption.';
+    return;
+  }
+  const tenantId = String(state.currentProfile?.tenant_id || '').trim();
+  try {
+    helper.render(destination, helper.analyze({
+      tenantId,
+      employees: state.employees || [],
+      // Existing loader already enforces .eq('tenant_id', tenantId) before
+      // caching lines. Add tenant tag for the pure model's explicit gate.
+      reportingLines: (state.primaryReportingLines || []).map((row) => ({ ...row, tenant_id: tenantId })),
+      positions: state.organizationJobTitles || [],
+      links: state.organizationJobTitleHierarchy || [],
+      departments: state.organizationDepartments || [],
+      positionLoaded: state.organizationPositionHierarchyLoaded === true,
+      reportingLoaded: state.primaryReportingHierarchyLoaded === true,
+      core: window.BexHROrganizationHierarchy,
+    }));
+  } catch (_) {
+    destination.textContent = 'The current hierarchy could not be reviewed safely. No records were changed.';
+  }
+});
+
+async function loadHrPrimaryReportingHierarchy() {
+  try {
+    const tenantId = getRequiredTenantIdForHrEmployeeData();
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("employee_reporting_lines")
+      .select("employee_id, manager_employee_id, manager_type, status")
+      .eq("tenant_id", tenantId);
+
+    if (error) throw error;
+
+    state.primaryReportingLines = (Array.isArray(data) ? data : [])
+      .filter(
+        (row) =>
+          normalizeText(row?.manager_type || "") === "primary" &&
+          normalizeText(row?.status || "active") === "active" &&
+          String(row?.employee_id || "").trim() &&
+          String(row?.manager_employee_id || "").trim(),
+      );
+
+    state.primaryReportingHierarchyLoaded = true;
+    return true;
+  } catch (error) {
+    console.error(
+      "Error loading Primary reporting hierarchy:",
+      error,
+    );
+
+    state.primaryReportingLines = [];
+    state.primaryReportingHierarchyLoaded = false;
+    return false;
+  }
+}
+
+function showHrReportingHierarchyBlockedFeedback(
+  { selfManager = false } = {},
+) {
+  const message = selfManager
+    ? "An employee cannot be assigned as their own manager. Choose a different manager."
+    : "This Primary Manager assignment would create a circular reporting relationship. Choose a manager outside this employee's reporting chain.";
+
+  showPageAlert("warning", message);
+
+  showDashboardToast(
+    "warning",
+    selfManager
+      ? "Self-management blocked"
+      : "Circular reporting blocked",
+    message,
+  );
+
+  return message;
+}
+
+function refreshHrReportingDepartmentChoices() {
+  const primary = state.dom.assignedLineManagerEmployeeId;
+  const previous = primary?.value || "";
+  populateAssignedLineManagerOptions(previous);
+  refreshEmployeeSecondaryReportingManagerOptions();
+  applyAssignedLineManagerSelection();
+  updateEmployeeSaveButtonState();
+}
+
 function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
   const select = state.dom.assignedLineManagerEmployeeId;
   if (!select) return;
@@ -13240,45 +15459,21 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
 
   const currentValue = String(preferredEmployeeId || select.value || "").trim();
 
-  // ASSIGN LINE MANAGER - STEP 1A
-  // Do not show every employee as a possible line manager.
-  // Only active employees with manager-level system roles or manager-style job titles
-  // should appear in the Assign Line Manager dropdown.
-  const managerEligibleRoles = new Set([
-    "manager",
-    "hr",
-    "hr_manager",
-  ]);
+  // BEXHR REPORTING HIERARCHY UX CONSISTENCY - R-12B
+  // Primary Manager choices use the same base eligibility rule as the reporting
+  // shortcut, then remove anyone already below this employee in the Primary chain.
+  const targetEmployee = getHrReportingFormEmployee();
 
-  const managerCandidates = (state.employees || [])
-    .filter((employee) => {
-      const isActive = normalizeText(employee.status) === "active";
-      const hasEmail = Boolean(String(employee.work_email || "").trim());
-      const isNotCurrentEmployee =
-        String(employee.id || "").trim() !== currentEditingEmployeeId;
+  const baseManagerCandidates =
+    getHrReportingManagerCandidatesForEmployee(
+      targetEmployee,
+      { primaryOnly: false },
+    );
 
-      const systemRole = normalizeText(employee.system_role || employee.role || "");
-      const jobTitle = normalizeText(employee.job_title || "");
-
-      const hasManagerRole = managerEligibleRoles.has(systemRole);
-
-      const hasManagerJobTitle =
-        jobTitle.includes("manager") ||
-        jobTitle.includes("supervisor") ||
-        jobTitle.includes("lead") ||
-        jobTitle.includes("head");
-
-      return (
-        isActive &&
-        hasEmail &&
-        isNotCurrentEmployee &&
-        (hasManagerRole || hasManagerJobTitle)
-      );
-    })
-    .sort((a, b) =>
-      getEmployeeManagerDisplayName(a).localeCompare(
-        getEmployeeManagerDisplayName(b),
-      ),
+  const managerCandidates =
+    getHrReportingManagerCandidatesForEmployee(
+      targetEmployee,
+      { primaryOnly: true },
     );
 
   // ASSIGN LINE MANAGER - STEP 1D
@@ -13293,9 +15488,16 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
   const placeholderOption = document.createElement("option");
   placeholderOption.value = "";
   placeholderOption.textContent =
-    managerCandidates.length || savedManagerOption
-      ? "Select line manager"
-      : "No manager employee records available";
+    currentEditingEmployeeId &&
+      !state.primaryReportingHierarchyLoaded
+      ? "Reporting hierarchy unavailable - refresh records"
+      : managerCandidates.length || savedManagerOption
+        ? "Select line manager"
+        : state.p7bDepartmentReportingEnabled === true
+          ? "No configured Primary Manager for this position"
+          : baseManagerCandidates.length
+            ? "No valid Primary Managers outside this reporting chain"
+            : "No eligible managers for this employee";
   select.appendChild(placeholderOption);
 
   managerCandidates.forEach((employee) => {
@@ -13324,13 +15526,15 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
       option.value = savedManagerOption.id;
       // EMPLOYEE BIODATA COMPLETION - STEP 6B-PREP
       // Avoid repeating email in the dropdown because Approver Email is displayed separately.
-      option.textContent = `${savedManagerOption.name} (saved manager)`;
+      option.textContent = `${savedManagerOption.name} (saved manager — replace with an eligible manager)`;
+      option.disabled = true;
       option.dataset.managerName = savedManagerOption.name;
       option.dataset.managerEmail = savedManagerOption.email;
       select.appendChild(option);
     }
   }
 
+  preserveHrUnavailableManagerOption(select, currentValue);
   if (currentValue) {
     const matchingOption = Array.from(select.options).find(
       (option) => String(option.value) === currentValue,
@@ -13444,54 +15648,63 @@ function syncAssignedLineManagerFromSavedValues(employee = {}) {
 // Return manager candidates that can be assigned as reporting lines.
 // This mirrors the existing Primary Line Manager rule: active employees
 // with manager-level roles or manager-style job titles only.
-function getEmployeeReportingLineManagerCandidates() {
-  const currentEditingEmployeeId = String(
-    state.currentEditingEmployee?.id || state.dom.editingEmployeeId?.value || "",
+function getEmployeeReportingLineManagerCandidates(selectedManagerId = "") {
+  const selectedId = String(selectedManagerId || "").trim();
+
+  const primaryManagerId = String(
+    state.dom.assignedLineManagerEmployeeId?.value || "",
   ).trim();
 
-  const managerEligibleRoles = new Set([
-    "manager",
-    "hr",
-    "hr_manager",
-  ]);
-
-  return (state.employees || [])
-    .filter((employee) => {
-      const isActive = normalizeText(employee.status) === "active";
-      const hasEmail = Boolean(String(employee.work_email || "").trim());
-      const isNotCurrentEmployee =
-        String(employee.id || "").trim() !== currentEditingEmployeeId;
-
-      const systemRole = normalizeText(employee.system_role || employee.role || "");
-      const jobTitle = normalizeText(employee.job_title || "");
-
-      const hasManagerRole = managerEligibleRoles.has(systemRole);
-
-      const hasManagerJobTitle =
-        jobTitle.includes("manager") ||
-        jobTitle.includes("supervisor") ||
-        jobTitle.includes("lead") ||
-        jobTitle.includes("head");
-
-      return (
-        isActive &&
-        hasEmail &&
-        isNotCurrentEmployee &&
-        (hasManagerRole || hasManagerJobTitle)
-      );
-    })
-    .sort((a, b) =>
-      getEmployeeManagerDisplayName(a).localeCompare(
-        getEmployeeManagerDisplayName(b),
-      ),
+  const otherSecondaryManagerIds = Array.from(
+    state.dom.employeeReportingLinesList?.querySelectorAll(
+      "[data-reporting-line-manager-id]",
+    ) || [],
+  )
+    .map((select) => String(select.value || "").trim())
+    .filter(
+      (managerId) =>
+        managerId &&
+        managerId !== selectedId,
     );
+
+  return getHrReportingManagerCandidatesForEmployee(
+    getHrReportingFormEmployee(),
+    {
+      primaryOnly: false,
+      excludedManagerIds: [
+        primaryManagerId,
+        ...otherSecondaryManagerIds,
+      ].filter(Boolean),
+    },
+  );
+}
+
+function refreshEmployeeSecondaryReportingManagerOptions(
+  changedSelect = null,
+) {
+  const selects = Array.from(
+    state.dom.employeeReportingLinesList?.querySelectorAll(
+      "[data-reporting-line-manager-id]",
+    ) || [],
+  );
+
+  selects.forEach((select) => {
+    // When HR changes one Secondary Manager, rebuild the sibling rows so the
+    // newly selected manager disappears from their available choices.
+    if (changedSelect && select === changedSelect) return;
+
+    const selectedManagerId = String(select.value || "").trim();
+    select.innerHTML = buildEmployeeReportingLineManagerOptions(
+      selectedManagerId,
+    );
+  });
 }
 
 // EMPLOYEE BIODATA COMPLETION - STEP 3C
 // Build select options for additional reporting manager rows.
 function buildEmployeeReportingLineManagerOptions(selectedManagerId = "") {
   const selectedId = String(selectedManagerId || "").trim();
-  const candidates = getEmployeeReportingLineManagerCandidates();
+  const candidates = getEmployeeReportingLineManagerCandidates(selectedId);
 
   const options = [
     `<option value="">Select manager</option>`,
@@ -13510,6 +15723,10 @@ function buildEmployeeReportingLineManagerOptions(selectedManagerId = "") {
     `);
   });
 
+  if (selectedId && !candidates.some(person => String(person.id) === selectedId)) {
+    const manager = (state.employees || []).find(person => String(person.id) === selectedId);
+    options.push(`<option value="${escapeHtml(selectedId)}" disabled selected>${escapeHtml(manager ? getEmployeeManagerDisplayName(manager) : "Saved manager")} — unavailable for this reporting scope; replace or remove</option>`);
+  }
   return options.join("");
 }
 
@@ -13547,7 +15764,6 @@ function addEmployeeReportingLineRow(rowData = {}) {
 
   // EMPLOYEE BIODATA COMPLETION - STEP 3I
   // Keep additional reporting lines simple in the employee biodata form.
-  // The Product Owner asked for 2+ line managers, not complex reporting types.
   // Additional managers are saved as Secondary by default.
   row.innerHTML = `
     <div class="row g-3 align-items-end">
@@ -13582,9 +15798,19 @@ function addEmployeeReportingLineRow(rowData = {}) {
     field.addEventListener("change", updateEmployeeSaveButtonState);
   });
 
+  const managerSelect = row.querySelector("[data-reporting-line-manager-id]");
+  managerSelect?.addEventListener("change", () => {
+    // R-12C.5: once selected, remove this Secondary Manager from sibling
+    // Secondary dropdowns while preserving this row's current value.
+    refreshEmployeeSecondaryReportingManagerOptions(managerSelect);
+  });
+
   row.querySelector("[data-remove-reporting-line-row]")?.addEventListener("click", () => {
     row.remove();
     renderEmployeeReportingLinesEmptyStateIfNeeded();
+
+    // A removed Secondary Manager becomes available to the remaining rows.
+    refreshEmployeeSecondaryReportingManagerOptions();
     updateEmployeeSaveButtonState();
   });
 
@@ -13711,6 +15937,107 @@ function getEmployeeReportingLinesFromForm() {
 // and the same manager cannot be assigned twice.
 function validateEmployeeReportingLines() {
   const rows = getEmployeeReportingLinesFromForm();
+  const targetEmployee = getHrReportingFormEmployee();
+
+  const primaryEligibleIds = new Set(
+    getHrReportingManagerCandidatesForEmployee(
+      targetEmployee,
+      { primaryOnly: true },
+    ).map((person) => String(person.id)),
+  );
+
+  const secondaryEligibleIds = new Set(
+    getHrReportingManagerCandidatesForEmployee(
+      targetEmployee,
+      { primaryOnly: false },
+    ).map((person) => String(person.id)),
+  );
+
+  const invalidAssignment = rows.find((row) => {
+    const managerId = String(row.managerEmployeeId || "").trim();
+    if (!managerId) return false;
+
+    const isPrimary =
+      normalizeText(row.managerType || "") === "primary";
+
+    return !(isPrimary
+      ? primaryEligibleIds
+      : secondaryEligibleIds
+    ).has(managerId);
+  });
+
+  if (invalidAssignment) {
+    const managerId = String(
+      invalidAssignment.managerEmployeeId || "",
+    ).trim();
+
+    const isPrimary =
+      normalizeText(invalidAssignment.managerType || "") ===
+      "primary";
+
+    const invalidManager = (state.employees || []).find(
+      (person) => String(person?.id || "").trim() === managerId,
+    );
+
+    const invalidWholeOrganizationOrder = Boolean(
+      isPrimary &&
+      invalidManager &&
+      isHrWholeOrganizationEmployee(targetEmployee) &&
+      isHrWholeOrganizationReportingManager(invalidManager) &&
+      !canHrReportingManagerSitAboveEmployee(
+        invalidManager,
+        targetEmployee,
+      )
+    );
+
+    if (
+      isPrimary &&
+      state.primaryReportingHierarchyLoaded &&
+      !isHrPrimaryManagerHierarchySafe(
+        targetEmployee?.id,
+        managerId,
+      )
+    ) {
+      showHrReportingHierarchyBlockedFeedback();
+    } else if (invalidWholeOrganizationOrder) {
+      const employeeTitle = String(
+        targetEmployee?.job_title || "Whole-organization position",
+      ).trim();
+      const managerTitle = String(
+        invalidManager?.job_title || "selected manager",
+      ).trim();
+      const hasOccupiedAncestor = Boolean(
+        getHrNearestOccupiedAncestorPositionId(targetEmployee),
+      );
+      const message = !hasOccupiedAncestor
+        ? "<strong>" + escapeHtml(employeeTitle) + "</strong> is the highest occupied organization position and must not have a reporting manager. Remove " + escapeHtml(managerTitle) + " before saving."
+        : "<strong>" + escapeHtml(employeeTitle) + "</strong> can report only to the nearest occupied configured ancestor. " + escapeHtml(managerTitle) + " is not eligible. Replace or remove the Primary Manager before saving.";
+
+      showPageAlert("warning", message);
+      showDashboardToast(
+        "warning",
+        "Primary Manager must be changed",
+        !hasOccupiedAncestor
+          ? employeeTitle + " is highest occupied and cannot report to " + managerTitle + "."
+          : managerTitle + " is not the nearest occupied parent of " + employeeTitle + ".",
+      );
+    } else {
+      showPageAlert(
+        "warning",
+        "Primary and secondary managers must be eligible for the employee's reporting scope. Department managers stay within their department; whole-organization managers must follow the executive reporting order. Replace or remove the unavailable assignment before saving.",
+      );
+    }
+
+    const field = invalidAssignment.rowElement?.matches?.("select")
+      ? invalidAssignment.rowElement
+      : invalidAssignment.rowElement?.querySelector?.(
+        "[data-reporting-line-manager-id]",
+      );
+
+    field?.classList.add("is-invalid");
+    if (field) focusEmployeeBiodataField(field);
+    return false;
+  }
   const managerRowsById = new Map();
   let isValid = true;
   let firstInvalidField = null;
@@ -13834,6 +16161,7 @@ function validateEmployeeReportingLines() {
 // Save reporting lines by replacing this employee's current reporting setup.
 // This keeps the child table aligned with the latest employee form state.
 async function saveEmployeeReportingLinesForEmployee(employeeId) {
+  if (!validateEmployeeReportingLines()) throw new Error("Correct the reporting manager assignments before saving.");
   const employeeKey = String(employeeId || "").trim();
   if (!employeeKey) return;
 
@@ -13869,20 +16197,20 @@ async function saveEmployeeReportingLinesForEmployee(employeeId) {
       updated_by: state.currentUser?.id || null,
     }));
 
-  const { error: deleteError } = await supabase
-    .from("employee_reporting_lines")
-    .delete()
-    .eq("employee_id", employeeKey);
+  // BEXHR REPORTING HIERARCHY INTEGRITY - R-12
+  // Replace reporting lines in one database transaction.
+  // If the hierarchy guard rejects a self/circular Primary Manager assignment,
+  // PostgreSQL rolls the whole replacement back so the employee's previous
+  // valid reporting lines are not lost.
+  const { error: replaceError } = await supabase.rpc(
+    "hr_replace_employee_reporting_lines",
+    {
+      p_employee_id: employeeKey,
+      p_rows: reportingRows,
+    },
+  );
 
-  if (deleteError) throw deleteError;
-
-  if (!reportingRows.length) return;
-
-  const { error: insertError } = await supabase
-    .from("employee_reporting_lines")
-    .insert(reportingRows);
-
-  if (insertError) throw insertError;
+  if (replaceError) throw replaceError;
 }
 
 // EMPLOYEE BIODATA COMPLETION - STEP 3C
@@ -13905,7 +16233,9 @@ async function loadEmployeeReportingLinesForEdit(employeeId) {
 
     if (error) throw error;
 
-    const rows = Array.isArray(data) ? data : [];
+    const rows = (Array.isArray(data) ? data : []).filter(
+      (row) => normalizeText(row?.status || "active") === "active",
+    );
 
     const primaryRow = rows.find(
       (row) => normalizeText(row.manager_type) === "primary",
@@ -14014,7 +16344,7 @@ function validateEmployeeAddressFields() {
   let isValid = true;
   let firstInvalidField = null;
 
-  getEmployeeAddressGroups().forEach((group) => {
+  getEmployeeAddressGroups().filter((group) => group.type === "Current").forEach((group) => {
     const hasAnyValue = isEmployeeAddressGroupStarted(group);
     const hasMainAddress = Boolean(String(group.addressLine1?.value || "").trim());
 
@@ -14049,7 +16379,7 @@ function buildEmployeeAddressRowsForEmployee(employeeId) {
   const tenantId = getRequiredTenantIdForHrEmployeeData();
 
   return getEmployeeAddressGroups()
-    .filter((group) => isEmployeeAddressGroupStarted(group))
+    .filter((group) => group.type === "Current" && isEmployeeAddressGroupStarted(group))
     .map((group) => ({
       employee_id: employeeKey,
       tenant_id: tenantId,
@@ -14080,7 +16410,8 @@ async function saveEmployeeAddressesForEmployee(employeeId) {
   const { error: deleteError } = await supabase
     .from("employee_addresses")
     .delete()
-    .eq("employee_id", employeeKey);
+    .eq("employee_id", employeeKey)
+    .eq("address_type", "Current"); // Preserve retired Permanent Address records.
 
   if (deleteError) throw deleteError;
 
@@ -14161,7 +16492,7 @@ async function loadEmployeeAddressesForEdit(employeeId) {
 }
 
 function areEmployeeAddressFieldsReadyForSubmit() {
-  return getEmployeeAddressGroups().every((group) => {
+  return getEmployeeAddressGroups().filter((group) => group.type === "Current").every((group) => {
     const hasAnyValue = isEmployeeAddressGroupStarted(group);
     const hasMainAddress = Boolean(String(group.addressLine1?.value || "").trim());
 
@@ -14240,10 +16571,6 @@ function validateEmployeeNextOfKinFields() {
     firstInvalidField ||= fields.phoneNumber;
   }
 
-  if (!validateEmailField(fields.email, { required: false })) {
-    issues.push("Enter a valid next of kin email address.");
-    firstInvalidField ||= fields.email;
-  }
 
   if (issues.length) {
     showPageAlert(
@@ -14391,11 +16718,8 @@ function areEmployeeNextOfKinFieldsReadyForSubmit() {
     String(fields.phoneNumber?.value || "").trim(),
   );
 
-  const emailValue = String(fields.email?.value || "").trim();
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const hasValidEmail = !emailValue || emailPattern.test(emailValue);
-
-  return hasRequiredFields && hasValidEmail;
+  // PRE-7B: next-of-kin email is not collected on the minimal form.
+  return hasRequiredFields;
 }
 
 // EMPLOYEE BIODATA COMPLETION - STEP 6C-3A
@@ -16133,14 +18457,9 @@ function isEmployeeFormReadyForSubmit() {
   // Optional Personal Email should not be required, but should block Save
   // if HR enters an invalid email format.
   const personalEmail = String(state.dom.personalEmail?.value || "").trim();
-  const hasValidPersonalEmail = !personalEmail || emailPattern.test(personalEmail);
+  const hasValidPersonalEmail = window.BexHrGroupA?.alpatech ? (!personalEmail || emailPattern.test(personalEmail)) : true;
 
-  const employmentDateValue = String(state.dom.employmentDate?.value || "").trim();
-  const exitDateValue = String(state.dom.exitDate?.value || "").trim();
-  const hasValidExitDate =
-    !employmentDateValue ||
-    !exitDateValue ||
-    new Date(exitDateValue).getTime() >= new Date(employmentDateValue).getTime();
+  const hasValidExitDate = true;
 
   // EMPLOYEE BIODATA COMPLETION - STEP 3I
   // Additional reporting manager rows are optional.
@@ -16166,12 +18485,12 @@ function isEmployeeFormReadyForSubmit() {
   // EMPLOYEE BIODATA COMPLETION - STEP 6C-3A
   // Education is optional. If HR starts it, Institution and Qualification
   // must be completed, and Graduation Year must be realistic.
-  const hasValidEducationFields = areEmployeeEducationFieldsReadyForSubmit();
+  const hasValidEducationFields = window.BexHrGroupA?.alpatech ? areEmployeeEducationFieldsReadyForSubmit() : true;
 
   // EMPLOYEE BIODATA COMPLETION - STEP 6D-3
   // Beneficiaries/dependants are optional. If HR starts a visible row,
   // it must be complete before Create/Update Employee is enabled.
-  const hasValidDependantFields = areEmployeeDependantFieldsReadyForSubmit();
+  const hasValidDependantFields = window.BexHrGroupA?.alpatech ? areEmployeeDependantFieldsReadyForSubmit() : true;
 
   // HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
   // If HR access is newly selected, Save must remain disabled until
@@ -16209,7 +18528,12 @@ function isEmployeeFormReadyForSubmit() {
 //
 // This is shared behaviour for every company workspace.
 function updateEmployeeSaveButtonState() {
-  const canSubmit = isEmployeeFormReadyForSubmit();
+  // Secure NIN retrieval is required only to CHANGE NIN, not to save ordinary
+  // profile fields. buildEmployeePayload omits NIN on all unverified edits.
+  // GROUP A V6: required custom fields participate in the same grey/ready button rule.
+  // Imports are intentionally exempt and keep their existing flexible validation.
+  const canSubmit = isEmployeeFormReadyForSubmit() &&
+    (window.BexHrGroupA?.ready !== true || window.BexHrGroupA.requiredComplete());
 
   // Additional reporting managers are optional, but every rendered row
   // represents an active reporting-line entry and therefore needs a valid
@@ -16248,22 +18572,21 @@ function updateEmployeeSaveButtonState() {
   updateEmployeeFormSteps();
 }
 
+// GROUP A V6: notify the existing authoritative save-button check when custom inputs change.
+window.bexhrGaUpdateEmployeeSaveButton = updateEmployeeSaveButtonState;
+
 // EMPLOYEE BIODATA INTERNAL WORKSPACE - STEP 1
 // Show one logical employee-profile group at a time without moving or copying
 // the existing form controls. This keeps the current form and all business logic
 // authoritative while reducing the long-form cognitive load.
 const EMPLOYEE_BIODATA_TAB_DEFINITIONS = [
-  { key: "core", stepNumber: "1", heading: "" },
+  { key: "core", stepNumber: "1", heading: "Core Details" },
   { key: "reporting", stepNumber: "2", heading: "Reporting Lines" },
-  { key: "dependants", stepNumber: "3", heading: "Benefits / HMO" },
+  { key: "dependants", stepNumber: "3", heading: "Dependants" },
   { key: "address", stepNumber: "4", heading: "Address Details" },
   { key: "next-of-kin", stepNumber: "5", heading: "Next of Kin" },
-  {
-    key: "education",
-    stepNumber: "6",
-    heading: "Education / Academic Qualifications",
-  },
-  { key: "documents", stepNumber: "7", heading: "Supporting Documents" },
+  { key: "education", stepNumber: "6", heading: "Education" },
+  { key: "documents", stepNumber: "7", heading: "Documents" },
 ];
 
 function normalizeEmployeeBiodataHeading(value = "") {
@@ -16299,6 +18622,8 @@ function setEmployeeBiodataTab(tabKey = "core", options = {}) {
   );
 
   if (!requestedTab) return false;
+  // BEXHR_GROUP_A_V5: tenant-scoped user-defined headings are valid navigation steps.
+  if (!window.BexHrGroupA?.alpatech && !["core","reporting","address","next-of-kin"].includes(cleanTabKey) && !window.BexHrGroupA?.isCustomHeading?.(cleanTabKey)) return false;
 
   const sectionNodes = Array.from(
     form.querySelectorAll("[data-employee-form-section]"),
@@ -16310,8 +18635,14 @@ function setEmployeeBiodataTab(tabKey = "core", options = {}) {
     return false;
   }
 
+  // BEXHR_GROUP_A_V4: real tab navigation, including legacy Alpatech fields.
+  // Some older CSS selectors force display:block!important, so hidden alone
+  // was not enough. Inline important is removed only for the selected step.
   sectionNodes.forEach((node) => {
-    node.hidden = node.dataset.employeeFormSection !== cleanTabKey;
+    const isVisible = node.dataset.employeeFormSection === cleanTabKey;
+    node.hidden = !isVisible;
+    if (isVisible) node.style.removeProperty('display');
+    else node.style.setProperty('display', 'none', 'important');
   });
 
   stepper.querySelectorAll("[data-employee-form-tab]").forEach((tab) => {
@@ -16329,6 +18660,7 @@ function setEmployeeBiodataTab(tabKey = "core", options = {}) {
   });
 
   form.dataset.activeEmployeeTab = cleanTabKey;
+  window.BexHrGroupA?.onTabChanged?.(cleanTabKey);
 
   if (options.resetScroll !== false) {
     form.scrollTop = 0;
@@ -16427,7 +18759,7 @@ function enhanceEmployeeBiodataInternalWorkspace() {
 
   if (!hasSafeBoundaries || tabs.some((tab) => !tab)) {
     console.warn(
-      "Employee biodata navigation was not applied because the seven sections could not be resolved safely.",
+      "Employee biodata navigation could not safely identify all existing sections.",
     );
     return false;
   }
@@ -16475,6 +18807,7 @@ function enhanceEmployeeBiodataInternalWorkspace() {
     const definition = EMPLOYEE_BIODATA_TAB_DEFINITIONS[index];
 
     tab.dataset.employeeFormTab = definition.key;
+    tab.querySelector('.bexhr-step-num')?.replaceChildren(document.createTextNode(definition.stepNumber));
     tab.classList.add("hr-employee-form-tab");
     tab.setAttribute("role", "button");
     tab.setAttribute("aria-pressed", String(index === 0));
@@ -16511,21 +18844,24 @@ function enhanceEmployeeBiodataInternalWorkspace() {
 
     event.preventDefault();
 
-    const currentIndex = tabs.indexOf(tab);
+    // BEXHR_GROUP_A_V5: include custom steps in arrow/Home/End keyboard navigation.
+    const eligibleTabs = Array.from(stepper.querySelectorAll('[data-employee-form-tab]'))
+      .filter((candidate) => window.BexHrGroupA?.alpatech || !["3", "6", "7"].includes(candidate.dataset.step));
+    const currentIndex = eligibleTabs.indexOf(tab);
     let nextIndex = currentIndex;
 
     if (event.key === "ArrowLeft") {
-      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+      nextIndex = (currentIndex - 1 + eligibleTabs.length) % eligibleTabs.length;
     } else if (event.key === "ArrowRight") {
-      nextIndex = (currentIndex + 1) % tabs.length;
+      nextIndex = (currentIndex + 1) % eligibleTabs.length;
     } else if (event.key === "Home") {
       nextIndex = 0;
     } else if (event.key === "End") {
-      nextIndex = tabs.length - 1;
+      nextIndex = eligibleTabs.length - 1;
     }
 
     setEmployeeBiodataTab(
-      EMPLOYEE_BIODATA_TAB_DEFINITIONS[nextIndex]?.key,
+      eligibleTabs[nextIndex]?.dataset.employeeFormTab,
       { focus: true, resetScroll: true },
     );
   });
@@ -17520,6 +19856,14 @@ async function loadHrEmployeesForLeaveDecisionIdentityMap() {
   const supabase = getSupabaseClient();
 
   try {
+    // BEXHR_H12_G4_PEOPLE_LEAVE_IDENTITY_V1: the dual-role COO must never query employees.select('*').
+    // Use the existing AAL2 + entitlement + tenant-checked minimal roster.
+    // Native HR accounts keep their original data path.
+    if (state.h12NativeHrStandard === true) {
+      const { data, error } = await supabase.rpc('bexhr_h12_native_hr_employee_roster');
+      if (error) throw error;
+      return Array.isArray(data) ? data : [];
+    }
     const { data, error } = await applyCurrentTenantFilter(
       supabase
         .from("employees")
@@ -17718,7 +20062,7 @@ function getHrApprovedLeaveCancellationActionHtml(decision = {}) {
     `;
   }
 
-  if (!canCurrentUserMaintainHrReviewData()) {
+  if (!canCurrentUserCancelApprovedLeave()) {
     return `
       <span class="badge bg-light text-secondary border hr-review-view-only-badge">
         <i class="bi bi-eye me-1" aria-hidden="true"></i>
@@ -18046,7 +20390,7 @@ function syncHrApprovedLeaveCancellationConfirmState() {
 function openHrApprovedLeaveCancellationModal(leaveRequestId) {
   // HR REVIEW ROLE ACCESS + MODERNISATION - STEP 7
   // Keep the modal inaccessible to Payroll, Auditor, QA, and unknown roles.
-  if (!canCurrentUserMaintainHrReviewData()) {
+  if (!canCurrentUserCancelApprovedLeave()) {
     showHrReviewAccessDeniedMessage("Approved-leave cancellation");
     return;
   }
@@ -18158,7 +20502,7 @@ async function submitHrApprovedLeaveCancellation() {
   // HR REVIEW ROLE ACCESS + MODERNISATION - STEP 8
   // The database RPC remains the final authority. This frontend guard prevents
   // review-only roles from initiating the destructive workflow at all.
-  if (!canCurrentUserMaintainHrReviewData()) {
+  if (!canCurrentUserCancelApprovedLeave()) {
     showHrReviewAccessDeniedMessage("Approved-leave cancellation");
     return;
   }
@@ -18385,6 +20729,9 @@ async function refreshRecentManagerLeaveDecisionsWorkspace(options = {}) {
 // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
 // Load correction requests for the current HR tenant only.
 async function loadProfileCorrectionRequests() {
+  // R14C: profile correction workflow retired; preserved records are not loaded.
+  state.profileCorrectionRequests = [];
+  return;
   const supabase = getSupabaseClient();
   const tenantId = getRequiredTenantIdForHrEmployeeData();
 
@@ -18499,11 +20846,9 @@ async function loadPayrollGradeLevels() {
   const supabase = getSupabaseClient();
   const tenantId = getRequiredTenantIdForHrEmployeeData();
 
-  // ALPATECH TENANT-SPECIFIC RULES - STEP 3
-  // Payroll Grade / Level records must be tenant-aware.
-  // First load grades owned by the active company/tenant. This makes ALPATECH
-  // see only its ALPATECH grade structure without affecting Pinehearst, BEX,
-  // or any future company workspace.
+  // Phase 3R-B / locked Phase 2 tenant rule:
+  // Staff Levels are company-owned configuration. Never fall back to global
+  // legacy levels because that leaks one structure into another tenant.
   const tenantGradeQuery = await supabase
     .from("payroll_grade_levels")
     .select("id, tenant_id, grade_code, grade_name, grade_description, salary_band_min, salary_band_max, status")
@@ -18514,77 +20859,193 @@ async function loadPayrollGradeLevels() {
   if (tenantGradeQuery.error) {
     throw new Error(
       tenantGradeQuery.error.message ||
-      "Tenant payroll grade levels could not be loaded.",
+      "Tenant staff levels could not be loaded.",
     );
   }
 
-  const tenantGrades = Array.isArray(tenantGradeQuery.data)
+  state.payrollGradeLevels = Array.isArray(tenantGradeQuery.data)
     ? tenantGradeQuery.data
     : [];
 
-  if (tenantGrades.length) {
-    state.payrollGradeLevels = tenantGrades;
-    populatePayrollGradeLevelOptions();
-    return;
-  }
+  // Phase 3R-D: merge company-owned learned suggestions after tenant levels load.
+  await loadPayrollStaffLevelSuggestions();
 
-  // ALPATECH TENANT-SPECIFIC RULES - STEP 3
-  // Fallback for existing companies that still use legacy/global grade records.
-  // This preserves current behaviour for non-ALPATECH tenants until their own
-  // tenant-owned grade structures are configured.
-  const legacyGradeQuery = await supabase
-    .from("payroll_grade_levels")
-    .select("id, tenant_id, grade_code, grade_name, grade_description, salary_band_min, salary_band_max, status")
-    .is("tenant_id", null)
-    .eq("status", "Active")
-    .order("grade_code", { ascending: true });
+  populatePayrollGradeLevelOptions();
+}
 
-  if (legacyGradeQuery.error) {
+// =========================================================
+// PHASE 3R-D - TENANT STAFF LEVEL SUGGESTION LEARNING
+//
+// Custom Staff Level text is learned only after a successful Salary Setup save.
+// Learned suggestions live in a dedicated tenant-owned table; they never become
+// cross-tenant/global fallbacks and they do not alter payroll_grade_levels.
+// =========================================================
+const PAYROLL_STAFF_LEVEL_SUGGESTIONS_TABLE =
+  "payroll_staff_level_suggestions";
+
+function normalizePayrollStaffLevelSuggestion(value = "") {
+  return normalizeText(String(value || "").trim());
+}
+
+function dedupePayrollStaffLevelLabels(labels = []) {
+  const seen = new Set();
+  const result = [];
+
+  labels.forEach((label) => {
+    const cleanLabel = String(label || "").trim();
+    const key = normalizePayrollStaffLevelSuggestion(cleanLabel);
+    if (!cleanLabel || !key || seen.has(key)) return;
+
+    seen.add(key);
+    result.push(cleanLabel);
+  });
+
+  return result;
+}
+
+function isDefaultPayrollStaffLevelSuggestion(label = "") {
+  const key = normalizePayrollStaffLevelSuggestion(label);
+  return BEXHR_DEFAULT_STAFF_LEVEL_SUGGESTIONS.some(
+    (suggestion) => normalizePayrollStaffLevelSuggestion(suggestion) === key,
+  );
+}
+
+async function loadPayrollStaffLevelSuggestions() {
+  const supabase = getSupabaseClient();
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+
+  const { data, error } = await supabase
+    .from(PAYROLL_STAFF_LEVEL_SUGGESTIONS_TABLE)
+    .select("id, tenant_id, label, created_at")
+    .eq("tenant_id", tenantId)
+    .order("label", { ascending: true });
+
+  if (error) {
+    const code = String(error.code || "").trim();
+    const message = String(error.message || "");
+
+    // Keep Phase 3R-C usable if code is loaded before the migration is applied.
+    // The migration gate below must still be completed before Phase 3R-D closes.
+    if (
+      code === "42P01" ||
+      message.toLowerCase().includes(PAYROLL_STAFF_LEVEL_SUGGESTIONS_TABLE)
+    ) {
+      console.warn(
+        "Phase 3R-D suggestion table is not available yet; using tenant levels + built-in suggestions only.",
+      );
+      state.payrollStaffLevelSuggestions = [];
+      return state.payrollStaffLevelSuggestions;
+    }
+
     throw new Error(
-      legacyGradeQuery.error.message ||
-      "Legacy payroll grade levels could not be loaded.",
+      error.message || "Tenant Staff Level suggestions could not be loaded.",
     );
   }
 
-  state.payrollGradeLevels = Array.isArray(legacyGradeQuery.data)
-    ? legacyGradeQuery.data
-    : [];
+  state.payrollStaffLevelSuggestions = Array.isArray(data) ? data : [];
+  return state.payrollStaffLevelSuggestions;
+}
 
-  populatePayrollGradeLevelOptions();
+async function learnPayrollStaffLevelSuggestion(label = "") {
+  const cleanLabel = String(label || "").trim();
+  if (!cleanLabel) return null;
+
+  // Existing tenant configuration and built-in GL suggestions do not need a
+  // learned row. Only genuinely new custom text is remembered.
+  if (
+    findTenantPayrollGradeLevelByInput(cleanLabel) ||
+    isDefaultPayrollStaffLevelSuggestion(cleanLabel)
+  ) {
+    return null;
+  }
+
+  const normalizedLabel = normalizePayrollStaffLevelSuggestion(cleanLabel);
+  const existingSuggestion = (state.payrollStaffLevelSuggestions || []).find(
+    (suggestion) =>
+      normalizePayrollStaffLevelSuggestion(suggestion?.label) === normalizedLabel,
+  );
+
+  if (existingSuggestion) return existingSuggestion;
+
+  const supabase = getSupabaseClient();
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+  const { data, error } = await supabase
+    .from(PAYROLL_STAFF_LEVEL_SUGGESTIONS_TABLE)
+    .insert([{ tenant_id: tenantId, label: cleanLabel }])
+    .select("id, tenant_id, label, created_at")
+    .maybeSingle();
+
+  if (error) {
+    // Database uniqueness also protects concurrent duplicate saves.
+    if (String(error.code || "") === "23505") {
+      await loadPayrollStaffLevelSuggestions();
+      return (state.payrollStaffLevelSuggestions || []).find(
+        (suggestion) =>
+          normalizePayrollStaffLevelSuggestion(suggestion?.label) === normalizedLabel,
+      ) || null;
+    }
+
+    throw error;
+  }
+
+  if (data) {
+    state.payrollStaffLevelSuggestions = dedupePayrollStaffLevelLabels([
+      ...(state.payrollStaffLevelSuggestions || []).map((suggestion) => suggestion?.label),
+      data.label,
+    ]).map((suggestionLabel) => ({ label: suggestionLabel }));
+  }
+
+  return data || null;
 }
 
 // DESCRIPTION ITEM 3 - STEP 2A-4
 // Populate Payroll Master Data dropdown from active setup records.
 // The dropdown stores the grade id, while the visible label is kept as a
 // snapshot when saving payroll master records.
-function populatePayrollGradeLevelOptions(preferredGradeLevelId = "") {
-  const select = state.dom.payrollMasterGradeLevel;
-  if (!select) return;
+function populatePayrollGradeLevelOptions(
+  preferredGradeLevelId = "",
+  preferredGradeLevelLabel = "",
+) {
+  const input = state.dom.payrollMasterGradeLevel;
+  const datalist = document.getElementById("payrollMasterGradeLevelSuggestions");
+  if (!input || !datalist) return;
 
-  const currentValue = String(preferredGradeLevelId || select.value || "").trim();
+  const tenantLabels = (state.payrollGradeLevels || [])
+    .map((grade) => getPayrollGradeLevelLabel(grade))
+    .filter(Boolean);
 
-  select.innerHTML = `<option value="">Select payroll grade / level</option>`;
+  const learnedLabels = (state.payrollStaffLevelSuggestions || [])
+    .map((suggestion) => String(suggestion?.label || "").trim())
+    .filter(Boolean);
 
-  state.payrollGradeLevels.forEach((grade) => {
-    const label = getPayrollGradeLevelLabel(grade);
+  const suggestionLabels = dedupePayrollStaffLevelLabels([
+    ...tenantLabels,
+    ...learnedLabels,
+    ...BEXHR_DEFAULT_STAFF_LEVEL_SUGGESTIONS,
+  ]);
+
+  datalist.innerHTML = "";
+  suggestionLabels.forEach((label) => {
     const option = document.createElement("option");
-
-    option.value = grade.id;
-    option.textContent = label;
-    option.dataset.gradeLabel = label;
-
-    select.appendChild(option);
+    option.value = label;
+    datalist.appendChild(option);
   });
 
-  if (currentValue) {
-    const stillExists = Array.from(select.options).some(
-      (option) => option.value === currentValue,
-    );
+  const preferredTenantGrade = (state.payrollGradeLevels || []).find(
+    (grade) => String(grade.id || "").trim() === String(preferredGradeLevelId || "").trim(),
+  );
 
-    if (stillExists) {
-      select.value = currentValue;
-    }
-  }
+  const currentValue = String(input.value || "").trim();
+  input.value =
+    getPayrollGradeLevelLabel(preferredTenantGrade || {}) ||
+    String(preferredGradeLevelLabel || "").trim() ||
+    (findTenantPayrollGradeLevelByInput(currentValue)
+      ? getPayrollGradeLevelLabel(findTenantPayrollGradeLevelByInput(currentValue))
+      : currentValue);
+
+  input.placeholder = state.payrollGradeLevels.length
+    ? "Type or choose staff level (optional)"
+    : "Type staff level or choose a suggestion (optional)";
 }
 
 // DESCRIPTION ITEM 3 - STEP 2A-4
@@ -18604,8 +21065,7 @@ async function refreshPayrollMasterWorkspace() {
   // Rebuild employee dropdown from the employee list already loaded for HR.
   populatePayrollMasterEmployeeOptions();
 
-  // DESCRIPTION ITEM 3 - STEP 2A-4
-  // Rebuild Payroll Grade / Level dropdown from controlled setup records.
+  // Phase 3R-C: Staff Level stays editable while tenant-owned levels remain linkable.
   populatePayrollGradeLevelOptions();
 
   // Load payroll master records from the database, then apply client-side search.
@@ -18615,6 +21075,78 @@ async function refreshPayrollMasterWorkspace() {
   // Salary setup create/update/refresh has now replaced the in-memory records.
   // Refresh the visible metrics immediately without a full browser reload.
   renderHrModernOverview();
+}
+
+const BEXHR_PHASE3R_SALARY_SETUP_V1 = true;
+
+function normalizePayrollMasterStartMonth(value = "") {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})-(\d{2})/);
+  if (!match) return "";
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || month < 1 || month > 12) return "";
+
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function payrollMasterStartMonthToEffectiveDate(value = "") {
+  const month = normalizePayrollMasterStartMonth(value);
+  return month ? `${month}-01` : null;
+}
+
+function formatPayrollMasterStartMonth(value = "") {
+  const month = normalizePayrollMasterStartMonth(value);
+  return month ? formatPayrollSetupMonthForDisplay(month) : "--";
+}
+
+function formatPayrollMasterPayBasis(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized || normalized === "monthly") return "Monthly salary";
+  return formatStatusLabel(value || "--");
+}
+
+function getCurrentPayrollMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+const BEXHR_PHASE3RB_SALARY_SETUP_V1 = true;
+const BEXHR_PHASE3RC_SALARY_SETUP_V1 = true;
+
+const BEXHR_DEFAULT_STAFF_LEVEL_SUGGESTIONS = Object.freeze([
+  "GL-01 — Entry / Junior Level",
+  "GL-02 — Officer / Associate Level",
+  "GL-03 — Senior Officer Level",
+  "GL-04 — Lead / Supervisor Level",
+  "GL-05 — Manager Level",
+  "GL-06 — Senior Manager Level",
+  "GL-07 — Executive Level",
+]);
+
+function findTenantPayrollGradeLevelByInput(value = "") {
+  const raw = String(value || "").trim();
+  const key = normalizeText(raw);
+  if (!raw) return null;
+
+  return (state.payrollGradeLevels || []).find((grade) => {
+    return (
+      String(grade.id || "").trim() === raw ||
+      normalizeText(getPayrollGradeLevelLabel(grade)) === key
+    );
+  }) || null;
+}
+
+function getPayrollMasterStaffLevelSelection() {
+  const raw = String(state.dom.payrollMasterGradeLevel?.value || "").trim();
+  if (!raw) return { id: null, label: null };
+
+  const tenantGrade = findTenantPayrollGradeLevelByInput(raw);
+  return {
+    id: tenantGrade?.id || null,
+    label: tenantGrade ? getPayrollGradeLevelLabel(tenantGrade) : raw,
+  };
 }
 
 function clearPayrollMasterValidationState() {
@@ -18642,24 +21174,21 @@ function findPayrollMasterEffectiveDateConflict(
   excludedPayrollMasterId = "",
 ) {
   const employeeKey = String(employeeId || "").trim();
-  const dateKey = String(effectiveDate || "").trim();
+  const monthKey = normalizePayrollMasterStartMonth(effectiveDate);
   const excludedId = String(excludedPayrollMasterId || "").trim();
 
-  if (!employeeKey || !dateKey) return null;
+  if (!employeeKey || !monthKey) return null;
 
-  // PAYROLL MASTER CORRECTION VS VERSIONING - STEP 1
-  // Block duplicate Employee Salary Setup rows for the same employee/effective date,
-  // but allow the currently edited row to keep its own effective date.
+  // Phase 3R: Salary Setup is month-based. Prevent duplicate rows for the
+  // same employee + start month even when legacy rows store another day.
   return (state.payrollMasterRecords || []).find((record) => {
     const recordId = String(record.id || "").trim();
-
-    if (excludedId && recordId === excludedId) {
-      return false;
-    }
+    if (excludedId && recordId === excludedId) return false;
+    if (normalizeText(record.payroll_status || record.status || "active") !== "active") return false;
 
     return (
       String(record.employee_id || "").trim() === employeeKey &&
-      String(record.salary_effective_date || "").trim() === dateKey
+      normalizePayrollMasterStartMonth(record.salary_effective_date) === monthKey
     );
   }) || null;
 }
@@ -18668,7 +21197,7 @@ function showPayrollMasterValidationIssues(issues = []) {
   if (!issues.length) return;
 
   const messageHtml = `
-    <div class="fw-semibold mb-2">Payroll Master Data could not be saved.</div>
+    <div class="fw-semibold mb-2">Employee Salary Setup could not be saved.</div>
     <ul class="mb-0 ps-3">
       ${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}
     </ul>
@@ -18696,18 +21225,19 @@ function validatePayrollMasterForm() {
 
   const employeeId = String(state.dom.payrollMasterEmployeeId?.value || "").trim();
   const salaryText = String(state.dom.payrollMasterBasicSalary?.value || "").trim();
-  const effectiveDate = String(state.dom.payrollMasterEffectiveDate?.value || "").trim();
-  const payCycle = String(state.dom.payrollMasterPayCycle?.value || "").trim();
-  const status = String(state.dom.payrollMasterStatus?.value || "").trim();
+  const startMonth = normalizePayrollMasterStartMonth(
+    state.dom.payrollMasterEffectiveDate?.value || "",
+  );
+  const effectiveDate = payrollMasterStartMonthToEffectiveDate(startMonth);
+  const payBasis = String(state.dom.payrollMasterPayCycle?.value || "").trim();
 
   if (!employeeId) {
-    issues.push("Select an employee for the payroll master record.");
+    issues.push("Select an employee for Salary Setup.");
     markPayrollMasterFieldInvalid(state.dom.payrollMasterEmployeeId);
     firstInvalidField ||= state.dom.payrollMasterEmployeeId;
   }
 
   const salaryValue = Number(salaryText);
-
   if (!salaryText) {
     issues.push("Enter the agreed monthly gross salary.");
     markPayrollMasterFieldInvalid(state.dom.payrollMasterBasicSalary);
@@ -18718,43 +21248,32 @@ function validatePayrollMasterForm() {
     firstInvalidField ||= state.dom.payrollMasterBasicSalary;
   }
 
-  if (!effectiveDate) {
-    issues.push("Select the salary effective date.");
-    markPayrollMasterFieldInvalid(state.dom.payrollMasterEffectiveDate);
-    firstInvalidField ||= state.dom.payrollMasterEffectiveDate;
-  } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
-    issues.push("Salary effective date is not valid.");
+  if (!startMonth || !effectiveDate) {
+    issues.push("Select the month this salary setup starts from.");
     markPayrollMasterFieldInvalid(state.dom.payrollMasterEffectiveDate);
     firstInvalidField ||= state.dom.payrollMasterEffectiveDate;
   }
 
-  if (!payCycle) {
-    issues.push("Select the pay cycle.");
+  if (!payBasis) {
+    issues.push("Select the pay basis.");
     markPayrollMasterFieldInvalid(state.dom.payrollMasterPayCycle);
     firstInvalidField ||= state.dom.payrollMasterPayCycle;
-  } else if (payCycle !== "Monthly") {
-    issues.push("Only Monthly pay cycle is currently supported.");
+  } else if (payBasis !== "Monthly") {
+    issues.push("Only Monthly salary pay basis is currently supported.");
     markPayrollMasterFieldInvalid(state.dom.payrollMasterPayCycle);
     firstInvalidField ||= state.dom.payrollMasterPayCycle;
-  }
-
-  if (!status) {
-    issues.push("Select the payroll status.");
-    markPayrollMasterFieldInvalid(state.dom.payrollMasterStatus);
-    firstInvalidField ||= state.dom.payrollMasterStatus;
   }
 
   const editingId = String(state.dom.editingPayrollMasterId?.value || "").trim();
-
   const conflict = findPayrollMasterEffectiveDateConflict(
     employeeId,
-    effectiveDate,
+    effectiveDate || startMonth,
     editingId,
   );
 
   if (conflict) {
     issues.push(
-      `A Payroll Master record already exists for this employee on ${formatDate(effectiveDate)}.`,
+      `A Salary Setup already exists for this employee for ${formatPayrollMasterStartMonth(effectiveDate || startMonth)}.`,
     );
     markPayrollMasterFieldInvalid(state.dom.payrollMasterEmployeeId);
     markPayrollMasterFieldInvalid(state.dom.payrollMasterEffectiveDate);
@@ -18763,11 +21282,7 @@ function validatePayrollMasterForm() {
 
   if (issues.length) {
     showPayrollMasterValidationIssues(issues);
-
-    if (firstInvalidField?.focus) {
-      firstInvalidField.focus();
-    }
-
+    if (firstInvalidField?.focus) firstInvalidField.focus();
     return false;
   }
 
@@ -18775,40 +21290,33 @@ function validatePayrollMasterForm() {
 }
 
 function buildPayrollMasterPayload(isEditMode = false) {
-  // DESCRIPTION ITEM 3 - STEP 2A-4
-  // Save both the connected grade id and a readable text snapshot.
-  // The id provides the real relationship; the text keeps records readable
-  // if a grade label changes later.
-  const selectedGradeOption =
-    state.dom.payrollMasterGradeLevel?.selectedOptions?.[0] || null;
+  const staffLevelSelection = getPayrollMasterStaffLevelSelection();
 
-  const selectedGradeLevelId =
-    String(state.dom.payrollMasterGradeLevel?.value || "").trim();
+  const startMonth = normalizePayrollMasterStartMonth(
+    state.dom.payrollMasterEffectiveDate?.value || "",
+  );
 
-  const selectedGradeLevelLabel =
-    String(selectedGradeOption?.dataset?.gradeLabel || "").trim();
+  const preservedLegacyStatus = isEditMode
+    ? String(
+      state.currentEditingPayrollMaster?.payroll_status ||
+      state.dom.payrollMasterStatus?.value ||
+      "Active",
+    ).trim() || "Active"
+    : "Active";
 
   const payload = {
     employee_id: String(state.dom.payrollMasterEmployeeId?.value || "").trim(),
-
-    // DESCRIPTION ITEM 3 - STEP 2B DUPLICATE CLEANUP
-    // Keep only one payroll_grade_level assignment.
-    // payroll_grade_level_id stores the real connected dropdown id.
-    // payroll_grade_level stores the readable label snapshot, not the id.
-    payroll_grade_level_id: selectedGradeLevelId || null,
-    payroll_grade_level: selectedGradeLevelLabel || null,
-
+    payroll_grade_level_id: staffLevelSelection.id,
+    payroll_grade_level: staffLevelSelection.label,
     basic_salary: Number(state.dom.payrollMasterBasicSalary?.value || 0),
-    salary_effective_date: state.dom.payrollMasterEffectiveDate?.value || null,
-    pay_cycle: String(state.dom.payrollMasterPayCycle?.value || "").trim(),
-    payroll_status: String(state.dom.payrollMasterStatus?.value || "Active").trim(),
+    // Existing storage remains date-based for compatibility; normal UX is month-based.
+    salary_effective_date: payrollMasterStartMonthToEffectiveDate(startMonth),
+    pay_cycle: String(state.dom.payrollMasterPayCycle?.value || "Monthly").trim() || "Monthly",
+    payroll_status: preservedLegacyStatus,
     notes: String(state.dom.payrollMasterNotes?.value || "").trim() || null,
-
-    // Always update the modifier on save.
     updated_by: state.currentUser?.id || null,
   };
 
-  // Only stamp created_by when creating a new record.
   if (!isEditMode) {
     payload.created_by = state.currentUser?.id || null;
   }
@@ -18829,7 +21337,7 @@ function setPayrollMasterSaveLoading(isLoading, isEditMode = false) {
 
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-${isEditMode ? "Saving New Version..." : "Saving Salary Setup..."}
+${isEditMode ? "Updating Salary Setup..." : "Saving Salary Setup..."}
     `;
   } else if (button.dataset.originalHtml) {
     button.innerHTML = button.dataset.originalHtml;
@@ -18888,16 +21396,32 @@ async function handlePayrollMasterSave() {
       throw response.error;
     }
 
+    // Phase 3R-D: only a successfully saved Salary Setup can teach a new
+    // tenant-owned suggestion. Suggestion-learning failure must never roll back
+    // or misreport the salary save that has already succeeded.
+    const savedStaffLevelLabel = String(
+      state.dom.payrollMasterGradeLevel?.value || "",
+    ).trim();
+
+    try {
+      await learnPayrollStaffLevelSuggestion(savedStaffLevelLabel);
+    } catch (suggestionError) {
+      console.warn(
+        "Salary Setup saved, but its custom Staff Level suggestion could not be learned:",
+        suggestionError,
+      );
+    }
+
     await refreshPayrollMasterWorkspace();
 
     showPageAlert(
       "success",
       isEditMode
-        ? `Employee Salary Setup was corrected successfully for effective date <strong>${escapeHtml(
-          payload.salary_effective_date,
+        ? `Employee Salary Setup was updated successfully from <strong>${escapeHtml(
+          formatPayrollMasterStartMonth(payload.salary_effective_date),
         )}</strong>.`
-        : `Employee Salary Setup was created successfully for effective date <strong>${escapeHtml(
-          payload.salary_effective_date,
+        : `Employee Salary Setup was created successfully from <strong>${escapeHtml(
+          formatPayrollMasterStartMonth(payload.salary_effective_date),
         )}</strong>.`,
     );
 
@@ -18927,7 +21451,7 @@ async function handlePayrollMasterSave() {
     ) {
       showPageAlert(
         "warning",
-        "An Employee Salary Setup already exists for this employee on the selected salary effective date.",
+        "An Employee Salary Setup already exists for this employee in the selected start month.",
       );
 
       // DESCRIPTION ITEM 6 - STEP 6A
@@ -18936,7 +21460,7 @@ async function handlePayrollMasterSave() {
       showDashboardToast(
         "warning",
         "Duplicate Employee Salary Setup",
-        "This employee already has an Employee Salary Setup for the selected effective date. Use a different effective date for the new version.",
+        "This employee already has an Employee Salary Setup for the selected start month. Choose a different month or edit the existing setup.",
       );
 
       return;
@@ -18966,6 +21490,11 @@ function resetPayrollMasterForm() {
 
   state.dom.payrollMasterCreateForm.reset();
   state.currentEditingPayrollMaster = null;
+  if (state.dom.payrollMasterEffectiveDate) {
+    state.dom.payrollMasterEffectiveDate.dispatchEvent(
+      new Event("input", { bubbles: true }),
+    );
+  }
 
   // DESCRIPTION ITEM 3 - STEP 2A-2
   // Include Payroll Grade / Level in reset cleanup.
@@ -19110,24 +21639,23 @@ function renderPayrollMasterRecords(records) {
     </div>
   </td>
 
-  <td class="text-nowrap" data-label="Grade / Level">
+  <td class="text-nowrap" data-label="Staff Level">
     <!-- DESCRIPTION ITEM 3 - STEP 2A-2
          Show the saved Payroll Grade / Level so HR can confirm
          which deduction rule group this payroll master record belongs to. -->
 ${escapeHtml(getPayrollMasterGradeDisplay(record))}
   </td>
 
-  <td class="text-nowrap" data-label="Salary">
+  <td class="text-nowrap" data-label="Monthly Gross Salary">
     ${formatCurrency(record.basic_salary, "NGN")}
   </td>
 
-  <td class="text-nowrap" data-label="Effective">${formatDate(record.salary_effective_date)}</td>
+  <td class="text-nowrap" data-label="Starts From">${escapeHtml(formatPayrollMasterStartMonth(record.salary_effective_date))}</td>
 
-  <td data-label="Cycle">${escapeHtml(record.pay_cycle || "--")}</td>
+  <td data-label="Pay Basis">${escapeHtml(formatPayrollMasterPayBasis(record.pay_cycle))}</td>
 
-<td class="bexhr-status-cell" data-label="Status">
+<td class="bexhr-status-cell" data-label="Lifecycle">
         <div class="bexhr-status-stack">
-          ${renderBexhrStatusPill(formatStatusLabel(record.payroll_status))}
           ${renderBexhrStatusPill(getPayrollMasterVersionLabel(record))}
         </div>
       </td>
@@ -19146,8 +21674,8 @@ ${escapeHtml(getPayrollMasterGradeDisplay(record))}
         <button
           type="button"
           class="btn btn-sm btn-outline-primary"
-          title="Create new payroll master version"
-          aria-label="Create new payroll master version"
+          title="Edit salary setup"
+          aria-label="Edit salary setup"
           onclick="window.hrEditPayrollMasterRecord('${String(record.id).replaceAll("'", "\\'")}')"
         >
           <i class="bi bi-pencil-square"></i>
@@ -19187,6 +21715,7 @@ function startPayrollMasterEdit(payrollMasterId) {
   }
 
   state.currentEditingPayrollMaster = record;
+  populatePayrollMasterEmployeeOptions(record.employee_id || "");
 
   if (state.dom.editingPayrollMasterId) {
     state.dom.editingPayrollMasterId.value = record.id || "";
@@ -19200,7 +21729,10 @@ function startPayrollMasterEdit(payrollMasterId) {
   // Edit mode selects the connected grade id, not the old text value.
   // This keeps Payroll Master Data properly linked to payroll_grade_levels.
   if (state.dom.payrollMasterGradeLevel) {
-    populatePayrollGradeLevelOptions(record.payroll_grade_level_id || "");
+    populatePayrollGradeLevelOptions(
+      record.payroll_grade_level_id || "",
+      record.payroll_grade_level || "",
+    );
   }
 
   if (state.dom.payrollMasterBasicSalary) {
@@ -19208,11 +21740,15 @@ function startPayrollMasterEdit(payrollMasterId) {
   }
 
   if (state.dom.payrollMasterEffectiveDate) {
-    state.dom.payrollMasterEffectiveDate.value = record.salary_effective_date || "";
+    const startMonth = normalizePayrollMasterStartMonth(record.salary_effective_date);
+    state.dom.payrollMasterEffectiveDate.value = startMonth;
+    state.dom.payrollMasterEffectiveDate.dispatchEvent(
+      new Event("input", { bubbles: true }),
+    );
   }
 
   if (state.dom.payrollMasterPayCycle) {
-    state.dom.payrollMasterPayCycle.value = record.pay_cycle || "";
+    state.dom.payrollMasterPayCycle.value = record.pay_cycle || "Monthly";
   }
 
   if (state.dom.payrollMasterStatus) {
@@ -19301,6 +21837,7 @@ function getBexhrStatusPresentation(status = "") {
     "required before submit",
     "returned",
     "scheduled",
+    "upcoming",
   ]);
 
   const dangerStates = new Set([
@@ -19341,6 +21878,8 @@ function getBexhrStatusPresentation(status = "") {
     rejected: "bi-x-circle-fill",
     returned: "bi-arrow-return-left",
     scheduled: "bi-calendar-event-fill",
+    upcoming: "bi-calendar-event-fill",
+    previous: "bi-clock-history",
     sent: "bi-envelope-check-fill",
   };
 
@@ -19374,60 +21913,45 @@ function renderBexhrStatusPill(status = "") {
 
 function getPayrollMasterVersionLabel(record = {}) {
   const employeeId = String(record.employee_id || "").trim();
-  const effectiveDate = String(
+  const startMonth = normalizePayrollMasterStartMonth(
     record.salary_effective_date || "",
-  ).trim();
+  );
+  const status = String(record.payroll_status || "").trim().toLowerCase();
 
-  const status = String(record.payroll_status || "")
-    .trim()
-    .toLowerCase();
-
-  if (status !== "active") {
-    return "Inactive";
+  // Phase 3R normal UX derives only Current / Upcoming / Previous.
+  // Legacy non-active rows remain preserved in storage but are not treated as current.
+  if (!employeeId || !startMonth || status !== "active") {
+    return "Previous";
   }
 
-  if (!employeeId || !effectiveDate) {
-    return "Historical";
+  const currentMonth = getCurrentPayrollMonthKey();
+  if (startMonth > currentMonth) {
+    return "Upcoming";
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-
-  if (effectiveDate > today) {
-    return "Scheduled";
-  }
-
-  const latestEffectiveActiveDate = (state.payrollMasterRecords || [])
+  const latestActiveStartMonth = (state.payrollMasterRecords || [])
     .filter((item) => {
-      const itemEmployeeId = String(
-        item.employee_id || "",
-      ).trim();
-
-      const itemStatus = String(
-        item.payroll_status || "",
-      )
-        .trim()
-        .toLowerCase();
-
-      const itemEffectiveDate = String(
+      const itemEmployeeId = String(item.employee_id || "").trim();
+      const itemStatus = String(item.payroll_status || "").trim().toLowerCase();
+      const itemStartMonth = normalizePayrollMasterStartMonth(
         item.salary_effective_date || "",
-      ).trim();
+      );
 
       return (
         itemEmployeeId === employeeId &&
         itemStatus === "active" &&
-        itemEffectiveDate &&
-        itemEffectiveDate <= today
+        itemStartMonth &&
+        itemStartMonth <= currentMonth
       );
     })
-    .map((item) =>
-      String(item.salary_effective_date || "").trim(),
-    )
+    .map((item) => normalizePayrollMasterStartMonth(item.salary_effective_date))
+    .filter(Boolean)
     .sort()
     .at(-1) || "";
 
-  return effectiveDate === latestEffectiveActiveDate
+  return startMonth === latestActiveStartMonth
     ? "Current"
-    : "Historical";
+    : "Previous";
 }
 
 // =========================================================
@@ -19482,7 +22006,7 @@ function populatePayrollAllowanceMasterOptions() {
     option.textContent =
       `${fullName}${gradeSegment} — ` +
       `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${record.salary_effective_date || "--"} — ` +
+      `${formatPayrollMasterStartMonth(record.salary_effective_date)} — ` +
       `${getPayrollMasterVersionLabel(record)}`;
     select.appendChild(option);
   });
@@ -19559,7 +22083,7 @@ function populatePayrollStatutoryMasterOptions() {
     option.textContent =
       `${fullName}${gradeSegment} — ` +
       `${formatCurrency(record.basic_salary, "NGN")} — ` +
-      `${record.salary_effective_date || "--"} — ` +
+      `${formatPayrollMasterStartMonth(record.salary_effective_date)} — ` +
       `${getPayrollMasterVersionLabel(record)}`;
 
     select.appendChild(option);
@@ -19727,6 +22251,7 @@ function showPayrollStatutoryValidationIssues(issues = []) {
 // Validate fields before saving and focus the first invalid field.
 // This mirrors existing HR/payroll form behaviour without adding edit logic yet.
 function validatePayrollStatutoryForm() {
+  configurePayrollStatutoryPhase4Ui();
   clearPayrollStatutoryValidationState();
 
   const issues = [];
@@ -19737,12 +22262,13 @@ function validatePayrollStatutoryForm() {
     String(state.dom.payrollStatutoryMasterRecordId?.value || "").trim();
   const deductionType =
     String(state.dom.payrollStatutoryDeductionType?.value || "").trim();
-  const method =
-    String(state.dom.payrollStatutoryCalculationMethod?.value || "").trim();
-  const deductionValueText =
-    String(state.dom.payrollStatutoryDeductionValue?.value || "").trim();
-  const effectiveDate =
-    String(state.dom.payrollStatutoryEffectiveDate?.value || "").trim();
+  const statutorySetup = getDefaultStatutoryDeductionSetup(deductionType);
+  const method = statutorySetup.method;
+  const deductionValueText = String(statutorySetup.value || "").trim();
+  const statutoryStartMonth = normalizePayrollDeductionStartMonth(
+    state.dom.payrollStatutoryEffectiveDate?.value || "",
+  );
+  const effectiveDate = payrollDeductionStartMonthToDate(statutoryStartMonth);
   const configSource =
     String(state.dom.payrollStatutoryConfigSource?.value || "").trim();
   const gradeSnapshot =
@@ -19783,11 +22309,11 @@ function validatePayrollStatutoryForm() {
   }
 
   if (!effectiveDate) {
-    issues.push("Select the statutory deduction effective date.");
+    issues.push("Select the statutory deduction start month.");
     markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryEffectiveDate);
     firstInvalidField ||= state.dom.payrollStatutoryEffectiveDate;
   } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
-    issues.push("Statutory deduction effective date is not valid.");
+    issues.push("statutory deduction start month is not valid.");
     markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryEffectiveDate);
     firstInvalidField ||= state.dom.payrollStatutoryEffectiveDate;
   }
@@ -19803,12 +22329,6 @@ function validatePayrollStatutoryForm() {
     markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryMasterRecordId);
     markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryGradeLevelDisplay);
     firstInvalidField ||= state.dom.payrollStatutoryMasterRecordId;
-  }
-
-  if (!status) {
-    issues.push("Select the statutory deduction status.");
-    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryStatus);
-    firstInvalidField ||= state.dom.payrollStatutoryStatus;
   }
 
   const payrollMasterEffectiveDateIssue =
@@ -19861,23 +22381,29 @@ function validatePayrollStatutoryForm() {
 // Rule Based deductions intentionally save null deduction_value because the
 // value will be calculated from configured statutory rules later.
 function buildPayrollStatutoryPayload(isEditMode = false) {
-  const method = String(state.dom.payrollStatutoryCalculationMethod?.value || "").trim();
+  const deductionType = String(
+    state.dom.payrollStatutoryDeductionType?.value || "",
+  ).trim();
+  const statutorySetup = getDefaultStatutoryDeductionSetup(deductionType);
+  const method = statutorySetup.method;
   const isRuleBased = method === "RULE_BASED";
 
   return {
     payroll_master_record_id:
       String(state.dom.payrollStatutoryMasterRecordId?.value || "").trim(),
 
-    deduction_type:
-      String(state.dom.payrollStatutoryDeductionType?.value || "").trim(),
+    deduction_type: deductionType,
 
     calculation_method: method,
 
     deduction_value: isRuleBased
       ? null
-      : Number(state.dom.payrollStatutoryDeductionValue?.value || 0),
+      : Number(statutorySetup.value || 0),
 
-    effective_date: state.dom.payrollStatutoryEffectiveDate?.value || null,
+    effective_date:
+      payrollDeductionStartMonthToDate(
+        state.dom.payrollStatutoryEffectiveDate?.value || "",
+      ) || null,
 
     configuration_source:
       String(state.dom.payrollStatutoryConfigSource?.value || "").trim(),
@@ -19888,8 +22414,7 @@ function buildPayrollStatutoryPayload(isEditMode = false) {
     payroll_grade_level_snapshot:
       String(state.dom.payrollStatutoryGradeLevelSnapshot?.value || "").trim() || null,
 
-    status:
-      String(state.dom.payrollStatutoryStatus?.value || "Active").trim(),
+    status: "Active", // Phase 4 lifecycle is system-derived.
 
     notes:
       String(state.dom.payrollStatutoryNotes?.value || "").trim() || null,
@@ -20068,7 +22593,7 @@ function startPayrollStatutoryEdit(statutoryDeductionId) {
   }
 
   if (state.dom.payrollStatutoryEffectiveDate) {
-    state.dom.payrollStatutoryEffectiveDate.value = record.effective_date || "";
+    state.dom.payrollStatutoryEffectiveDate.value = normalizePayrollDeductionStartMonth(record.effective_date);
   }
 
   if (state.dom.payrollStatutoryConfigSource) {
@@ -20143,22 +22668,19 @@ async function handlePayrollStatutorySave() {
   }
 
   const startedAt = Date.now();
+  const editingId = String(
+    state.currentEditingPayrollStatutory?.id ||
+    state.dom.editingPayrollStatutoryId?.value ||
+    "",
+  ).trim();
+  const isEditMode = Boolean(editingId);
+  const payload = buildPayrollStatutoryPayload(isEditMode);
 
   try {
     setPayrollStatutorySaveLoading(true);
     await waitForNextPaint();
 
     const supabase = getSupabaseClient();
-
-    const editingId = String(
-      state.currentEditingPayrollStatutory?.id ||
-      state.dom.editingPayrollStatutoryId?.value ||
-      "",
-    ).trim();
-
-    const isEditMode = Boolean(editingId);
-    const payload = buildPayrollStatutoryPayload(isEditMode);
-
     let error = null;
 
     if (isEditMode) {
@@ -20497,6 +23019,7 @@ function applyPayrollStatutorySearch() {
 // Statutory deduction presentation only. Search, create/edit, Supabase,
 // tenant filtering, payroll calculation, status, and permission logic remain unchanged.
 function renderPayrollStatutoryRecords(records = []) {
+  configurePayrollStatutoryPhase4Ui();
   const tbody = state.dom.payrollStatutoryRecordsTableBody;
   if (!tbody) return;
 
@@ -20552,7 +23075,7 @@ function renderPayrollStatutoryRecords(records = []) {
             </div>
 
             <div class="hr-deduction-record-header-actions">
-              ${renderBexhrStatusPill(formatStatusLabel(record.status))}
+              ${renderBexhrStatusPill(getPayrollStatutoryLifecycle(record))}
 
               <button
                 type="button"
@@ -20583,14 +23106,11 @@ function renderPayrollStatutoryRecords(records = []) {
             </div>
 
             <div class="hr-deduction-record-detail">
-              <span class="hr-deduction-record-label">Effective date</span>
-              <strong>${escapeHtml(formatDate(record.effective_date))}</strong>
+              <span class="hr-deduction-record-label">Start month</span>
+              <strong>${escapeHtml(formatPayrollDeductionStartMonth(record.effective_date))}</strong>
             </div>
 
-            <div class="hr-deduction-record-detail">
-              <span class="hr-deduction-record-label">Configuration source</span>
-              <strong>${escapeHtml(formatPayrollStatutoryConfigSource(record.configuration_source))}</strong>
-            </div>
+
 
             <div class="hr-deduction-record-detail">
               <span class="hr-deduction-record-label">Last updated</span>
@@ -20670,6 +23190,7 @@ function syncPayrollStatutoryDefaultFromDeductionType() {
 
   syncPayrollStatutoryCalculationMethodUi();
   updatePayrollStatutorySaveButtonState();
+  configurePayrollStatutoryPhase4Ui();
 }
 
 // DESCRIPTION ITEM 3 - STEP 2A-5
@@ -20797,11 +23318,9 @@ function applyPayrollMasterSearch() {
         record.basic_salary,
         formatCurrency(record.basic_salary, "NGN"),
 
-        record.salary_effective_date,
-        formatDate(record.salary_effective_date),
-
-        record.pay_cycle,
-        record.payroll_status,
+        formatPayrollMasterStartMonth(record.salary_effective_date),
+        formatPayrollMasterPayBasis(record.pay_cycle),
+        getPayrollMasterVersionLabel(record),
 
         record.updated_at,
         formatDate(record.updated_at || record.created_at),
@@ -20931,34 +23450,122 @@ function getPayrollMasterRecordEffectiveDateValidationIssue(
   childSetupLabel = "setup",
 ) {
   const masterId = String(payrollMasterRecordId || "").trim();
-  const effectiveDate = String(childEffectiveDate || "").trim();
+  const childStartMonth = normalizePayrollMasterStartMonth(childEffectiveDate);
 
-  if (!masterId || !effectiveDate) return "";
+  if (!masterId || !childStartMonth) return "";
 
   const payrollMaster = getPayrollMasterRecordById(masterId);
-
   if (!payrollMaster) {
     return "The selected Employee Salary Setup record could not be found. Refresh the page and try again.";
   }
 
-  const masterEffectiveTime = new Date(
+  const masterStartMonth = normalizePayrollMasterStartMonth(
     payrollMaster.salary_effective_date || "",
-  ).getTime();
+  );
+  if (!masterStartMonth) return "";
 
-  const childEffectiveTime = new Date(effectiveDate).getTime();
-
-  if (
-    !Number.isFinite(masterEffectiveTime) ||
-    !Number.isFinite(childEffectiveTime)
-  ) {
-    return "";
-  }
-
-  if (childEffectiveTime < masterEffectiveTime) {
-    return `This ${childSetupLabel} starts before the selected Employee Salary Setup. Select the matching salary setup record for ${formatDate(effectiveDate)}.`;
+  if (childStartMonth < masterStartMonth) {
+    return `This ${childSetupLabel} starts before the selected Employee Salary Setup. Choose a start month from ${formatPayrollMasterStartMonth(payrollMaster.salary_effective_date)} onward.`;
   }
 
   return "";
+}
+
+// =========================================================
+// BEXHR PHASE 4B-R - ALLOWANCE SIMPLIFICATION
+// Locked principle: HR enters business facts; BexHR derives lifecycle state.
+// Existing DB columns remain for historical compatibility, but the live UX uses
+// Additional Allowance Type + Amount + Start Month only.
+// =========================================================
+function normalizePayrollAllowanceStartMonth(value = "") {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+  if (!match) return "";
+
+  const month = Number(match[2]);
+  if (!Number.isInteger(month) || month < 1 || month > 12) return "";
+
+  return match[1] + "-" + match[2];
+}
+
+function payrollAllowanceStartMonthToEffectiveDate(value = "") {
+  const startMonth = normalizePayrollAllowanceStartMonth(value);
+  return startMonth ? startMonth + "-01" : "";
+}
+
+function formatPayrollAllowanceStartMonth(value = "") {
+  const startMonth = normalizePayrollAllowanceStartMonth(value);
+  if (!startMonth) return "—";
+
+  const [year, month] = startMonth.split("-");
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+
+  return monthNames[Number(month) - 1] + " " + year;
+}
+
+function isPayrollStructuralAllowanceType(value = "", label = "") {
+  const normalized = (String(value || "") + " " + String(label || ""))
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ");
+
+  return ["basic","housing","transport","utility"].some((token) => {
+    return normalized.split(/\s+/).includes(token);
+  });
+}
+
+function setPayrollAllowancePhase4Label(field, text) {
+  if (!field?.id || typeof document === "undefined") return;
+
+  const label = document.querySelector('label[for="' + field.id + '"]');
+  if (!label) return;
+
+  label.textContent = text;
+  if (field.required) {
+    const marker = document.createElement("span");
+    marker.className = "text-danger";
+    marker.textContent = " *";
+    label.appendChild(marker);
+  }
+}
+
+function configurePayrollAllowancePhase4Ui() {
+  const typeField = state.dom.payrollAllowanceType;
+  const startMonthField = state.dom.payrollAllowanceEffectiveDate;
+  const statusField = state.dom.payrollAllowanceStatus;
+
+  if (typeField) {
+    Array.from(typeField.options || []).forEach((option) => {
+      if (isPayrollStructuralAllowanceType(option.value, option.textContent)) {
+        option.remove();
+      }
+    });
+    setPayrollAllowancePhase4Label(typeField, "Additional Allowance Type");
+  }
+
+  if (startMonthField) {
+    startMonthField.type = "month";
+    setPayrollAllowancePhase4Label(startMonthField, "Start Month");
+  }
+
+  if (statusField) {
+    statusField.required = false;
+    statusField.value = "Active";
+    statusField.hidden = true;
+
+    const statusLabel = statusField.id
+      ? document.querySelector('label[for="' + statusField.id + '"]')
+      : null;
+    if (statusLabel) statusLabel.hidden = true;
+
+    const statusWrapper = statusField.closest(
+      ".col-md-6, .col-md-4, .col-lg-6, .col-lg-4, .mb-3, .form-group",
+    );
+    if (statusWrapper) statusWrapper.classList.add("d-none");
+  }
 }
 
 function findPayrollAllowanceEffectiveDateConflict({
@@ -21134,10 +23741,10 @@ function validatePayrollAllowanceForm() {
     String(state.dom.payrollAllowanceType?.value || "").trim();
   const amountText =
     String(state.dom.payrollAllowanceAmount?.value || "").trim();
-  const effectiveDate =
-    String(state.dom.payrollAllowanceEffectiveDate?.value || "").trim();
-  const status =
-    String(state.dom.payrollAllowanceStatus?.value || "").trim();
+  const startMonth = normalizePayrollAllowanceStartMonth(
+    state.dom.payrollAllowanceEffectiveDate?.value || "",
+  );
+  const effectiveDate = payrollAllowanceStartMonthToEffectiveDate(startMonth);
 
   if (!payrollMasterRecordId) {
     issues.push("Select the Payroll Master record for this allowance.");
@@ -21169,21 +23776,24 @@ function validatePayrollAllowanceForm() {
     firstInvalidField ||= state.dom.payrollAllowanceAmount;
   }
 
+  if (isPayrollStructuralAllowanceType(allowanceType, allowanceType)) {
+    issues.push(
+      "Basic, Housing, Transport and Utility are salary-structure components, not additional allowances.",
+    );
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceType);
+    firstInvalidField ||= state.dom.payrollAllowanceType;
+  }
+
   if (!effectiveDate) {
-    issues.push("Select the allowance effective date.");
+    issues.push("Select the allowance start month.");
     markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceEffectiveDate);
     firstInvalidField ||= state.dom.payrollAllowanceEffectiveDate;
   } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
-    issues.push("Allowance effective date is not valid.");
+    issues.push("Allowance start month is not valid.");
     markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceEffectiveDate);
     firstInvalidField ||= state.dom.payrollAllowanceEffectiveDate;
   }
 
-  if (!status) {
-    issues.push("Select the allowance status.");
-    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceStatus);
-    firstInvalidField ||= state.dom.payrollAllowanceStatus;
-  }
 
   const payrollMasterEffectiveDateIssue =
     getPayrollMasterRecordEffectiveDateValidationIssue(
@@ -21236,10 +23846,12 @@ function buildPayrollAllowancePayload(isEditMode = false) {
     ).trim(),
     allowance_type: String(state.dom.payrollAllowanceType?.value || "").trim(),
     allowance_amount: Number(state.dom.payrollAllowanceAmount?.value || 0),
-    effective_date: state.dom.payrollAllowanceEffectiveDate?.value || null,
-    allowance_status: String(
-      state.dom.payrollAllowanceStatus?.value || "Active",
-    ).trim(),
+    effective_date:
+      payrollAllowanceStartMonthToEffectiveDate(
+        state.dom.payrollAllowanceEffectiveDate?.value || "",
+      ) || null,
+    // Phase 4 keeps the legacy column for compatibility; HR no longer manages it.
+    allowance_status: "Active",
     notes: String(state.dom.payrollAllowanceNotes?.value || "").trim() || null,
 
     // Always stamp the updater.
@@ -21500,10 +24112,10 @@ function renderPayrollAllowanceRecords(records) {
     const allowanceStatus = formatStatusLabel(
       record.allowance_status || "Inactive",
     );
-    const masterEffectiveDate = formatDate(
+    const masterStartMonth = formatPayrollMasterStartMonth(
       record.payroll_master_effective_date,
     );
-    const allowanceEffectiveDate = formatDate(record.effective_date);
+    const allowanceStartMonth = formatPayrollAllowanceStartMonth(record.effective_date);
     const updatedDate = formatDate(record.updated_at || record.created_at);
     const notes = String(record.notes || "").trim();
     const safeRecordId = String(record.id || "").replaceAll("'", "\\'");
@@ -21527,7 +24139,7 @@ function renderPayrollAllowanceRecords(records) {
 
                 <span class="hr-allowance-record-context">
                   <i class="bi bi-calendar2-check" aria-hidden="true"></i>
-                  Payroll profile effective ${escapeHtml(masterEffectiveDate)}
+                  Salary setup from ${escapeHtml(masterStartMonth)}
                 </span>
               </div>
             </div>
@@ -21560,8 +24172,8 @@ function renderPayrollAllowanceRecords(records) {
             </div>
 
             <div class="hr-allowance-record-detail">
-              <span class="hr-allowance-record-detail-label">Effective date</span>
-              <strong>${escapeHtml(allowanceEffectiveDate)}</strong>
+              <span class="hr-allowance-record-detail-label">Start month</span>
+              <strong>${escapeHtml(allowanceStartMonth)}</strong>
             </div>
 
             <div class="hr-allowance-record-detail">
@@ -21721,7 +24333,7 @@ function startPayrollAllowanceEdit(allowanceId) {
   }
 
   if (state.dom.payrollAllowanceEffectiveDate) {
-    state.dom.payrollAllowanceEffectiveDate.value = record.effective_date || "";
+    state.dom.payrollAllowanceEffectiveDate.value = normalizePayrollAllowanceStartMonth(record.effective_date);
   }
 
   if (state.dom.payrollAllowanceStatus) {
@@ -22626,6 +25238,11 @@ function continueRunPayrollToPayrollWorkspace() {
   // Open the payroll card and land directly on the batch review table.
   openPayrollRecordCard();
 
+  // BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+  // continueRunPayrollToPayrollWorkspace() calls switchHrWorkspace() directly,
+  // so reapply Run Payroll focus after that authoritative workspace transition.
+  applyHrNavigationTask("payroll.run", { scroll: false });
+
   // BATCH PAYROLL DEFAULT - STEP 2B
   // Wait for the Payroll workspace to become visible before scrolling.
   // The previous scroll fired too early and targeted the inner batch table,
@@ -23486,6 +26103,12 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     };
   }
 
+
+  const adjustmentAmounts = getPayrollEmployeeAdjustmentAmountsForMaster(
+    activePayrollMaster.id,
+    getCurrentBatchPayrollCalculationDate(),
+  );
+
   let baseSalary = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["Base Salary"]),
   );
@@ -23550,13 +26173,15 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
 
   // BATCH PAYROLL CSV IMPORT - STEP 5C
   // Preserve optional extra earnings from the imported CSV.
-  const bonus = parseBatchPayrollCsvAmount(
-    getBatchPayrollCsvValue(row, headerMap, ["Bonus"]),
-  );
+  const bonus =
+    parseBatchPayrollCsvAmount(
+      getBatchPayrollCsvValue(row, headerMap, ["Bonus"]),
+    ) + adjustmentAmounts.bonus;
 
-  const overtime = parseBatchPayrollCsvAmount(
-    getBatchPayrollCsvValue(row, headerMap, ["Overtime"]),
-  );
+  const overtime =
+    parseBatchPayrollCsvAmount(
+      getBatchPayrollCsvValue(row, headerMap, ["Overtime"]),
+    ) + adjustmentAmounts.overtime;
 
   let bht = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["BHT"]),
@@ -23575,6 +26200,8 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     otherAllowance = newBaseSalary * 0.2;
     bht = basicPay + housingAllowance + transportAllowance;
   }
+
+  otherAllowance += adjustmentAmounts.otherEarning;
 
   // DESCRIPTION ITEM 3 - STEP 2E-2B
   // PAYE and Pension values in the imported CSV are no longer trusted as
@@ -23602,6 +26229,7 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
   // Final gross/net for CSV batch payroll should preserve optional extra earnings.
   const grossPay =
     newBaseSalary +
+    adjustmentAmounts.otherEarning +
     bonus +
     overtime +
     logisticsAllowance +
@@ -23625,6 +26253,9 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     overtime,
     logisticsAllowance,
     dataAirtimeAllowance,
+    oneOffBonus: adjustmentAmounts.bonus,
+    oneOffOvertime: adjustmentAmounts.overtime,
+    oneOffOtherAllowance: adjustmentAmounts.otherEarning,
 
     bht,
     grossPay,
@@ -23633,9 +26264,11 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
   const payeTax = statutoryTotals.payeTax;
   const employeePension = statutoryTotals.employeePension;
   const employerPension = statutoryTotals.employerPension;
-  const otherDeductions = statutoryTotals.otherDeductions;
-  const totalDeductions = statutoryTotals.totalDeductions;
-  const netPay = statutoryTotals.netPay;
+  const otherDeductions =
+    statutoryTotals.otherDeductions + adjustmentAmounts.otherDeduction;
+  const totalDeductions =
+    statutoryTotals.totalDeductions + adjustmentAmounts.otherDeduction;
+  const netPay = grossPay - totalDeductions;
 
   // DESCRIPTION ITEM 3 - STEP 2E-2B
   // Keep this field consistent with the recalculated net pay instead of
@@ -23652,8 +26285,14 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     payroll_group: "REGULAR",
     payroll_model: "REGULAR",
     source: "csv",
-    employee_override_applied: resolvedCsvBaseSalary.overrideApplied,
+    employee_override_applied: adjustmentAmounts.totalCount > 0,
     employee_override_audit_summary: employeeOverrideAuditSummary,
+    tax_one_off_bonus: adjustmentAmounts.bonus,
+    tax_one_off_overtime: adjustmentAmounts.overtime,
+    tax_one_off_other_allowance: adjustmentAmounts.otherEarning,
+    tax_relief_pension: statutoryTotals.employeePension,
+    tax_relief_nhf: statutoryTotals.nhfContribution,
+    tax_relief_health: statutoryTotals.healthContribution,
 
     base_salary: baseSalary,
     // BATCH PAYROLL CSV IMPORT - STEP 5C
@@ -23701,12 +26340,7 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     employee_custom_id: employeeCustomId,
     employee_name: employeeNameFromCsv,
   };
-
-  return applyActivePayrollEmployeeOverridesToBatchPreparedRow(
-    preparedRow,
-    activePayrollMaster.id,
-    getCurrentBatchPayrollCalculationDate(),
-  );
+  return preparedRow;
 }
 
 // BATCH PAYROLL CSV IMPORT - STEP 2
@@ -23794,7 +26428,7 @@ function renderImportedBatchPayrollCsvRows(preparedRows = [], skippedRows = []) 
 </div>
 ${preparedRow.employee_override_applied
         ? `<div class="text-primary small fw-semibold mt-1">
-      Employee override applied
+      Payroll adjustment applied
     </div>`
         : ""}
       </td>
@@ -24209,7 +26843,7 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
               </div>
               ${preparedPayrollRow.employee_override_applied
           ? `<div class="text-primary small fw-semibold mt-1">
-                    Employee override applied
+                    Payroll adjustment applied
                   </div>`
           : ""}`
         : ""
@@ -24228,7 +26862,7 @@ ${!isActiveEmployee
 
   ${activePayrollMaster?.salary_effective_date
         ? `<div class="text-secondary small mt-1 text-nowrap">
-          Effective ${formatDate(activePayrollMaster.salary_effective_date)}
+          Starts ${escapeHtml(formatPayrollMasterStartMonth(activePayrollMaster.salary_effective_date))}
         </div>`
         : ""
       }
@@ -24306,7 +26940,7 @@ function getHrWorkspacePresentation(workspace = "dashboard") {
   const presentations = {
     dashboard: {
       title: "HR Overview",
-      subtitle: "Monitor people operations, HR reviews, payroll readiness, and recent activity.",
+      subtitle: "Monitor employee records, departmental coverage, payroll readiness, and recent activity.",
       module: "Dashboard",
     },
     profile: {
@@ -24434,7 +27068,99 @@ function getPerformanceAppraisalDepartmentId(departmentName = "") {
   ).trim();
 }
 
-function publishHrPerformanceAppraisalContext({ mode = "hr-admin" } = {}) {
+// BEXHR PA WORKSPACE SWITCHING - US-06 DEFECT CLOSEOUT
+// Build one capability-rich PA context so HR users can move between their
+// permitted My Appraisal, Manager Reviews and HR workspaces without leaving PA.
+// Existing role checks remain authoritative; this only carries the already
+// resolved tenant-scoped people/reporting context into the standalone module.
+function getHrPerformanceAppraisalAvailableEmployees() {
+  return (Array.isArray(state.employees) ? state.employees : [])
+    .filter((employee) => normalizeText(employee.status || "active") === "active")
+    .map((employee) => {
+      const employeeName = [
+        employee.first_name,
+        employee.middle_name,
+        employee.last_name,
+      ]
+        .map((namePart) => String(namePart || "").trim())
+        .filter(Boolean)
+        .join(" ");
+
+      return {
+        id: String(employee.id || "").trim(),
+        name:
+          employeeName ||
+          String(
+            employee.full_name ||
+            employee.fullName ||
+            employee.name ||
+            employee.work_email ||
+            "Employee",
+          ).trim(),
+        department: String(employee.department || "").trim(),
+        departmentId:
+          String(
+            employee.department_id ||
+            employee.departmentId ||
+            "",
+          ).trim() ||
+          getPerformanceAppraisalDepartmentId(employee.department),
+        jobTitle: String(
+          employee.job_title ||
+          employee.jobTitle ||
+          "",
+        ).trim(),
+      };
+    })
+    .filter((employee) => employee.id && employee.name)
+    .sort((firstEmployee, secondEmployee) =>
+      firstEmployee.name.localeCompare(secondEmployee.name),
+    );
+}
+
+function getHrPerformanceAppraisalManagerContext(managerScope = null) {
+  const allEmployees = getHrPerformanceAppraisalAvailableEmployees();
+  const managerEmployeeId = String(
+    managerScope?.managerEmployeeId || "",
+  ).trim();
+
+  const primaryEmployeeIds = [
+    ...new Set(
+      Array.isArray(managerScope?.primaryEmployeeIds)
+        ? managerScope.primaryEmployeeIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+        : [],
+    ),
+  ];
+
+  const secondaryEmployeeIds = [
+    ...new Set(
+      Array.isArray(managerScope?.secondaryEmployeeIds)
+        ? managerScope.secondaryEmployeeIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+        : [],
+    ),
+  ];
+
+  const primaryEmployeeIdSet = new Set(primaryEmployeeIds);
+  const secondaryEmployeeIdSet = new Set(secondaryEmployeeIds);
+
+  return {
+    managerEmployeeId,
+    primaryEmployeeIds,
+    secondaryEmployeeIds,
+    primaryEmployees: allEmployees.filter((employee) =>
+      primaryEmployeeIdSet.has(employee.id),
+    ),
+    secondaryEmployees: allEmployees.filter((employee) =>
+      secondaryEmployeeIdSet.has(employee.id),
+    ),
+  };
+}
+
+function publishHrPerformanceAppraisalContext({ mode = "hr-admin", managerScope = null } = {}) {
   const isHrAdmin =
     canCurrentUserMaintainOrganizationSetupData();
 
@@ -24469,62 +27195,68 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin" } = {}) {
       return false;
     }
 
-    const hrStandardEmployees =
-      mode === "hr-standard" && isHrStandard
-        ? (Array.isArray(state.employees)
-          ? state.employees
-          : []
-        )
-          .map((employee) => ({
-            id: String(
-              employee?.id || "",
-            ).trim(),
+    const managerContext =
+      getHrPerformanceAppraisalManagerContext(managerScope);
 
-            name: String(
-              employee?.full_name ||
-              employee?.fullName ||
-              employee?.name ||
-              employee?.work_email ||
-              "Employee",
-            ).trim(),
+    // HR PA operational visibility is deliberately independent
+    // from Primary/Secondary reporting ownership.
+    const hrOperationalEmployees =
+      getHrPerformanceAppraisalAvailableEmployees();
 
-            department: String(
-              employee?.department ||
-              "",
-            ).trim(),
-
-            departmentId: String(
-              employee?.department_id ||
-              employee?.departmentId ||
-              "",
-            ).trim(),
-
-            jobTitle: String(
-              employee?.job_title ||
-              employee?.jobTitle ||
-              "",
-            ).trim(),
-          }))
-          .filter(
-            (employee) =>
-              employee.id &&
-              employee.name,
-          )
-        : [];
+    const availableDepartments = Array.isArray(state.organizationDepartments)
+      ? state.organizationDepartments
+        .map((department) => ({
+          id: String(department?.id || "").trim(),
+          name: String(department?.department_name || "").trim(),
+        }))
+        .filter((department) => department.id && department.name)
+      : [];
 
     const performanceAppraisalContext = {
       source: "bexhr",
       sourceDashboard: "hr-dashboard",
+    managerDisplayName: String(state.currentProfile?.full_name || "Current manager"),
       issuedAt: new Date().toISOString(),
       persona:
         mode === "hr-standard"
           ? "hr-standard"
           : "employee",
       hrStandardCapability: isHrStandard,
+      hrAdminCapability: isHrAdmin,
       employeeId,
-      managerEmployeeId: "",
-      managedEmployeeIds: [],
-      availableEmployees: hrStandardEmployees,
+
+      managerEmployeeId: managerContext.managerEmployeeId,
+      managedEmployeeIds: managerContext.primaryEmployeeIds,
+      managerAvailableEmployees: managerContext.primaryEmployees,
+      secondaryEmployeeIds: managerContext.secondaryEmployeeIds,
+      secondaryEmployees: managerContext.secondaryEmployees,
+
+      availableEmployees:
+        mode === "hr-standard"
+          ? hrOperationalEmployees
+          : [],
+
+      // Canonical PA operations scope.
+      // This does NOT mean these employees report to the HR user.
+      hrOperationalEmployees,
+
+      hrOperationalEmployeeIds:
+        hrOperationalEmployees
+          .map((employee) =>
+            String(
+              employee?.id || "",
+            ).trim(),
+          )
+          .filter(Boolean),
+
+      // Compatibility alias for older PA browser sessions.
+      hrAvailableEmployees:
+        hrOperationalEmployees,
+      availableDepartments,
+      canonicalDepartments:
+        Array.isArray(state.organizationDepartments)
+          ? state.organizationDepartments
+          : [],
     };
 
     window.BexHrPerformanceAppraisalContext = performanceAppraisalContext;
@@ -24546,55 +27278,10 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin" } = {}) {
     return false;
   }
 
-  const availableEmployees = (
-    Array.isArray(state.employees)
-      ? state.employees
-      : []
-  )
-    .map((employee) => {
-      const employeeName = [
-        employee.first_name,
-        employee.middle_name,
-        employee.last_name,
-      ]
-        .map((namePart) =>
-          String(namePart || "").trim(),
-        )
-        .filter(Boolean)
-        .join(" ");
-
-      return {
-        id: String(
-          employee.id || "",
-        ).trim(),
-
-        name:
-          employeeName ||
-          String(
-            employee.work_email ||
-            "Employee",
-          ).trim(),
-
-        department: String(
-          employee.department || "",
-        ).trim(),
-
-        departmentId:
-          getPerformanceAppraisalDepartmentId(
-            employee.department,
-          ),
-
-        jobTitle: String(
-          employee.job_title || "",
-        ).trim(),
-      };
-    })
-    .filter((employee) => employee.id)
-    .sort((firstEmployee, secondEmployee) =>
-      firstEmployee.name.localeCompare(
-        secondEmployee.name,
-      ),
-    );
+  const hrOperationalEmployees =
+    getHrPerformanceAppraisalAvailableEmployees();
+  const managerContext =
+    getHrPerformanceAppraisalManagerContext(managerScope);
 
   const availableDepartments = Array.isArray(state.organizationDepartments)
     ? state.organizationDepartments
@@ -24620,14 +27307,41 @@ function publishHrPerformanceAppraisalContext({ mode = "hr-admin" } = {}) {
   const performanceAppraisalContext = {
     source: "bexhr",
     sourceDashboard: "hr-dashboard",
+    managerDisplayName: String(state.currentProfile?.full_name || "Current manager"),
     issuedAt: new Date().toISOString(),
     persona: "hr-admin",
     hrAdminCapability: true,
+    hrStandardCapability: false,
     employeeId: currentEmployeeId,
-    managerEmployeeId: "",
-    managedEmployeeIds: [],
-    availableEmployees,
+
+    managerEmployeeId: managerContext.managerEmployeeId,
+    managedEmployeeIds: managerContext.primaryEmployeeIds,
+    managerAvailableEmployees: managerContext.primaryEmployees,
+    secondaryEmployeeIds: managerContext.secondaryEmployeeIds,
+    secondaryEmployees: managerContext.secondaryEmployees,
+
+    availableEmployees:
+      hrOperationalEmployees,
+
+    hrOperationalEmployees,
+
+    hrOperationalEmployeeIds:
+      hrOperationalEmployees
+        .map((employee) =>
+          String(
+            employee?.id || "",
+          ).trim(),
+        )
+        .filter(Boolean),
+
+    // Compatibility alias.
+    hrAvailableEmployees:
+      hrOperationalEmployees,
     availableDepartments,
+    canonicalDepartments:
+      Array.isArray(state.organizationDepartments)
+        ? state.organizationDepartments
+        : [],
   };
 
   window.BexHrPerformanceAppraisalContext =
@@ -24722,11 +27436,36 @@ function publishHrPerformanceAppraisalManagerContext(
       ),
     );
 
+  const isHrAdmin =
+    canCurrentUserMaintainOrganizationSetupData();
+  const isHrStandard =
+    state.currentProfile?.is_active === true &&
+    normaliseHrBusinessRole(
+      state.currentProfile?.role || "",
+    ) === "hr" &&
+    normaliseHrBusinessRole(
+      state.currentProfile?.hr_access_level || "standard",
+    ) !== "tenant_admin" &&
+    Boolean(String(state.currentProfile?.tenant_id || "").trim());
+  const hrOperationalEmployees =
+    getHrPerformanceAppraisalAvailableEmployees();
+  const availableDepartments = Array.isArray(state.organizationDepartments)
+    ? state.organizationDepartments
+      .map((department) => ({
+        id: String(department?.id || "").trim(),
+        name: String(department?.department_name || "").trim(),
+      }))
+      .filter((department) => department.id && department.name)
+    : [];
+
   const performanceAppraisalContext = {
     source: "bexhr",
     sourceDashboard: "hr-dashboard",
+    managerDisplayName: String(state.currentProfile?.full_name || "Current manager"),
     issuedAt: new Date().toISOString(),
     persona: "primary-manager",
+    hrAdminCapability: isHrAdmin,
+    hrStandardCapability: isHrStandard,
 
     employeeId,
     managerEmployeeId,
@@ -24736,11 +27475,28 @@ function publishHrPerformanceAppraisalManagerContext(
 
     availableEmployees:
       primaryEmployees,
+    managerAvailableEmployees:
+      primaryEmployees,
 
     secondaryEmployeeIds,
-
     secondaryEmployees,
 
+    hrOperationalEmployees,
+
+    hrOperationalEmployeeIds:
+      hrOperationalEmployees
+        .map((employee) =>
+          String(
+            employee?.id || "",
+          ).trim(),
+        )
+        .filter(Boolean),
+
+    // Compatibility alias.
+    hrAvailableEmployees:
+      hrOperationalEmployees,
+
+    availableDepartments,
     canonicalDepartments:
       Array.isArray(state.organizationDepartments)
         ? state.organizationDepartments
@@ -24867,6 +27623,57 @@ async function getHrPerformanceAppraisalManagerScope() {
   }
 }
 
+async function isCurrentHrEmployeeExcludedFromActivePaCycle() {
+  const employeeId = String(
+    getCurrentHrEmployeeRecord()?.id || "",
+  ).trim();
+
+  if (!employeeId) {
+    return false;
+  }
+
+  try {
+    const tenantId =
+      getRequiredTenantIdForHrEmployeeData();
+
+    const supabase =
+      getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("pa_cycles")
+      .select("status, payload")
+      .eq("tenant_id", tenantId)
+      .ilike("status", "active");
+
+    if (error) {
+      throw error;
+    }
+
+    const activeCycles =
+      Array.isArray(data) ? data : [];
+
+    if (activeCycles.length === 0) {
+      return false;
+    }
+
+    // Match the PA page: exclude only when every Active cycle explicitly
+    // snapshots this employee as excluded. Missing snapshots mean eligible.
+    return activeCycles.every((cycle) => {
+      const excludedIds = cycle?.payload?.participationSnapshot?.excludedEmployeeIds;
+      return Array.isArray(excludedIds) && excludedIds.some(
+        (id) => String(id || "").trim() === employeeId,
+      );
+    });
+  } catch (error) {
+    console.error(
+      "PA highest-tier participation could not be resolved for the HR chooser:",
+      error,
+    );
+
+    return false;
+  }
+}
+
 async function showHrPerformanceAppraisalChooser() {
   const managerScope =
     await getHrPerformanceAppraisalManagerScope();
@@ -24874,6 +27681,12 @@ async function showHrPerformanceAppraisalChooser() {
   const hasManagerReviewCapability =
     managerScope.primaryEmployeeIds.length > 0 ||
     managerScope.secondaryEmployeeIds.length > 0;
+
+  // BEXHR_GROUP_B_V13_PATCH: PA exclusion follows current hierarchy even without cycles.
+  const employeeExcludedFromActivePaCycle =
+    await window.BexHRGroupBV13.isHighest(getSupabaseClient(), getCurrentHrEmployeeRecord()) ||
+    await isCurrentHrEmployeeExcludedFromActivePaCycle();
+
   const existingChooser = document.getElementById(
     "hrPerformanceAppraisalChooser",
   );
@@ -24884,150 +27697,187 @@ async function showHrPerformanceAppraisalChooser() {
 
   const overlay = document.createElement("div");
   overlay.id = "hrPerformanceAppraisalChooser";
+  overlay.className =
+    "position-fixed top-0 start-0 w-100 h-100 hr-operating-guide-modal hr-performance-appraisal-chooser-modal";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute(
     "aria-labelledby",
     "hrPerformanceAppraisalChooserTitle",
   );
+  overlay.setAttribute(
+    "aria-describedby",
+    "hrPerformanceAppraisalChooserDescription",
+  );
 
-  Object.assign(overlay.style, {
-    position: "fixed",
-    inset: "0",
-    zIndex: "10000",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "24px",
-    background: "rgba(15, 23, 42, 0.48)",
-  });
+  const stage = document.createElement("div");
+  stage.className = "hr-operating-guide-stage";
 
   const dialog = document.createElement("div");
+  dialog.className =
+    "hr-operating-guide-shell hr-performance-appraisal-chooser-shell";
+  dialog.setAttribute("tabindex", "-1");
 
-  Object.assign(dialog.style, {
-    width: "min(680px, 100%)",
-    background: "#ffffff",
-    borderRadius: "16px",
-    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.24)",
-    padding: "24px",
-    position: "relative",
-  });
+  const header = document.createElement("header");
+  header.className = "hr-operating-guide-header";
 
-  const title = document.createElement("h2");
-  title.id = "hrPerformanceAppraisalChooserTitle";
-  title.textContent = "Open Performance Appraisal";
-
-  Object.assign(title.style, {
-    margin: "0 0 8px",
-    fontSize: "20px",
-  });
-
-  const description = document.createElement("p");
-  description.textContent =
-    "Choose the Performance Appraisal workspace you want to open.";
-
-  Object.assign(description.style, {
-    margin: "0 0 24px",
-    color: "#475569",
-  });
-
-  const actions = document.createElement("div");
-
-  Object.assign(actions.style, {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(160px, 1fr))",
-    gap: "12px",
-    width: "100%",
-  });
+  const heading = document.createElement("div");
+  heading.className = "hr-operating-guide-heading";
+  heading.innerHTML = `
+    <span class="hr-operating-guide-heading-icon" aria-hidden="true">
+      <i class="bi bi-clipboard2-check"></i>
+    </span>
+    <div>
+      <span class="hr-operating-guide-kicker">Performance Appraisal</span>
+      <h2 id="hrPerformanceAppraisalChooserTitle">Choose your appraisal workspace</h2>
+      <p id="hrPerformanceAppraisalChooserDescription">
+        Continue to the appraisal area that matches the work you need to do.
+      </p>
+    </div>
+  `;
 
   const closeButton = document.createElement("button");
   closeButton.type = "button";
-  closeButton.textContent = "Cancel";
+  closeButton.className = "hr-operating-guide-close";
+  closeButton.setAttribute("aria-label", "Close Performance Appraisal chooser");
+  closeButton.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i>';
 
-  const employeeButton = document.createElement("button");
-  employeeButton.type = "button";
-  employeeButton.textContent = "My Appraisal";
+  header.append(heading, closeButton);
+
+  const body = document.createElement("div");
+  body.className = "hr-operating-guide-body";
+
+  const actions = document.createElement("div");
+  actions.className =
+    "hr-guide-workspace-grid hr-performance-appraisal-option-grid";
+  actions.setAttribute("aria-label", "Performance Appraisal workspaces");
+
+  const createOptionCard = ({
+    variantClass,
+    iconClass,
+    title,
+    description,
+  }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className =
+      `hr-guide-workspace-card ${variantClass} hr-performance-appraisal-option-card`;
+    button.innerHTML = `
+      <span class="hr-guide-workspace-icon" aria-hidden="true">
+        <i class="${iconClass}"></i>
+      </span>
+      <span class="hr-guide-workspace-copy">
+        <strong>${title}</strong>
+        <small>${description}</small>
+      </span>
+      <span class="hr-guide-workspace-link">
+        Open workspace <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+      </span>
+    `;
+    return button;
+  };
+
+  const employeeButton = createOptionCard({
+    variantClass: "hr-guide-workspace-card--self-service",
+    iconClass: "bi bi-person-check",
+    title: "My Appraisal",
+    description:
+      "Open your own Performance Appraisal workspace and review your current appraisal progress.",
+  });
+
+  const managerButton = createOptionCard({
+    variantClass: "hr-guide-workspace-card--review",
+    iconClass: "bi bi-people",
+    title: "Manager Reviews",
+    description:
+      "Review appraisal work for employees assigned to your primary or secondary reporting scope.",
+  });
 
   const isHrAdmin =
     canCurrentUserMaintainOrganizationSetupData();
+  const hrWorkspaceTitle = isHrAdmin
+    ? "HR Administration"
+    : "HR Standard View";
+  const hrWorkspaceButton = createOptionCard({
+    variantClass: "hr-guide-workspace-card--performance",
+    iconClass: "bi bi-clipboard-data",
+    title: hrWorkspaceTitle,
+    description: isHrAdmin
+      ? "Open the HR appraisal administration and oversight workspace available to your role."
+      : "Open the HR appraisal workspace available to your assigned HR responsibilities.",
+  });
 
-  const managerButton =
-    document.createElement("button");
+  const availableWorkspaceButtons = [];
 
-  managerButton.type = "button";
-  managerButton.textContent = "Manager Reviews";
+  if (!employeeExcludedFromActivePaCycle) {
+    actions.append(employeeButton);
 
-  const hrWorkspaceButton = document.createElement("button");
-  hrWorkspaceButton.type = "button";
-  hrWorkspaceButton.textContent =
-    isHrAdmin
-      ? "HR Administration"
-      : "HR Standard View";
+    availableWorkspaceButtons.push(
+      employeeButton,
+    );
+  }
 
-  [employeeButton, managerButton, hrWorkspaceButton].forEach(
-    (button) => {
-      Object.assign(button.style, {
-        width: "100%",
-        minHeight: "44px",
-        padding: "9px 14px",
-        borderRadius: "10px",
-        fontWeight: "700",
-        cursor: "pointer",
-      });
-    },
+  if (hasManagerReviewCapability) {
+    actions.append(managerButton);
+
+    availableWorkspaceButtons.push(
+      managerButton,
+    );
+  }
+
+  actions.append(hrWorkspaceButton);
+
+  availableWorkspaceButtons.push(
+    hrWorkspaceButton,
   );
 
-  Object.assign(closeButton.style, {
-    position: "absolute",
-    top: "1rem",
-    right: "1rem",
-    border: "0",
-    background: "transparent",
-    color: "#64748b",
-    fontSize: "0.875rem",
-    fontWeight: "600",
-    padding: "0.35rem 0.5rem",
-    cursor: "pointer",
-  });
+  actions.style.gridTemplateColumns =
+    "repeat(auto-fit, minmax(240px, 1fr))";
 
-  Object.assign(employeeButton.style, {
-    border: "1px solid #0f6f8f",
-    background: "#ffffff",
-    color: "#0f6f8f",
-  });
+  actions.style.maxWidth =
+    availableWorkspaceButtons.length === 2
+      ? "720px"
+      : "100%";
 
-  Object.assign(managerButton.style, {
-    border: "1px solid #0f6f8f",
-    background: "#ffffff",
-    color: "#0f6f8f",
-  });
+  actions.style.marginInline = "auto";
 
-  Object.assign(hrWorkspaceButton.style, {
-    border: "1px solid #0f6f8f",
-    background: "#0f6f8f",
-    color: "#ffffff",
-  });
+  body.append(actions);
+
+  const footer = document.createElement("footer");
+  footer.className = "hr-operating-guide-footer";
+
+  const accessNote = document.createElement("span");
+  accessNote.innerHTML =
+    '<i class="bi bi-shield-check" aria-hidden="true"></i>' +
+    '<span>Available appraisal workspaces follow your assigned responsibilities.</span>';
+
+  const footerCloseButton = document.createElement("button");
+  footerCloseButton.type = "button";
+  footerCloseButton.className = "btn btn-outline-secondary";
+  footerCloseButton.textContent = "Close";
+
+  footer.append(accessNote, footerCloseButton);
+  dialog.append(header, body, footer);
+  stage.append(dialog);
+  overlay.append(stage);
 
   const closeChooser = () => {
     document.removeEventListener(
       "keydown",
       handleKeydown,
     );
-
+    document.body?.classList.remove("hr-operating-guide-open");
     overlay.remove();
   };
 
-  closeButton.addEventListener(
-    "click",
-    closeChooser,
-  );
+  closeButton.addEventListener("click", closeChooser);
+  footerCloseButton.addEventListener("click", closeChooser);
 
   employeeButton.addEventListener(
     "click",
     () => {
       closeChooser();
-      openHrPerformanceAppraisal("employee");
+      openHrPerformanceAppraisal("employee", managerScope);
     },
   );
 
@@ -25061,83 +27911,75 @@ async function showHrPerformanceAppraisalChooser() {
     },
   );
 
-hrWorkspaceButton.addEventListener(
-  "click",
-  async () => {
-    closeChooser();
+  hrWorkspaceButton.addEventListener(
+    "click",
+    async () => {
+      closeChooser();
 
-    const departmentsLoaded =
-      await ensureHrPerformanceAppraisalDepartmentsLoaded();
+      const departmentsLoaded =
+        await ensureHrPerformanceAppraisalDepartmentsLoaded();
 
-    if (!departmentsLoaded) {
-      showPageAlert(
-        "warning",
-        "Performance Appraisal could not load the canonical BexHR departments. Please try again.",
+      if (!departmentsLoaded) {
+        showPageAlert(
+          "warning",
+          "Performance Appraisal could not load the canonical BexHR departments. Please try again.",
+        );
+        return;
+      }
+
+      if (
+        !publishHrPerformanceAppraisalContext({
+          mode: isHrAdmin
+            ? "hr-admin"
+            : "hr-standard",
+          managerScope,
+        })
+      ) {
+        return;
+      }
+
+      window.location.assign(
+        "features/performance-appraisal/performance-appraisal.html",
       );
+    },
+  );
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay || event.target === stage) {
+      closeChooser();
+    }
+  });
+
+  const handleKeydown = (event) => {
+    if (event.key !== "Escape") {
       return;
     }
 
-    if (
-      !publishHrPerformanceAppraisalContext({
-        mode: isHrAdmin
-          ? "hr-admin"
-          : "hr-standard",
-      })
-    ) {
-      return;
-    }
-
-    window.location.assign(
-      "features/performance-appraisal/performance-appraisal.html",
-    );
-  },
-);
-
-overlay.addEventListener("click", (event) => {
-  if (event.target === overlay) {
+    event.preventDefault();
     closeChooser();
-  }
-});
+  };
 
-const handleKeydown = (event) => {
-  if (event.key !== "Escape") {
+  if (
+    availableWorkspaceButtons.length === 1
+  ) {
+    availableWorkspaceButtons[0].click();
     return;
   }
 
-  document.removeEventListener(
+  document.addEventListener(
     "keydown",
     handleKeydown,
   );
 
-  closeChooser();
-};
+  document.body.append(overlay);
+  document.body?.classList.add("hr-operating-guide-open");
 
-document.addEventListener(
-  "keydown",
-  handleKeydown,
-);
-
-actions.append(employeeButton);
-
-if (hasManagerReviewCapability) {
-  actions.append(managerButton);
+  window.requestAnimationFrame(() => {
+    actions
+      .querySelector("button")
+      ?.focus({ preventScroll: true });
+  });
 }
-
-actions.append(hrWorkspaceButton);
-
-dialog.append(
-  closeButton,
-  title,
-  description,
-  actions,
-);
-
-overlay.append(dialog);
-document.body.append(overlay);
-
-employeeButton.focus();
-}
-
 async function ensureHrPerformanceAppraisalDepartmentsLoaded() {
   if (
     Array.isArray(state.organizationDepartments) &&
@@ -25172,7 +28014,13 @@ async function ensureHrPerformanceAppraisalDepartmentsLoaded() {
   }
 }
 
-function openHrPerformanceAppraisal(mode = "auto") {
+async function openHrPerformanceAppraisal(mode = "auto", managerScope = null) {
+  // BEXHR_GROUP_B_V13_PATCH: no direct bypass through employee-mode navigation.
+  if (mode === 'employee' &&
+      await window.BexHRGroupBV13.isHighest(getSupabaseClient(), getCurrentHrEmployeeRecord())) {
+    showPageAlert('warning','The highest occupied position does not have a personal appraisal.');
+    return;
+  }
   const isHrAdmin =
     canCurrentUserMaintainOrganizationSetupData();
 
@@ -25187,7 +28035,10 @@ function openHrPerformanceAppraisal(mode = "auto") {
       return;
     }
 
-    publishHrPerformanceAppraisalContext({ mode: "employee" });
+    publishHrPerformanceAppraisalContext({
+      mode: "employee",
+      managerScope,
+    });
     window.location.assign(
       "features/performance-appraisal/performance-appraisal.html",
     );
@@ -25559,20 +28410,31 @@ function renderHrModernOverview() {
     employees.map((employee) => [String(employee.id || "").trim(), employee]),
   );
 
-  const openReviews = (Array.isArray(state.profileCorrectionRequests)
-    ? state.profileCorrectionRequests
-    : []
-  ).filter((request) => {
-    const status = normalizeText(request.status || request.request_status || "pending");
-    return !["completed", "rejected", "cancelled", "closed"].includes(status);
-  });
+  const missingInformationEmployees =
+    activeEmployees.filter((employee) => {
+      const hasOrganizationPlacement =
+        isHrWholeOrganizationEmployee(
+          employee,
+        ) ||
+        Boolean(
+          String(
+            employee.department || "",
+          ).trim(),
+        );
 
-  const missingInformationEmployees = activeEmployees.filter((employee) => {
-    return !String(employee.employee_number || "").trim() ||
-      !String(employee.department || "").trim() ||
-      !String(employee.job_title || "").trim() ||
-      !String(employee.work_email || "").trim();
-  });
+      return (
+        !String(
+          employee.employee_number || "",
+        ).trim() ||
+        !hasOrganizationPlacement ||
+        !String(
+          employee.job_title || "",
+        ).trim() ||
+        !String(
+          employee.work_email || "",
+        ).trim()
+      );
+    });
 
   // HR OVERVIEW PAYROLL READINESS - CURRENT SALARY SETUP FIX
   // An employee is payroll-ready only when the salary setup is:
@@ -25609,15 +28471,15 @@ function renderHrModernOverview() {
   );
 
   if (state.dom.hrOverviewTotalEmployees) {
-    state.dom.hrOverviewTotalEmployees.textContent = String(employees.length);
+    state.dom.hrOverviewTotalEmployees.textContent = String(activeEmployees.length);
   }
 
   if (state.dom.hrOverviewActiveEmployees) {
-    state.dom.hrOverviewActiveEmployees.textContent = `${activeEmployees.length} active`;
-  }
-
-  if (state.dom.hrOverviewOpenReviews) {
-    state.dom.hrOverviewOpenReviews.textContent = String(openReviews.length);
+    const exitedCount = employees.filter((employee) =>
+      normalizeText(employee.status || "") === "exited",
+    ).length;
+    state.dom.hrOverviewActiveEmployees.textContent =
+      `${employees.length} employee records \u00b7 ${exitedCount} exited`;
   }
 
   if (state.dom.hrOverviewPayrollReady) {
@@ -25631,6 +28493,16 @@ function renderHrModernOverview() {
 
   if (state.dom.hrOverviewMissingInformation) {
     state.dom.hrOverviewMissingInformation.textContent = String(missingInformationEmployees.length);
+  }
+
+  // R14C: Distinct active departments from already-loaded, tenant-scoped employees.
+  // Whole-organisation positions (CEO/COO) and unassigned records are not departments.
+  if (state.dom.hrOverviewDepartmentsCount) {
+    const departmentKeys = new Set(activeEmployees
+      .filter((employee) => !isHrWholeOrganizationEmployee(employee))
+      .map((employee) => String(employee.department || "").trim().toLowerCase())
+      .filter(Boolean));
+    state.dom.hrOverviewDepartmentsCount.textContent = String(departmentKeys.size);
   }
 
   if (state.dom.hrOverviewPayrollReadinessPercent) {
@@ -25663,21 +28535,12 @@ function renderHrModernOverview() {
     ).filter((log) => normalizeText(log.status || log.delivery_status) === "failed");
 
     const priorityItems = [
-      openReviews.length
-        ? {
-          tone: "review",
-          icon: "bi-inbox",
-          title: `${openReviews.length} open HR review${openReviews.length === 1 ? "" : "s"}`,
-          detail: "Employee correction requests require HR attention.",
-          target: "hrTabReviewBtn",
-        }
-        : null,
       missingInformationEmployees.length
         ? {
           tone: "warning",
           icon: "bi-person-exclamation",
           title: `${missingInformationEmployees.length} incomplete employee record${missingInformationEmployees.length === 1 ? "" : "s"}`,
-          detail: "Complete employee number, department, job title, or work email information.",
+          detail: "Complete employee number, organizational placement, job title, or work email information.",
           target: "hrTabEmployeesBtn",
         }
         : null,
@@ -25726,7 +28589,7 @@ function renderHrModernOverview() {
             <i class="bi bi-check2-circle" aria-hidden="true"></i>
             <div>
               <strong>All clear</strong>
-              <span>No employee, review, payroll, or delivery actions need attention.</span>
+              <span>No employee, payroll, or delivery actions need attention.</span>
             </div>
           </div>
 
@@ -25737,16 +28600,6 @@ function renderHrModernOverview() {
               <span class="hr-overview-check-copy">
                 <small>Employee records</small>
                 <strong>${activeEmployees.length ? "Complete" : "No active staff"}</strong>
-              </span>
-              <i class="bi bi-chevron-right" aria-hidden="true"></i>
-            </button>
-
-            <button type="button" class="hr-overview-check-card tone-review"
-              onclick="document.getElementById('hrTabReviewBtn')?.click()">
-              <span class="hr-overview-check-icon"><i class="bi bi-clipboard2-check"></i></span>
-              <span class="hr-overview-check-copy">
-                <small>HR reviews</small>
-                <strong>No open reviews</strong>
               </span>
               <i class="bi bi-chevron-right" aria-hidden="true"></i>
             </button>
@@ -25778,24 +28631,82 @@ function renderHrModernOverview() {
     const departments = new Map();
 
     employees.forEach((employee) => {
-      const department = String(employee.department || "Unassigned").trim() || "Unassigned";
-      const current = departments.get(department) || { total: 0, active: 0, ready: 0 };
+      const rawDepartment =
+        String(
+          employee.department || "",
+        ).trim();
+
+      const department =
+        isHrWholeOrganizationEmployee(
+          employee,
+        )
+          ? "Whole organization"
+          : rawDepartment ||
+            "Unassigned";
+
+      const current =
+        departments.get(
+          department,
+        ) || {
+          total: 0,
+          active: 0,
+          ready: 0,
+        };
 
       current.total += 1;
 
-      if (isHrOverviewEmployeeActive(employee)) {
+      if (
+        isHrOverviewEmployeeActive(
+          employee,
+        )
+      ) {
         current.active += 1;
-        if (activePayrollMasterEmployeeIds.has(String(employee.id || "").trim())) {
+
+        if (
+          activePayrollMasterEmployeeIds.has(
+            String(
+              employee.id || "",
+            ).trim(),
+          )
+        ) {
           current.ready += 1;
         }
       }
 
-      departments.set(department, current);
+      departments.set(
+        department,
+        current,
+      );
     });
 
-    const departmentRows = Array.from(departments.entries())
-      .sort((left, right) => right[1].total - left[1].total)
-      .slice(0, 6);
+    const departmentRows =
+      Array.from(
+        departments.entries(),
+      )
+        .sort((left, right) => {
+          if (
+            left[0] === "Unassigned" &&
+            right[0] !== "Unassigned"
+          ) {
+            return 1;
+          }
+
+          if (
+            right[0] === "Unassigned" &&
+            left[0] !== "Unassigned"
+          ) {
+            return -1;
+          }
+
+          return (
+            right[1].total -
+              left[1].total ||
+            left[0].localeCompare(
+              right[0],
+            )
+          );
+        })
+        .slice(0, 6);
 
     state.dom.hrOverviewDepartmentList.innerHTML = departmentRows.length
       ? departmentRows.map(([department, counts]) => {
@@ -25803,10 +28714,17 @@ function renderHrModernOverview() {
           ? Math.round((counts.ready / counts.active) * 100)
           : 0;
 
+        const departmentMark =
+          department === "Whole organization"
+            ? "WO"
+            : department
+              .slice(0, 2)
+              .toUpperCase();
+
         return `
             <div class="hr-overview-department-row">
               <div class="hr-overview-department-main">
-                <span class="hr-overview-department-mark">${escapeHtml(department.slice(0, 2).toUpperCase())}</span>
+                <span class="hr-overview-department-mark">${escapeHtml(departmentMark)}</span>
                 <span>
                   <strong>${escapeHtml(department)}</strong>
                   <small>${counts.total} employee${counts.total === 1 ? "" : "s"}</small>
@@ -25837,23 +28755,6 @@ function renderHrModernOverview() {
         detail: getHrOverviewEmployeeName(employee),
       });
     });
-
-    (Array.isArray(state.profileCorrectionRequests) ? state.profileCorrectionRequests : [])
-      .forEach((request) => {
-        const date = getHrOverviewRecordDate(request, ["updated_at", "submitted_at", "created_at"]);
-        if (!date) return;
-
-        const employee = employeeById.get(String(request.employee_id || "").trim());
-        activities.push({
-          date,
-          icon: "bi-clipboard-check",
-          tone: "review",
-          title: "Profile correction activity",
-          detail: employee
-            ? getHrOverviewEmployeeName(employee)
-            : String(request.field_label || request.field_name || "Employee request"),
-        });
-      });
 
     (Array.isArray(state.recentManagerLeaveDecisionRecords)
       ? state.recentManagerLeaveDecisionRecords
@@ -25915,6 +28816,17 @@ function renderHrModernOverview() {
 }
 
 function switchHrWorkspace(workspace) {
+  // PRE-7B - Review destinations are retired, including calls from stale
+  // workspace memory or direct-link parameters. No review data is deleted.
+  if (workspace === "review") workspace = "dashboard";
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Generic/mobile/programmatic workspace navigation restores the existing
+  // full workspace. A sidebar task reapplies its focused view immediately
+  // after the authoritative hrTab* route completes.
+  if (!_hrSidebarTaskRoutingInProgress) {
+    resetHrNavigationTaskFocus();
+  }
+
   const isDashboard = workspace === "dashboard";
   const isProfile = workspace === "profile";
   const isEmployees = workspace === "employees";
@@ -25922,6 +28834,14 @@ function switchHrWorkspace(workspace) {
   const isSetup = workspace === "setup";
   const isPayroll = workspace === "payroll";
   const isSelfService = workspace === "selfservice";
+
+  if (isSelfService) {
+    const preferredSelfServiceSection = getPreferredHrSelfServiceSection();
+    window.EmployeeSelfService?.prepare?.(preferredSelfServiceSection, {
+      leaveView: preferredSelfServiceSection === "leave" ? "request" : undefined,
+    });
+    void initHrSelfServiceOnFirstOpen(preferredSelfServiceSection);
+  }
 
   state.dom.hrDashboardSection?.classList.toggle("d-none", !isDashboard);
   state.dom.hrProfileSection?.classList.toggle("d-none", !isProfile);
@@ -25963,15 +28883,17 @@ function switchHrWorkspace(workspace) {
     if (element) element.classList.toggle("active", active);
   });
 
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // switchHrWorkspace() remains the top-level source of truth. The sidebar
+  // only mirrors the current workspace and expands its single matching group.
+  syncHrSidebarGroupForWorkspace(workspace);
+
   updateHrModernApplicationHeader(workspace);
 
   if (isDashboard) {
     renderHrModernOverview();
   }
 
-  if (isSelfService) {
-    initHrSelfServiceOnFirstOpen();
-  }
 }
 
 function normalizeText(value) {
@@ -26296,6 +29218,204 @@ const EMPLOYEE_DEPARTMENT_JOB_TITLES = Object.freeze({
 // Manage Organization departments.
 // Employee records currently save department as text, so option values remain
 // department names instead of department IDs.
+// BEXHR ORGANIZATION-WIDE POSITIONS - R-12C
+// Keep the UI sentinel separate from the database value. Employee records save
+// whole-organization positions with department = null.
+const HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE = "__whole_organization__";
+
+function isHrWholeOrganizationDepartmentSelection(value = "") {
+  return String(value || "").trim() === HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE;
+}
+
+function getSelectedEmployeeDepartmentValue() {
+  const selectedValue = String(state.dom.department?.value || "").trim();
+  return isHrWholeOrganizationDepartmentSelection(selectedValue)
+    ? ""
+    : selectedValue;
+}
+
+function isHrWholeOrganizationJobTitleValue(jobTitleValue = "", tenantId = "") {
+  const normalizedTitle =
+    normalizeText(
+      jobTitleValue,
+    );
+
+  const tenantKey =
+    String(
+      tenantId || "",
+    ).trim();
+
+  if (!normalizedTitle) {
+    return false;
+  }
+
+  const matchingTitles =
+    (state.organizationJobTitles || [])
+      .filter((record) => {
+        const recordTenantId =
+          String(
+            record?.tenant_id || "",
+          ).trim();
+
+        const status =
+          normalizeText(
+            record?.status || "active",
+          );
+
+        return (
+          normalizeText(
+            record?.job_title || "",
+          ) === normalizedTitle &&
+          status === "active" &&
+          (
+            !tenantKey ||
+            !recordTenantId ||
+            recordTenantId === tenantKey
+          )
+        );
+      });
+
+  const wholeOrganizationTitles =
+    matchingTitles.filter(
+      (record) =>
+        !String(
+          record?.department_id || "",
+        ).trim(),
+    );
+
+  const departmentTitles =
+    matchingTitles.filter(
+      (record) =>
+        Boolean(
+          String(
+            record?.department_id || "",
+          ).trim(),
+        ),
+    );
+
+  return (
+    wholeOrganizationTitles.length === 1 &&
+    departmentTitles.length === 0
+  );
+}
+
+function isHrWholeOrganizationEmployee(employee = {}) {
+  return isHrWholeOrganizationJobTitleValue(
+    employee?.job_title || "",
+    employee?.tenant_id || "",
+  );
+}
+
+// GROUP B V10: tenant-scoped presentation only; never bulk-update employees
+// by a shared job-title string or treat rank changes as department changes.
+function getHrEmployeePositionScopePresentation(employee = {}) {
+  return window.BexHrGroupBV10?.resolveEmployeeScope(employee, {
+    tenantId: state.currentProfile?.tenant_id || '',
+    loaded: state.organizationPositionHierarchyLoaded === true,
+    positions: state.organizationJobTitles || [],
+  }) || { label: String(employee?.department || '').trim() || 'No department',
+    kind: 'saved', needsReview: false };
+}
+
+function getEmployeeDepartmentSelectionValue(employee = {}) {
+  return getHrEmployeePositionScopePresentation(employee).kind === 'whole'
+    ? HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE
+    : String(employee?.department || '').trim();
+}
+
+function syncHrEmployeeScopeReviewMessage(employee = state.currentEditingEmployee) {
+  const notice = document.getElementById('bexhrEmployeeScopeReview');
+  if (!notice) return;
+  notice.classList.toggle('d-none', !employee ||
+    !getHrEmployeePositionScopePresentation(employee).needsReview);
+}
+
+// Manager is a *suggested* role for a new hire into a configured whole-
+// organisation leadership position. Saved roles and manual choices always win.
+// BEXHR_GROUP_B_V12: onboarding role policy
+function getHrLeadershipOnboardingRolePolicy() {
+  if (state.currentEditingEmployee) return 'existing';
+  const whole = isHrWholeOrganizationDepartmentSelection(state.dom.department?.value || '');
+  if (!whole) return 'standard';
+  const title = String(state.dom.jobTitle?.value || '').trim();
+  if (!title) return 'awaiting-title';
+  const leadership = window.BexHrGroupBV10?.isConfiguredLeadershipPosition({
+    tenantId: state.currentProfile?.tenant_id || '',
+    loaded: state.organizationPositionHierarchyLoaded === true,
+    isWholeOrganisation: true,
+    jobTitle: title,
+    positions: state.organizationJobTitles || [],
+    links: state.organizationJobTitleHierarchy || [],
+  }) === true;
+  return leadership ? 'manager-only' : 'standard';
+}
+
+function restoreHrLeadershipOnboardingRoleOptions(restorePreviousChoice = true) {
+  const select = state.dom.systemRole;
+  if (!select || state.bexhrV12RoleLock !== true) return;
+  const saved = state.bexhrV12RoleOptionStates || [];
+  for (const original of saved) {
+    if (original.option?.isConnected === false) continue;
+    if (original.option) {
+      original.option.hidden = original.hidden;
+      original.option.disabled = original.disabled;
+    }
+  }
+  // Rebuilding the normal options preserves the existing HR Admin permission
+  // check; it does not grant a user HR Standard or HR Admin access.
+  const previous = String(state.bexhrV12RoleBeforeLock || '').trim();
+  state.bexhrV12RoleLock = false;
+  state.bexhrV12RoleOptionStates = null;
+  state.bexhrV12RoleBeforeLock = '';
+  if (restorePreviousChoice && !state.currentEditingEmployee && previous) {
+    setEmployeeSystemRoleFieldValue(previous);
+  } else {
+    syncEmployeeSystemRoleOptions(previous);
+  }
+  delete select.dataset.bexhrV12ManagerOnly;
+}
+
+function syncHrNewEmployeeManagerRoleSuggestion() {
+  const select = state.dom.systemRole;
+  if (!select) return;
+  if (state.currentEditingEmployee) {
+    restoreHrLeadershipOnboardingRoleOptions(false);
+    return;
+  }
+  // Do not override actual People view-only permissions.
+  if (select.disabled) return;
+  const policy = getHrLeadershipOnboardingRolePolicy();
+  const managerOnly = policy === 'manager-only' || policy === 'awaiting-title';
+  if (managerOnly) {
+    if (!Array.from(select.options).some(option => option.value === 'manager')) return;
+    if (state.bexhrV12RoleLock !== true) {
+      state.bexhrV12RoleBeforeLock = getSelectedEmployeeSystemRoleValue() || 'employee';
+      state.bexhrV12RoleLock = true;
+    }
+    // The existing role setter may rebuild the HR Standard option. Snapshot
+    // each current option before restricting; release restores original flags.
+    if (select.value !== 'manager') setEmployeeSystemRoleFieldValue('manager');
+    if (!Array.isArray(state.bexhrV12RoleOptionStates)) {
+      state.bexhrV12RoleOptionStates = Array.from(select.options).map(option => ({
+        option, hidden: option.hidden, disabled: option.disabled,
+      }));
+    }
+    Array.from(select.options).forEach(option => {
+      const allowed = option.value === 'manager';
+      option.hidden = !allowed;
+      option.disabled = !allowed;
+    });
+    select.value = 'manager';
+    select.dataset.bexhrV12ManagerOnly = 'true';
+    state.bexhrRoleAutoSuggested = true;
+  } else {
+    restoreHrLeadershipOnboardingRoleOptions(true);
+    state.bexhrRoleAutoSuggested = false;
+  }
+  syncHrRoleAssignmentWarning();
+  updateEmployeeSaveButtonState();
+}
+
 function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartment = "") {
   const departmentSelect = state.dom.department;
   if (!departmentSelect) return;
@@ -26312,10 +29432,30 @@ function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartm
       ),
     );
 
-  // ORGANIZATION HR SETUP VALUES - STEP 5A
-  // If setup values have not loaded yet, keep existing hardcoded HTML options.
-  // This preserves existing employee form behaviour instead of leaving HR stuck.
+  // If setup values have not loaded yet, retain the existing fallback choices
+  // but still expose the whole-organization option.
   if (!activeDepartments.length) {
+    const hasWholeOrganizationOption = Array.from(departmentSelect.options).some(
+      (option) => option.value === HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE,
+    );
+
+    if (!hasWholeOrganizationOption) {
+      const wholeOrganizationOption = document.createElement("option");
+      wholeOrganizationOption.value = HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE;
+      wholeOrganizationOption.textContent = "No department - whole organization";
+      departmentSelect.insertBefore(
+        wholeOrganizationOption,
+        departmentSelect.options[1] || null,
+      );
+    }
+
+    if (currentValue) {
+      const matchingOption = Array.from(departmentSelect.options).find(
+        (option) => String(option.value) === currentValue,
+      );
+      if (matchingOption) departmentSelect.value = currentValue;
+    }
+
     return;
   }
 
@@ -26325,6 +29465,11 @@ function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartm
   placeholderOption.value = "";
   placeholderOption.textContent = "Select department";
   departmentSelect.appendChild(placeholderOption);
+
+  const wholeOrganizationOption = document.createElement("option");
+  wholeOrganizationOption.value = HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE;
+  wholeOrganizationOption.textContent = "No department - whole organization";
+  departmentSelect.appendChild(wholeOrganizationOption);
 
   activeDepartments.forEach((department) => {
     const option = document.createElement("option");
@@ -26340,13 +29485,10 @@ function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartm
 
     if (matchingOption) {
       departmentSelect.value = matchingOption.value;
-    } else {
-      // ORGANIZATION HR SETUP VALUES - STEP 5A
-      // Preserve an older saved department during edit mode, even if HR has
-      // since marked that department inactive or renamed it.
+    } else if (!isHrWholeOrganizationDepartmentSelection(currentValue)) {
       const savedOption = document.createElement("option");
       savedOption.value = currentValue;
-      savedOption.textContent = `${currentValue} (saved value)`;
+      savedOption.textContent = currentValue + " (saved value)";
       departmentSelect.appendChild(savedOption);
       departmentSelect.value = currentValue;
     }
@@ -26358,7 +29500,11 @@ function populateEmployeeDepartmentOptionsFromOrganizationSetup(preferredDepartm
 // Department using Manage Organization setup values.
 // Falls back to the old hardcoded mapping only if setup values are unavailable.
 function populateJobTitleOptionsForDepartment(preferredJobTitle = "") {
-  const department = String(state.dom.department?.value || "").trim();
+  const departmentSelection = String(state.dom.department?.value || "").trim();
+  const isWholeOrganization = isHrWholeOrganizationDepartmentSelection(
+    departmentSelection,
+  );
+  const department = isWholeOrganization ? "" : departmentSelection;
   const jobTitleSelect = state.dom.jobTitle;
 
   if (!jobTitleSelect) return;
@@ -26371,44 +29517,50 @@ function populateJobTitleOptionsForDepartment(preferredJobTitle = "") {
 
   const placeholderOption = document.createElement("option");
   placeholderOption.value = "";
-  placeholderOption.textContent = department
-    ? "Select job title"
-    : "Select department first";
+  placeholderOption.textContent = isWholeOrganization
+    ? "Select whole-organization job title"
+    : department
+      ? "Select job title"
+      : "Select department first";
 
   jobTitleSelect.appendChild(placeholderOption);
 
   let jobTitles = [];
 
-  // ORGANIZATION HR SETUP VALUES - STEP 5A
-  // Preferred source: active Job Titles saved under active Departments
-  // in Manage Organization.
-  const matchingDepartment = (state.organizationDepartments || []).find(
-    (departmentRecord) =>
-      normalizeText(departmentRecord.department_name) === normalizeText(department) &&
-      normalizeText(departmentRecord.status) === "active",
-  );
-
-  if (matchingDepartment) {
+  if (isWholeOrganization) {
     jobTitles = (state.organizationJobTitles || [])
-      .filter((jobTitle) => {
-        const isSameDepartment =
-          String(jobTitle.department_id || "").trim() ===
-          String(matchingDepartment.id || "").trim();
-
-        const isActive = normalizeText(jobTitle.status) === "active";
-
-        return isSameDepartment && isActive;
-      })
+      .filter((jobTitle) =>
+        !String(jobTitle.department_id || "").trim() &&
+        normalizeText(jobTitle.status) === "active",
+      )
       .map((jobTitle) => String(jobTitle.job_title || "").trim())
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
-  }
+  } else {
+    const matchingDepartment = (state.organizationDepartments || []).find(
+      (departmentRecord) =>
+        normalizeText(departmentRecord.department_name) === normalizeText(department) &&
+        normalizeText(departmentRecord.status) === "active",
+    );
 
-  // ORGANIZATION HR SETUP VALUES - STEP 5A
-  // Safe fallback: use the old hardcoded mapping only if the setup table
-  // has not provided titles for this department yet.
-  if (!jobTitles.length && department) {
-    jobTitles = EMPLOYEE_DEPARTMENT_JOB_TITLES[department] || [];
+    if (matchingDepartment) {
+      jobTitles = (state.organizationJobTitles || [])
+        .filter((jobTitle) => {
+          const isSameDepartment =
+            String(jobTitle.department_id || "").trim() ===
+            String(matchingDepartment.id || "").trim();
+
+          const isActive = normalizeText(jobTitle.status) === "active";
+          return isSameDepartment && isActive;
+        })
+        .map((jobTitle) => String(jobTitle.job_title || "").trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+    }
+
+    if (!jobTitles.length && department) {
+      jobTitles = EMPLOYEE_DEPARTMENT_JOB_TITLES[department] || [];
+    }
   }
 
   jobTitles.forEach((jobTitle) => {
@@ -26418,30 +29570,23 @@ function populateJobTitleOptionsForDepartment(preferredJobTitle = "") {
     jobTitleSelect.appendChild(option);
   });
 
-  // ORGANIZATION HR SETUP VALUES - STEP 5A
-  // Preserve old/saved job titles during edit mode, even if HR later made
-  // the title inactive or it is not part of the active controlled list.
   if (savedOrCurrentJobTitle) {
-    const titleExists = jobTitles.some(
-      (jobTitle) =>
-        jobTitle.toLowerCase() === savedOrCurrentJobTitle.toLowerCase(),
+    const matchingTitle = jobTitles.find(
+      (jobTitle) => normalizeText(jobTitle) === normalizeText(savedOrCurrentJobTitle),
     );
 
-    if (titleExists) {
-      jobTitleSelect.value = jobTitles.find(
-        (jobTitle) =>
-          jobTitle.toLowerCase() === savedOrCurrentJobTitle.toLowerCase(),
-      );
-    } else if (department) {
+    if (matchingTitle) {
+      jobTitleSelect.value = matchingTitle;
+    } else if (departmentSelection) {
       const savedOption = document.createElement("option");
       savedOption.value = savedOrCurrentJobTitle;
-      savedOption.textContent = `${savedOrCurrentJobTitle} (saved value)`;
+      savedOption.textContent = savedOrCurrentJobTitle + " (saved value)";
       jobTitleSelect.appendChild(savedOption);
       jobTitleSelect.value = savedOrCurrentJobTitle;
     }
   }
 
-  jobTitleSelect.disabled = !department;
+  jobTitleSelect.disabled = !departmentSelection;
   jobTitleSelect.classList.remove("is-invalid");
 
   updateEmployeeSaveButtonState();
@@ -26486,7 +29631,7 @@ function setEmployeeAccountPanel(accountLinkage = null) {
 // updates profiles.department to "Human Resources" so it is always sourced
 // from the list rather than being a blank or freehand string.
 async function ensureHrProfileDepartment(supabase, profileData) {
-  if (!profileData) return profileData;
+  if (!profileData || state.h12NativeHrStandard === true) return profileData;
 
   const HR_DEPT_NAME = "Human Resources";
 
@@ -26584,21 +29729,105 @@ function clearPageAlert() {
   state.dom.pageAlert.textContent = "";
 }
 
-async function getSignedProfileImageUrl(filePath) {
+// BEXHR PROFILE IMAGE EARLY RESOLUTION - R-08
+function getProfileImageSignedUrlCacheKey(filePath) {
+  const userId = String(state.currentUser?.id || "anonymous").trim();
+  return `${PROFILE_IMAGE_SIGNED_URL_CACHE_PREFIX}:${userId}:${filePath}`;
+}
+
+function getCachedProfileImageSignedUrl(filePath) {
   if (!filePath) return null;
 
   try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.storage
-      .from(PROFILE_IMAGES_BUCKET)
-      .createSignedUrl(filePath, 3600);
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    const rawValue = window.sessionStorage.getItem(cacheKey);
+    if (!rawValue) return null;
 
-    if (error) throw error;
-    return data?.signedUrl || null;
+    const cached = JSON.parse(rawValue);
+    const signedUrl = String(cached?.signedUrl || "").trim();
+    const expiresAt = Number(cached?.expiresAt || 0);
+
+    if (!signedUrl || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      window.sessionStorage.removeItem(cacheKey);
+      return null;
+    }
+
+    return signedUrl;
   } catch (error) {
-    console.error("Error creating signed profile image URL:", error);
     return null;
   }
+}
+
+function cacheProfileImageSignedUrl(filePath, signedUrl) {
+  if (!filePath || !signedUrl) return;
+
+  try {
+    const cacheKey = getProfileImageSignedUrlCacheKey(filePath);
+    window.sessionStorage.setItem(
+      cacheKey,
+      JSON.stringify({
+        signedUrl,
+        expiresAt: Date.now() + PROFILE_IMAGE_SIGNED_URL_CACHE_TTL_MS,
+      }),
+    );
+  } catch (error) {
+    // Browser storage is an optimisation only. Profile rendering must still
+    // succeed when sessionStorage is restricted or unavailable.
+  }
+}
+
+function preloadProfileImageUrl(signedUrl) {
+  if (!signedUrl) return;
+
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = signedUrl;
+  } catch (error) {
+    // Preloading is best-effort only. The visible <img> remains authoritative.
+  }
+}
+
+function primeProfileImageSignedUrl(filePath) {
+  if (!filePath) return;
+
+  void getSignedProfileImageUrl(filePath).then((signedUrl) => {
+    if (signedUrl) preloadProfileImageUrl(signedUrl);
+  });
+}
+
+async function getSignedProfileImageUrl(filePath) {
+  if (!filePath) return null;
+
+  const cachedSignedUrl = getCachedProfileImageSignedUrl(filePath);
+  if (cachedSignedUrl) return cachedSignedUrl;
+
+  const requestKey = getProfileImageSignedUrlCacheKey(filePath);
+  const existingRequest = profileImageSignedUrlPromises.get(requestKey);
+  if (existingRequest) return existingRequest;
+
+  const signedUrlRequest = (async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.storage
+        .from(PROFILE_IMAGES_BUCKET)
+        .createSignedUrl(filePath, 3600);
+
+      if (error) throw error;
+
+      const signedUrl = data?.signedUrl || null;
+      if (signedUrl) cacheProfileImageSignedUrl(filePath, signedUrl);
+      return signedUrl;
+    } catch (error) {
+      console.error("Error creating signed profile image URL:", error);
+      return null;
+    } finally {
+      profileImageSignedUrlPromises.delete(requestKey);
+    }
+  })();
+
+  profileImageSignedUrlPromises.set(requestKey, signedUrlRequest);
+  return signedUrlRequest;
 }
 
 function renderHrProfile(profile, user) {
@@ -26607,6 +29836,19 @@ function renderHrProfile(profile, user) {
   const role = String(profile?.role || "hr").toLowerCase();
   const department = profile?.department || "";
   const initials = getInitials(fullName, "HR");
+
+  // BEXHR_H12_G4_NATIVE_PILOT_20261111: label verified secondary access without modifying profile.role.
+  if (state.h12NativeHrStandard === true) {
+    const area = document.querySelector(".hr-modern-account-area");
+    if (area && !document.getElementById("bexhrH12SecondaryHrBadge")) {
+      const badge = document.createElement("span");
+      badge.id = "bexhrH12SecondaryHrBadge";
+      badge.textContent = "HR Standard · Dual role pilot";
+      badge.style.cssText = "font-size:12px;font-weight:700;border-radius:14px;" +
+        "padding:6px 10px;background:#e5f5f2;color:#17675e;";
+      area.insertBefore(badge, area.firstChild);
+    }
+  }
 
   if (state.dom.hrInitials) {
     state.dom.hrInitials.textContent = initials;
@@ -27100,7 +30342,7 @@ async function refreshOrganizationHrSetupValues() {
   try {
     const supabase = getSupabaseClient();
 
-    const [departmentsResponse, jobTitlesResponse] = await Promise.all([
+    const [departmentsResponse, jobTitlesResponse, hierarchyResponse, reportingCapabilitiesResponse] = await Promise.all([
       supabase
         .from("organization_departments")
         .select("*")
@@ -27110,10 +30352,29 @@ async function refreshOrganizationHrSetupValues() {
         .from("organization_job_titles")
         .select("*")
         .order("job_title", { ascending: true }),
+
+      supabase
+        .from("organization_job_title_hierarchy")
+        .select("*")
+        .order("created_at", { ascending: true }),
+
+      // P7B departmental structure is opt-in only after the reviewed SQL is
+      // deployed. Missing RPC is expected on older databases: retain legacy UI.
+      supabase.rpc("bexhr_p7b_structure_capabilities"),
     ]);
 
     if (departmentsResponse.error) throw departmentsResponse.error;
     if (jobTitlesResponse.error) throw jobTitlesResponse.error;
+    if (hierarchyResponse.error) throw hierarchyResponse.error;
+
+    const capabilities = Array.isArray(reportingCapabilitiesResponse?.data)
+      ? reportingCapabilitiesResponse.data[0]
+      : reportingCapabilitiesResponse?.data;
+    state.p7bDepartmentReportingEnabled = Boolean(
+      !reportingCapabilitiesResponse?.error &&
+      capabilities?.department_positions === true &&
+      capabilities?.atomic_position_save === true,
+    );
 
     state.organizationDepartments = Array.isArray(departmentsResponse.data)
       ? departmentsResponse.data
@@ -27122,6 +30383,11 @@ async function refreshOrganizationHrSetupValues() {
     state.organizationJobTitles = Array.isArray(jobTitlesResponse.data)
       ? jobTitlesResponse.data
       : [];
+
+    state.organizationJobTitleHierarchy = Array.isArray(hierarchyResponse.data)
+      ? hierarchyResponse.data
+      : [];
+    state.organizationPositionHierarchyLoaded = true;
 
     // ORGANIZATION HR SETUP VALUES - STEP 4A
     // Render Department Records after loading setup values.
@@ -27139,6 +30405,10 @@ async function refreshOrganizationHrSetupValues() {
     // This is read-only for now; save/edit comes after this is confirmed stable.
     renderOrganizationJobTitlesTable();
 
+    // BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+    renderOrganizationPositionHierarchy();
+    syncOrganizationJobTitleReportsToControls();
+
     // ORGANIZATION HR SETUP VALUES - STEP 5A
     // Keep the Create/Edit Employee Department and Job Title dropdowns aligned
     // with the latest Manage Organization setup records.
@@ -27149,12 +30419,108 @@ async function refreshOrganizationHrSetupValues() {
       state.dom.jobTitle?.value || "",
     );
 
+    // A successful position-scope update immediately refreshes the directory.
+    // Do not replace form inputs someone has deliberately changed mid-edit.
+    const openEmployee = state.currentEditingEmployee;
+    if (openEmployee) {
+      const originalDepartment = String(openEmployee.department || '').trim();
+      const shownDepartment = String(state.dom.department?.value || '').trim();
+      const configuredScope = getHrEmployeePositionScopePresentation(openEmployee);
+      if (configuredScope.kind === 'whole' &&
+          (normalizeText(shownDepartment) === normalizeText(originalDepartment) ||
+           !shownDepartment)) {
+        populateEmployeeDepartmentOptionsFromOrganizationSetup(
+          HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE);
+        if (state.dom.department) {
+          state.dom.department.value = HR_WHOLE_ORGANIZATION_DEPARTMENT_VALUE;
+        }
+        populateJobTitleOptionsForDepartment(openEmployee.job_title || '');
+      }
+      syncHrEmployeeScopeReviewMessage(openEmployee);
+    } else {
+      syncHrNewEmployeeManagerRoleSuggestion();
+    }
+    if (Array.isArray(state.filteredEmployees) &&
+        Array.isArray(state.employees) && state.employees.length) {
+      renderEmployeeRecords(state.filteredEmployees);
+    }
+
+    refreshHrReportingDepartmentChoices();
     updateOrganizationJobTitleSaveButtonState();
+
+    // P7B locked contract: one tenant-data snapshot for the HR Admin setup
+    // reminder. No browser storage, no new query and no permission changes.
+    // Both HR Admin and HR Standard use this same refresh; only the admin
+    // is allowed to see a setup action in the onboarding UI.
+    const setupTenant = String(state.currentProfile?.tenant_id || '').trim();
+    const activePositions = (state.organizationJobTitles || []).filter((row) =>
+      normalizeText(row.status || 'active') === 'active' &&
+      (!String(row.tenant_id || '').trim() || String(row.tenant_id) === setupTenant),
+    );
+    const activeDepartments = (state.organizationDepartments || []).filter((row) =>
+      normalizeText(row.status || 'active') === 'active' &&
+      (!String(row.tenant_id || '').trim() || String(row.tenant_id) === setupTenant),
+    );
+    const wholeOrganizationPositions = activePositions.filter((row) =>
+      !String(row.department_id || '').trim(),
+    );
+    const configuredPositionIds = new Set(
+      (state.organizationJobTitleHierarchy || [])
+        .filter((row) => String(row.tenant_id || '') === setupTenant)
+        .map((row) => String(row.job_title_id || '').trim())
+        .filter(Boolean),
+    );
+    window.dispatchEvent(new CustomEvent('bexhr:organization-setup-updated', {
+      detail: {
+        loaded: true,
+        canMaintain: canCurrentUserMaintainOrganizationSetupData(),
+        activeDepartments: activeDepartments.length,
+        activeTitles: activePositions.length,
+        activeLinks: configuredPositionIds.size,
+        wholeOrganizationPositions: wholeOrganizationPositions.length,
+        // Do not demand department links until the upgraded SQL is present.
+        // Existing organisations remain usable while they configure changes.
+        unconfiguredPositions: (state.p7bDepartmentReportingEnabled
+          ? activePositions : wholeOrganizationPositions).filter((row) =>
+          !configuredPositionIds.has(String(row.id || '').trim()),
+        ).length,
+        // BEXHR_HIERARCHY_TEMPLATE_ASSISTANT_PHASE_H1: non-personal, tenant-scoped data for a read-only preview.
+        hierarchyPreview: {
+          tenantId: setupTenant,
+          departmentReportingEnabled: state.p7bDepartmentReportingEnabled === true,
+          positions: activePositions.map((row) => ({
+            id: String(row.id || '').trim(),
+            tenant_id: String(row.tenant_id || '').trim(),
+            job_title: String(row.job_title || '').trim(),
+            department_id: String(row.department_id || '').trim(),
+            status: String(row.status || 'active').trim(),
+          })),
+          departments: activeDepartments.map((row) => ({
+            id: String(row.id || '').trim(),
+            tenant_id: String(row.tenant_id || '').trim(),
+            department_name: String(row.department_name || '').trim(),
+          })),
+          links: (state.organizationJobTitleHierarchy || [])
+            .filter((row) => String(row.tenant_id || '').trim() === setupTenant)
+            .map((row) => ({
+              tenant_id: setupTenant,
+              job_title_id: String(row.job_title_id || '').trim(),
+              reports_to_job_title_id: String(row.reports_to_job_title_id || '').trim(),
+            })),
+        },
+      },
+    }));
   } catch (error) {
     console.error("Error loading organization HR setup values:", error);
 
     state.organizationDepartments = [];
     state.organizationJobTitles = [];
+    state.organizationJobTitleHierarchy = [];
+    state.organizationPositionHierarchyLoaded = false;
+    state.p7bDepartmentReportingEnabled = false;
+    window.dispatchEvent(new CustomEvent('bexhr:organization-setup-updated', {
+      detail: { loaded: false },
+    }));
 
     showPageAlert(
       "danger",
@@ -27626,13 +30992,23 @@ async function refreshCompanyAdminAuditHistory({
   try {
     const supabase = getSupabaseClient();
 
-    const { data, error } = await supabase.rpc(
-      "list_administrative_audit_events",
-      {
-        p_limit: 100,
-        p_offset: 0,
-      },
-    );
+    const readAuditHistory = () =>
+      supabase.rpc(
+        "list_administrative_audit_events",
+        {
+          p_limit: 100,
+          p_offset: 0,
+        },
+      );
+
+    const { data, error } =
+      window.SessionManager
+        ?.runWithFreshSessionRead
+        ? await window.SessionManager
+          .runWithFreshSessionRead(
+            readAuditHistory,
+          )
+        : await readAuditHistory();
 
     if (error) throw error;
 
@@ -28001,6 +31377,137 @@ async function handleOrganizationDepartmentSave() {
   }
 }
 
+// BEXHR R-14A SAFE ORGANIZATION SETUP DELETE
+// Deletion remains a Tenant-Admin-only protected RPC. Direct browser DELETE
+// stays revoked; dependencies fail closed instead of cascading.
+async function deleteOrganizationDepartmentRecord(departmentId) {
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Department Setup");
+    return;
+  }
+
+  const record = (state.organizationDepartments || []).find(
+    (department) => String(department.id) === String(departmentId),
+  );
+
+  if (!record) {
+    showPageAlert("warning", "The selected Department could not be found.");
+    return;
+  }
+
+  const departmentName = String(record.department_name || "Department").trim();
+  const confirmed = window.confirm(
+    "Delete Department \"" + departmentName + "\"? This is allowed only when no employees, job titles, appraisal records, or other protected records still use it.",
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "hr_tenant_admin_delete_organization_department",
+      { p_department_id: record.id },
+    );
+
+    if (error) throw error;
+
+    if (
+      String(state.dom.editingOrganizationDepartmentId?.value || "") ===
+      String(record.id)
+    ) {
+      resetOrganizationDepartmentForm();
+    }
+
+    await refreshOrganizationHrSetupValues();
+    redirectToOrganizationDepartmentRecordsAfterSave();
+
+    const successMessage =
+      "Department <strong>" + escapeHtml(departmentName) + "</strong> was deleted successfully.";
+    showPageAlert("success", successMessage);
+    showDashboardToast("success", "Department Deleted", successMessage);
+    return data;
+  } catch (error) {
+    console.error("Error deleting organization department:", error);
+    const message = String(error.message || "Department could not be deleted.");
+    const isInUse =
+      String(error.code || "") === "23503" ||
+      message.includes("BEXHR_ORG_DEPARTMENT_IN_USE");
+
+    showPageAlert(isInUse ? "warning" : "danger", escapeHtml(message));
+    showDashboardToast(
+      isInUse ? "warning" : "danger",
+      isInUse ? "Department Still In Use" : "Department Delete Failed",
+      escapeHtml(message),
+    );
+  } finally {
+    applyHrOrganizationSetupAccessControls();
+  }
+}
+
+async function deleteOrganizationJobTitleRecord(jobTitleId) {
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Job Title Setup");
+    return;
+  }
+
+  const record = (state.organizationJobTitles || []).find(
+    (jobTitle) => String(jobTitle.id) === String(jobTitleId),
+  );
+
+  if (!record) {
+    showPageAlert("warning", "The selected Job Title could not be found.");
+    return;
+  }
+
+  const jobTitleName = String(record.job_title || "Job Title").trim();
+  const confirmed = window.confirm(
+    "Delete Job Title \"" + jobTitleName + "\"? This is allowed only when no employee or protected company record still uses it.",
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "hr_tenant_admin_delete_organization_job_title",
+      { p_job_title_id: record.id },
+    );
+
+    if (error) throw error;
+
+    if (
+      String(state.dom.editingOrganizationJobTitleId?.value || "") ===
+      String(record.id)
+    ) {
+      resetOrganizationJobTitleForm();
+    }
+
+    await refreshOrganizationHrSetupValues();
+    redirectToOrganizationJobTitleRecordsAfterSave();
+
+    const successMessage =
+      "Job Title <strong>" + escapeHtml(jobTitleName) + "</strong> was deleted successfully.";
+    showPageAlert("success", successMessage);
+    showDashboardToast("success", "Job Title Deleted", successMessage);
+    return data;
+  } catch (error) {
+    console.error("Error deleting organization job title:", error);
+    const message = String(error.message || "Job Title could not be deleted.");
+    const isInUse =
+      String(error.code || "") === "23503" ||
+      message.includes("BEXHR_ORG_JOB_TITLE_IN_USE");
+
+    showPageAlert(isInUse ? "warning" : "danger", escapeHtml(message));
+    showDashboardToast(
+      isInUse ? "warning" : "danger",
+      isInUse ? "Job Title Still In Use" : "Job Title Delete Failed",
+      escapeHtml(message),
+    );
+  } finally {
+    applyHrOrganizationSetupAccessControls();
+  }
+}
+
 // AUDIT RECORD PRESENTATION CLEANUP - PHASE 2I-C1
 // Internal migration provenance remains stored for traceability but is not
 // useful in daily Company Administration tables. Preserve user-entered notes.
@@ -28067,15 +31574,26 @@ function renderOrganizationDepartmentsTable() {
       </td>
 
       <td class="text-center">
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-primary"
-          title="Edit department"
-          aria-label="Edit department"
-          onclick="window.hrEditOrganizationDepartmentRecord('${safeDepartmentId}')"
-        >
-          <i class="bi bi-pencil-square"></i>
-        </button>
+        <div class="d-inline-flex align-items-center gap-2">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary"
+            title="Edit department"
+            aria-label="Edit department"
+            onclick="window.hrEditOrganizationDepartmentRecord('${safeDepartmentId}')"
+          >
+            <i class="bi bi-pencil-square"></i>
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-danger"
+            title="Delete department"
+            aria-label="Delete department"
+            onclick="window.hrDeleteOrganizationDepartmentRecord('${safeDepartmentId}')"
+          >
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
       </td>
     `;
 
@@ -28147,7 +31665,6 @@ function populateOrganizationJobTitleDepartmentOptions(preferredDepartmentId = "
   if (!select) return;
 
   const currentValue = String(preferredDepartmentId || select.value || "").trim();
-
   const departments = Array.isArray(state.organizationDepartments)
     ? state.organizationDepartments
     : [];
@@ -28179,30 +31696,218 @@ function populateOrganizationJobTitleDepartmentOptions(preferredDepartmentId = "
     const matchingOption = Array.from(select.options).find(
       (option) => String(option.value) === currentValue,
     );
-
-    if (matchingOption) {
-      select.value = currentValue;
-    }
+    if (matchingOption) select.value = currentValue;
   }
 
-  updateOrganizationJobTitleSaveButtonState();
+  syncOrganizationJobTitleScopeControls();
 }
 // ORGANIZATION HR SETUP VALUES - STEP 4B-2
 // Job Title form follows the same grey/blue button behaviour used elsewhere.
+// BEXHR ORGANIZATION-WIDE POSITIONS - R-12C
+function getOrganizationJobTitleScopeValue() {
+  return String(state.dom.organizationJobTitleScope?.value || "department").trim();
+}
+
+// R40 P7B: One visible Department / Scope selector; keep the existing form's
+// validated scope and department inputs as its single source of truth.
+function hrR40SyncUnifiedPositionScope() {
+  if (state.p7bDepartmentReportingEnabled !== true) return;
+  const scope = state.dom.organizationJobTitleScope;
+  const department = state.dom.organizationJobTitleDepartmentId;
+  const departmentField = state.dom.organizationJobTitleDepartmentField;
+  const form = state.dom.organizationJobTitleForm;
+  const scopeField = scope?.closest('.col-12');
+  if (!scope || !department || !departmentField || !form || !scopeField ||
+      !form.contains(scopeField) || !scopeField.parentElement) return;
+  const WHOLE = '__bexhr_whole_organisation__';
+  let unified = document.getElementById('bexhrR40UnifiedPositionScope');
+  if (!unified) {
+    const host = document.createElement('div');
+    host.id = 'bexhrR40UnifiedPositionScopeField';
+    host.className = 'col-12 col-md-6 col-xl-4';
+    const label = document.createElement('label');
+    label.className = 'form-label fw-semibold';
+    label.htmlFor = 'bexhrR40UnifiedPositionScope';
+    label.textContent = 'Department / Scope *';
+    unified = document.createElement('select');
+    unified.id = 'bexhrR40UnifiedPositionScope';
+    unified.className = 'form-select';
+    unified.required = true;
+    const help = document.createElement('div');
+    help.className = 'form-text';
+    help.textContent = 'Whole organisation is a company-wide position, not a department.';
+    host.append(label, unified, help);
+    scopeField.before(host);
+    unified.addEventListener('change', () => {
+      const chosen = String(unified.value || '').trim();
+      scope.value = chosen === WHOLE ? 'organization' : 'department';
+      department.value = chosen && chosen !== WHOLE ? chosen : '';
+      scope.dispatchEvent(new Event('change', { bubbles: true }));
+      department.dispatchEvent(new Event('change', { bubbles: true }));
+      updateOrganizationJobTitleSaveButtonState();
+    });
+    if (window.MutationObserver) {
+      new MutationObserver(() => window.requestAnimationFrame(hrR40SyncUnifiedPositionScope))
+        .observe(department, { childList: true });
+    }
+  }
+  scopeField.classList.add('d-none');
+  departmentField.classList.add('d-none');
+  if (!document.getElementById('bexhrR40TitleTableCleanup')) {
+    const style = document.createElement('style');
+    style.id = 'bexhrR40TitleTableCleanup';
+    style.textContent = '#hrOrganizationInternalWorkspace [data-hr-setup-workspace-panel="jobTitles"] th:nth-child(3), ' +
+      '#hrOrganizationInternalWorkspace [data-hr-setup-workspace-panel="jobTitles"] td[data-label="Reports to"] { display:none !important; }';
+    document.head.appendChild(style);
+  }
+  // Use the original tenant-filtered department options. No assumed departments.
+  const choices = Array.from(department.options).filter((opt) =>
+    !opt.disabled && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(opt.value || ''))
+  ).map((opt) => [String(opt.value), String(opt.textContent || '').trim()]);
+  const signature = JSON.stringify(choices);
+  if (unified.dataset.bexhrR40Options !== signature) {
+    unified.replaceChildren(
+      new Option('Choose department or Whole organisation', ''),
+      new Option('Whole organisation (no department)', WHOLE),
+      ...choices.map(([id, caption]) => new Option(caption, id)),
+    );
+    unified.dataset.bexhrR40Options = signature;
+  }
+  const selected = scope.value === 'organization' ? WHOLE : String(department.value || '').trim();
+  unified.value = Array.from(unified.options).some((opt) => opt.value === selected) ? selected : '';
+  unified.disabled = scope.disabled || !canCurrentUserMaintainOrganizationSetupData();
+  unified.classList.toggle('is-invalid',
+    scope.classList.contains('is-invalid') || department.classList.contains('is-invalid'));
+}
+function syncOrganizationJobTitleScopeControls() {
+  const isWholeOrganization =
+    getOrganizationJobTitleScopeValue() === "organization";
+  const departmentSelect = state.dom.organizationJobTitleDepartmentId;
+  const departmentField = state.dom.organizationJobTitleDepartmentField;
+
+  if (departmentSelect) {
+    departmentSelect.disabled = isWholeOrganization;
+    departmentSelect.required = !isWholeOrganization;
+    if (isWholeOrganization) {
+      departmentSelect.value = "";
+      departmentSelect.classList.remove("is-invalid");
+    }
+  }
+
+  // A company-wide title has no department; do not show a disabled empty field.
+  departmentField?.classList.toggle("d-none", isWholeOrganization);
+  syncOrganizationJobTitleReportsToControls();
+  updateOrganizationJobTitleSaveButtonState();
+}
+
+// P7B: keep the legacy company-wide structure working until the protected,
+// atomic departmental reporting SQL has been rehearsed and deployed.
+// Once enabled by the server, the same form supports all active positions.
+function syncOrganizationJobTitleReportsToControls() {
+  const field = state.dom.organizationJobTitleReportsToField;
+  const select = state.dom.organizationJobTitleReportsTo;
+  if (!select) return;
+  // R40: reporting hierarchy is managed only in Reporting Lines when P7B is enabled.
+  // The protected hierarchy editor and the legacy fallback remain untouched.
+  if (state.p7bDepartmentReportingEnabled === true) {
+    hrR40SyncUnifiedPositionScope();
+    field?.classList.add('d-none');
+    select.disabled = true;
+    select.required = false;
+    select.value = '';
+    delete select.dataset.editingPositionId;
+    state.dom.removeOrganizationJobTitleLinkBtn?.classList.add('d-none');
+    document.getElementById('organizationJobTitlesSection')?.querySelector('details')?.classList.add('d-none');
+    if (!document.getElementById('bexhrR40TitleOnlyStyle')) {
+      const style = document.createElement('style');
+      style.id = 'bexhrR40TitleOnlyStyle';
+      style.textContent = '#organizationJobTitlesTableWrapper th:nth-child(3), #organizationJobTitlesTableWrapper td:nth-child(3) { display:none !important; }';
+      document.head.appendChild(style);
+    }
+    return;
+  }
+  const whole = getOrganizationJobTitleScopeValue() === 'organization';
+  const status = normalizeText(state.dom.organizationJobTitleStatus?.value || 'active');
+  const needsReporting = status === 'active' &&
+    (whole || state.p7bDepartmentReportingEnabled === true);
+  const editId = String(state.dom.editingOrganizationJobTitleId?.value || '').trim();
+  state.dom.removeOrganizationJobTitleLinkBtn?.classList.toggle(
+    'd-none', !(whole && editId && getOrganizationPositionHierarchyRecord(editId))
+  );
+  field?.classList.toggle('d-none', !needsReporting);
+  select.disabled = !needsReporting || !canCurrentUserMaintainOrganizationSetupData();
+  select.required = needsReporting;
+  if (!needsReporting) {
+    select.value = '';
+    delete select.dataset.editingPositionId;
+    return;
+  }
+  const editingId = String(state.dom.editingOrganizationJobTitleId?.value || '').trim();
+  const currentRecord = getOrganizationPositionHierarchyRecord(editingId);
+  const expected = currentRecord
+    ? String(currentRecord.reports_to_job_title_id || ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE)
+    : '';
+  // Do not carry a selected parent across two different edited titles.
+  const previouslySelected = String(select.dataset.editingPositionId || '') === editingId
+    ? String(select.value || '').trim() : '';
+  const descendants = getOrganizationPositionHierarchyDescendantIds(editingId);
+  const currentTenant = String(state.currentProfile?.tenant_id || '').trim();
+  const candidates = (state.p7bDepartmentReportingEnabled === true
+    ? getActiveOrganizationJobTitles()
+    : getActiveWholeOrganizationJobTitles()).filter((row) => {
+    const candidateId = String(row.id || '').trim();
+    const rowTenant = String(row.tenant_id || '').trim();
+    return candidateId && candidateId !== editingId && !descendants.has(candidateId) &&
+      (!rowTenant || rowTenant === currentTenant) &&
+      Boolean(getOrganizationPositionHierarchyRecord(candidateId));
+  });
+  const options = [
+    ['', 'Choose reporting position'],
+    [ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE, 'Top level (no parent)'],
+    ...candidates.map((row) => [String(row.id),
+      String(row.job_title || 'Unnamed position') +
+      (row.department_id
+        ? ' (' + String((state.organizationDepartments || []).find(
+            (d) => String(d.id) === String(row.department_id))?.department_name || 'Department') + ')'
+        : ' (Whole organisation)')]),
+  ];
+  select.replaceChildren(...options.map(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    return option;
+  }));
+  const allowable = new Set(options.map(([value]) => value));
+  select.value = allowable.has(previouslySelected) && previouslySelected
+    ? previouslySelected
+    : allowable.has(expected) ? expected : '';
+  select.dataset.editingPositionId = editingId;
+}
+
 function isOrganizationJobTitleFormReadyForSubmit() {
+  const scope = getOrganizationJobTitleScopeValue();
+  const hasValidScope = scope === "department" || scope === "organization";
   const hasDepartment = Boolean(
     String(state.dom.organizationJobTitleDepartmentId?.value || "").trim(),
   );
-
   const hasJobTitle = Boolean(
     String(state.dom.organizationJobTitleName?.value || "").trim(),
   );
-
   const hasStatus = Boolean(
     String(state.dom.organizationJobTitleStatus?.value || "").trim(),
   );
+  const requiresParent = (scope === 'organization' &&
+    state.p7bDepartmentReportingEnabled !== true) &&
+    normalizeText(state.dom.organizationJobTitleStatus?.value || '') === 'active';
+  const parentSelected = Boolean(String(state.dom.organizationJobTitleReportsTo?.value || '').trim());
 
-  return hasDepartment && hasJobTitle && hasStatus;
+  return Boolean(
+    hasValidScope &&
+    hasJobTitle &&
+    hasStatus &&
+    (scope === "organization" || hasDepartment) &&
+    (!requiresParent || parentSelected)
+  );
 }
 
 // ORGANIZATION HR SETUP VALUES - STEP 4B-2
@@ -28225,6 +31930,10 @@ function resetOrganizationJobTitleForm() {
     state.dom.editingOrganizationJobTitleId.value = "";
   }
 
+  if (state.dom.organizationJobTitleScope) {
+    state.dom.organizationJobTitleScope.value = "department";
+  }
+
   if (state.dom.organizationJobTitleStatus) {
     state.dom.organizationJobTitleStatus.value = "Active";
   }
@@ -28234,8 +31943,10 @@ function resetOrganizationJobTitleForm() {
   }
 
   state.dom.cancelOrganizationJobTitleEditBtn?.classList.add("d-none");
+  state.dom.removeOrganizationJobTitleLinkBtn?.classList.add("d-none");
 
   populateOrganizationJobTitleDepartmentOptions("");
+  syncOrganizationJobTitleScopeControls();
   updateOrganizationJobTitleSaveButtonState();
 }
 
@@ -28302,81 +32013,571 @@ function renderOrganizationJobTitlesTable() {
   state.dom.organizationJobTitlesTableWrapper?.classList.remove("d-none");
 
   records.forEach((jobTitle) => {
-    // ORGANIZATION HR SETUP VALUES - STEP 4B-4
-    // Safe ID used by the edit button for this Job Title row.
     const safeJobTitleId = String(jobTitle.id || "").replaceAll("'", "\\'");
     const linkedDepartment = jobTitle.organization_departments || {};
+    const departmentId = String(jobTitle.department_id || "").trim();
 
     const fallbackDepartment = (state.organizationDepartments || []).find(
-      (department) => String(department.id) === String(jobTitle.department_id),
+      (department) => String(department.id) === departmentId,
     );
 
-    const departmentName =
-      linkedDepartment.department_name ||
-      fallbackDepartment?.department_name ||
-      "--";
+    const appliesToLabel = !departmentId
+      ? "Whole organization"
+      : linkedDepartment.department_name ||
+        fallbackDepartment?.department_name ||
+        "Department unavailable";
 
+    const hierarchy = (!departmentId || state.p7bDepartmentReportingEnabled === true)
+      ? getOrganizationPositionHierarchyRecord(jobTitle.id) : null;
+    const reportingLabel = departmentId && !state.p7bDepartmentReportingEnabled
+      ? 'Assigned per employee'
+      : !hierarchy
+        ? 'Not linked yet'
+        : hierarchy.reports_to_job_title_id
+          ? getOrganizationJobTitleRecordById(hierarchy.reports_to_job_title_id)?.job_title || 'Unavailable position'
+          : 'Top level';
     const row = document.createElement("tr");
 
-    row.innerHTML = `
-      <td>
-        <!-- ORGANIZATION HR SETUP VALUES - STEP 4B-3
-             Show seeded or manually created Job Title name with optional note. -->
-        <div class="fw-semibold">${escapeHtml(jobTitle.job_title || "--")}</div>
-        ${getVisibleOrganizationSetupNote(jobTitle.notes)
-        ? `<div class="text-secondary small">${escapeHtml(
-          getVisibleOrganizationSetupNote(jobTitle.notes),
-        )}</div>`
-        : ""
-      }
-      </td>
-
-      <td>${escapeHtml(departmentName)}</td>
-
-      <td class="bexhr-status-cell" data-label="Status">
-        ${renderBexhrStatusPill(
-        formatStatusLabel(jobTitle.status),
-      )}
-      </td>
-
-      <td class="text-nowrap">
-        ${formatDate(jobTitle.updated_at || jobTitle.created_at)}
-      </td>
-
-      <td class="text-center">
-        <!-- ORGANIZATION HR SETUP VALUES - STEP 4B-4
-             Edit button loads the selected Job Title into the form above. -->
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-primary"
-          title="Edit job title"
-          aria-label="Edit job title"
-          onclick="window.hrEditOrganizationJobTitleRecord('${safeJobTitleId}')"
-        >
-          <i class="bi bi-pencil-square"></i>
-        </button>
-      </td>
-    `;
+    row.innerHTML = [
+      "<td data-label=\"Job title\">",
+      "<div class=\"fw-semibold\">" + escapeHtml(jobTitle.job_title || "--") + "</div>",
+      getVisibleOrganizationSetupNote(jobTitle.notes)
+        ? "<div class=\"text-secondary small\">" +
+          escapeHtml(getVisibleOrganizationSetupNote(jobTitle.notes)) +
+          "</div>"
+        : "",
+      "</td>",
+      "<td data-label=\"Department / Scope\">" + escapeHtml(appliesToLabel) + "</td>",
+      "<td data-label=\"Reports to\">" + escapeHtml(reportingLabel) + "</td>",
+      "<td class=\"bexhr-status-cell\" data-label=\"Position status\">" +
+        renderBexhrStatusPill(formatStatusLabel(jobTitle.status)) +
+        "</td>",
+      "<td class=\"text-center\" data-label=\"Actions\">",
+      "<div class=\"d-inline-flex align-items-center gap-2\">",
+      "<button type=\"button\" class=\"btn btn-sm btn-outline-primary\" " +
+        "title=\"Edit job title\" aria-label=\"Edit job title\" " +
+        "onclick=\"window.hrEditOrganizationJobTitleRecord('" + safeJobTitleId + "')\">",
+      "<i class=\"bi bi-pencil-square\"></i>",
+      "</button>",
+      "<button type=\"button\" class=\"btn btn-sm btn-outline-danger\" " +
+        "title=\"Delete job title\" aria-label=\"Delete job title\" " +
+        "onclick=\"window.hrDeleteOrganizationJobTitleRecord('" + safeJobTitleId + "')\">",
+      "<i class=\"bi bi-trash\"></i>",
+      "</button>",
+      "</div>",
+      "</td>",
+    ].join("");
 
     tbody.appendChild(row);
   });
 }
 
+// BEXHR PHASE 4A-2 ORGANIZATION POSITION HIERARCHY
+// This UI manages position-to-position ordering only. Employee Primary Manager
+// reporting lines, Leave and Performance Appraisal routing are not modified here.
+const ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE = "__top_level__";
+
+// BEXHR_HIERARCHY_TEMPLATE_ASSISTANT_PHASE_H1: one-root client preflight. Database enforcement remains necessary.
+function isOtherActiveOrganizationRootConfigured(positionId = '') {
+  const tenant = String(state.currentProfile?.tenant_id || '').trim();
+  if (!tenant || state.organizationPositionHierarchyLoaded !== true) return true;
+  return (state.organizationJobTitleHierarchy || []).some((link) => {
+    if (String(link.tenant_id || '').trim() !== tenant ||
+        String(link.reports_to_job_title_id || '').trim() ||
+        String(link.job_title_id || '').trim() === String(positionId || '').trim()) return false;
+    const position = (state.organizationJobTitles || []).find((p) =>
+      String(p.id || '').trim() === String(link.job_title_id || '').trim());
+    // Unknown/inactive legacy roots require review, not automatic deletion.
+    return !position || normalizeText(position.status || 'active') === 'active';
+  });
+}
+
+
+function getActiveWholeOrganizationJobTitles() {
+  return (state.organizationJobTitles || [])
+    .filter((jobTitle) => {
+      const isWholeOrganization = !String(jobTitle.department_id || "").trim();
+      const isActive = String(jobTitle.status || "")
+        .trim()
+        .toLowerCase() === "active";
+
+      return isWholeOrganization && isActive;
+    })
+    .sort((a, b) =>
+      String(a.job_title || "").localeCompare(String(b.job_title || "")),
+    );
+}
+
+function getActiveOrganizationJobTitles() {
+  const currentTenant = String(state.currentProfile?.tenant_id || '').trim();
+  if (!currentTenant) return [];
+  return (state.organizationJobTitles || [])
+    .filter((jobTitle) => normalizeText(jobTitle.status || '') === 'active' &&
+      (!String(jobTitle.tenant_id || '').trim() ||
+        String(jobTitle.tenant_id).trim() === currentTenant))
+    .sort((a, b) => String(a.job_title || '').localeCompare(String(b.job_title || '')));
+}
+
+function getOrganizationJobTitleRecordById(jobTitleId) {
+  const targetId = String(jobTitleId || "").trim();
+  if (!targetId) return null;
+
+  return (state.organizationJobTitles || []).find(
+    (jobTitle) => String(jobTitle.id || "").trim() === targetId,
+  ) || null;
+}
+
+function getOrganizationPositionHierarchyRecord(jobTitleId) {
+  const targetId = String(jobTitleId || "").trim();
+  if (!targetId) return null;
+
+  return (state.organizationJobTitleHierarchy || []).find(
+    (record) => String(record.job_title_id || "").trim() === targetId,
+  ) || null;
+}
+
+function getOrganizationPositionHierarchyDescendantIds(jobTitleId) {
+  const rootId = String(jobTitleId || "").trim();
+  const descendants = new Set();
+  if (!rootId) return descendants;
+
+  const queue = [rootId];
+
+  while (queue.length) {
+    const parentId = queue.shift();
+
+    (state.organizationJobTitleHierarchy || []).forEach((record) => {
+      const recordParentId = String(record.reports_to_job_title_id || "").trim();
+      const childId = String(record.job_title_id || "").trim();
+
+      if (
+        childId &&
+        recordParentId === parentId &&
+        !descendants.has(childId)
+      ) {
+        descendants.add(childId);
+        queue.push(childId);
+      }
+    });
+  }
+
+  return descendants;
+}
+
+function getOrganizationPositionHierarchyDepth(jobTitleId) {
+  let depth = 0;
+  let currentId = String(jobTitleId || "").trim();
+  const visited = new Set();
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const record = getOrganizationPositionHierarchyRecord(currentId);
+    const parentId = String(record?.reports_to_job_title_id || "").trim();
+
+    if (!parentId) break;
+
+    depth += 1;
+    currentId = parentId;
+  }
+
+  return depth;
+}
+
+function populateOrganizationPositionHierarchyJobTitleOptions() {
+  const select = state.dom.organizationPositionHierarchyJobTitleId;
+  if (!select) return;
+
+  const previousValue = String(select.value || "").trim();
+  const jobTitles = getActiveWholeOrganizationJobTitles();
+
+  select.innerHTML = [
+    '<option value="">Select whole-organization position</option>',
+    ...jobTitles.map(
+      (jobTitle) =>
+        `<option value="${escapeHtml(jobTitle.id)}">${escapeHtml(jobTitle.job_title || "Unnamed position")}</option>`,
+    ),
+  ].join("");
+
+  if (
+    previousValue &&
+    jobTitles.some((jobTitle) => String(jobTitle.id) === previousValue)
+  ) {
+    select.value = previousValue;
+  }
+}
+
+function populateOrganizationPositionHierarchyParentOptions() {
+  const jobTitleSelect = state.dom.organizationPositionHierarchyJobTitleId;
+  const parentSelect = state.dom.organizationPositionHierarchyParentId;
+  if (!parentSelect) return;
+
+  const jobTitleId = String(jobTitleSelect?.value || "").trim();
+  const currentRecord = getOrganizationPositionHierarchyRecord(jobTitleId);
+  const currentParentId = String(
+    currentRecord?.reports_to_job_title_id || "",
+  ).trim();
+
+  const configuredIds = new Set(
+    (state.organizationJobTitleHierarchy || [])
+      .map((record) => String(record.job_title_id || "").trim())
+      .filter(Boolean),
+  );
+
+  const descendantIds = getOrganizationPositionHierarchyDescendantIds(jobTitleId);
+
+  const parentCandidates = getActiveWholeOrganizationJobTitles().filter((jobTitle) => {
+    const candidateId = String(jobTitle.id || "").trim();
+
+    return Boolean(
+      candidateId &&
+      candidateId !== jobTitleId &&
+      configuredIds.has(candidateId) &&
+      !descendantIds.has(candidateId),
+    );
+  });
+
+  parentSelect.innerHTML = [
+    `<option value="${ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE}">Top level (no parent)</option>`,
+    ...parentCandidates.map(
+      (jobTitle) =>
+        `<option value="${escapeHtml(jobTitle.id)}">${escapeHtml(jobTitle.job_title || "Unnamed position")}</option>`,
+    ),
+  ].join("");
+
+  const desiredValue = currentRecord
+    ? currentParentId || ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE
+    : ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE;
+
+  const desiredOptionExists = Array.from(parentSelect.options).some(
+    (option) => option.value === desiredValue,
+  );
+
+  parentSelect.value = desiredOptionExists
+    ? desiredValue
+    : ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE;
+}
+
+function syncOrganizationPositionHierarchyFormFromSelection() {
+  populateOrganizationPositionHierarchyParentOptions();
+  updateOrganizationPositionHierarchySaveButtonState();
+}
+
+function updateOrganizationPositionHierarchySaveButtonState() {
+  const jobTitleSelect = state.dom.organizationPositionHierarchyJobTitleId;
+  const parentSelect = state.dom.organizationPositionHierarchyParentId;
+  const button = state.dom.saveOrganizationPositionHierarchyBtn;
+  const canMaintain = canCurrentUserMaintainOrganizationSetupData();
+  const jobTitleId = String(jobTitleSelect?.value || "").trim();
+  const parentValue = String(parentSelect?.value || "").trim();
+
+  if (jobTitleSelect) {
+    jobTitleSelect.disabled = !canMaintain;
+  }
+
+  if (parentSelect) {
+    parentSelect.disabled = !canMaintain || !jobTitleId;
+  }
+
+  if (!button) return;
+
+  if (button.dataset.isLoading === "true") {
+    button.disabled = true;
+    return;
+  }
+
+  const isTopLevel =
+    parentValue === ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE;
+
+  const validConfiguredParent = Boolean(
+    parentValue &&
+    !isTopLevel &&
+    parentValue !== jobTitleId &&
+    getOrganizationPositionHierarchyRecord(parentValue) &&
+    !getOrganizationPositionHierarchyDescendantIds(jobTitleId).has(parentValue),
+  );
+
+  setPrimaryActionButtonReadyState(
+    button,
+    canMaintain &&
+    Boolean(jobTitleId) &&
+    (isTopLevel || validConfiguredParent),
+  );
+}
+
+function resetOrganizationPositionHierarchyForm() {
+  if (state.dom.organizationPositionHierarchyJobTitleId) {
+    state.dom.organizationPositionHierarchyJobTitleId.value = "";
+  }
+
+  populateOrganizationPositionHierarchyParentOptions();
+  updateOrganizationPositionHierarchySaveButtonState();
+}
+
+function renderOrganizationPositionHierarchy() {
+  populateOrganizationPositionHierarchyJobTitleOptions();
+  populateOrganizationPositionHierarchyParentOptions();
+
+  const tbody = state.dom.organizationPositionHierarchyTableBody;
+  if (!tbody) {
+    updateOrganizationPositionHierarchySaveButtonState();
+    return;
+  }
+
+  const records = [...(state.organizationJobTitleHierarchy || [])].sort((a, b) => {
+    const depthDifference =
+      getOrganizationPositionHierarchyDepth(a.job_title_id) -
+      getOrganizationPositionHierarchyDepth(b.job_title_id);
+
+    if (depthDifference !== 0) return depthDifference;
+
+    const aTitle = getOrganizationJobTitleRecordById(a.job_title_id)?.job_title || "";
+    const bTitle = getOrganizationJobTitleRecordById(b.job_title_id)?.job_title || "";
+    return String(aTitle).localeCompare(String(bTitle));
+  });
+
+  tbody.innerHTML = "";
+
+  if (!records.length) {
+    state.dom.organizationPositionHierarchyEmptyState?.classList.remove("d-none");
+    state.dom.organizationPositionHierarchyTableWrapper?.classList.add("d-none");
+    updateOrganizationPositionHierarchySaveButtonState();
+    return;
+  }
+
+  state.dom.organizationPositionHierarchyEmptyState?.classList.add("d-none");
+  state.dom.organizationPositionHierarchyTableWrapper?.classList.remove("d-none");
+
+  records.forEach((record) => {
+    const jobTitleId = String(record.job_title_id || "").trim();
+    const parentId = String(record.reports_to_job_title_id || "").trim();
+    const jobTitle = getOrganizationJobTitleRecordById(jobTitleId);
+    const parentTitle = parentId
+      ? getOrganizationJobTitleRecordById(parentId)?.job_title || "Unavailable position"
+      : "Top level";
+    const safeJobTitleId = jobTitleId.replaceAll("'", "\\'");
+    const row = document.createElement("tr");
+
+    row.innerHTML = [
+      "<td><div class=\"fw-semibold\">" +
+        escapeHtml(jobTitle?.job_title || "Unavailable position") +
+        "</div></td>",
+      "<td>" + escapeHtml(parentTitle) + "</td>",
+      "<td class=\"text-nowrap\">" +
+        formatDate(record.updated_at || record.created_at) +
+        "</td>",
+      "<td class=\"text-center\">",
+      "<button type=\"button\" class=\"btn btn-sm btn-outline-danger\" " +
+        "title=\"Remove hierarchy configuration\" aria-label=\"Remove hierarchy configuration\" " +
+        "onclick=\"window.hrDeleteOrganizationPositionHierarchyRecord('" +
+        safeJobTitleId +
+        "')\">",
+      "<i class=\"bi bi-trash\"></i>",
+      "</button>",
+      "</td>",
+    ].join("");
+
+    tbody.appendChild(row);
+  });
+
+  updateOrganizationPositionHierarchySaveButtonState();
+}
+
+function setOrganizationPositionHierarchySaveLoading(isLoading) {
+  const button = state.dom.saveOrganizationPositionHierarchyBtn;
+  if (!button) return;
+
+  button.dataset.isLoading = isLoading ? "true" : "false";
+  button.disabled = true;
+
+  if (isLoading) {
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Saving...
+    `;
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+  }
+
+  delete button.dataset.isLoading;
+  updateOrganizationPositionHierarchySaveButtonState();
+}
+
+async function handleOrganizationPositionHierarchySave() {
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Organization Position Hierarchy");
+    return;
+  }
+
+  const jobTitleId = String(
+    state.dom.organizationPositionHierarchyJobTitleId?.value || "",
+  ).trim();
+  const parentValue = String(
+    state.dom.organizationPositionHierarchyParentId?.value || "",
+  ).trim();
+
+  if (!jobTitleId) {
+    showPageAlert("warning", "Select a whole-organization position before saving.");
+    return;
+  }
+
+  const parentId =
+    parentValue === ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE
+      ? null
+      : parentValue || null;
+
+  const jobTitle = getOrganizationJobTitleRecordById(jobTitleId);
+  const parentTitle = parentId
+    ? getOrganizationJobTitleRecordById(parentId)
+    : null;
+
+  // BEXHR_HIERARCHY_TEMPLATE_ASSISTANT_PHASE_H1: do not configure a second active root by mistake.
+  if (!parentId && isOtherActiveOrganizationRootConfigured(jobTitleId)) {
+    showPageAlert('warning', 'This company already has an organisation head. Select its reporting position instead of creating another top level.');
+    return;
+  }
+
+  try {
+    clearPageAlert();
+    setOrganizationPositionHierarchySaveLoading(true);
+
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc(
+      "hr_tenant_admin_save_organization_job_title_hierarchy",
+      {
+        p_job_title_id: jobTitleId,
+        p_reports_to_job_title_id: parentId,
+      },
+    );
+
+    if (error) throw error;
+
+    await refreshOrganizationHrSetupValues();
+    resetOrganizationPositionHierarchyForm();
+
+    const relationshipMessage = parentTitle
+      ? `<strong>${escapeHtml(jobTitle?.job_title || "Position")}</strong> now reports to <strong>${escapeHtml(parentTitle.job_title || "Position")}</strong>.`
+      : `<strong>${escapeHtml(jobTitle?.job_title || "Position")}</strong> is now configured as a top-level position.`;
+
+    showPageAlert("success", relationshipMessage);
+    showDashboardToast(
+      "success",
+      "Position Hierarchy Saved",
+      relationshipMessage,
+    );
+  } catch (error) {
+    console.error("Error saving organization position hierarchy:", error);
+
+    const message = String(
+      error.message || "Organization position hierarchy could not be saved.",
+    );
+    const isHierarchyRule =
+      String(error.code || "") === "23514" ||
+      String(error.code || "") === "23503" ||
+      message.includes("BEXHR_POSITION_HIERARCHY_");
+
+    showPageAlert(isHierarchyRule ? "warning" : "danger", escapeHtml(message));
+    showDashboardToast(
+      isHierarchyRule ? "warning" : "danger",
+      isHierarchyRule ? "Hierarchy Rule Blocked" : "Hierarchy Save Failed",
+      escapeHtml(message),
+    );
+  } finally {
+    setOrganizationPositionHierarchySaveLoading(false);
+    applyHrOrganizationSetupAccessControls();
+  }
+}
+
+async function deleteOrganizationPositionHierarchyRecord(jobTitleId) {
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Organization Position Hierarchy");
+    return;
+  }
+
+  const record = getOrganizationPositionHierarchyRecord(jobTitleId);
+  if (!record) {
+    showPageAlert("warning", "The selected hierarchy position could not be found.");
+    return;
+  }
+
+  const jobTitle = getOrganizationJobTitleRecordById(record.job_title_id);
+  const jobTitleName = String(jobTitle?.job_title || "Position").trim();
+  const confirmed = window.confirm(
+    `Remove the hierarchy configuration for "${jobTitleName}"? Child positions must be reassigned or removed first.`,
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc(
+      "hr_tenant_admin_delete_organization_job_title_hierarchy",
+      { p_job_title_id: record.job_title_id },
+    );
+
+    if (error) throw error;
+
+    await refreshOrganizationHrSetupValues();
+    resetOrganizationPositionHierarchyForm();
+
+    const successMessage =
+      `Hierarchy configuration for <strong>${escapeHtml(jobTitleName)}</strong> was removed successfully.`;
+
+    showPageAlert("success", successMessage);
+    showDashboardToast(
+      "success",
+      "Hierarchy Configuration Removed",
+      successMessage,
+    );
+  } catch (error) {
+    console.error("Error deleting organization position hierarchy:", error);
+
+    const message = String(
+      error.message || "Organization position hierarchy could not be removed.",
+    );
+    const isInUse =
+      String(error.code || "") === "23503" ||
+      message.includes("child positions");
+
+    showPageAlert(isInUse ? "warning" : "danger", escapeHtml(message));
+    showDashboardToast(
+      isInUse ? "warning" : "danger",
+      isInUse ? "Hierarchy Position Still In Use" : "Hierarchy Remove Failed",
+      escapeHtml(message),
+    );
+  } finally {
+    applyHrOrganizationSetupAccessControls();
+  }
+}
 // ORGANIZATION HR SETUP VALUES - STEP 4B-4
 // Validate required Job Title fields before saving.
+
 function validateOrganizationJobTitleForm() {
   let isValid = true;
   let firstInvalidField = null;
-
+  const scope = getOrganizationJobTitleScopeValue();
   const requiredFields = [
-    state.dom.organizationJobTitleDepartmentId,
+    state.dom.organizationJobTitleScope,
+    ...(scope === "department"
+      ? [state.dom.organizationJobTitleDepartmentId]
+      : []),
+    ...((scope === 'organization' && state.p7bDepartmentReportingEnabled !== true) &&
+        normalizeText(state.dom.organizationJobTitleStatus?.value || '') === 'active'
+      ? [state.dom.organizationJobTitleReportsTo]
+      : []),
     state.dom.organizationJobTitleName,
     state.dom.organizationJobTitleStatus,
   ];
 
   requiredFields.forEach((field) => {
     const value = String(field?.value || "").trim();
-
     if (!value) {
       field?.classList.add("is-invalid");
       isValid = false;
@@ -28385,6 +32586,12 @@ function validateOrganizationJobTitleForm() {
       field?.classList.remove("is-invalid");
     }
   });
+
+  if (scope !== "department" && scope !== "organization") {
+    state.dom.organizationJobTitleScope?.classList.add("is-invalid");
+    isValid = false;
+    if (!firstInvalidField) firstInvalidField = state.dom.organizationJobTitleScope;
+  }
 
   if (!isValid && firstInvalidField?.focus) {
     firstInvalidField.focus();
@@ -28397,13 +32604,17 @@ function validateOrganizationJobTitleForm() {
 // Build one clean Job Title payload for insert/update.
 // This only affects organization_job_titles.
 function buildOrganizationJobTitlePayload(isEditMode = false) {
+  const scope = getOrganizationJobTitleScopeValue();
+
   return {
     p_job_title_id: isEditMode
       ? String(state.dom.editingOrganizationJobTitleId?.value || "").trim()
       : null,
-    p_department_id: String(
-      state.dom.organizationJobTitleDepartmentId?.value || "",
-    ).trim(),
+    p_department_id: scope === "organization"
+      ? null
+      : String(
+        state.dom.organizationJobTitleDepartmentId?.value || "",
+      ).trim(),
     p_job_title: String(
       state.dom.organizationJobTitleName?.value || "",
     ).trim(),
@@ -28455,7 +32666,7 @@ async function handleOrganizationJobTitleSave() {
   if (!validateOrganizationJobTitleForm()) {
     showPageAlert(
       "warning",
-      "Please select a department and enter a job title before saving.",
+      "Choose where this job title applies and enter the job title before saving.",
     );
     return;
   }
@@ -28466,13 +32677,32 @@ async function handleOrganizationJobTitleSave() {
 
   const isEditMode = Boolean(editingId);
   const payload = buildOrganizationJobTitlePayload(isEditMode);
+  // R40: active Phase 7B permits title creation without a reporting link.
+  // Existing links are preserved by the deployed atomic RPC when configuration=false.
+  const requiresPositionLink = (getOrganizationJobTitleScopeValue() === 'organization' &&
+    state.p7bDepartmentReportingEnabled !== true) &&
+    normalizeText(payload.p_status) === 'active';
+  const selectedParent = requiresPositionLink
+    ? String(state.dom.organizationJobTitleReportsTo?.value || '').trim()
+    : '';
+  // The default is deliberately blank, never an accidental Top level.
+  // Database-level cycle and tenant guards still decide whether this is valid.
+  const selectedParentId = selectedParent === ORGANIZATION_POSITION_HIERARCHY_TOP_LEVEL_VALUE
+    ? null : selectedParent || null;
+
+  // BEXHR_HIERARCHY_TEMPLATE_ASSISTANT_PHASE_H1: protect the combined title-and-parent save as well.
+  if (requiresPositionLink && !selectedParentId &&
+      isOtherActiveOrganizationRootConfigured(editingId)) {
+    showPageAlert('warning', 'This company already has an organisation head. Choose the correct reporting parent instead of another top level.');
+    return;
+  }
 
   const duplicateJobTitle = (
     state.organizationJobTitles || []
   ).find((jobTitle) => {
     const isSameDepartment =
       String(jobTitle.department_id || "").trim() ===
-      payload.p_department_id;
+      String(payload.p_department_id || "").trim();
 
     const isSameTitle =
       normalizeText(jobTitle.job_title) ===
@@ -28489,8 +32719,9 @@ async function handleOrganizationJobTitleSave() {
   });
 
   if (duplicateJobTitle) {
-    const message =
-      `Job Title <strong>${escapeHtml(payload.p_job_title)}</strong> already exists under the selected department.`;
+    const message = payload.p_department_id
+      ? `Job Title <strong>${escapeHtml(payload.p_job_title)}</strong> already exists under the selected department.`
+      : `Job Title <strong>${escapeHtml(payload.p_job_title)}</strong> already exists for the whole organization.`;
 
     showPageAlert("warning", message);
     showDashboardToast(
@@ -28506,10 +32737,15 @@ async function handleOrganizationJobTitleSave() {
     setOrganizationJobTitleSaveLoading(true, isEditMode);
 
     const supabase = getSupabaseClient();
-    const response = await supabase.rpc(
-      "hr_tenant_admin_save_organization_job_title",
-      payload,
-    );
+    // The upgraded server saves title + parent in ONE DB transaction.
+    // Pre-upgrade tenants retain the existing two-RPC company-wide behaviour.
+    const response = state.p7bDepartmentReportingEnabled === true
+      ? await supabase.rpc("hr_tenant_admin_save_position_with_reporting", {
+          ...payload,
+          p_reports_to_job_title_id: selectedParentId,
+          p_configure_reporting: requiresPositionLink,
+        })
+      : await supabase.rpc("hr_tenant_admin_save_organization_job_title", payload);
 
     if (response.error) throw response.error;
 
@@ -28525,6 +32761,28 @@ async function handleOrganizationJobTitleSave() {
 
     state.lastSavedOrganizationJobTitleKey =
       buildOrganizationJobTitleSortKey(savedRecord);
+
+    // Old databases still use the existing protected company-wide hierarchy RPC.
+    // The new database operation already wrote the parent atomically.
+    if (!state.p7bDepartmentReportingEnabled && requiresPositionLink) {
+      const hierarchyResponse = await supabase.rpc(
+        'hr_tenant_admin_save_organization_job_title_hierarchy',
+        { p_job_title_id: savedRecord.id, p_reports_to_job_title_id: selectedParentId },
+      );
+      if (hierarchyResponse.error) {
+        // Existing APIs are not yet transactional as a pair. Never report
+        // success for both when only the job title was persisted. Keep the
+        // saved title editable so HR can finish the reporting step safely.
+        await refreshOrganizationHrSetupValues();
+        startOrganizationJobTitleEdit(savedRecord.id);
+        showPageAlert('warning',
+          `The job title was saved, but its reporting link was not. Review the Reports to field and retry. ${escapeHtml(hierarchyResponse.error.message || '')}`,
+        );
+        showDashboardToast('warning', 'Reporting link not saved',
+          'Your job title is safe. Complete the reporting link before finishing setup.');
+        return;
+      }
+    }
 
     resetOrganizationJobTitleForm();
     await refreshOrganizationHrSetupValues();
@@ -28575,12 +32833,11 @@ async function handleOrganizationJobTitleSave() {
 }
 
 function startOrganizationJobTitleEdit(jobTitleId) {
-  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
-  // View-only setup roles cannot load Job Title records into edit mode.
   if (!canCurrentUserMaintainOrganizationSetupData()) {
     showHrSetupAccessDeniedMessage("Job Title Setup");
     return;
   }
+
   const record = (state.organizationJobTitles || []).find(
     (jobTitle) => String(jobTitle.id) === String(jobTitleId),
   );
@@ -28599,7 +32856,18 @@ function startOrganizationJobTitleEdit(jobTitleId) {
     state.dom.editingOrganizationJobTitleId.value = record.id || "";
   }
 
-  populateOrganizationJobTitleDepartmentOptions(record.department_id || "");
+  const isWholeOrganization = !String(record.department_id || "").trim();
+
+  if (state.dom.organizationJobTitleScope) {
+    state.dom.organizationJobTitleScope.value = isWholeOrganization
+      ? "organization"
+      : "department";
+  }
+
+  populateOrganizationJobTitleDepartmentOptions(
+    isWholeOrganization ? "" : record.department_id || "",
+  );
+  syncOrganizationJobTitleScopeControls();
 
   if (state.dom.organizationJobTitleName) {
     state.dom.organizationJobTitleName.value = record.job_title || "";
@@ -28617,11 +32885,11 @@ function startOrganizationJobTitleEdit(jobTitleId) {
     state.dom.organizationJobTitleSubmitLabel.textContent = "Update Job Title";
   }
 
+  syncOrganizationJobTitleReportsToControls();
   state.dom.cancelOrganizationJobTitleEditBtn?.classList.remove("d-none");
-
   updateOrganizationJobTitleSaveButtonState();
-
-  state.dom.organizationJobTitleName?.focus();
+  state.dom.organizationJobTitleForm?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  state.dom.organizationJobTitleName?.focus({ preventScroll: true });
 }
 
 // MANAGE ORGANIZATION CARD - STEP 3
@@ -29080,6 +33348,7 @@ async function refreshEmployeeWorkspace() {
   await loadAllEmployeeDocuments();
   await loadAuthProfilesForLinkage();
   await loadEmployees();
+  await loadHrPrimaryReportingHierarchy();
 
   // =========================================================
   // Keep payroll and employee bank dropdowns in sync with the
@@ -29132,7 +33401,9 @@ async function loadAuthProfilesForLinkage() {
     // Use the protected tenant-scoped RPC instead of reading profiles directly.
     // This gives every authorised HR browser the same tenant profile data.
     const { data, error } = await supabase.rpc(
-      "hr_list_tenant_profile_linkage",
+      state.h12NativeHrStandard === true
+        ? "bexhr_h12_native_hr_profile_linkage"
+        : "hr_list_tenant_profile_linkage",
     );
 
     if (error) throw error;
@@ -29171,17 +33442,21 @@ async function loadEmployees() {
   try {
     // HRP-80 - TENANT DATA SEGMENTATION - STEP 7D
     // HR users should only load employees that belong to their logged-in tenant.
-    const { data, error } = await applyCurrentTenantFilter(
-      supabase
-        .from("employees")
-        .select("*"),
-    ).order("created_at", { ascending: false });
+    // BEXHR_H12_G4_NATIVE_PILOT_20261111: only an allowlisted, tenant-scoped roster crosses to
+    // secondary HR Standard. Never use employees.select('*') for this actor.
+    const { data, error } = state.h12NativeHrStandard === true
+      ? await supabase.rpc("bexhr_h12_native_hr_employee_roster")
+      : await applyCurrentTenantFilter(
+          supabase.from("employees").select("*"),
+        ).order("created_at", { ascending: false });
 
     if (error) throw error;
 
     state.employees = sortEmployeeRecordsByEmployeeNumber(
       Array.isArray(data) ? data : [],
     );
+    // BEXHR_GROUP_B_V14_PATCH: self-only highest-position leave visibility.
+    void window.BexHRGroupBV14Leave?.apply(getSupabaseClient(),getCurrentHrEmployeeRecord()?.id);
 
     publishHrPerformanceAppraisalContext();
 
@@ -29337,15 +33612,17 @@ function applyEmployeeSearch() {
   const searchTerm = normalizeText(state.dom.employeeSearchInput?.value || "");
   const searchTokens = searchTerm.split(/\s+/).filter(Boolean);
 
-  // BATCH PAYROLL DEFAULT - STEP 1
-  // Normal Employee Management still shows all employees.
-  // Run Payroll mode shows active employees only, because the batch payroll
-  // table should not prepare inactive employees for a new payroll run.
+  // PHASE 7 PEOPLE DIRECTORY - operational list, not a historical archive.
+  // Exited employees remain in tenant-scoped state.employees and the dedicated
+  // Employee Lifecycle workspace for Reactivation and historical records.
+  // Payroll selection remains strictly ACTIVE-only, unchanged.
   const employeeSource = state.isRunPayrollSelectionMode
     ? state.employees.filter(
       (employee) => normalizeText(employee.status) === "active",
     )
-    : [...state.employees];
+    : state.employees.filter(
+      (employee) => normalizeText(employee.status || "active") !== "exited",
+    );
 
   if (!searchTokens.length) {
     state.filteredEmployees = employeeSource;
@@ -29399,11 +33676,24 @@ function getEmployeeAccountLinkage(employee) {
   const employeeUserId = String(employee?.auth_user_id || employee?.user_id || "").trim();
   const workEmail = normalizeText(employee?.work_email || "");
 
+  const buildDisabledResult = (profile = null) => ({
+    code: "disabled",
+    label: "Login Disabled",
+    chipVariant: "neutral",
+    iconClass: "bi-person-lock",
+    matchedEmail: profile?.email || employee?.work_email || "--",
+    helperText: "Login is disabled because this employee is not currently active.",
+  });
+
   if (employeeUserId) {
     const linkedProfile =
       state.authProfiles.find(
         (profile) => String(profile.id || "").trim() === employeeUserId,
       ) || null;
+
+    if (linkedProfile?.is_active === false) {
+      return buildDisabledResult(linkedProfile);
+    }
 
     return {
       code: "linked",
@@ -29419,6 +33709,10 @@ function getEmployeeAccountLinkage(employee) {
     state.authProfiles.find(
       (profile) => normalizeText(profile.email || "") === workEmail,
     ) || null;
+
+  if (matchedProfile?.is_active === false) {
+    return buildDisabledResult(matchedProfile);
+  }
 
   if (matchedProfile) {
     return {
@@ -29492,6 +33786,12 @@ async function sendEmployeeLoginInviteForExistingRecord(employeeId) {
       "Refresh People records, then try sending the login invite again.",
     );
 
+    return;
+  }
+
+  if (normalizeText(employee.status || "active") !== "active") {
+    showPageAlert("warning", "Reactivate this employee before sending a login invite.");
+    showDashboardToast("warning", "Employee is offboarded", "Login stays disabled until Reactivate Employee is completed.");
     return;
   }
 
@@ -30076,17 +34376,15 @@ function setCreatePayrollBatchModeUi() {
 function setCreatePayrollManualModeUi() {
   state.dom.payrollCreateForm?.classList.remove("d-none");
   setPayrollRecordToolbarForManualMode();
+  setPhase6PayrollCompatibilityVisibility(false);
 
-  // PAYROLL WORKFLOW UX REPAIR - STEP 5D
-  // Manual mode is now single-employee payroll finalisation.
-  // Do not revert the card back to old "Create Payroll Record" wording.
   if (state.dom.payrollFormTitle) {
-    state.dom.payrollFormTitle.textContent = "Finalise Payroll & Payslips";
+    state.dom.payrollFormTitle.textContent = "Run Payroll";
   }
 
   if (state.dom.payrollFormSubtext) {
     state.dom.payrollFormSubtext.textContent =
-      "Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.";
+      "Choose one employee or all active employees, select the pay period, review BexHR calculations, then finalise.";
   }
 
   if (state.dom.payrollFormModeBadge) {
@@ -30573,6 +34871,12 @@ function calculateBatchStatutoryDeductionAmount(record = {}, context = {}) {
       overtime: context.overtime,
       logisticsAllowance: context.logisticsAllowance,
       dataAirtimeAllowance: context.dataAirtimeAllowance,
+      oneOffBonus: context.oneOffBonus,
+      oneOffOvertime: context.oneOffOvertime,
+      oneOffOtherAllowance: context.oneOffOtherAllowance,
+      monthlyPensionContribution: context.monthlyPensionContribution,
+      monthlyNhfContribution: context.monthlyNhfContribution,
+      monthlyHealthContribution: context.monthlyHealthContribution,
     });
   }
 
@@ -30647,8 +34951,10 @@ function getPayrollMonthIndexFromDateValue(dateValue = "") {
 }
 
 function isPayrollOtherDeductionActiveForDate(record = {}, payrollDateValue = "") {
-  const status = normalizeText(record.status || "");
-  if (status !== "active") return false;
+  // Legacy compatibility only: do not resurrect an explicitly disabled historical row.
+  // Phase 4 no longer exposes status as an HR-controlled lifecycle field.
+  const legacyStatus = normalizeText(record.status || "active");
+  if (legacyStatus && legacyStatus !== "active") return false;
 
   const deductionAmount = Number(record.deduction_amount || 0);
   if (!Number.isFinite(deductionAmount) || deductionAmount <= 0) return false;
@@ -30806,21 +35112,23 @@ function calculateBatchStatutoryDeductionTotals(context = {}) {
     context.payrollDate,
   );
 
-  let payeTax = 0;
   let employeePension = 0;
   let employerPension = 0;
+  let nhfContribution = 0;
+  let healthContribution = 0;
   let otherDeductions = 0;
+
+  const healthReliefTypes = new Set(["NHIS", "NHIA", "HEALTH", "HEALTH_INSURANCE"]);
+  const payeRecord = activeDeductions.find(
+    (record) => String(record.deduction_type || "").trim() === "PAYE",
+  ) || null;
 
   activeDeductions.forEach((record) => {
     const type = String(record.deduction_type || "").trim();
+    if (!type || type === "PAYE") return;
+
     const amount = calculateBatchStatutoryDeductionAmount(record, context);
-
     if (!Number.isFinite(amount) || amount < 0) return;
-
-    if (type === "PAYE") {
-      payeTax = amount;
-      return;
-    }
 
     if (type === "EMPLOYEE_PENSION") {
       employeePension = amount;
@@ -30832,29 +35140,60 @@ function calculateBatchStatutoryDeductionTotals(context = {}) {
       return;
     }
 
-    // NHF and future statutory deductions without a dedicated payroll field
-    // are grouped under Other Deductions, same as manual payroll.
+    if (type === "NHF") {
+      nhfContribution = amount;
+      otherDeductions += amount;
+      return;
+    }
+
+    if (healthReliefTypes.has(type)) {
+      healthContribution += amount;
+      otherDeductions += amount;
+      return;
+    }
+
     otherDeductions += amount;
   });
 
-  const whtTax = 0;
+  const payeContext = {
+    ...context,
+    monthlyPensionContribution: employeePension,
+    monthlyNhfContribution: nhfContribution,
+    monthlyHealthContribution: healthContribution,
+  };
 
-  // DESCRIPTION ITEM 4 - STEP 5
-  // Add active non-statutory Other Deductions into the same batch deduction
-  // total used by Run Payroll and Batch Payroll CSV import.
-  // This keeps manual payroll, Run Payroll, and CSV import aligned.
+  let payeTax = calculateNta2025MonthlyPayeTaxFromComponents({
+    basicPay: context.basicPay,
+    housingAllowance: context.housingAllowance,
+    transportAllowance: context.transportAllowance,
+    utilityAllowance: context.utilityAllowance,
+    otherAllowance: context.otherAllowance,
+    medicalAllowance: context.medicalAllowance,
+    bonus: context.bonus,
+    overtime: context.overtime,
+    logisticsAllowance: context.logisticsAllowance,
+    dataAirtimeAllowance: context.dataAirtimeAllowance,
+    oneOffBonus: context.oneOffBonus,
+    oneOffOvertime: context.oneOffOvertime,
+    oneOffOtherAllowance: context.oneOffOtherAllowance,
+    monthlyPensionContribution: employeePension,
+    monthlyNhfContribution: nhfContribution,
+    monthlyHealthContribution: healthContribution,
+  });
+
+  if (payeRecord) {
+    payeTax = calculateBatchStatutoryDeductionAmount(payeRecord, payeContext);
+  }
+
+  const whtTax = 0;
   const configuredOtherDeductions =
     calculateActivePayrollOtherDeductionTotalForMaster(
       context.payrollMasterRecordId,
       context.payrollDate,
     );
-
-  const combinedOtherDeductions =
-    otherDeductions + configuredOtherDeductions;
-
+  const combinedOtherDeductions = otherDeductions + configuredOtherDeductions;
   const totalDeductions =
     payeTax + whtTax + employeePension + combinedOtherDeductions;
-
   const netPay = Number(context.grossPay || 0) - totalDeductions;
 
   return {
@@ -30862,6 +35201,8 @@ function calculateBatchStatutoryDeductionTotals(context = {}) {
     whtTax,
     employeePension,
     employerPension,
+    nhfContribution,
+    healthContribution,
     otherDeductions: combinedOtherDeductions,
     totalDeductions,
     netPay,
@@ -30900,20 +35241,37 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
     activePayrollMaster.id,
   );
 
+  const adjustmentAmounts = getPayrollEmployeeAdjustmentAmountsForMaster(
+    activePayrollMaster.id,
+    getCurrentBatchPayrollCalculationDate(),
+  );
+
   // BATCH PAYROLL CSV IMPORT - STEP 5C
   // No automatic salary increment. HR should only apply increments through
   // an approved CSV/manual salary review.
   const incrementAmount = 0;
   const newBaseSalary = baseSalary;
 
-  const basicPay = newBaseSalary * 0.5;
-  const housingAllowance = newBaseSalary * 0.1;
-  const transportAllowance = newBaseSalary * 0.1;
-  const utilityAllowance = newBaseSalary * 0.1;
-  const otherAllowance = newBaseSalary * 0.2;
+  const usesAlpatechStructuredSplit = isCurrentTenantAlpatechWorkspace();
 
-  const bonus = extras.bonus;
-  const overtime = extras.overtime;
+  const basicPay = usesAlpatechStructuredSplit
+    ? newBaseSalary * 0.5
+    : newBaseSalary;
+  const housingAllowance = usesAlpatechStructuredSplit
+    ? newBaseSalary * 0.1
+    : 0;
+  const transportAllowance = usesAlpatechStructuredSplit
+    ? newBaseSalary * 0.1
+    : 0;
+  const utilityAllowance = usesAlpatechStructuredSplit
+    ? newBaseSalary * 0.1
+    : 0;
+  const otherAllowance =
+    (usesAlpatechStructuredSplit ? newBaseSalary * 0.2 : 0) +
+    adjustmentAmounts.otherEarning;
+
+  const bonus = Number(extras.bonus || 0) + adjustmentAmounts.bonus;
+  const overtime = Number(extras.overtime || 0) + adjustmentAmounts.overtime;
   const logisticsAllowance = extras.logisticsAllowance;
   const dataAirtimeAllowance = extras.dataAirtimeAllowance;
   const medicalAllowance = extras.medicalAllowance;
@@ -30951,6 +35309,9 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
     overtime,
     logisticsAllowance,
     dataAirtimeAllowance,
+    oneOffBonus: adjustmentAmounts.bonus,
+    oneOffOvertime: adjustmentAmounts.overtime,
+    oneOffOtherAllowance: adjustmentAmounts.otherEarning,
 
     bht,
     grossPay,
@@ -30960,9 +35321,9 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
   const whtTax = statutoryTotals.whtTax;
   const employeePension = statutoryTotals.employeePension;
   const employerPension = statutoryTotals.employerPension;
-  const otherDeductions = statutoryTotals.otherDeductions;
-  const totalDeductions = statutoryTotals.totalDeductions;
-  const netPay = statutoryTotals.netPay;
+  const otherDeductions = statutoryTotals.otherDeductions + adjustmentAmounts.otherDeduction;
+  const totalDeductions = statutoryTotals.totalDeductions + adjustmentAmounts.otherDeduction;
+  const netPay = grossPay - totalDeductions;
 
   const preparedRow = {
     employee_id: employee.id,
@@ -30970,8 +35331,14 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
     pay_cycle: activePayrollMaster.pay_cycle || "",
     payroll_group: "REGULAR",
     payroll_model: "REGULAR",
-    employee_override_applied: resolvedBaseSalary.overrideApplied,
+    employee_override_applied: adjustmentAmounts.totalCount > 0,
     employee_override_audit_summary: employeeOverrideAuditSummary,
+    tax_one_off_bonus: adjustmentAmounts.bonus,
+    tax_one_off_overtime: adjustmentAmounts.overtime,
+    tax_one_off_other_allowance: adjustmentAmounts.otherEarning,
+    tax_relief_pension: statutoryTotals.employeePension,
+    tax_relief_nhf: statutoryTotals.nhfContribution,
+    tax_relief_health: statutoryTotals.healthContribution,
 
     base_salary: baseSalary,
     regular_increment_percent: 0,
@@ -31007,12 +35374,7 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
 
     currency: "NGN",
   };
-
-  return applyActivePayrollEmployeeOverridesToBatchPreparedRow(
-    preparedRow,
-    activePayrollMaster.id,
-    getCurrentBatchPayrollCalculationDate(),
-  );
+  return preparedRow;
 }
 
 // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1G
@@ -31111,11 +35473,11 @@ function buildBatchPayrollRecordPayload(preparedRow, payrollReference = "") {
     merit_increment: preparedRow.merit_increment ?? null,
     new_base_salary: preparedRow.regular_new_base_salary,
 
-    basic_percent: 0.5,
-    housing_percent: 0.1,
-    transport_percent: 0.1,
-    utility_percent: 0.1,
-    other_allowance_percent: 0.2,
+    basic_percent: isCurrentTenantAlpatechWorkspace() ? 0.5 : null,
+    housing_percent: isCurrentTenantAlpatechWorkspace() ? 0.1 : null,
+    transport_percent: isCurrentTenantAlpatechWorkspace() ? 0.1 : null,
+    utility_percent: isCurrentTenantAlpatechWorkspace() ? 0.1 : null,
+    other_allowance_percent: isCurrentTenantAlpatechWorkspace() ? 0.2 : null,
 
     base_salary: preparedRow.base_salary,
     basic_pay: preparedRow.basic_pay,
@@ -31153,6 +35515,34 @@ function buildBatchPayrollRecordPayload(preparedRow, payrollReference = "") {
     other_deductions: preparedRow.other_deductions ?? 0,
     total_deductions: preparedRow.total_deductions,
     net_pay: preparedRow.net_pay,
+
+    // PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B
+    // Run Payroll and CSV import share this payload builder, so one snapshot
+    // attachment covers both finalisation routes.
+    ...buildPayrollTaxSnapshotFieldsFromPayrollValues({
+      payrollModel: preparedRow.payroll_model || "REGULAR",
+      payDate: payDate || null,
+      basicPay: preparedRow.basic_pay,
+      housingAllowance: preparedRow.housing_allowance,
+      transportAllowance: preparedRow.transport_allowance,
+      utilityAllowance: preparedRow.utility_allowance,
+      otherAllowance: preparedRow.other_allowance,
+      medicalAllowance: preparedRow.medical_allowance,
+      bonus: preparedRow.bonus,
+      overtime: preparedRow.overtime,
+      logisticsAllowance: preparedRow.logistics_allowance,
+      dataAirtimeAllowance: preparedRow.data_airtime_allowance,
+      oneOffBonus: preparedRow.tax_one_off_bonus || 0,
+      oneOffOvertime: preparedRow.tax_one_off_overtime || 0,
+      oneOffOtherAllowance: preparedRow.tax_one_off_other_allowance || 0,
+      monthlyPensionContribution:
+        preparedRow.tax_relief_pension ?? preparedRow.employee_pension ?? 0,
+      monthlyNhfContribution: preparedRow.tax_relief_nhf || 0,
+      monthlyHealthContribution: preparedRow.tax_relief_health || 0,
+      grossPay: preparedRow.gross_pay,
+      employeePension: preparedRow.employee_pension,
+      payeTax: preparedRow.paye_tax,
+    }),
 
     currency: "NGN",
     status: "Authorised",
@@ -31476,6 +35866,180 @@ async function loadEmployeeFilledFormRelatedData(employeeId) {
   };
 }
 
+// H12: Read-only source-of-truth reporting. Never use stale legacy snapshots
+// when an authoritative active Primary reporting line exists.
+async function loadEmployeeFilledFormPrimaryManager(employeeId) {
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("employee_reporting_lines")
+    .select("manager_employee_id,manager_type,status,effective_date,end_date")
+    .eq("tenant_id", tenantId)
+    .eq("employee_id", employeeId);
+  if (error) throw error;
+  const today = new Date().toISOString().slice(0, 10);
+  const activeRows = (data || []).filter((line) =>
+    normalizeText(line.status || "active") === "active" &&
+    (!line.effective_date || line.effective_date <= today) &&
+    (!line.end_date || line.end_date >= today));
+  const primaryRow = activeRows.find((line) => normalizeText(line.manager_type) === "primary");
+  const supportingRows = activeRows.filter((line) =>
+    normalizeText(line.manager_type) !== "primary" && line.manager_employee_id);
+  const ids = [...new Set([primaryRow?.manager_employee_id,
+    ...supportingRows.map((line) => line.manager_employee_id)].filter(Boolean))];
+  const cached = (state.employees || []).filter((employee) =>
+    ids.includes(String(employee.id || "")));
+  const missingIds = ids.filter((id) =>
+    !cached.some((employee) => String(employee.id || "") === String(id)));
+  let missing = [];
+  if (missingIds.length) {
+    const { data: scopedManagers, error: managerError } = await supabase
+      .from("employees")
+      .select("id,first_name,middle_name,last_name,work_email")
+      .eq("tenant_id", tenantId)
+      .in("id", missingIds);
+    if (managerError) throw managerError;
+    missing = scopedManagers || [];
+  }
+  const names = [...cached, ...missing];
+  const find = (id) => names.find((person) =>
+    String(person.id || "") === String(id || ""));
+  const primaryPerson = find(primaryRow?.manager_employee_id);
+  return {
+    name: primaryRow ? (primaryPerson ? getEmployeeFilledFormFullName(primaryPerson) : "--") : "",
+    email: primaryRow ? String(primaryPerson?.work_email || "").trim() : "",
+    hasPrimary: Boolean(primaryRow),
+    supporting: supportingRows.map((line) => ({
+      name: find(line.manager_employee_id)
+        ? getEmployeeFilledFormFullName(find(line.manager_employee_id)) : "--",
+      type: String(line.manager_type || "Secondary"),
+    })),
+  };
+}
+
+// H12: configured fields must appear INSIDE their selected existing biodata
+// heading. New, administrator-created headings are the only standalone cards.
+// Uses the same tenant-scoped HR-only field definitions as Edit Employee.
+function placeEmployeeFilledFormConfiguredFields(content, configuredSections = []) {
+  const builtInSectionTitles = {
+    core: ["Core Details"],
+    reporting: ["Reporting", "Employment Details"],
+    address: ["Address", "Address Details"],
+    "next-of-kin": ["Next of Kin"],
+    dependants: ["Beneficiaries / Dependants"],
+    education: ["Education / Academic Qualification"],
+    documents: ["Supporting Documents"],
+  };
+  const htmlSections = Array.from(content.querySelectorAll("section"));
+  const missingHeadings = [];
+  const norm = (text) => String(text || "").trim().toLowerCase();
+  for (const configured of (Array.isArray(configuredSections) ? configuredSections : [])) {
+    const entries = Array.isArray(configured.fields) ? configured.fields : [];
+    if (!entries.length) continue;
+    const key = String(configured.key || "").trim();
+    const renderedFields = entries.map((field) =>
+      renderEmployeeFilledFormField(field.label, field.value, { date: field.type === "date" })
+    ).join("");
+    if (key.startsWith("custom:")) {
+      // Custom headings are intentionally separate. Their labels are escaped
+      // by the existing filled-form section helper.
+      content.insertAdjacentHTML("beforeend", renderEmployeeFilledFormSection(
+        configured.title || "Additional Details", renderedFields,
+        "Configured fields saved for this employee.",
+      ));
+      continue;
+    }
+    const titles = builtInSectionTitles[key] || [];
+    const target = htmlSections.find((section) => {
+      const heading = section.querySelector("h3");
+      return heading && titles.some((title) => norm(heading.textContent) === norm(title));
+    });
+    if (!target) {
+      // Never misplace a built-in heading field into a new top-level card.
+      missingHeadings.push(configured.title || key);
+      continue;
+    }
+    let row = target.querySelector(".row.g-3");
+    if (!row) {
+      row = document.createElement("div");
+      row.className = "row g-3 mt-3";
+      target.appendChild(row);
+    }
+    const group = document.createElement("div");
+    group.className = "contents";
+    group.dataset.bexhrConfiguredHeading = key;
+    group.innerHTML = renderedFields;
+    // Move field cards into the native section's grid, not into a new card.
+    while (group.firstChild) row.appendChild(group.firstChild);
+  }
+  if (missingHeadings.length) {
+    content.insertAdjacentHTML("afterbegin",
+      `<div class="alert alert-warning small mb-3">Some configured fields could not be placed under their approved headings: ${escapeHtml(missingHeadings.join(", "))}.</div>`);
+  }
+}
+
+// Standard BexHR tenant: match the currently accepted Core, Reporting,
+// Address and Next of Kin form. Alpatech retains its existing full layout.
+function renderStandardBexhrFilledForm(employee, relatedData, organizationHtml) {
+  const primary = relatedData.primaryManager || {};
+  const managerName = primary.hasPrimary ? primary.name : "--";
+  const managerEmail = primary.hasPrimary ? primary.email : "--";
+  const supporting = Array.isArray(primary.supporting) ? primary.supporting : [];
+  const addresses = Array.isArray(relatedData.addresses) ? relatedData.addresses : [];
+  const nextOfKin = Array.isArray(relatedData.nextOfKin) ? relatedData.nextOfKin : [];
+  const field = renderEmployeeFilledFormField;
+  const section = renderEmployeeFilledFormSection;
+  // Keep this projection aligned with the STANDARD four-tab employee form:
+  // Core (identity, employment and access), Reporting, Address, Next of Kin.
+  // Legacy Personal Email / Alternative Phone / extended Alpatech-only fields
+  // remain available to Alpatech but must not reappear in standard read-only.
+  return `
+    ${organizationHtml}
+    <div class="alert alert-info border mb-4"><div class="fw-semibold mb-1">Read-only HR review</div>
+      <div class="small">Approved saved biodata and reporting details. Edit Employee Profile only when a correction is authorised.</div></div>
+    ${section("Core Details", [
+      field("Employee Number", employee.employee_number),
+      field("Full Name", getEmployeeFilledFormFullName(employee)),
+      field("Work Email", employee.work_email),
+      field("Phone Number", employee.phone_number),
+      field("Date of Birth", employee.date_of_birth, { date: true }),
+      field("Sex / Gender", employee.gender),
+      field("Nationality", employee.nationality),
+      field("Town / Village / Community", employee.town),
+      field("NIN", employee.nin, { sensitive: true }),
+      field("Department / Position scope", getHrEmployeePositionScopePresentation(employee).label),
+      field("Job Title", employee.job_title),
+      field("Employment Date", employee.employment_date, { date: true }),
+      field("Last Working Day", employee.exit_date, { date: true }),
+      field("Status", formatStatusLabel(employee.status)),
+      field("System Role", formatEmployeeAccessRoleLabel(employee)),
+      field("Account Linkage", getEmployeeAccountLinkage(employee).label),
+    ].join(""), "Saved core biodata, employment and account information.")}
+    ${section("Reporting", [
+      field("Primary Line Manager", managerName),
+      field("Primary Approver Email", managerEmail),
+      ...(supporting.length ? [field("Additional Reporting Managers",
+          supporting.map((item) => `${item.name} (${item.type})`).join(", "))] : []),
+    ].join(""), "Saved authoritative primary and additional reporting assignments.")}
+    ${section("Address", renderEmployeeFilledFormList(addresses,
+      "No address records saved for this employee.", (address) => `
+        <div class="fw-semibold">${escapeHtml(address.address_type || "Address")}</div>
+        <div class="text-secondary small text-break">${escapeHtml([
+          address.address_line_1, address.address_line_2, address.city,
+          address.state_region, address.country, address.postal_code,
+        ].filter(Boolean).join(", ") || "--")}</div>`),
+      "Saved employee address records.")}
+    ${section("Next of Kin", renderEmployeeFilledFormList(nextOfKin,
+      "No next of kin record saved for this employee.", (kin) => `
+        <div class="fw-semibold">${escapeHtml(kin.full_name || "--")}</div>
+        <div class="text-secondary small">${escapeHtml(kin.relationship || "--")}</div>
+        <div class="text-secondary small">${escapeHtml(kin.phone_number || "--")}</div>
+        <div class="text-secondary small text-break">${escapeHtml(kin.email || "--")}</div>
+        <div class="text-secondary small text-break">${escapeHtml(kin.address || "--")}</div>`),
+      "Saved emergency contact information.")}
+  `;
+}
+
 // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
 // Build the complete read-only employee filled-form HTML.
 function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
@@ -31555,6 +36119,17 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
   const dependants = Array.isArray(relatedData.dependants) ? relatedData.dependants : [];
   const documents = Array.isArray(relatedData.documents) ? relatedData.documents : [];
 
+  if (!isAlpatechEmployeeFilledForm) {
+    const standardOrganizationHtml = `
+      <section class="border rounded-4 p-3 p-lg-4 bg-white mb-4">
+        <div class="small text-secondary text-uppercase fw-semibold mb-1">Company Details</div>
+        <h3 class="h4 fw-bold mb-1">${escapeHtml(organizationName)}</h3>
+        <div class="text-secondary small">${organizationAddress ? escapeHtml(organizationAddress) : "Company address not set"}</div>
+        ${organizationContactLines.length ? `<div class="text-secondary small mt-1">${escapeHtml(organizationContactLines.join(" • "))}</div>` : ""}
+      </section>`;
+    return renderStandardBexhrFilledForm(employee, relatedData, standardOrganizationHtml);
+  }
+
   return `
     ${employeeFilledFormHeaderHtml}
 
@@ -31629,12 +36204,12 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
     ${renderEmployeeFilledFormSection(
       "Employment Details",
       [
-        renderEmployeeFilledFormField("Department", employee.department),
+        renderEmployeeFilledFormField("Department / Position scope", getHrEmployeePositionScopePresentation(employee).label),
         renderEmployeeFilledFormField("Job Title", employee.job_title),
         renderEmployeeFilledFormField("Employment Date", employee.employment_date, { date: true }),
-        renderEmployeeFilledFormField("Exit Date", employee.exit_date, { date: true }),
-        renderEmployeeFilledFormField("Primary Line Manager", employee.line_manager),
-        renderEmployeeFilledFormField("Primary Approver Email", employee.approver_email),
+        renderEmployeeFilledFormField("Last Working Day", employee.exit_date, { date: true }),
+        renderEmployeeFilledFormField("Primary Line Manager", relatedData.primaryManager?.hasPrimary ? relatedData.primaryManager.name : "--"),
+        renderEmployeeFilledFormField("Primary Approver Email", relatedData.primaryManager?.hasPrimary ? relatedData.primaryManager.email : "--"),
         renderEmployeeFilledFormField("HMO Provider", employee.hmo_provider),
         renderEmployeeFilledFormField("HMO Plan", employee.hmo_plan),
         renderEmployeeFilledFormField("HMO Number", employee.hmo_number),
@@ -31756,7 +36331,9 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
 
 // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
 // Open the filled-form modal for the selected employee.
+let employeeFilledFormRequestCounter = 0;
 async function viewEmployeeFilledForm(employeeId) {
+  const requestCounter = ++employeeFilledFormRequestCounter;
   const employeeKey = String(employeeId || "").trim();
 
   const employee = (state.employees || []).find(
@@ -31796,6 +36373,7 @@ async function viewEmployeeFilledForm(employeeId) {
     </div>
   `;
 
+  modal.dataset.employeeFilledFormId = employeeKey;
   modal.classList.remove("d-none");
   modal.setAttribute("aria-hidden", "false");
   document.body?.classList.add("hr-employee-details-modal-open");
@@ -31805,9 +36383,42 @@ async function viewEmployeeFilledForm(employeeId) {
   });
 
   try {
-    const relatedData = await loadEmployeeFilledFormRelatedData(employeeKey);
-    content.innerHTML = renderEmployeeFilledFormPreview(employee, relatedData);
+    // The ordinary filled-form preview must not depend on a separate NIN RPC.
+    // Never use the legacy row's raw NIN, even before the vault migration.
+    const [relatedData, primaryManager, configuredSections, ninResult] = await Promise.all([
+      loadEmployeeFilledFormRelatedData(employeeKey),
+      loadEmployeeFilledFormPrimaryManager(employeeKey),
+      window.BexHrGroupA?.readOnlyEmployeeDetails
+        ? window.BexHrGroupA.readOnlyEmployeeDetails(employeeKey)
+            .then((sections) => ({ sections, error: "" }))
+            .catch((error) => ({ sections: [], error: error.message || "Configured biodata could not be loaded." }))
+        : Promise.resolve({ sections: [], error: "Biodata configuration is not yet available." }),
+      Promise.resolve()
+        .then(() => getSupabaseClient().from("employees").select("nin").eq("id", employeeKey).single())
+        .catch((error) => ({ data: null, error })),
+    ]);
+    // A newer add/edit/delete refresh or a closed modal supersedes this load.
+    if (requestCounter !== employeeFilledFormRequestCounter ||
+        modal.classList.contains("d-none") ||
+        modal.dataset.employeeFilledFormId !== employeeKey) return;
+    const verifiedNin = !ninResult?.error && /^\d{11}$/.test(String(ninResult?.data?.nin || ""))
+      ? String(ninResult.data.nin) : "";
+    content.innerHTML = renderEmployeeFilledFormPreview(
+      { ...employee, nin: verifiedNin },
+      { ...relatedData, primaryManager, configuredSections: configuredSections.sections },
+    );
+    placeEmployeeFilledFormConfiguredFields(content, configuredSections.sections);
+    if (configuredSections.error) {
+      content.insertAdjacentHTML("afterbegin",
+        `<div class="alert alert-warning small mb-3">${escapeHtml(configuredSections.error)} The standard employee details are still available.</div>`);
+    }
+    if (ninResult?.error) {
+      content.insertAdjacentHTML("afterbegin",
+        '<div class="alert alert-info small mb-3">Secure NIN viewing is temporarily unavailable. The other employee details are still available.</div>');
+    }
   } catch (error) {
+    if (requestCounter !== employeeFilledFormRequestCounter ||
+        modal.classList.contains("d-none")) return;
     console.error("Error loading employee filled form:", error);
 
     content.innerHTML = `
@@ -31821,14 +36432,26 @@ async function viewEmployeeFilledForm(employeeId) {
 // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
 // Close the read-only employee filled-form modal.
 function closeEmployeeFilledFormModal() {
+  ++employeeFilledFormRequestCounter;
   const modal = document.getElementById("employeeFilledFormModal");
 
   if (!modal) return;
 
   modal.classList.add("d-none");
   modal.setAttribute("aria-hidden", "true");
+  delete modal.dataset.employeeFilledFormId;
   document.body?.classList.remove("hr-employee-details-modal-open");
 }
+
+// Any successful configured-field add/edit/delete refreshes an open preview
+// automatically. A later opening always reads the latest schema from Supabase.
+document.addEventListener("bexhr:biodata-fields-changed", (event) => {
+  const modal = document.getElementById("employeeFilledFormModal");
+  const employeeId = modal?.dataset.employeeFilledFormId;
+  if (!employeeId || modal.classList.contains("d-none")) return;
+  if (event.detail?.tenantId && String(event.detail.tenantId) !== String(getRequiredTenantIdForHrEmployeeData())) return;
+  void viewEmployeeFilledForm(employeeId);
+});
 
 // EMPLOYEE DIRECTORY COMPACT STATUS - STEP 1
 function getEmployeeDirectoryEmploymentStatusPresentation(status = "") {
@@ -31883,16 +36506,293 @@ function getEmployeeDirectoryAccountStatusPresentation(accountLinkage = {}) {
     };
   }
 
+  if (accountLinkage.code === "disabled") {
+    return {
+      iconClass: "bi-person-lock",
+      toneClass: "hr-employee-status-pill--neutral",
+    };
+  }
+
   return {
     iconClass: "bi-person-x-fill",
     toneClass: "hr-employee-status-pill--neutral",
   };
 }
 
+// BEXHR PHASE 7 - LEAN OFFBOARDING
+function getHrEmployeeLifecycleRecord(employeeId = "") {
+  const employeeKey = String(employeeId || "").trim();
+  return (state.employees || []).find(
+    (employee) => String(employee?.id || "").trim() === employeeKey,
+  ) || null;
+}
+
+function getHrEmployeeLifecycleDisplayName(employee = {}) {
+  return [employee.first_name, employee.middle_name, employee.last_name]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ") || String(employee.work_email || "Employee").trim() || "Employee";
+}
+
+function closeEmployeeOffboardingModal() {
+  const modal = document.getElementById("hrEmployeeOffboardingModal");
+  if (!modal) return;
+  modal.classList.add("d-none");
+  modal.setAttribute("aria-hidden", "true");
+  document.body?.classList.remove("hr-employee-access-modal-open");
+}
+
+function openEmployeeOffboardingModal(employeeId = "") {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const employee = getHrEmployeeLifecycleRecord(employeeId);
+  if (!employee) {
+    showPageAlert("warning", "The selected employee record could not be found. Refresh People records and try again.");
+    return;
+  }
+
+  if (normalizeText(employee.status || "active") !== "active") {
+    showPageAlert("warning", "This employee is already inactive. Use Reactivate Employee if they are returning to work.");
+    return;
+  }
+
+  const modal = document.getElementById("hrEmployeeOffboardingModal");
+  if (!modal) return;
+
+  const idField = document.getElementById("hrEmployeeOffboardingEmployeeId");
+  const nameField = document.getElementById("hrEmployeeOffboardingEmployeeName");
+  const reasonField = document.getElementById("hrEmployeeOffboardingReason");
+  const dayField = document.getElementById("hrEmployeeOffboardingLastWorkingDay");
+  const noteField = document.getElementById("hrEmployeeOffboardingNote");
+  const statusField = document.getElementById("hrEmployeeOffboardingStatus");
+
+  if (idField) idField.value = employee.id || "";
+  if (nameField) nameField.textContent = getHrEmployeeLifecycleDisplayName(employee);
+  if (reasonField) reasonField.value = "";
+  if (dayField) dayField.value = "";
+  if (noteField) noteField.value = "";
+  if (statusField) {
+    statusField.textContent = "";
+    statusField.className = "alert d-none mt-3 mb-0";
+  }
+
+  modal.classList.remove("d-none");
+  modal.setAttribute("aria-hidden", "false");
+  document.body?.classList.add("hr-employee-access-modal-open");
+  window.requestAnimationFrame(() => reasonField?.focus());
+}
+
+function setEmployeeOffboardingModalLoading(isLoading = false) {
+  const button = document.getElementById("hrEmployeeOffboardingConfirmBtn");
+  if (!button) return;
+  button.disabled = Boolean(isLoading);
+  button.innerHTML = isLoading
+    ? '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Offboarding...'
+    : '<i class="bi bi-person-dash me-2"></i>Offboard Employee';
+}
+
+// PHASE 7A12: One authoritative lifecycle reconciliation for every HR view.
+// Load employees before payroll (the salary loader depends on tenant employee
+// IDs); re-render linkage chips after profiles load. This is UI only.
+let hrLifecycleRefreshPromise = null;
+async function refreshHrAfterEmployeeLifecycleChange() {
+  if (hrLifecycleRefreshPromise) return hrLifecycleRefreshPromise;
+  hrLifecycleRefreshPromise = (async () => {
+    await loadEmployees();
+    await Promise.all([
+      loadAuthProfilesForLinkage(),
+      loadPayrollMasterRecords(),
+    ]);
+    await loadHrPrimaryReportingHierarchy();
+    applyEmployeeSearch();
+    populatePayrollEmployeeOptions();
+    populatePayrollMasterEmployeeOptions();
+    populateEmployeeBankEmployeeOptions();
+    populateAssignedLineManagerOptions();
+    renderHrModernOverview();
+  })();
+  try {
+    return await hrLifecycleRefreshPromise;
+  } finally {
+    hrLifecycleRefreshPromise = null;
+  }
+}
+
+const HR_EMPLOYEE_LIFECYCLE_SYNC_STORAGE_KEY = "bexhrEmployeeLifecycleSync";
+let hrLifecycleForegroundCheckInProgress = false;
+let lastHrLifecycleForegroundCheckAt = 0;
+
+function publishHrEmployeeLifecycleChange(employeeId = "", reason = "employee_changed") {
+  const detail = {
+    employeeId: String(employeeId || "").trim() || null,
+    tenantId: String(state.currentProfile?.tenant_id || "").trim(),
+    reason: String(reason || "employee_changed"),
+    changedAt: Date.now(),
+  };
+  window.dispatchEvent(new CustomEvent("bexhr:employee-lifecycle-changed", { detail }));
+  try {
+    window.localStorage.setItem(
+      HR_EMPLOYEE_LIFECYCLE_SYNC_STORAGE_KEY,
+      JSON.stringify(detail),
+    );
+  } catch (error) {
+    console.warn("Employee lifecycle cross-tab notice could not be published:", error);
+  }
+}
+
+function getHrEmployeeLifecycleStateSignature(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => `${String(row.id || "").trim()}:${normalizeText(row.status || "")}`)
+    .sort()
+    .join("|");
+}
+
+// Detect changes made in another browser, device, or incognito session without
+// requiring Supabase Realtime publication changes. This is a small tenant-scoped
+// ID/status read; only real membership/status changes trigger a full UI refresh.
+async function checkForHrEmployeeLifecycleChanges() {
+  if (document.hidden || !state.currentUser?.id || !state.currentProfile?.tenant_id) return;
+  const now = Date.now();
+  if (hrLifecycleForegroundCheckInProgress || hrLifecycleRefreshPromise ||
+      now - lastHrLifecycleForegroundCheckAt < 15000) return;
+  hrLifecycleForegroundCheckInProgress = true;
+  lastHrLifecycleForegroundCheckAt = now;
+  try {
+    if (window.SessionManager?.revalidateActiveProfile &&
+        !(await window.SessionManager.revalidateActiveProfile())) return;
+    const supabase = getSupabaseClient();
+    const { data, error } = await applyCurrentTenantFilter(
+      supabase.from("employees").select("id,status"),
+    );
+    if (error) throw error;
+    const latest = getHrEmployeeLifecycleStateSignature(data);
+    const current = getHrEmployeeLifecycleStateSignature(state.employees);
+    if (latest !== current) await refreshHrAfterEmployeeLifecycleChange();
+  } catch (error) {
+    console.warn("Employee lifecycle background check failed:", error);
+  } finally {
+    hrLifecycleForegroundCheckInProgress = false;
+  }
+}
+
+async function submitEmployeeOffboarding() {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const employeeId = String(document.getElementById("hrEmployeeOffboardingEmployeeId")?.value || "").trim();
+  const reason = String(document.getElementById("hrEmployeeOffboardingReason")?.value || "").trim();
+  const lastWorkingDay = String(document.getElementById("hrEmployeeOffboardingLastWorkingDay")?.value || "").trim();
+  const note = String(document.getElementById("hrEmployeeOffboardingNote")?.value || "").trim();
+  const statusField = document.getElementById("hrEmployeeOffboardingStatus");
+
+  if (!employeeId || !reason || !lastWorkingDay) {
+    if (statusField) {
+      statusField.textContent = "Reason and Last Working Day are required.";
+      statusField.className = "alert alert-warning mt-3 mb-0";
+    }
+    return;
+  }
+
+  const employee = getHrEmployeeLifecycleRecord(employeeId);
+  const displayName = getHrEmployeeLifecycleDisplayName(employee || {});
+
+  try {
+    setEmployeeOffboardingModalLoading(true);
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("hr_offboard_employee", {
+      p_employee_id: employeeId,
+      p_reason: reason,
+      p_last_working_day: lastWorkingDay,
+      p_note: note || null,
+    });
+
+    if (error) throw error;
+
+    if (state.currentEditingEmployee && String(state.currentEditingEmployee.id || "") === employeeId) {
+      resetEmployeeForm();
+    }
+
+    closeEmployeeOffboardingModal();
+    await refreshHrAfterEmployeeLifecycleChange();
+    publishHrEmployeeLifecycleChange(employeeId, "offboard");
+    publishHrReportingHierarchyChange(employeeId, "employee_offboarded");
+
+    showPageAlert("success", "<strong>" + escapeHtml(displayName) + "</strong> was offboarded. Login is disabled and future payroll is blocked. Historical records were preserved.");
+    showDashboardToast("success", "Employee offboarded", displayName + " is archived as Exited.");
+    return data;
+  } catch (error) {
+    console.error("Error offboarding employee:", error);
+    const detail = String(error?.details || error?.detail || "").trim();
+    const message = detail || String(error?.message || "Employee could not be offboarded.");
+    if (statusField) {
+      statusField.textContent = message;
+      statusField.className = "alert alert-warning mt-3 mb-0";
+    }
+    showDashboardToast("warning", "Offboarding blocked", message);
+    return null;
+  } finally {
+    setEmployeeOffboardingModalLoading(false);
+  }
+}
+
+async function reactivateEmployeeRecord(employeeId = "") {
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  const employee = getHrEmployeeLifecycleRecord(employeeId);
+  if (!employee) {
+    showPageAlert("warning", "The selected employee record could not be found. Refresh People records and try again.");
+    return;
+  }
+
+  if (normalizeText(employee.status || "active") === "active") {
+    showPageAlert("warning", "This employee is already active.");
+    return;
+  }
+
+  const displayName = getHrEmployeeLifecycleDisplayName(employee);
+  const confirmed = window.confirm(
+    "Reactivate " + displayName + "? Login will be re-enabled when an account exists, but old Salary Setup and reporting managers will not be restored.",
+  );
+  if (!confirmed) return;
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("hr_reactivate_employee", {
+      p_employee_id: String(employee.id || "").trim(),
+    });
+    if (error) throw error;
+
+    await refreshHrAfterEmployeeLifecycleChange();
+    publishHrEmployeeLifecycleChange(employeeId, "reactivate");
+    publishHrReportingHierarchyChange(employeeId, "employee_reactivated");
+    showPageAlert(
+      "success",
+      "<strong>" + escapeHtml(displayName) + "</strong> was reactivated. Create a new Salary Setup and assign reporting managers before normal payroll/manager workflows resume.",
+    );
+    showDashboardToast("success", "Employee reactivated", "Old salary and manager assignments were not restored.");
+    return data;
+  } catch (error) {
+    console.error("Error reactivating employee:", error);
+    const message = String(error?.details || error?.detail || error?.message || "Employee could not be reactivated.");
+    showPageAlert("danger", escapeHtml(message));
+    showDashboardToast("danger", "Reactivation failed", message);
+    return null;
+  }
+}
+
 function renderEmployeeRecords(employees) {
   const tbody = state.dom.employeeRecordsTableBody;
   if (!tbody) return;
 
+  window.BexHrPeopleUxPhase7?.closeMenu?.();
   tbody.innerHTML = "";
 
   if (!employees.length) {
@@ -31905,6 +36805,7 @@ function renderEmployeeRecords(employees) {
     }
 
     syncSelectAllEmployeesForPayrollCheckbox();
+    window.BexHrPeopleUxPhase7?.renderLifecycle?.();
     return;
   }
 
@@ -31936,6 +36837,7 @@ function renderEmployeeRecords(employees) {
       getEmployeeDirectoryEmploymentStatusPresentation(employee.status);
     const accountStatusPresentation =
       getEmployeeDirectoryAccountStatusPresentation(accountLinkage);
+    const positionScope = getHrEmployeePositionScopePresentation(employee);
     const rawEmployeeId = String(employee.id || "").trim();
     const safeEmployeeId = rawEmployeeId.replaceAll("'", "\\'");
     const isRecentlySavedEmployee =
@@ -31958,6 +36860,14 @@ function renderEmployeeRecords(employees) {
 
     const canMaintainPeople = canCurrentUserMaintainPeopleData();
     const isHrAdmin = canCurrentUserAssignHrOfficerAccess();
+    const isEmployeeActive = normalizeText(employee.status || "active") === "active";
+    const canMaintainLiveAccess = canMaintainPeople && isEmployeeActive;
+    const lifecycleAction = isEmployeeActive
+      ? { handler: "hrOffboardEmployee", buttonClass: "btn-outline-danger", iconClass: "bi-person-dash", label: "Offboard", title: "Offboard employee" }
+      : { handler: "hrReactivateEmployee", buttonClass: "btn-outline-success", iconClass: "bi-person-check", label: "Reactivate", title: "Reactivate employee" };
+    const lifecycleActionButtonHtml = canMaintainPeople
+      ? '<button type="button" class="btn btn-sm ' + lifecycleAction.buttonClass + ' hr-employee-action-btn" title="' + escapeHtml(lifecycleAction.title) + '" aria-label="' + escapeHtml(lifecycleAction.title + " " + employeeDisplayName) + '" onclick="window.' + lifecycleAction.handler + '(\'' + safeEmployeeId + '\')"><i class="bi ' + lifecycleAction.iconClass + '" aria-hidden="true"></i><span>' + escapeHtml(lifecycleAction.label) + '</span></button>'
+      : "";
 
     // HR ACCESS / REPORTING RESPONSIBILITY DECOUPLING - PHASE 1
     // The row action no longer treats Manager dashboard access as the same thing
@@ -31981,10 +36891,12 @@ function renderEmployeeRecords(employees) {
       };
 
     const shouldShowLoginInviteRecovery =
-      canMaintainPeople && Boolean(String(employee.work_email || "").trim());
+      canMaintainLiveAccess && Boolean(String(employee.work_email || "").trim());
 
     const row = document.createElement("tr");
     row.className = "hr-employee-directory-row";
+    row.dataset.hrEmployeeId = rawEmployeeId;
+    row.dataset.hrEmployeeName = employeeDisplayName;
 
     if (isRecentlySavedEmployee) {
       row.classList.add("hr-employee-directory-row--recent");
@@ -32041,17 +36953,18 @@ function renderEmployeeRecords(employees) {
 
       <td data-label="Role">
         <div class="hr-employee-cell-primary">
-          ${escapeHtml(employee.department || "No department")}
+          ${escapeHtml(positionScope.label)}
         </div>
         <div class="hr-employee-cell-secondary">
           ${escapeHtml(employee.job_title || "No job title")}
         </div>
+        ${positionScope.needsReview ? '<span class="small text-warning-emphasis">Position scope needs review</span>' : ''}
         <span class="hr-employee-role-badge">
           ${escapeHtml(formatEmployeeAccessRoleLabel(employee))}
         </span>
       </td>
 
-      <td class="hr-employee-status-cell" data-label="Status">
+      <td class="hr-employee-status-cell" data-label="Employment / Account">
         <div class="hr-employee-status-stack">
           <span class="hr-employee-status-pill ${employmentStatusPresentation.toneClass}">
             <i class="bi ${employmentStatusPresentation.iconClass}" aria-hidden="true"></i>
@@ -32105,14 +37018,15 @@ function renderEmployeeRecords(employees) {
           <button
             type="button"
             class="btn btn-sm ${peopleAction.buttonClass} hr-employee-action-btn"
-            title="${canMaintainPeople ? peopleAction.title : "People maintenance is restricted for this role"}"
+            title="${canMaintainLiveAccess ? peopleAction.title : isEmployeeActive ? "People maintenance is restricted for this role" : "Reactivate this employee before changing access or managers"}"
             aria-label="${escapeHtml(peopleAction.ariaLabel)}"
-            ${canMaintainPeople ? "" : "disabled"}
+            ${canMaintainLiveAccess ? "" : "disabled"}
             onclick="window.${peopleAction.handler}('${safeEmployeeId}')"
           >
             <i class="bi ${peopleAction.iconClass}" aria-hidden="true"></i>
             <span>${escapeHtml(peopleAction.label)}</span>
           </button>
+          ${lifecycleActionButtonHtml}
         </div>
       </td>
     `;
@@ -32121,13 +37035,26 @@ function renderEmployeeRecords(employees) {
   });
 
   syncSelectAllEmployeesForPayrollCheckbox();
+  window.BexHrPeopleUxPhase7?.enhanceDirectory?.(tbody);
 }
 
 function resetEmployeeForm() {
   if (!state.dom.employeeCreateForm) return;
+  restoreHrLeadershipOnboardingRoleOptions(false);
 
   state.dom.employeeCreateForm.reset();
+  state.groupAEducationTouched = false;
+  state.groupADependantsTouched = false;
+  window.BexHrGroupA?.reset();
   state.currentEditingEmployee = null;
+  state.bexhrRoleChoiceTouched = false;
+  state.bexhrRoleAutoSuggested = false;
+  syncHrEmployeeScopeReviewMessage(null);
+  ++p7NinEditTicket; // Invalidate a pending NIN read when leaving edit mode.
+  state.p7NinEditStatus = null;
+  state.p7NinLoadedValue = "";
+  if (state.dom.nin) state.dom.nin.readOnly = false;
+  syncP7NinEditHint();
   syncEmployeeCompanyAdminAccessBadge(null);
 
   const fieldsToReset = [
@@ -32147,7 +37074,6 @@ function resetEmployeeForm() {
     state.dom.gender,
     state.dom.maritalStatus,
     state.dom.nationality,
-    state.dom.exitDate,
     state.dom.hmoProvider,
     state.dom.hmoPlan,
     state.dom.hmoNumber,
@@ -32200,7 +37126,6 @@ function resetEmployeeForm() {
     state.dom.employmentDate,
     state.dom.approverEmail,
     state.dom.employeeNumber,
-    state.dom.employmentStatus,
     state.dom.systemRole,
   ];
 
@@ -32209,8 +37134,6 @@ function resetEmployeeForm() {
   });
 
   if (state.dom.editingEmployeeId) state.dom.editingEmployeeId.value = "";
-
-  setSelectValueIfPresent(state.dom.employmentStatus, "active", ["Active"]);
 
   // HR SELF-ROLE PROTECTION - STEP 1
   // Reset/create mode has no employee object, so clear and unlock System Role.
@@ -32317,8 +37240,72 @@ function resetEmployeeForm() {
   clearPageAlert();
 }
 
+// P7 Stage B: HR NIN reads are explicit, tenant-scoped, and fail closed.
+// Null/blank in an UPDATE means "preserve" in the Stage B capture trigger.
+// For an unchanged identifier, transmit no raw NIN in general employee updates.
+function getP7NinWriteValue(enteredValue, verifiedOriginalValue, isEditing) {
+  const entered = String(enteredValue || "").trim();
+  if (!isEditing) return entered || null;
+  const verifiedOriginal = String(verifiedOriginalValue || "").trim();
+  if (!entered || entered === verifiedOriginal) return null;
+  return entered;
+}
+
+// Use the existing NIN help text as a quiet, accessible status message.
+// No HTML or CSS changes, and no global red error for unrelated profile edits.
+function syncP7NinEditHint() {
+  const hint = state.dom.nin?.closest("#ninFieldCol")?.querySelector(".form-text");
+  if (!hint) return;
+  if (hint.dataset.p7NinDefaultText === undefined) {
+    hint.dataset.p7NinDefaultText = hint.textContent;
+  }
+  hint.textContent = state.currentEditingEmployee && state.p7NinEditStatus !== "ready"
+    ? "Secure NIN access is unavailable for this edit. Other employee details can still be saved; the existing NIN stays unchanged."
+    : hint.dataset.p7NinDefaultText;
+}
+
+let p7NinEditTicket = 0;
+async function loadP7HrNinForEmployeeEdit(employeeId, ticket) {
+  try {
+    const { data, error } = await getSupabaseClient().from("employees").select("nin").eq("id", employeeId).single();
+    if (ticket !== p7NinEditTicket ||
+        String(state.currentEditingEmployee?.id || "") !== String(employeeId)) return;
+    if (error) throw error;
+
+    state.p7NinLoadedValue = String(data?.nin || "");
+    state.p7NinEditStatus = "ready";
+    if (state.dom.nin) {
+      state.dom.nin.value = state.p7NinLoadedValue;
+      state.dom.nin.readOnly = false;
+      state.dom.nin.classList.remove("is-invalid");
+    }
+    syncP7NinEditHint();
+    updateEmployeeSaveButtonState();
+  } catch (error) {
+    if (ticket !== p7NinEditTicket ||
+        String(state.currentEditingEmployee?.id || "") !== String(employeeId)) return;
+    state.p7NinEditStatus = "failed";
+    state.p7NinLoadedValue = "";
+    if (state.dom.nin) {
+      state.dom.nin.value = "";
+      state.dom.nin.readOnly = true;
+    }
+    syncP7NinEditHint();
+    updateEmployeeSaveButtonState();
+    console.warn("P7 Stage B HR NIN read unavailable; NIN changes remain locked:", error);
+    // No page-wide blocker. Ordinary employee saves omit the NIN column.
+  }
+}
+
 function enterEmployeeEditMode(employee) {
+  restoreHrLeadershipOnboardingRoleOptions(false);
   state.currentEditingEmployee = employee;
+  state.bexhrRoleChoiceTouched = true; // never auto-default an existing role
+  state.bexhrRoleAutoSuggested = false;
+  syncHrEmployeeScopeReviewMessage(employee);
+  state.groupAEducationTouched = false;
+  state.groupADependantsTouched = false;
+  void window.BexHrGroupA?.editEmployee(employee.id);
 
   if (state.dom.editingEmployeeId) state.dom.editingEmployeeId.value = employee.id || "";
   if (state.dom.firstName) state.dom.firstName.value = employee.first_name || "";
@@ -32376,9 +37363,17 @@ function enterEmployeeEditMode(employee) {
 
   syncIdentificationIssueStateOptions(employee.identification_issue_state || "");
 
+  // P7 Stage B: raw NIN no longer travels in general employees SELECT queries.
+  // Load it only through the tenant-checked HR-only RPC for this edit session.
+  state.p7NinEditStatus = "loading";
+  state.p7NinLoadedValue = "";
+  const p7NinTicket = ++p7NinEditTicket;
   if (state.dom.nin) {
-    state.dom.nin.value = employee.nin || "";
+    state.dom.nin.value = "";
+    state.dom.nin.readOnly = true;
   }
+  syncP7NinEditHint();
+  void loadP7HrNinForEmployeeEdit(employee.id, p7NinTicket);
 
   // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
   // In edit mode, restore both values correctly:
@@ -32386,8 +37381,6 @@ function enterEmployeeEditMode(employee) {
   // - NIN for National ID/NIN Slip and optionally for other selected IDs.
   syncIdentificationDocumentNumberVisibility({ clearWhenHidden: true });
   syncNinFieldVisibility({ clearWhenHidden: true });
-
-  if (state.dom.exitDate) state.dom.exitDate.value = employee.exit_date || "";
   if (state.dom.hmoProvider) state.dom.hmoProvider.value = employee.hmo_provider || "";
   if (state.dom.hmoPlan) state.dom.hmoPlan.value = employee.hmo_plan || "";
   if (state.dom.hmoNumber) state.dom.hmoNumber.value = employee.hmo_number || "";
@@ -32397,23 +37390,34 @@ function enterEmployeeEditMode(employee) {
   // ORGANIZATION HR SETUP VALUES - STEP 5A
   // Edit mode must rebuild the Department dropdown from Manage Organization
   // before selecting the employee's saved department.
-  populateEmployeeDepartmentOptionsFromOrganizationSetup(employee.department || "");
+  const employeeDepartmentSelection =
+    getEmployeeDepartmentSelectionValue(employee);
+
+  populateEmployeeDepartmentOptionsFromOrganizationSetup(
+    employeeDepartmentSelection,
+  );
 
   if (state.dom.department) {
-    state.dom.department.value = employee.department || "";
+    state.dom.department.value = employeeDepartmentSelection;
   }
 
-  // ORGANIZATION HR SETUP VALUES - STEP 5A
-  // After the saved Department is selected, rebuild Job Title options
-  // from active Manage Organization Job Titles under that Department.
+  // R-12C: whole-organization employees use controlled titles with no department.
   populateJobTitleOptionsForDepartment(employee.job_title || "");
 
   if (state.dom.lineManager) state.dom.lineManager.value = employee.line_manager || "";
   if (state.dom.employmentDate) state.dom.employmentDate.value = employee.employment_date || "";
   if (state.dom.approverEmail) state.dom.approverEmail.value = employee.approver_email || "";
 
+  // BEXHR REPORTING EDIT ROLE SEQUENCING - R-12C.2
+  // Load the employee's saved System Role before reporting-manager candidates
+  // are rebuilt. Otherwise edit mode can briefly use the reset/default Employee
+  // role and incorrectly offer lower-tier employees as Primary Managers.
+  setEmployeeSystemRoleFieldValue(employee.system_role || "");
+  syncHrSelfRoleProtectionState();
+
   // ASSIGN LINE MANAGER - STEP 1
-  // In edit mode, select the matching manager in the primary dropdown where possible.
+  // In edit mode, select the matching manager only after the saved System Role
+  // is loaded so the shared reporting-role hierarchy evaluates the real employee.
   // Existing saved Line Manager and Approver Email values are still preserved.
   syncAssignedLineManagerFromSavedValues(employee);
 
@@ -32423,17 +37427,6 @@ function enterEmployeeEditMode(employee) {
   resetEmployeeReportingLineRows();
 
   if (state.dom.employeeNumber) state.dom.employeeNumber.value = employee.employee_number || "";
-
-  setSelectValueIfPresent(state.dom.employmentStatus, employee.status, [
-    "active",
-    "Active",
-  ]);
-
-  // HR SELF-ROLE PROTECTION - STEP 1
-  // Edit mode loads the saved System Role, then locks it if HR is editing
-  // their own employee record.
-  setEmployeeSystemRoleFieldValue(employee.system_role || "");
-  syncHrSelfRoleProtectionState();
 
   setEmployeeAccountPanel(getEmployeeAccountLinkage(employee));
 
@@ -32475,10 +37468,21 @@ function enterEmployeeEditMode(employee) {
   renderPendingFiles();
   switchHrWorkspace("employees");
 
+  // BEXHR HR NAVIGATION ARCHITECTURE - US-02
+  // Programmatic edit is not the Add Employee task; keep the parent workspace
+  // active without showing a misleading child-task label.
+  clearRememberedHrNavigationTask();
+  clearHrSidebarTaskActiveState();
+
   // REMOVE GRADE LEVEL FIELD FROM EMPLOYEE DATA - STEP 3
   // Editing an employee should always reopen the Create/Edit Employee card,
   // even if HR previously collapsed it after saving.
   openEmployeeFormCard();
+
+  // BEXHR PEOPLE & SETUP FOCUSED WORKSPACES - US-03
+  // Editing remains a focused People task without pretending that the user
+  // selected Add Employee. Only the existing employee form stays visible.
+  focusHrTransientPeopleEditWorkspace();
 
   void loadEmployeeDocuments(employee.id);
 
@@ -32639,114 +37643,28 @@ function validateEmployeeForm() {
 
   // EMPLOYEE BIODATA COMPLETION - STEP 2F
   // Personal email is optional, but must be valid if HR enters it.
-  if (!validateEmailField(state.dom.personalEmail, { required: false })) {
-    isValid = false;
-    if (!firstInvalidField) firstInvalidField = state.dom.personalEmail;
+
+  if (window.BexHrGroupA?.alpatech && !validateEmailField(state.dom.personalEmail)) {
+    focusEmployeeBiodataField(state.dom.personalEmail);
+    return false;
   }
-
-  // EMPLOYEE BIODATA COMPLETION - STEP 2F
-  // Exit Date must not be before Employment Date.
-  const employmentDateValue = String(state.dom.employmentDate?.value || "").trim();
-  const exitDateValue = String(state.dom.exitDate?.value || "").trim();
-
-  state.dom.exitDate?.classList.remove("is-invalid");
-
-  if (
-    employmentDateValue &&
-    exitDateValue &&
-    new Date(exitDateValue).getTime() < new Date(employmentDateValue).getTime()
-  ) {
-    state.dom.exitDate?.classList.add("is-invalid");
-    isValid = false;
-    if (!firstInvalidField) firstInvalidField = state.dom.exitDate;
-  }
-
   // QUICK FIX - APPROVER EMAIL BYPASS
   // Primary Approver Email is optional while approver mailboxes are not ready.
   // It must not block employee create/update, even when empty.
   state.dom.approverEmail?.classList.remove("is-invalid");
 
-  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
-  // Identity fields are optional until HR selects a means of identification.
-  // Once a non-NIN document is selected, its document number is required.
-  // NIN is required for National ID / NIN Slip and optional for other IDs,
-  // but when entered it must still be exactly 11 digits.
-  state.dom.alternativePhoneNumber?.classList.remove("is-invalid");
-  state.dom.identificationDocumentNumber?.classList.remove("is-invalid");
-  state.dom.nin?.classList.remove("is-invalid");
-
-  const primaryPhoneDigits = String(state.dom.phoneNumber?.value || "")
-    .replace(/\D/g, "");
-  const alternativePhoneDigits = String(state.dom.alternativePhoneNumber?.value || "")
-    .replace(/\D/g, "");
-
-  if (
-    primaryPhoneDigits &&
-    alternativePhoneDigits &&
-    primaryPhoneDigits === alternativePhoneDigits
-  ) {
-    state.dom.alternativePhoneNumber?.classList.add("is-invalid");
-    isValid = false;
-    if (!firstInvalidField) firstInvalidField = state.dom.alternativePhoneNumber;
-
-    showPageAlert(
-      "warning",
-      "Alternative Phone Number must be different from the primary Phone Number.",
-    );
-  }
-
-  const selectedMeansOfIdentification = String(
-    state.dom.meansOfIdentification?.value || "",
-  ).trim();
-
-  const isDocumentNumberRequired =
-    isIdentificationDocumentNumberRequiredForMeansOfIdentification(
-      selectedMeansOfIdentification,
-    );
-
-  const identificationDocumentNumberValue = String(
-    state.dom.identificationDocumentNumber?.value || "",
-  ).trim();
-
-  if (isDocumentNumberRequired && !identificationDocumentNumberValue) {
-    state.dom.identificationDocumentNumber?.classList.add("is-invalid");
-    isValid = false;
-    if (!firstInvalidField) {
-      firstInvalidField = state.dom.identificationDocumentNumber;
-    }
-
-    showPageAlert(
-      "warning",
-      "Identification Document Number is required for the selected means of identification.",
-    );
-  }
-
-  const isNinRequired = isNinRequiredForMeansOfIdentification(
-    selectedMeansOfIdentification,
-  );
-
-  const ninValue = String(state.dom.nin?.value || "").trim();
-
-  if (isNinRequired && !ninValue) {
+  // R14B: New or changed NINs must be exactly eleven digits. Legacy values
+  // remain unchanged on unrelated edits; do not block those edits here.
+  const enteredNin = String(state.dom.nin?.value || "").trim();
+  // Only the authorized NIN input may affect validation during edit.
+  const ninIsEditable = !state.currentEditingEmployee || state.p7NinEditStatus === "ready";
+  const previousNin = String(state.p7NinLoadedValue || "").trim();
+  if (ninIsEditable && enteredNin && enteredNin !== previousNin && !/^\d{11}$/.test(enteredNin)) {
     state.dom.nin?.classList.add("is-invalid");
     isValid = false;
     if (!firstInvalidField) firstInvalidField = state.dom.nin;
-
-    showPageAlert(
-      "warning",
-      "NIN is required when National ID / NIN Slip is selected as the means of identification.",
-    );
-  }
-
-  if (ninValue && !/^\d{11}$/.test(ninValue)) {
-    state.dom.nin?.classList.add("is-invalid");
-    isValid = false;
-    if (!firstInvalidField) firstInvalidField = state.dom.nin;
-
-    showPageAlert(
-      "warning",
-      "NIN must be exactly 11 digits when provided.",
-    );
+  } else {
+    state.dom.nin?.classList.remove("is-invalid");
   }
 
   if (!isValid && firstInvalidField) {
@@ -32769,9 +37687,12 @@ function buildEmployeePayload() {
     ? rawApproverEmail
     : "";
 
-  const rawStatus = String(
-    state.dom.employmentStatus?.value || "active",
-  ).trim();
+  // BEXHR PHASE 7 - lifecycle state is derived from Offboard/Reactivate actions.
+  // Normal Create Employee starts Active. Normal Edit Employee preserves the saved lifecycle state.
+  const lifecycleStatus = state.currentEditingEmployee
+    ? normalizeText(state.currentEditingEmployee.status || "active") || "active"
+    : "active";
+  const lifecycleExitDate = state.currentEditingEmployee?.exit_date || null;
 
   // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 7A
   // Keep the primary ID document number separate from NIN.
@@ -32789,11 +37710,15 @@ function buildEmployeePayload() {
       ? String(state.dom.identificationDocumentNumber?.value || "").trim()
       : "";
 
-  const ninForPayload = selectedMeansOfIdentificationForPayload
-    ? String(state.dom.nin?.value || "").trim()
-    : "";
+  // Stage B trigger: writing null preserves the existing protected NIN.
+  // Never resend an unchanged raw NIN in an unrelated employee edit.
+  const ninForPayload = getP7NinWriteValue(
+    state.dom.nin?.value,
+    state.p7NinLoadedValue,
+    Boolean(state.currentEditingEmployee),
+  );
 
-  return {
+  const payload = {
     first_name: String(state.dom.firstName?.value || "").trim(),
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1C
@@ -32833,7 +37758,7 @@ function buildEmployeePayload() {
     nin: ninForPayload || null,
 
     phone_number: String(state.dom.phoneNumber?.value || "").trim() || null,
-    department: String(state.dom.department?.value || "").trim(),
+    department: getSelectedEmployeeDepartmentValue() || null,
     job_title: String(state.dom.jobTitle?.value || "").trim(),
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
@@ -32843,7 +37768,7 @@ function buildEmployeePayload() {
 
     // EMPLOYEE BIODATA COMPLETION - STEP 2D
     // Exit and HMO details are part of the employee profile lifecycle/benefits data.
-    exit_date: state.dom.exitDate?.value || null,
+    exit_date: lifecycleExitDate,
     hmo_provider: String(state.dom.hmoProvider?.value || "").trim() || null,
     hmo_plan: String(state.dom.hmoPlan?.value || "").trim() || null,
     hmo_number: String(state.dom.hmoNumber?.value || "").trim() || null,
@@ -32851,7 +37776,7 @@ function buildEmployeePayload() {
     approver_email: approverEmail || null,
     employee_number:
       String(state.dom.employeeNumber?.value || "").trim() || null,
-    status: normalizeText(rawStatus) || "active",
+    status: lifecycleStatus,
 
     // HRP-80 - TENANT DATA SEGMENTATION - STEP 7C
     // New and updated employee records inherit the logged-in HR user's tenant.
@@ -32863,6 +37788,29 @@ function buildEmployeePayload() {
     // and Assign Line Manager can identify real manager-level employees.
     system_role: getSelectedEmployeeSystemRoleValue() || null,
   };
+
+  // On an employee UPDATE, omit NIN unless HR has verified the original
+  // through the protected RPC and explicitly entered a different NIN.
+  // CRITICAL: an explicit null would ERASE legacy employees.nin before the
+  // vault migration. Omitting the property preserves NIN before AND after it.
+  if (state.currentEditingEmployee &&
+      (state.p7NinEditStatus !== "ready" || !ninForPayload)) {
+    delete payload.nin;
+  }
+
+  // PRE-7B - Saving visible fields must never erase retired biodata columns
+  // already present on employee records. Old values remain in the DB for
+  // authorised compliance/benefit processes, but aren't collected here.
+  const previous = state.currentEditingEmployee || {};
+  [
+    "personal_email", "alternative_phone_number", "marital_status",
+    "state_of_origin", "local_government_area", "means_of_identification",
+    "identification_document_number", "identification_issue_state",
+    "hmo_provider", "hmo_plan", "hmo_number",
+  ].forEach((column) => {
+    if (!window.BexHrGroupA?.alpatech) payload[column] = previous[column] ?? null;
+  });
+  return payload;
 }
 
 
@@ -34104,9 +39052,9 @@ function getHrSupportingManagerModal() {
         <header class="hr-access-modal-header">
           <div class="hr-access-modal-heading">
             <span class="hr-access-modal-kicker">REPORTING RESPONSIBILITY</span>
-            <h2 id="hrSupportingManagerModalLabel">Manage supporting manager</h2>
+            <h2 id="hrSupportingManagerModalLabel">Manage reporting managers</h2>
             <p id="hrSupportingManagerModalDescription">
-              Add or remove Secondary Managers without changing dashboard access or the Primary Manager.
+              Review the Primary Manager and add or remove Secondary Managers without changing dashboard access.
             </p>
           </div>
           <div class="d-flex align-items-center gap-2">
@@ -34154,6 +39102,28 @@ function getHrSupportingManagerModal() {
               <div class="text-secondary small">
                 Loading Primary Manager...
               </div>
+            </div>
+          </section>
+
+          <!-- H11A: HR Admin-only exception action, independent of default reporting choices. -->
+          <section id="hrPrimaryExceptionSection" class="hr-access-section-card mt-3 d-none" aria-label="Primary reporting exception approval">
+            <div class="hr-access-section-heading">
+              <span class="hr-access-section-step" aria-hidden="true"><i class="bi bi-shield-lock"></i></span>
+              <div>
+                <strong>HR Admin: Approve individual Primary exception</strong>
+                <span>Use only when the intended manager is outside the company's normal configured reporting path.</span>
+              </div>
+            </div>
+            <p class="small text-secondary mt-2 mb-2">Approval and assignment happen in one protected database transaction. Pending Leave and active PA responsibilities can block reassignment. This does not grant extra HR, PA or Leave privileges.</p>
+            <label for="hrPrimaryExceptionManagerSelect" class="form-label">Proposed exception manager</label>
+            <select class="form-select mb-2" id="hrPrimaryExceptionManagerSelect" disabled>
+              <option value="">No approved exception workflow available</option>
+            </select>
+            <label for="hrPrimaryExceptionReason" class="form-label">Approval reason (12–500 characters)</label>
+            <textarea class="form-control mb-2" id="hrPrimaryExceptionReason" rows="2" minlength="12" maxlength="500" placeholder="Explain why this specific employee requires a different reporting line."></textarea>
+            <p class="small mb-2" id="hrPrimaryExceptionStatus" role="status" aria-live="polite"></p>
+            <div class="d-flex justify-content-end">
+              <button type="button" class="btn btn-outline-warning btn-sm" id="hrPrimaryExceptionAssignBtn" disabled>Approve and assign exception</button>
             </div>
           </section>
 
@@ -34231,6 +39201,10 @@ function getHrSupportingManagerModal() {
     .getElementById("hrSupportingManagerAddBtn")
     ?.addEventListener("click", addHrSupportingManagerFromModal);
 
+  document
+    .getElementById("hrPrimaryExceptionAssignBtn")
+    ?.addEventListener("click", assignHrPrimaryExceptionFromModal);
+
   return modalElement;
 }
 
@@ -34247,6 +39221,7 @@ function closeHrSupportingManagerModal() {
     ?.classList.add("d-none");
 
   delete document.body.dataset.hrEmployeeAccessReturnEmployeeId;
+  hrPrimaryExceptionPanelGeneration += 1; // discard any in-flight read-only entitlement result
 }
 
 function getSupportingManagerDisplayName(employee = {}) {
@@ -34254,39 +39229,6 @@ function getSupportingManagerDisplayName(employee = {}) {
     .map((part) => String(part || "").trim())
     .filter(Boolean)
     .join(" ") || "Employee";
-}
-
-function canEmployeeBeAssignedAsManager(employee = {}) {
-  if (normalizeText(employee?.status || "") !== "active") {
-    return false;
-  }
-
-  const linkedProfile = getEmployeeLinkedAuthProfile(employee);
-
-  const employeeRole = normaliseHrBusinessRole(
-    employee?.system_role || "",
-  );
-
-  const profileRole = normaliseHrBusinessRole(
-    linkedProfile?.role || "",
-  );
-
-  const hasActiveProfile =
-    !linkedProfile || linkedProfile.is_active === true;
-
-  const managerRoles = new Set([
-    "manager",
-    "hr",
-    "hr_manager",
-  ]);
-
-  return Boolean(
-    hasActiveProfile &&
-    (
-      managerRoles.has(profileRole) ||
-      (!linkedProfile && managerRoles.has(employeeRole))
-    )
-  );
 }
 
 function populateHrPrimaryManagerOptions(
@@ -34304,26 +39246,40 @@ function populateHrPrimaryManagerOptions(
       .filter(Boolean),
   );
 
-  const candidates = sortEmployeeRecordsByEmployeeNumber(
-    (state.employees || []).filter((employee) => {
-      const candidateId = String(employee?.id || "").trim();
+  const targetEmployee = (state.employees || []).find(
+    (person) => String(person.id) === employeeKey,
+  );
 
-      return Boolean(
-        candidateId &&
-        candidateId !== employeeKey &&
-        !excludedIds.has(candidateId) &&
-        canEmployeeBeAssignedAsManager(employee)
-      );
-    }),
+  const baseCandidates = getHrReportingManagerCandidatesForEmployee(
+    targetEmployee,
+    {
+      primaryOnly: false,
+      excludedManagerIds: [...excludedIds],
+    },
+  );
+
+  const candidates = getHrReportingManagerCandidatesForEmployee(
+    targetEmployee,
+    {
+      primaryOnly: true,
+      excludedManagerIds: [...excludedIds],
+    },
   );
 
   select.innerHTML = "";
 
   const placeholderOption = document.createElement("option");
   placeholderOption.value = "";
-  placeholderOption.textContent = candidates.length
-    ? "Select Primary Manager"
-    : "No eligible managers available";
+  placeholderOption.textContent =
+    !state.primaryReportingHierarchyLoaded
+      ? "Reporting hierarchy unavailable - refresh"
+      : candidates.length
+        ? "Select Primary Manager"
+        : state.p7bDepartmentReportingEnabled === true
+          ? "No configured Primary Manager for this position"
+          : baseCandidates.length
+            ? "No valid Primary Managers outside this reporting chain"
+            : "No eligible managers for this employee";
 
   select.appendChild(placeholderOption);
 
@@ -34359,16 +39315,16 @@ function populateHrSupportingManagerOptions(employeeId, assignedManagerIds = [])
     (assignedManagerIds || []).map((value) => String(value || "").trim()),
   );
 
-  const candidates = sortEmployeeRecordsByEmployeeNumber(
-    (state.employees || []).filter((employee) => {
-      const candidateId = String(employee?.id || "").trim();
-      return (
-        candidateId &&
-        candidateId !== employeeKey &&
-        !assignedIds.has(candidateId) &&
-        canEmployeeBeAssignedAsManager(employee)
-      );
-    }),
+  const targetEmployee = (state.employees || []).find(
+    (person) => String(person.id) === employeeKey,
+  );
+
+  const candidates = getHrReportingManagerCandidatesForEmployee(
+    targetEmployee,
+    {
+      primaryOnly: false,
+      excludedManagerIds: [...assignedIds],
+    },
   );
 
   select.innerHTML = [
@@ -34383,7 +39339,7 @@ function populateHrSupportingManagerOptions(employeeId, assignedManagerIds = [])
 
       return `<option value="${escapeHtml(candidateId)}">${escapeHtml(displayName)}${meta ? ` - ${escapeHtml(meta)}` : ""}</option>`;
     }),
-  ].join(" - ");
+  ].join("");
 }
 
 async function loadHrSupportingManagersForModal(employeeId) {
@@ -34514,12 +39470,19 @@ ${canChangePrimaryManager
         </div>
       </div>
     `
-      : canCurrentUserMaintainPeopleData()
+      : primaryRow
         ? `
     <div class="alert alert-warning mb-3">
+      <strong>A Primary Manager is assigned, but the manager record could not be loaded.</strong>
+      <div class="small mt-1">Refresh before editing. Existing assignments have not changed.</div>
+    </div>
+  `
+      : canCurrentUserMaintainPeopleData()
+        ? `
+    <div class="alert alert-light border mb-3">
       <strong>No Primary Manager assigned.</strong>
       <div class="small mt-1">
-        Select an eligible employee below to assign the Primary Manager.
+        This is valid for a top-level employee. Assign one only if this employee reports to someone else.
       </div>
     </div>
 
@@ -34536,7 +39499,7 @@ ${canChangePrimaryManager
       </select>
 
       <div class="form-text">
-        The employee, inactive employees, and existing Supporting Managers are excluded.
+        Only hierarchy-safe Primary Manager candidates are shown. Employees already below this employee are excluded.
       </div>
 
       <div class="d-flex justify-content-end mt-3">
@@ -34556,6 +39519,28 @@ ${canChangePrimaryManager
       <strong>No Primary Manager assigned.</strong>
     </div>
   `;
+  }
+  const targetEmployee = (state.employees || []).find(person => String(person.id) === employeeKey);
+  const currentPrimaryCheck = primaryRow && primaryManager && targetEmployee
+    ? getHrConfiguredReportingEligibility(primaryManager, targetEmployee, 'primary')
+    : null;
+  if (primarySummary && primaryRow && primaryManager &&
+      currentPrimaryCheck?.mode === 'configured' && currentPrimaryCheck.allowed === false) {
+    const warning = document.createElement('p');
+    warning.className = 'alert alert-warning mt-3';
+    warning.textContent = "Review required: the saved Primary Manager no longer matches this employee's configured position hierarchy. Use Change Primary Manager, or have HR Admin review an approved exception. The saved Primary and historical PA/Leave decisions have not been changed automatically.";
+    primarySummary.appendChild(warning);
+  }
+  const unresolvedSecondary = rows.some((row) => {
+    const assigned = (state.employees || []).find(
+      (person) => String(person.id) === String(row.manager_employee_id));
+    return !assigned || !isHrManagerInEmployeeDepartment(assigned, targetEmployee);
+  });
+  if (primarySummary && unresolvedSecondary) {
+    const warning = document.createElement('p');
+    warning.className = 'alert alert-warning mt-3';
+    warning.textContent = 'Review a supporting-manager assignment outside its current scope. Existing Secondary assignments remain unchanged until an authorised action.';
+    primarySummary.appendChild(warning);
   }
   // REPORTING MANAGER MANAGEMENT REPAIR - PRIMARY MANAGER REMOVE BUTTON
   // Bind the remove action after the Primary Manager summary HTML has been
@@ -34609,8 +39594,8 @@ ${canChangePrimaryManager
           </select>
 
           <div class="form-text">
-            The employee, current Primary Manager, inactive employees, and
-            existing Supporting Managers are excluded.
+            The employee, current Primary Manager, inactive employees,
+            existing Supporting Managers, and anyone already below this employee are excluded.
           </div>
 
           <div class="d-flex justify-content-end gap-2 mt-3">
@@ -34660,7 +39645,7 @@ ${canChangePrimaryManager
       });
   }
 
-  if (!primaryManager && canCurrentUserMaintainPeopleData()) {
+  if (!primaryRow && !primaryManager && canCurrentUserMaintainPeopleData()) {
     const secondaryManagerIds = rows
       .map((row) => String(row?.manager_employee_id || "").trim())
       .filter(Boolean);
@@ -34730,6 +39715,14 @@ ${canChangePrimaryManager
   }
 
   populateHrSupportingManagerOptions(employeeKey, assignedManagerIds);
+
+  // Separate admin-only exceptional routes from the ordinary configured
+  // Primary dropdown. This read-only check never delays normal reporting.
+  void syncHrPrimaryExceptionPanel(employeeKey, activeRows).catch((error) => {
+    console.warn("Exception UI readiness check unavailable:", error);
+    const section = document.getElementById("hrPrimaryExceptionSection");
+    section?.classList.add("d-none");
+  });
 }
 
 async function openEmployeeReportingManagerWorkspace(employeeId) {
@@ -34794,6 +39787,7 @@ async function openEmployeeReportingManagerWorkspace(employeeId) {
   document.body?.classList.add("hr-employee-access-modal-open");
 
   try {
+    await loadHrPrimaryReportingHierarchy();
     await loadHrSupportingManagersForModal(employee.id);
     window.requestAnimationFrame(() => {
       document.getElementById("hrSupportingManagerSelect")?.focus();
@@ -34805,6 +39799,230 @@ async function openEmployeeReportingManagerWorkspace(employeeId) {
       "danger",
       error?.message || "Supporting managers could not be loaded. Please try again.",
     );
+  }
+}
+
+// Keep the open reporting shortcut in sync with saved company-position lines.
+// Edit Employee is already refreshed by refreshOrganizationHrSetupValues().
+// Re-read the currently saved reporting rows, not an in-progress selector,
+// after configuration changes. A failed refresh closes the modal rather than
+// leaving a stale, potentially assignable manager option on screen.
+window.addEventListener("bexhr:organization-setup-updated", (event) => {
+  if (event?.detail?.loaded !== true) return;
+  const modal = document.getElementById("hrSupportingManagerModal");
+  if (!modal || modal.classList.contains("d-none") ||
+      modal.getAttribute("aria-hidden") === "true") return;
+  const employeeId = String(
+    document.getElementById("hrSupportingManagerEmployeeId")?.value || "",
+  ).trim();
+  if (!employeeId) return;
+  for (const selectId of ["hrPrimaryManagerSelect", "hrSupportingManagerSelect"]) {
+    const select = document.getElementById(selectId);
+    if (select) select.disabled = true;
+  }
+  Promise.resolve(loadHrSupportingManagersForModal(employeeId)).catch((error) => {
+    console.error("Reporting shortcut could not refresh configured manager choices:", error);
+    closeHrSupportingManagerModal();
+    showPageAlert("warning", "Company reporting configuration changed. Reopen Manage reporting managers to load the current eligible choices.");
+  });
+});
+
+
+// BEXHR H11A: INDIVIDUALLY APPROVED PRIMARY REPORTING EXCEPTIONS.
+// A separate HR Admin-only action; it deliberately does not broaden the
+// configured Primary dropdown used by Edit Employee and Shortcuts.
+// Backend guards (tenant, AAL2, current graph, PA, Leave, ledger) are final.
+let hrPrimaryExceptionPanelGeneration = 0;
+
+function getHrExceptionManagerCandidates(employeeId, activeRows = []) {
+  const employeeKey = String(employeeId || "").trim();
+  const tenantId = String(state.currentProfile?.tenant_id || "").trim();
+  const employee = (state.employees || []).find(
+    (row) => String(row.id || "") === employeeKey,
+  );
+  if (!employee || !tenantId || String(employee.tenant_id || "") !== tenantId ||
+      state.primaryReportingHierarchyLoaded !== true ||
+      state.organizationPositionHierarchyLoaded !== true) return [];
+
+  const assignedIds = new Set((activeRows || [])
+    .map((row) => String(row.manager_employee_id || "").trim())
+    .filter(Boolean));
+
+  return (state.employees || []).filter((manager) => {
+    const id = String(manager?.id || "").trim();
+    if (!id || id === employeeKey || assignedIds.has(id) ||
+        String(manager.tenant_id || "") !== tenantId ||
+        normalizeText(manager.status || "active") !== "active" ||
+        !hasHrReportingManagerRole(manager) ||
+        !isHrPrimaryManagerHierarchySafe(employeeKey, id)) return false;
+
+    // The protected RPC insists on an active, same-tenant linked login.
+    // A matching email alone cannot establish an authorised account.
+    const userId = String(manager.user_id || manager.auth_user_id || "").trim();
+    const linked = getEmployeeLinkedAuthProfile(manager);
+    if (!userId || !linked || String(linked.id || "") !== userId ||
+        String(linked.tenant_id || "") !== tenantId ||
+        linked.is_active !== true ||
+        !["manager", "hr", "hr_manager"].includes(normalizeText(linked.role))) {
+      return false;
+    }
+    // Do not turn ordinary permitted managers into 'exceptions'.
+    return !canHrPrimaryReportingManagerSitImmediatelyAboveEmployee(manager, employee);
+  }).sort((first, second) =>
+    getSupportingManagerDisplayName(first).localeCompare(
+      getSupportingManagerDisplayName(second),
+    ));
+}
+
+async function syncHrPrimaryExceptionPanel(employeeId, activeRows = []) {
+  const generation = ++hrPrimaryExceptionPanelGeneration;
+  const section = document.getElementById("hrPrimaryExceptionSection");
+  const select = document.getElementById("hrPrimaryExceptionManagerSelect");
+  const button = document.getElementById("hrPrimaryExceptionAssignBtn");
+  if (!section || !select || !button) return;
+  section.classList.add("d-none");
+  button.disabled = true;
+  select.disabled = true;
+  select.replaceChildren(new Option("Select an exceptional manager", ""));
+
+  if (!canCurrentUserAssignHrOfficerAccess() ||
+      state.p7bDepartmentReportingEnabled !== true ||
+      state.primaryReportingHierarchyLoaded !== true) return;
+
+  const candidates = getHrExceptionManagerCandidates(employeeId, activeRows);
+  if (!candidates.length) return;
+
+  // The H6D list RPC is READ-ONLY and requires the same authenticated tenant
+  // HR Admin guard. Missing backend capability: keep the action hidden.
+  const { error } = await getSupabaseClient().rpc(
+    "hr_tenant_admin_list_primary_exceptions",
+  );
+  if (error || generation !== hrPrimaryExceptionPanelGeneration) return;
+  const modal = document.getElementById("hrSupportingManagerModal");
+  if (!modal || modal.classList.contains("d-none") ||
+      String(document.getElementById("hrSupportingManagerEmployeeId")?.value || "") !== String(employeeId)) return;
+
+  for (const manager of candidates) {
+    const option = new Option(
+      `${getSupportingManagerDisplayName(manager)} - ${String(manager.job_title || "").trim()}`,
+      String(manager.id),
+    );
+    select.appendChild(option);
+  }
+  select.disabled = false;
+  button.disabled = false;
+  section.classList.remove("d-none");
+  section.dataset.employeeId = String(employeeId);
+}
+
+async function assignHrPrimaryExceptionFromModal() {
+  const section = document.getElementById("hrPrimaryExceptionSection");
+  const button = document.getElementById("hrPrimaryExceptionAssignBtn");
+  const select = document.getElementById("hrPrimaryExceptionManagerSelect");
+  const reasonField = document.getElementById("hrPrimaryExceptionReason");
+  const status = document.getElementById("hrPrimaryExceptionStatus");
+  const employeeId = String(document.getElementById("hrSupportingManagerEmployeeId")?.value || "").trim();
+  const managerId = String(select?.value || "").trim();
+  const reason = String(reasonField?.value || "").trim();
+  const updateStatus = (message) => { if (status) status.textContent = message; };
+
+  if (!canCurrentUserAssignHrOfficerAccess() ||
+      state.p7bDepartmentReportingEnabled !== true ||
+      state.primaryReportingHierarchyLoaded !== true ||
+      !section || section.classList.contains("d-none") ||
+      String(section.dataset.employeeId || "") !== employeeId ||
+      !button || button.disabled || !managerId) return;
+
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+  if (String(state.currentProfile?.tenant_id || "") !== tenantId ||
+      reason.length < 12 || reason.length > 500) {
+    updateStatus("Enter a clear approval reason between 12 and 500 characters.");
+    return;
+  }
+
+  // Server remains authoritative; UI checks only prevent stale/unsafe intent.
+  button.disabled = true;
+  const supabase = getSupabaseClient();
+  let rows;
+  try {
+    const response = await supabase
+      .from("employee_reporting_lines")
+      .select("id, manager_employee_id, manager_type, status")
+      .eq("tenant_id", tenantId)
+      .eq("employee_id", employeeId);
+    if (response.error) throw response.error;
+    rows = response.data;
+  } catch (error) {
+    updateStatus("Could not recheck current reporting lines. Refresh and try again.");
+    button.disabled = false;
+    return;
+  }
+  const activeRows = (rows || []).filter((row) =>
+    normalizeText(row.status || "active") === "active");
+  if (!getHrExceptionManagerCandidates(employeeId, activeRows)
+    .some((manager) => String(manager.id) === managerId)) {
+    updateStatus("Reporting assignments or eligible managers changed. Reopen the shortcut.");
+    button.disabled = false;
+    return;
+  }
+
+  const employee = (state.employees || []).find((row) => String(row.id) === employeeId);
+  const manager = (state.employees || []).find((row) => String(row.id) === managerId);
+  if (!employee || !manager ||
+      !window.confirm(`Approve an exceptional Primary reporting line for ${getSupportingManagerDisplayName(employee)} to ${getSupportingManagerDisplayName(manager)}?\n\nReason: ${reason}\n\nAn active PA cycle or pending Leave may prevent the change. This action will be audited.`)) {
+    button.disabled = false;
+    return;
+  }
+
+  button.disabled = true;
+  updateStatus("Checking permissions and saving the approved exception...");
+  let committed = false;
+  try {
+    // AAL2 cannot be provided by user input or a browser-side flag.
+    const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (assurance.error || assurance.data?.currentLevel !== "aal2") {
+      updateStatus("HR Admin MFA verification (AAL2) is required.");
+      return;
+    }
+    if (!canCurrentUserAssignHrOfficerAccess() ||
+        section.classList.contains("d-none") ||
+        String(document.getElementById("hrSupportingManagerEmployeeId")?.value || "") !== employeeId ||
+        String(state.currentProfile?.tenant_id || "") !== tenantId) {
+      updateStatus("Your account or selected employee changed during verification. Reopen the shortcut.");
+      return;
+    }
+    const { data, error } = await supabase.rpc(
+      "hr_tenant_admin_assign_primary_exception",
+      { p_employee_id: employeeId, p_manager_employee_id: managerId,
+        p_reason: reason, p_expires_at: null },
+    );
+    if (error) throw error;
+    if (!data?.reporting_line_id || !data?.approval_id) {
+      throw new Error("The server did not confirm the new reporting line. Refresh before retrying.");
+    }
+    committed = true;
+    updateStatus("Exception saved. Refreshing reporting and team information...");
+    publishHrReportingHierarchyChange(employeeId, "primary_exception_approved");
+    await refreshEmployeeWorkspace();
+    await loadHrPrimaryReportingHierarchy();
+    await loadHrSupportingManagersForModal(employeeId);
+    await updateHrAccountResponsibilityTitle(state.currentProfile || {});
+    showPageAlert("success", "The approved Primary Manager exception was saved. New PA and Leave decisions follow the backend's current-authority rules; completed history is unchanged.");
+  } catch (error) {
+    console.error("Primary Manager exception action failed:", error);
+    if (committed) {
+      // Never attempt a compensating browser write after the RPC committed.
+      updateStatus("Exception saved on the server, but the screen refresh failed. Refresh the page before doing anything else.");
+      showPageAlert("warning", "Reporting was saved; refresh the page to see the current assignment.");
+    } else {
+      const message = String(error?.message || "");
+      const blockedWorkflow = /BEXHR_H11A_(ACTIVE_PA|ACTIVE_PA_GOALS|PENDING_LEAVE)/.test(message);
+      updateStatus(blockedWorkflow
+        ? "This employee has active PA or pending Leave responsibilities. Resolve them before approving this exception."
+        : "The database did not approve this exception. No browser-side fallback was attempted.");
+    }
+  } finally {
+    if (!committed) button.disabled = false;
   }
 }
 
@@ -34866,11 +40084,24 @@ async function assignHrPrimaryManagerFromModal() {
     return;
   }
 
-  if (!canEmployeeBeAssignedAsManager(manager)) {
+  if (
+    !isHrReportingManagerCandidate(manager, employee) ||
+    !canHrPrimaryReportingManagerSitImmediatelyAboveEmployee(manager, employee)
+  ) {
     showPageAlert(
       "warning",
-      `${getSupportingManagerDisplayName(manager)} does not currently have Manager or HR access and cannot be assigned as a manager.`,
+      "Select the nearest eligible Primary Manager from the configured hierarchy.",
     );
+    return;
+  }
+
+  if (
+    !isHrPrimaryManagerHierarchySafe(
+      employeeId,
+      managerEmployeeId,
+    )
+  ) {
+    showHrReportingHierarchyBlockedFeedback();
     return;
   }
 
@@ -35103,6 +40334,8 @@ async function assignHrPrimaryManagerFromModal() {
       state.currentProfile || {},
     );
 
+    publishHrReportingHierarchyChange(employeeId, "primary_manager_assigned");
+
     const primaryManagerWasChanged = Boolean(
       updatedPrimaryReportingLineId,
     );
@@ -35128,6 +40361,36 @@ async function assignHrPrimaryManagerFromModal() {
       "Error assigning Primary Manager:",
       error,
     );
+
+    const combinedErrorText = [
+      error?.message,
+      error?.details,
+      error?.hint,
+      error?.code,
+    ]
+      .map((value) => String(value || "").toLowerCase())
+      .join(" ");
+
+    const isSelfManagerAssignment =
+      combinedErrorText.includes("bexhr_reporting_self_manager") ||
+      combinedErrorText.includes("cannot be assigned as their own manager");
+
+    const isCircularPrimaryManagerAssignment =
+      combinedErrorText.includes("bexhr_reporting_cycle") ||
+      combinedErrorText.includes("circular primary manager") ||
+      combinedErrorText.includes("circular reporting relationship");
+
+    if (
+      isSelfManagerAssignment ||
+      isCircularPrimaryManagerAssignment
+    ) {
+      showHrReportingHierarchyBlockedFeedback({
+        selfManager: isSelfManagerAssignment,
+      });
+
+      await loadHrPrimaryReportingHierarchy();
+      return;
+    }
 
     showPageAlert(
       "danger",
@@ -35272,6 +40535,8 @@ async function removeHrPrimaryManagerFromModal(
       state.currentProfile || {},
     );
 
+    publishHrReportingHierarchyChange(employeeId, "primary_manager_removed");
+
     showPageAlert(
       "success",
       `${previousManagerName || "The Primary Manager"} was removed. Supporting Manager assignments were preserved.`,
@@ -35317,6 +40582,18 @@ async function addHrSupportingManagerFromModal() {
 
   if (employeeId === managerEmployeeId) {
     showPageAlert("warning", "An employee cannot be assigned as their own manager.");
+    return;
+  }
+
+  const employee = (state.employees || []).find(person => String(person.id) === employeeId);
+  const manager = (state.employees || []).find(person => String(person.id) === managerEmployeeId);
+  const supportingOptions = getHrReportingManagerCandidatesForEmployee(employee, {
+    primaryOnly: false,
+  });
+  if (!employee || !manager || !supportingOptions.some(
+    (option) => String(option.id) === managerEmployeeId,
+  )) {
+    showPageAlert("warning", "Select an eligible Secondary Manager from the configured reporting hierarchy.");
     return;
   }
 
@@ -35378,6 +40655,8 @@ async function addHrSupportingManagerFromModal() {
       state.currentProfile || {},
     );
 
+    publishHrReportingHierarchyChange(employeeId, "secondary_manager_assigned");
+
     showDashboardToast(
       "success",
       "Supporting manager added",
@@ -35434,6 +40713,8 @@ async function removeHrSupportingManagerFromModal(reportingLineId, managerName =
     await updateHrAccountResponsibilityTitle(
       state.currentProfile || {},
     );
+
+    publishHrReportingHierarchyChange(employeeId, "secondary_manager_removed");
 
     showDashboardToast(
       "success",
@@ -35765,6 +41046,17 @@ function prepareEmployeeAsReportingManagerFromAccess() {
       "warning",
       "The selected reporting assignment could not be resolved. Please refresh and try again.",
     );
+    return;
+  }
+
+  if (
+    normalizeText(managerType) === "primary" &&
+    !isHrPrimaryManagerHierarchySafe(
+      managedEmployeeId,
+      managerEmployeeId,
+    )
+  ) {
+    showHrReportingHierarchyBlockedFeedback();
     return;
   }
 
@@ -36145,6 +41437,20 @@ async function toggleEmployeeManagerRole(employeeId) {
 
 async function handleEmployeeSave() {
   clearPageAlert();
+  // BEXHR_GROUP_B_V12: form role restriction is also enforced on submit.
+  if (!state.currentEditingEmployee && getHrLeadershipOnboardingRolePolicy() === 'manager-only' &&
+      normaliseHrBusinessRole(getSelectedEmployeeSystemRoleValue()) !== 'manager') {
+    showPageAlert('warning', 'A configured whole-organisation leadership appointment must be onboarded as Manager.');
+    syncHrNewEmployeeManagerRoleSuggestion();
+    return;
+  }
+  // Read-only NIN is intentionally excluded from ordinary employee updates.
+  // Do not silently accept a forged NIN input while secure verification failed.
+  if (state.currentEditingEmployee && state.p7NinEditStatus !== "ready" &&
+      String(state.dom.nin?.value || "").trim()) {
+    showPageAlert("warning", "NIN cannot be changed until secure verification is available. Other employee details can still be edited.");
+    return;
+  }
 
   // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
   // Payroll, Auditor, QA, and unknown/custom HR-routed roles must not create
@@ -36285,24 +41591,48 @@ async function handleEmployeeSave() {
     return;
   }
 
-  // EMPLOYEE BIODATA COMPLETION - STEP 6C-3A
-  // Final guard: Education is optional, but if HR starts it,
-  // required education fields must be valid before save proceeds.
-  if (!validateEmployeeEducationFields()) {
-    updateEmployeeSaveButtonState();
-    return;
-  }
-
-  // EMPLOYEE BIODATA COMPLETION - STEP 6D-3
-  // Beneficiaries/dependants are optional, but any visible un-staged row must
-  // be complete before saving it to employee_dependants.
-  if (isEmployeeDependantStarted() && !validateEmployeeDependantFields()) {
-    updateEmployeeSaveButtonState();
-    return;
-  }
+  // BEXHR_GROUP_A_20261108: validate custom biodata before any core record write.
+  try { window.BexHrGroupA?.validateManual(); }
+  catch (error) { showPageAlert('warning', error.message); return; }
+  // Re-enabled Alpatech sections also retain their original validation.
+  if (window.BexHrGroupA?.alpatech &&
+      (!validateEmployeeEducationFields() || !validateEmployeeDependantFields())) return;
+  // PRE-7B: all existing core payroll/reporting validations stay authoritative.
   const employeePayload = buildEmployeePayload();
   const editingId = String(state.dom.editingEmployeeId?.value || "").trim();
   const isEditMode = Boolean(editingId);
+
+  let hierarchyPositionImpact = [];
+
+  if (isEditMode && state.currentEditingEmployee && state.primaryReportingHierarchyLoaded) {
+    const savedEmployee = state.currentEditingEmployee;
+    const hierarchyRelevantPositionChanged =
+      normalizeText(savedEmployee.department || "") !== normalizeText(employeePayload.department || "") ||
+      normalizeText(savedEmployee.job_title || "") !== normalizeText(employeePayload.job_title || "") ||
+      normalizeText(savedEmployee.system_role || "") !== normalizeText(employeePayload.system_role || "") ||
+      normalizeText(savedEmployee.status || "active") !== normalizeText(employeePayload.status || "active");
+
+    if (hierarchyRelevantPositionChanged) {
+      const pendingManager = { ...savedEmployee, ...employeePayload, id: editingId };
+      hierarchyPositionImpact = getHrInvalidPrimaryReportsForPendingManagerPosition(
+        editingId,
+        pendingManager,
+      );
+
+      if (hierarchyPositionImpact.length) {
+        const managerName = getSupportingManagerDisplayName(savedEmployee);
+        const affectedNames = hierarchyPositionImpact
+          .map((employee) => getSupportingManagerDisplayName(employee))
+          .join(", ");
+        const confirmed = window.confirm(
+          managerName + "'s position change will make these current Primary reporting lines invalid: " +
+          affectedNames + ". BexHR will deactivate those old Primary lines so they stop granting team/Leave authority. The affected employees must then be reassigned to a valid Primary Manager. Continue?",
+        );
+
+        if (!confirmed) return;
+      }
+    }
+  }
 
   try {
     setEmployeeSaveLoading(true, isEditMode);
@@ -36514,23 +41844,37 @@ async function handleEmployeeSave() {
     // EMPLOYEE SAVE PERFORMANCE - STEP 1
     // Independent child biodata tables save concurrently after the
     // employee record exists. Validation and tenant controls remain unchanged.
+    // BEXHR REPORTING HIERARCHY INTEGRITY - R-12
+    // Reporting lines save first so an invalid hierarchy blocks the remaining
+    // child-table writes. Other independent biodata tables still save together.
+    await saveEmployeeReportingLinesForEmployee(savedEmployeeId);
+
     await Promise.all([
-      saveEmployeeReportingLinesForEmployee(savedEmployeeId),
       saveEmployeeAddressesForEmployee(savedEmployeeId),
       saveEmployeeNextOfKinForEmployee(savedEmployeeId),
-      saveEmployeeEducationRecordsForEmployee(savedEmployeeId),
-      saveEmployeeDependantRecordsForEmployee(savedEmployeeId),
     ]);
+    // BEXHR_GROUP_A_20261108: never overwrite untouched historical child records.
+    if (window.BexHrGroupA?.alpatech) {
+      if (state.groupAEducationTouched) await saveEmployeeEducationRecordsForEmployee(savedEmployeeId);
+      if (state.groupADependantsTouched) await saveEmployeeDependantRecordsForEmployee(savedEmployeeId);
+    }
+    let groupAManualWarning = '';
+    try { await window.BexHrGroupA?.saveManual(savedEmployeeId); }
+    catch (error) { groupAManualWarning = error.message; }
 
-    // Refresh Education suggestions after Education records have saved.
-    await refreshEducationSuggestionLists();
-
-    if (state.pendingFiles.length) {
-      await uploadPendingFilesForEmployee(savedEmployeeId);
+    // PRE-7B: Other tenants keep their historical supporting documents unchanged.
+    // Alpatech can save newly selected documents using the existing secured uploader.
+    if (window.BexHrGroupA?.alpatech && state.pendingFiles?.length) {
+      try { await uploadPendingFilesForEmployee(savedEmployeeId); }
+      catch (error) {
+        groupAManualWarning = [groupAManualWarning, 'Supporting document upload: ' + error.message]
+          .filter(Boolean).join('; ');
+        await loadEmployeeDocuments(savedEmployeeId);
+      }
     } else {
       await loadEmployeeDocuments(savedEmployeeId);
-      renderAttachedDocuments();
     }
+    renderAttachedDocuments();
 
 
     // EMPLOYEE LIST STABLE ORDER - STEP 1
@@ -36547,6 +41891,11 @@ async function handleEmployeeSave() {
       loadEmployees(),
     ]);
 
+    await loadHrPrimaryReportingHierarchy();
+
+    // BEXHR R-14B LIVE REPORTING HIERARCHY REFRESH
+    publishHrReportingHierarchyChange(savedEmployeeId, "employee_saved");
+    publishHrEmployeeLifecycleChange(savedEmployeeId, isEditMode ? "employee_updated" : "employee_created");
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
     // Keep payroll-related employee dropdowns aligned after employee create/update.
@@ -36604,6 +41953,17 @@ async function handleEmployeeSave() {
     // Show the employee save result together with the dashboard routing result.
     // If no login profile exists yet, HR gets a warning but the employee record
     // and selected system role still save successfully.
+    if (hierarchyPositionImpact.length) {
+      const affectedNames = hierarchyPositionImpact
+        .map((employee) => getSupportingManagerDisplayName(employee))
+        .join(", ");
+
+      employeeSaveSuccessMessage +=
+        '<div class="mt-2 small text-warning"><strong>Reporting hierarchy refreshed:</strong> ' +
+        escapeHtml(affectedNames) +
+        ' no longer report directly to this position. Their previous Primary lines were preserved as inactive history; assign a valid Primary Manager before they submit new Leave requests.</div>';
+    }
+
     const roleSyncMessage = roleSyncResult?.message || "";
     // EMPLOYEE LOGIN INVITE WORDING - STEP 2A
     // Existing login account is a successful linked-account outcome, not a
@@ -36626,7 +41986,8 @@ async function handleEmployeeSave() {
   `;
     }
 
-    showPageAlert(employeeSaveAlertType, employeeSaveSuccessMessage);
+    if (groupAManualWarning) employeeSaveSuccessMessage += '<div class="mt-2 text-warning"><strong>Custom fields were NOT saved:</strong> ' + escapeHtml(groupAManualWarning) + '. Employee main record was saved.</div>';
+    showPageAlert(groupAManualWarning ? 'warning' : employeeSaveAlertType, employeeSaveSuccessMessage);
 
     // ADMIN COMPANY / HR USER BOOTSTRAP - STEP 1G
     // HR-facing confirmation after employee create/update.
@@ -36706,6 +42067,33 @@ async function handleEmployeeSave() {
       errorCode,
     ].join(" ");
 
+    // BEXHR REPORTING HIERARCHY INTEGRITY - R-12
+    // Database is authoritative. Convert its hierarchy guard into clear HR feedback.
+    const isSelfManagerAssignment =
+      combinedErrorText.includes("bexhr_reporting_self_manager") ||
+      combinedErrorText.includes("cannot be assigned as their own manager");
+
+    const isCircularPrimaryManagerAssignment =
+      combinedErrorText.includes("bexhr_reporting_cycle") ||
+      combinedErrorText.includes("circular primary manager") ||
+      combinedErrorText.includes("circular reporting relationship");
+
+    if (isSelfManagerAssignment || isCircularPrimaryManagerAssignment) {
+      const primaryManagerField =
+        state.dom.assignedLineManagerEmployeeId;
+
+      primaryManagerField?.classList.add("is-invalid");
+
+      if (primaryManagerField) {
+        focusEmployeeBiodataField(primaryManagerField);
+      }
+
+      showHrReportingHierarchyBlockedFeedback({
+        selfManager: isSelfManagerAssignment,
+      });
+
+      return;
+    }
     const isDuplicateEmployeeNumber =
       combinedErrorText.includes("uq_employees_employee_number_normalised") ||
       (
@@ -36735,6 +42123,7 @@ async function handleEmployeeSave() {
     }
 
     const isDuplicateNin =
+      combinedErrorText.includes("bexhr_p7_nin_tenant_unique") ||
       combinedErrorText.includes("employees_unique_nin_per_tenant_idx") ||
       (
         combinedErrorText.includes("duplicate key value") &&
@@ -37227,30 +42616,20 @@ function updatePayrollMasterSaveButtonState() {
     setPrimaryActionButtonReadyState(state.dom.savePayrollMasterBtn, false);
     return;
   }
-  // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-  // Grade removed from Payroll Master readiness.
-  // Payroll Master can save when employee, salary, effective date,
-  // pay cycle, and status are complete.
+
   const hasEmployee = Boolean(String(state.dom.payrollMasterEmployeeId?.value || "").trim());
   const hasSalary = Boolean(String(state.dom.payrollMasterBasicSalary?.value || "").trim());
-  const hasEffectiveDate = Boolean(String(state.dom.payrollMasterEffectiveDate?.value || "").trim());
-  const hasPayCycle = Boolean(String(state.dom.payrollMasterPayCycle?.value || "").trim());
-  const hasStatus = Boolean(String(state.dom.payrollMasterStatus?.value || "").trim());
+  const hasStartMonth = Boolean(
+    normalizePayrollMasterStartMonth(state.dom.payrollMasterEffectiveDate?.value || ""),
+  );
+  const hasPayBasis = String(state.dom.payrollMasterPayCycle?.value || "").trim() === "Monthly";
 
   const salaryValue = Number(state.dom.payrollMasterBasicSalary?.value || 0);
-  // DESCRIPTION ITEM 8 - STEP 8A
-  // Payroll Master salary setup must be a real positive salary value.
-  // Zero salary is not valid for an active monthly payroll master record.
   const salaryIsValid = Number.isFinite(salaryValue) && salaryValue > 0;
 
   setPrimaryActionButtonReadyState(
     state.dom.savePayrollMasterBtn,
-    hasEmployee &&
-    hasSalary &&
-    salaryIsValid &&
-    hasEffectiveDate &&
-    hasPayCycle &&
-    hasStatus,
+    hasEmployee && hasSalary && salaryIsValid && hasStartMonth && hasPayBasis,
   );
 }
 
@@ -37258,11 +42637,14 @@ function updatePayrollMasterSaveButtonState() {
 // Allowance Components button state.
 // Required fields match validatePayrollAllowanceForm().
 function updatePayrollAllowanceSaveButtonState() {
-  const hasMasterRecord = Boolean(String(state.dom.payrollAllowanceMasterRecordId?.value || "").trim());
+  configurePayrollAllowancePhase4Ui();
+
+  const hasMasterRecord =
+    Boolean(String(state.dom.payrollAllowanceMasterRecordId?.value || "").trim());
   const hasType = Boolean(String(state.dom.payrollAllowanceType?.value || "").trim());
   const hasAmount = Boolean(String(state.dom.payrollAllowanceAmount?.value || "").trim());
   const hasEffectiveDate = Boolean(String(state.dom.payrollAllowanceEffectiveDate?.value || "").trim());
-  const hasStatus = Boolean(String(state.dom.payrollAllowanceStatus?.value || "").trim());
+  const hasStatus = true; // Phase 4 lifecycle state is derived by BexHR.
 
   const amountValue = Number(state.dom.payrollAllowanceAmount?.value || 0);
   // DESCRIPTION ITEM 8 - STEP 8B
@@ -38019,38 +43401,44 @@ function populateEmployeeBankBankOptions() {
   }
 }
 
-function populatePayrollEmployeeOptions() {
+function populatePayrollEmployeeOptions(preferredEmployeeId = "") {
   const select = state.dom.payrollEmployeeId;
   if (!select) return;
 
-  const currentValue = select.value;
-  const employees = [...state.employees].sort((a, b) => {
-    const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
-    const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+  const currentValue = String(preferredEmployeeId || select.value || "").trim();
+  const allowHistoricalEmployee = Boolean(currentValue && state.currentEditingPayroll);
+  const activeEmployees = (state.employees || []).filter(
+    (employee) => normalizeText(employee.status || "active") === "active",
+  );
+  const historicalEmployee = allowHistoricalEmployee
+    ? (state.employees || []).find((employee) => String(employee.id || "") === currentValue) || null
+    : null;
+  const employees = [...activeEmployees];
+  if (historicalEmployee && !employees.some((employee) => String(employee.id || "") === currentValue)) {
+    employees.push(historicalEmployee);
+  }
+
+  employees.sort((a, b) => {
+    const nameA = (String(a.first_name || "") + " " + String(a.last_name || "")).trim().toLowerCase();
+    const nameB = (String(b.first_name || "") + " " + String(b.last_name || "")).trim().toLowerCase();
     return nameA.localeCompare(nameB);
   });
 
-  select.innerHTML = `<option value="">Select employee</option>`;
-
+  select.innerHTML = '<option value="">Select employee</option>';
   employees.forEach((employee) => {
     const option = document.createElement("option");
     option.value = employee.id;
-    option.textContent =
-      `${employee.first_name || ""} ${employee.last_name || ""}`.trim() ||
-      employee.work_email ||
-      "Unnamed Employee";
+    const displayName = (String(employee.first_name || "") + " " + String(employee.last_name || "")).trim() || employee.work_email || "Unnamed Employee";
+    const isActive = normalizeText(employee.status || "active") === "active";
+    option.textContent = isActive ? displayName : displayName + " — historical payroll record";
     option.dataset.department = employee.department || "";
     option.dataset.jobTitle = employee.job_title || "";
+    option.disabled = !isActive;
     select.appendChild(option);
   });
 
-  if (currentValue) {
-    const stillExists = Array.from(select.options).some(
-      (option) => option.value === currentValue,
-    );
-    if (stillExists) {
-      select.value = currentValue;
-    }
+  if (currentValue && Array.from(select.options).some((option) => option.value === currentValue)) {
+    select.value = currentValue;
   }
 }
 // =========================================================
@@ -38116,9 +43504,9 @@ async function loadPayrollMasterRecords() {
         })
         .map((record) => ({
           ...record,
-          first_name: record.employees?.first_name || "",
-          last_name: record.employees?.last_name || "",
-          work_email: record.employees?.work_email || "",
+          first_name: record.employees?.first_name || (state.h12NativeHrStandard ? state.employees.find(e => String(e.id) === String(record.employee_id))?.first_name : "") || "",
+          last_name: record.employees?.last_name || (state.h12NativeHrStandard ? state.employees.find(e => String(e.id) === String(record.employee_id))?.last_name : "") || "",
+          work_email: record.employees?.work_email || (state.h12NativeHrStandard ? state.employees.find(e => String(e.id) === String(record.employee_id))?.work_email : "") || "",
         }))
       : [];
 
@@ -38150,40 +43538,42 @@ async function loadPayrollMasterRecords() {
 // Populate employee options for Payroll Master Data form
 // This reuses the current employee list already loaded for HR.
 // =========================================================
-function populatePayrollMasterEmployeeOptions() {
+function populatePayrollMasterEmployeeOptions(preferredEmployeeId = "") {
   const select = state.dom.payrollMasterEmployeeId;
   if (!select) return;
 
-  const currentValue = select.value;
+  const currentValue = String(preferredEmployeeId || select.value || "").trim();
+  const allowHistoricalEmployee = Boolean(currentValue && state.currentEditingPayrollMaster);
+  const activeEmployees = (state.employees || []).filter(
+    (employee) => normalizeText(employee.status || "active") === "active",
+  );
+  const historicalEmployee = allowHistoricalEmployee
+    ? (state.employees || []).find((employee) => String(employee.id || "") === currentValue) || null
+    : null;
+  const employees = [...activeEmployees];
+  if (historicalEmployee && !employees.some((employee) => String(employee.id || "") === currentValue)) {
+    employees.push(historicalEmployee);
+  }
 
-  const employees = [...state.employees].sort((a, b) => {
-    const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
-    const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+  employees.sort((a, b) => {
+    const nameA = (String(a.first_name || "") + " " + String(a.last_name || "")).trim().toLowerCase();
+    const nameB = (String(b.first_name || "") + " " + String(b.last_name || "")).trim().toLowerCase();
     return nameA.localeCompare(nameB);
   });
 
-  // Reset the dropdown before rebuilding it.
-  select.innerHTML = `<option value="">Select employee</option>`;
-
+  select.innerHTML = '<option value="">Select employee</option>';
   employees.forEach((employee) => {
     const option = document.createElement("option");
     option.value = employee.id;
-    option.textContent =
-      `${employee.first_name || ""} ${employee.last_name || ""}`.trim() ||
-      employee.work_email ||
-      "Unnamed Employee";
+    const displayName = (String(employee.first_name || "") + " " + String(employee.last_name || "")).trim() || employee.work_email || "Unnamed Employee";
+    const isActive = normalizeText(employee.status || "active") === "active";
+    option.textContent = isActive ? displayName : displayName + " — historical Salary Setup";
+    option.disabled = !isActive;
     select.appendChild(option);
   });
 
-  // Preserve existing selected value if the employee still exists.
-  if (currentValue) {
-    const stillExists = Array.from(select.options).some(
-      (option) => option.value === currentValue,
-    );
-
-    if (stillExists) {
-      select.value = currentValue;
-    }
+  if (currentValue && Array.from(select.options).some((option) => option.value === currentValue)) {
+    select.value = currentValue;
   }
 }
 
@@ -39375,11 +44765,12 @@ function buildPayrollRecordSourceDetailsHtml(
 ) {
   const currency = record.currency || "NGN";
   const cleanOverrideAudit = String(employeeOverrideAuditSummary || "")
-    .replace("Employee override audit:", "")
+    .replace(/^\s*(?:Employee override audit|Payroll adjustment audit):\s*/i, "")
+    .replace(/(\s\|\s)Override(?=\s)/g, "$1Adjustment")
     .trim();
 
   const sourceLabel = employeeOverrideAuditSummary
-    ? "Employee override + Payroll Master version"
+    ? "Payroll adjustment + Payroll Master version"
     : "Payroll Master version";
 
   // DESCRIPTION ITEM 6 - STEP 6C
@@ -39407,7 +44798,7 @@ function buildPayrollRecordSourceDetailsHtml(
 
         ${cleanOverrideAudit
       ? `<div class="mt-1 text-break">
-              <span class="fw-semibold">Override audit:</span>
+              <span class="fw-semibold">Adjustment audit:</span>
               ${escapeHtml(cleanOverrideAudit)}
             </div>`
       : ""}
@@ -39603,7 +44994,7 @@ ${recentlyEditedPayrollBadgeHtml}
         ? `<div class="mt-1">
               ${employeeOverrideAuditSummary
           ? `<span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-                    <i class="bi bi-shield-check me-1"></i>Override
+                    <i class="bi bi-shield-check me-1"></i>Adjustment
                   </span>`
           : `<span class="badge bg-light text-secondary border">
                     Versioned salary
@@ -39829,6 +45220,8 @@ function populatePayrollFormFromEmployeeMaster(employeeId) {
   const effectivePayrollProfile =
     getEffectivePayrollMasterRecordForEmployeeAtDate(employeeKey, payrollDate);
 
+  clearPhase6CreateDerivedPayrollFields();
+
   if (state.dom.payrollBaseSalary) {
     state.dom.payrollBaseSalary.value =
       effectivePayrollProfile?.basic_salary ?? "";
@@ -39894,6 +45287,7 @@ function resetPayrollForm() {
 
   state.dom.payrollCreateForm.reset();
   state.currentEditingPayroll = null;
+  setPhase6PayrollCompatibilityVisibility(false);
 
   // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - FINAL CLEANUP
   // Explicitly clear payroll form fields after create/update so the form
@@ -39972,12 +45366,12 @@ function resetPayrollForm() {
   }
 
   if (state.dom.payrollFormTitle) {
-    state.dom.payrollFormTitle.textContent = "Create Payroll Record";
+    state.dom.payrollFormTitle.textContent = "Run Payroll";
   }
 
   if (state.dom.payrollFormSubtext) {
     state.dom.payrollFormSubtext.textContent =
-      "Enter payroll details for an employee. Core monetary fields use NGN.";
+      "Choose an employee and pay period, review the BexHR calculation, then finalise.";
   }
 
   if (state.dom.payrollFormModeBadge) {
@@ -39995,7 +45389,7 @@ function resetPayrollForm() {
     // Keep the default payroll action aligned with the new story wording.
     state.dom.savePayrollBtn.innerHTML = `
     <i class="bi bi-send-check me-2"></i>
-    <span id="savePayrollBtnText">Finalise Single Employee</span>
+    <span id="savePayrollBtnText">Finalise Payroll</span>
   `;
     state.dom.savePayrollBtnText = document.getElementById("savePayrollBtnText");
   }
@@ -40794,6 +46188,8 @@ async function startPayrollEdit(payrollId) {
   }
 
   state.currentEditingPayroll = payrollRecord;
+  populatePayrollEmployeeOptions(payrollRecord.employee_id || "");
+  setPhase6PayrollCompatibilityVisibility(true);
 
   if (state.dom.editingPayrollId) state.dom.editingPayrollId.value = payrollRecord.id || "";
   if (state.dom.payrollEmployeeId) state.dom.payrollEmployeeId.value = payrollRecord.employee_id || "";
@@ -40897,7 +46293,19 @@ async function startPayrollEdit(payrollId) {
   if (state.dom.payrollNetPay) state.dom.payrollNetPay.value = payrollRecord.net_pay ?? "";
   if (state.dom.payrollCurrency) state.dom.payrollCurrency.value = payrollRecord.currency || "NGN";
   if (state.dom.payrollIsFinalised) state.dom.payrollIsFinalised.checked = Boolean(payrollRecord.is_finalised);
-  if (state.dom.payrollNotes) state.dom.payrollNotes.value = payrollRecord.notes || "";
+  if (state.dom.payrollNotes) {
+    // Presentation only: preserve the stored audit marker and numeric audit evidence.
+    const originalNotes = String(payrollRecord.notes || "");
+    state.dom.payrollNotes.value = originalNotes
+      .split(/\r?\n/)
+      .map((line) => {
+        if (!/^\s*Employee override audit:/i.test(line)) return line;
+        return line
+          .replace(/^(\s*)Employee override audit:/i, "$1Payroll adjustment audit:")
+          .replace(/(\s\|\s)Override(?=\s)/g, "$1Adjustment");
+      })
+      .join("\n");
+  }
 
   // PAYROLL FINALISATION CORRECTION - STEP 1
   // Finalised records can be corrected by authorised HR/Payroll users.
@@ -40962,6 +46370,11 @@ async function startPayrollEdit(payrollId) {
   // Editing must reopen Create Payroll Record even if HR collapsed it
   // after a previous submit/update.
   openPayrollRecordCard();
+
+  // BEXHR PAYROLL FOCUSED WORKSPACE - US-04
+  // Payroll record editing is a transient Run Payroll work screen. Do not
+  // persist this transient state; Save already returns to Payroll Records.
+  applyHrNavigationTask("payroll.run", { remember: false, scroll: false });
 
   // BATCH PAYROLL DEFAULT - STEP 2A
   // Scroll to the full Create Payroll Batch card instead of the inner
@@ -41083,11 +46496,14 @@ function setNumericFieldValue(field, value) {
 // These bands are annual bands. The payroll form works monthly,
 // so monthly values are annualised before tax is calculated.
 const NTA_2025_PAYE_BANDS = [
+  // Nigeria Tax Act 2025, Fourth Schedule, effective for 2026 payroll:
+  // first NGN 800,000 @ 0%; next 2.2m @ 15%; next 9m @ 18%;
+  // next 13m @ 21%; next 25m @ 23%; balance above NGN 50m @ 25%.
   { limit: 800000, rate: 0 },
   { limit: 2200000, rate: 0.15 },
   { limit: 9000000, rate: 0.18 },
-  { limit: 12000000, rate: 0.21 },
-  { limit: 16000000, rate: 0.23 },
+  { limit: 13000000, rate: 0.21 },
+  { limit: 25000000, rate: 0.23 },
   { limit: Infinity, rate: 0.25 },
 ];
 
@@ -41126,50 +46542,697 @@ function calculateNta2025MonthlyPayeTaxFromComponents({
   overtime = 0,
   logisticsAllowance = 0,
   dataAirtimeAllowance = 0,
+  oneOffBonus = 0,
+  oneOffOvertime = 0,
+  oneOffOtherAllowance = 0,
+  monthlyPensionContribution = 0,
+  monthlyNhfContribution = 0,
+  monthlyHealthContribution = 0,
   annualRentPaid = 0,
+  returnDetails = false,
 } = {}) {
-  const monthlyBasic = Number(basicPay || 0);
-  const monthlyHousing = Number(housingAllowance || 0);
-  const monthlyTransport = Number(transportAllowance || 0);
+  const toNonNegative = (value) => {
+    const numericValue = Number(value || 0);
+    return Number.isFinite(numericValue) ? Math.max(0, numericValue) : 0;
+  };
 
-  const monthlyGross =
+  const monthlyBasic = toNonNegative(basicPay);
+  const monthlyHousing = toNonNegative(housingAllowance);
+  const monthlyTransport = toNonNegative(transportAllowance);
+  const monthlyUtility = toNonNegative(utilityAllowance);
+  const monthlyOtherAllowance = toNonNegative(otherAllowance);
+  const monthlyMedical = toNonNegative(medicalAllowance);
+  const monthlyBonus = toNonNegative(bonus);
+  const monthlyOvertime = toNonNegative(overtime);
+  const monthlyLogistics = toNonNegative(logisticsAllowance);
+  const monthlyDataAirtime = toNonNegative(dataAirtimeAllowance);
+
+  const currentOneOffBonus = Math.min(monthlyBonus, toNonNegative(oneOffBonus));
+  const currentOneOffOvertime = Math.min(monthlyOvertime, toNonNegative(oneOffOvertime));
+  const currentOneOffOtherAllowance = Math.min(
+    monthlyOtherAllowance,
+    toNonNegative(oneOffOtherAllowance),
+  );
+
+  const monthlyRecurringGross =
     monthlyBasic +
     monthlyHousing +
     monthlyTransport +
-    Number(utilityAllowance || 0) +
-    Number(otherAllowance || 0) +
-    Number(medicalAllowance || 0) +
-    Number(bonus || 0) +
-    Number(overtime || 0) +
-    Number(logisticsAllowance || 0) +
-    Number(dataAirtimeAllowance || 0);
+    monthlyUtility +
+    Math.max(0, monthlyOtherAllowance - currentOneOffOtherAllowance) +
+    monthlyMedical +
+    Math.max(0, monthlyBonus - currentOneOffBonus) +
+    Math.max(0, monthlyOvertime - currentOneOffOvertime) +
+    monthlyLogistics +
+    monthlyDataAirtime;
 
-  const annualGross = monthlyGross * 12;
+  const currentPeriodOneOffGross =
+    currentOneOffBonus + currentOneOffOvertime + currentOneOffOtherAllowance;
+  const monthlyGross = monthlyRecurringGross + currentPeriodOneOffGross;
+  const annualRecurringGross = monthlyRecurringGross * 12;
+  const annualGross = annualRecurringGross + currentPeriodOneOffGross;
 
-  // PAYROLL TAX DEDUCTION CALCULATION - STEP 1
-  // TaxCalc model:
-  // Pension = 8% of Basic + Housing + Transport.
-  // NHF = 2.5% of Basic.
-  // NHIS = 5% of Basic.
-  const annualPension =
-    (monthlyBasic + monthlyHousing + monthlyTransport) * 12 * 0.08;
-
-  const annualNhf = monthlyBasic * 12 * 0.025;
-  const annualNhis = monthlyBasic * 12 * 0.05;
-
+  const annualPension = toNonNegative(monthlyPensionContribution) * 12;
+  const annualNhf = toNonNegative(monthlyNhfContribution) * 12;
+  const annualHealth = toNonNegative(monthlyHealthContribution) * 12;
   const annualRentRelief =
-    Number(annualRentPaid || 0) > 0
-      ? Math.min(Number(annualRentPaid || 0) * 0.2, 500000)
+    toNonNegative(annualRentPaid) > 0
+      ? Math.min(toNonNegative(annualRentPaid) * 0.2, 500000)
       : 0;
 
-  const annualChargeableIncome = Math.max(
+  const annualEligibleDeductions =
+    annualPension + annualNhf + annualHealth + annualRentRelief;
+  const annualRecurringChargeableIncome = Math.max(
     0,
-    annualGross - annualPension - annualNhf - annualNhis - annualRentRelief,
+    annualRecurringGross - annualEligibleDeductions,
+  );
+  const annualChargeableIncome =
+    annualRecurringChargeableIncome + currentPeriodOneOffGross;
+
+  const annualBasePayeTax = calculateAnnualPayeFromBands(
+    annualRecurringChargeableIncome,
+  );
+  const annualPayeTax = calculateAnnualPayeFromBands(annualChargeableIncome);
+  const currentPeriodOneOffPayeTax = Math.max(
+    0,
+    annualPayeTax - annualBasePayeTax,
+  );
+  const monthlyPayeTax =
+    annualBasePayeTax / 12 + currentPeriodOneOffPayeTax;
+
+  if (returnDetails) {
+    return {
+      monthlyGross,
+      monthlyRecurringGross,
+      currentPeriodOneOffGross,
+      annualRecurringGross,
+      annualGross,
+      annualPension,
+      annualNhf,
+      annualHealth,
+      annualRentRelief,
+      annualEligibleDeductions,
+      annualRecurringChargeableIncome,
+      annualChargeableIncome,
+      annualBasePayeTax,
+      annualPayeTax,
+      currentPeriodOneOffPayeTax,
+      monthlyPayeTax,
+    };
+  }
+
+  return monthlyPayeTax;
+}
+
+// =========================================================
+// PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B
+// 10B-B-R - Preserve the tax facts used when a new Regular payroll record is saved.
+//
+// This phase does NOT calculate cumulative YTD PAYE. The four ytd_* columns stay
+// null until Phase 2C can derive them from complete, ordered payroll history.
+// It also does not backfill old payroll rows.
+// =========================================================
+const PAYROLL_TAX_RULE_VERSION = "NTA_2025_2026_V2_ACTUAL_RELIEFS_ONE_OFF";
+
+function roundPayrollTaxSnapshotAmount(value) {
+  const numericValue = Number(value || 0);
+  return Number.isFinite(numericValue)
+    ? Math.round((numericValue + Number.EPSILON) * 100) / 100
+    : 0;
+}
+
+function buildPayrollTaxSnapshotFieldsFromPayrollValues({
+  payrollModel = "",
+  payDate = null,
+  basicPay = 0,
+  housingAllowance = 0,
+  transportAllowance = 0,
+  utilityAllowance = 0,
+  otherAllowance = 0,
+  medicalAllowance = 0,
+  bonus = 0,
+  overtime = 0,
+  logisticsAllowance = 0,
+  dataAirtimeAllowance = 0,
+  grossPay = 0,
+  employeePension = 0,
+  oneOffBonus = 0,
+  oneOffOvertime = 0,
+  oneOffOtherAllowance = 0,
+  monthlyPensionContribution = null,
+  monthlyNhfContribution = 0,
+  monthlyHealthContribution = 0,
+  payeTax = 0,
+} = {}) {
+  const normalizedPayrollModel = String(payrollModel || "")
+    .trim()
+    .toUpperCase();
+
+  if (normalizedPayrollModel !== "REGULAR") {
+    return {
+      tax_rule_version: null,
+      tax_calculation_snapshot: null,
+      ytd_gross_emoluments: null,
+      ytd_eligible_deductions: null,
+      ytd_taxable_emoluments: null,
+      ytd_cumulative_tax: null,
+    };
+  }
+
+  const resolvedMonthlyPensionContribution =
+    monthlyPensionContribution === null || monthlyPensionContribution === undefined
+      ? roundPayrollTaxSnapshotAmount(employeePension)
+      : roundPayrollTaxSnapshotAmount(monthlyPensionContribution);
+
+  const components = {
+    basicPay: roundPayrollTaxSnapshotAmount(basicPay),
+    housingAllowance: roundPayrollTaxSnapshotAmount(housingAllowance),
+    transportAllowance: roundPayrollTaxSnapshotAmount(transportAllowance),
+    utilityAllowance: roundPayrollTaxSnapshotAmount(utilityAllowance),
+    otherAllowance: roundPayrollTaxSnapshotAmount(otherAllowance),
+    medicalAllowance: roundPayrollTaxSnapshotAmount(medicalAllowance),
+    bonus: roundPayrollTaxSnapshotAmount(bonus),
+    overtime: roundPayrollTaxSnapshotAmount(overtime),
+    logisticsAllowance: roundPayrollTaxSnapshotAmount(logisticsAllowance),
+    dataAirtimeAllowance: roundPayrollTaxSnapshotAmount(dataAirtimeAllowance),
+    oneOffBonus: roundPayrollTaxSnapshotAmount(oneOffBonus),
+    oneOffOvertime: roundPayrollTaxSnapshotAmount(oneOffOvertime),
+    oneOffOtherAllowance: roundPayrollTaxSnapshotAmount(oneOffOtherAllowance),
+    monthlyPensionContribution: resolvedMonthlyPensionContribution,
+    monthlyNhfContribution: roundPayrollTaxSnapshotAmount(monthlyNhfContribution),
+    monthlyHealthContribution: roundPayrollTaxSnapshotAmount(monthlyHealthContribution),
+  };
+
+  const taxDetails = calculateNta2025MonthlyPayeTaxFromComponents({
+    ...components,
+    annualRentPaid: 0,
+    returnDetails: true,
+  });
+
+  const baselineCalculatedPayeTax = Number(taxDetails?.monthlyPayeTax || 0);
+  const finalSavedPayeTax = roundPayrollTaxSnapshotAmount(payeTax);
+
+  return {
+    tax_rule_version: PAYROLL_TAX_RULE_VERSION,
+    tax_calculation_snapshot: {
+      snapshot_version: 3,
+      tax_rule_version: PAYROLL_TAX_RULE_VERSION,
+      calculation_basis: "ANNUALISED_RECURRING_PLUS_CURRENT_ONE_OFF_ACTUAL_RELIEFS",
+      pay_date: payDate || null,
+      payroll_model: normalizedPayrollModel,
+      earnings: {
+        basic_pay: components.basicPay,
+        housing_allowance: components.housingAllowance,
+        transport_allowance: components.transportAllowance,
+        utility_allowance: components.utilityAllowance,
+        other_allowance: components.otherAllowance,
+        medical_allowance: components.medicalAllowance,
+        bonus: components.bonus,
+        overtime: components.overtime,
+        logistics_allowance: components.logisticsAllowance,
+        data_airtime_allowance: components.dataAirtimeAllowance,
+        one_off_bonus: components.oneOffBonus,
+        one_off_overtime: components.oneOffOvertime,
+        one_off_other_allowance: components.oneOffOtherAllowance,
+      },
+      gross_emoluments: roundPayrollTaxSnapshotAmount(grossPay),
+      actual_saved_employee_pension: roundPayrollTaxSnapshotAmount(employeePension),
+      tax_calculation_basis: {
+        monthly_gross_emoluments: roundPayrollTaxSnapshotAmount(taxDetails?.monthlyGross),
+        monthly_recurring_gross_emoluments: roundPayrollTaxSnapshotAmount(
+          taxDetails?.monthlyRecurringGross,
+        ),
+        current_period_one_off_taxable_emoluments: roundPayrollTaxSnapshotAmount(
+          taxDetails?.currentPeriodOneOffGross,
+        ),
+        annual_recurring_gross_emoluments: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualRecurringGross,
+        ),
+        annual_gross_emoluments: roundPayrollTaxSnapshotAmount(taxDetails?.annualGross),
+        annual_reliefs_used: {
+          pension: roundPayrollTaxSnapshotAmount(taxDetails?.annualPension),
+          nhf: roundPayrollTaxSnapshotAmount(taxDetails?.annualNhf),
+          health: roundPayrollTaxSnapshotAmount(taxDetails?.annualHealth),
+          rent_relief: roundPayrollTaxSnapshotAmount(taxDetails?.annualRentRelief),
+        },
+        monthly_eligible_deductions: roundPayrollTaxSnapshotAmount(
+          Number(taxDetails?.annualEligibleDeductions || 0) / 12,
+        ),
+        annual_eligible_deductions: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualEligibleDeductions,
+        ),
+        annual_recurring_chargeable_income: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualRecurringChargeableIncome,
+        ),
+        annual_chargeable_income: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualChargeableIncome,
+        ),
+        annual_base_calculated_tax: roundPayrollTaxSnapshotAmount(
+          taxDetails?.annualBasePayeTax,
+        ),
+        annual_calculated_tax: roundPayrollTaxSnapshotAmount(taxDetails?.annualPayeTax),
+        current_period_one_off_tax: roundPayrollTaxSnapshotAmount(
+          taxDetails?.currentPeriodOneOffPayeTax,
+        ),
+        monthly_calculated_tax: roundPayrollTaxSnapshotAmount(
+          taxDetails?.monthlyPayeTax,
+        ),
+      },
+      baseline_calculated_paye_tax: roundPayrollTaxSnapshotAmount(
+        baselineCalculatedPayeTax,
+      ),
+      final_saved_paye_tax: finalSavedPayeTax,
+      paye_adjustment_from_baseline: roundPayrollTaxSnapshotAmount(
+        finalSavedPayeTax - baselineCalculatedPayeTax,
+      ),
+      assumptions: {
+        annual_rent_paid: 0,
+        rent_relief_input_available: false,
+        actual_relief_contributions_only: true,
+        one_off_earnings_annualised: false,
+        ytd_calculation_deferred_to_phase_2c: true,
+      },
+    },
+    ytd_gross_emoluments: null,
+    ytd_eligible_deductions: null,
+    ytd_taxable_emoluments: null,
+    ytd_cumulative_tax: null,
+  };
+}
+
+// =========================================================
+// PAYROLL TAX YTD ENGINE - PHASE 2C-A
+// 10B-C1 - Shadow cumulative YTD PAYE engine.
+//
+// Safety rules:
+// * Do not backfill legacy payroll rows.
+// * Do not trust incomplete in-year history.
+// * Do not change the saved PAYE deduction yet.
+// * Populate YTD fields only when every earlier finalised in-year row has a
+//   complete v2 tax snapshot under the same tax rule.
+// =========================================================
+function getPayrollTaxSnapshotVersion(snapshot = null) {
+  const version = Number(snapshot?.snapshot_version || 0);
+  return Number.isFinite(version) ? version : 0;
+}
+
+function getPayrollTaxSnapshotMonthlyEligibleDeductions(snapshot = null) {
+  const explicitMonthlyEligible = Number(
+    snapshot?.tax_calculation_basis?.monthly_eligible_deductions,
+  );
+  if (Number.isFinite(explicitMonthlyEligible)) {
+    return roundPayrollTaxSnapshotAmount(explicitMonthlyEligible);
+  }
+
+  const annualEligible = Number(
+    snapshot?.tax_calculation_basis?.annual_eligible_deductions || 0,
+  );
+  return Number.isFinite(annualEligible)
+    ? roundPayrollTaxSnapshotAmount(annualEligible / 12)
+    : 0;
+}
+
+function getPayrollTaxSnapshotMonthlyRecurringGross(snapshot = null) {
+  const explicitRecurring = Number(
+    snapshot?.tax_calculation_basis?.monthly_recurring_gross_emoluments,
+  );
+  if (Number.isFinite(explicitRecurring)) {
+    return roundPayrollTaxSnapshotAmount(explicitRecurring);
+  }
+
+  const monthlyGross = Number(
+    snapshot?.tax_calculation_basis?.monthly_gross_emoluments || 0,
+  );
+  const oneOff = getPayrollTaxSnapshotCurrentPeriodOneOffTaxable(snapshot);
+  return Number.isFinite(monthlyGross)
+    ? roundPayrollTaxSnapshotAmount(Math.max(0, monthlyGross - oneOff))
+    : 0;
+}
+
+function getPayrollTaxSnapshotCurrentPeriodOneOffTaxable(snapshot = null) {
+  const explicitOneOff = Number(
+    snapshot?.tax_calculation_basis?.current_period_one_off_taxable_emoluments || 0,
+  );
+  return Number.isFinite(explicitOneOff)
+    ? roundPayrollTaxSnapshotAmount(Math.max(0, explicitOneOff))
+    : 0;
+}
+
+function calculatePayrollYtdShadowFromHistory({
+  priorRows = [],
+  currentPayload = {},
+} = {}) {
+  const currentSnapshot = currentPayload.tax_calculation_snapshot || null;
+
+  if (
+    String(currentPayload.tax_rule_version || "") !== PAYROLL_TAX_RULE_VERSION ||
+    getPayrollTaxSnapshotVersion(currentSnapshot) < 3
+  ) {
+    return {
+      status: "DEFERRED_CURRENT_SNAPSHOT_INCOMPLETE",
+      ytdFields: null,
+    };
+  }
+
+  const currentPayeAdjustment = Number(
+    currentSnapshot?.paye_adjustment_from_baseline || 0,
+  );
+  if (
+    Number.isFinite(currentPayeAdjustment) &&
+    Math.abs(currentPayeAdjustment) > 0.009
+  ) {
+    return {
+      status: "DEFERRED_CURRENT_PAYE_ADJUSTMENT",
+      ytdFields: null,
+    };
+  }
+
+  const incompletePriorRow = priorRows.find((row) => {
+    return (
+      String(row.tax_rule_version || "") !== PAYROLL_TAX_RULE_VERSION ||
+      getPayrollTaxSnapshotVersion(row.tax_calculation_snapshot) < 3
+    );
+  });
+  if (incompletePriorRow) {
+    return {
+      status: "DEFERRED_INCOMPLETE_PRIOR_HISTORY",
+      ytdFields: null,
+      incompletePriorRecordId: incompletePriorRow.id || null,
+    };
+  }
+
+  const priorWithUnexpectedAdjustment = priorRows.find((row) => {
+    const snapshot = row.tax_calculation_snapshot || null;
+    const adjustment = Number(snapshot?.paye_adjustment_from_baseline || 0);
+    if (!Number.isFinite(adjustment) || Math.abs(adjustment) <= 0.009) {
+      return false;
+    }
+
+    const ytdCalculation = snapshot?.ytd_calculation || null;
+    const isVerifiedAppliedYtd =
+      ytdCalculation?.paye_applied_to_payroll === true &&
+      String(ytdCalculation?.status || "") === "READY_APPLIED" &&
+      String(ytdCalculation?.phase || "") === "2C_B_ACTIVE";
+    return !isVerifiedAppliedYtd;
+  });
+  if (priorWithUnexpectedAdjustment) {
+    return {
+      status: "DEFERRED_PRIOR_PAYE_ADJUSTMENT",
+      ytdFields: null,
+      incompletePriorRecordId: priorWithUnexpectedAdjustment.id || null,
+    };
+  }
+
+  const currentRecurringGross = getPayrollTaxSnapshotMonthlyRecurringGross(
+    currentSnapshot,
+  );
+  const currentOneOff = getPayrollTaxSnapshotCurrentPeriodOneOffTaxable(
+    currentSnapshot,
+  );
+  const currentEligible = getPayrollTaxSnapshotMonthlyEligibleDeductions(
+    currentSnapshot,
   );
 
-  const annualPayeTax = calculateAnnualPayeFromBands(annualChargeableIncome);
+  const priorRecurringGross = priorRows.reduce((total, row) => {
+    return total + getPayrollTaxSnapshotMonthlyRecurringGross(
+      row.tax_calculation_snapshot,
+    );
+  }, 0);
+  const priorOneOff = priorRows.reduce((total, row) => {
+    return total + getPayrollTaxSnapshotCurrentPeriodOneOffTaxable(
+      row.tax_calculation_snapshot,
+    );
+  }, 0);
+  const priorEligible = priorRows.reduce((total, row) => {
+    return total + getPayrollTaxSnapshotMonthlyEligibleDeductions(
+      row.tax_calculation_snapshot,
+    );
+  }, 0);
+  const priorTaxWithheld = priorRows.reduce((total, row) => {
+    const value = Number(row.paye_tax || 0);
+    return total + (Number.isFinite(value) ? value : 0);
+  }, 0);
 
-  return annualPayeTax / 12;
+  const periodCount = priorRows.length + 1;
+  const ytdRecurringGross = roundPayrollTaxSnapshotAmount(
+    priorRecurringGross + currentRecurringGross,
+  );
+  const cumulativeOneOffTaxable = roundPayrollTaxSnapshotAmount(
+    priorOneOff + currentOneOff,
+  );
+  const ytdGross = roundPayrollTaxSnapshotAmount(
+    ytdRecurringGross + cumulativeOneOffTaxable,
+  );
+  const ytdEligible = roundPayrollTaxSnapshotAmount(
+    priorEligible + currentEligible,
+  );
+  const ytdTaxable = roundPayrollTaxSnapshotAmount(
+    Math.max(0, ytdGross - ytdEligible),
+  );
+  const ytdRecurringTaxable = roundPayrollTaxSnapshotAmount(
+    Math.max(0, ytdRecurringGross - ytdEligible),
+  );
+
+  const annualisedRecurringTaxable = roundPayrollTaxSnapshotAmount(
+    periodCount > 0 ? (ytdRecurringTaxable / periodCount) * 12 : 0,
+  );
+  const annualBaseTax = roundPayrollTaxSnapshotAmount(
+    calculateAnnualPayeFromBands(annualisedRecurringTaxable),
+  );
+  const annualTaxWithOneOff = roundPayrollTaxSnapshotAmount(
+    calculateAnnualPayeFromBands(
+      annualisedRecurringTaxable + cumulativeOneOffTaxable,
+    ),
+  );
+  const cumulativeOneOffTax = roundPayrollTaxSnapshotAmount(
+    Math.max(0, annualTaxWithOneOff - annualBaseTax),
+  );
+  const ytdCumulativeTax = roundPayrollTaxSnapshotAmount(
+    (annualBaseTax * periodCount) / 12 + cumulativeOneOffTax,
+  );
+
+  const currentPeriodTaxBeforeFloor = roundPayrollTaxSnapshotAmount(
+    ytdCumulativeTax - priorTaxWithheld,
+  );
+  const shadowCurrentPeriodPaye = roundPayrollTaxSnapshotAmount(
+    Math.max(0, currentPeriodTaxBeforeFloor),
+  );
+  const overwithheldCarryForward = roundPayrollTaxSnapshotAmount(
+    Math.max(0, -currentPeriodTaxBeforeFloor),
+  );
+
+  return {
+    status: "READY_SHADOW",
+    ytdFields: {
+      ytd_gross_emoluments: ytdGross,
+      ytd_eligible_deductions: ytdEligible,
+      ytd_taxable_emoluments: ytdTaxable,
+      ytd_cumulative_tax: ytdCumulativeTax,
+    },
+    basis: {
+      period_count: periodCount,
+      prior_period_count: priorRows.length,
+      prior_tax_withheld: roundPayrollTaxSnapshotAmount(priorTaxWithheld),
+      ytd_recurring_gross_emoluments: ytdRecurringGross,
+      cumulative_one_off_taxable_emoluments: cumulativeOneOffTaxable,
+      annualised_recurring_taxable_emoluments: annualisedRecurringTaxable,
+      annualised_calculated_tax: annualBaseTax,
+      annual_tax_with_one_off: annualTaxWithOneOff,
+      cumulative_one_off_tax: cumulativeOneOffTax,
+      cumulative_tax_through_current_period: ytdCumulativeTax,
+      current_period_tax_before_floor: currentPeriodTaxBeforeFloor,
+      shadow_current_period_paye: shadowCurrentPeriodPaye,
+      overwithheld_carry_forward: overwithheldCarryForward,
+    },
+  };
+}
+
+// =========================================================
+// PAYROLL TAX YTD ENGINE - PHASE 2C-B
+// 10B-C2 - Activate cumulative YTD PAYE only when the Phase 2C-A safety
+// engine reports complete, trustworthy in-year history.
+//
+// Deferred histories keep their existing current-period PAYE unchanged.
+// =========================================================
+function applyPayrollYtdResultToPayload(payload = {}, ytdResult = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+
+  const isReady =
+    ytdResult?.status === "READY_SHADOW" &&
+    Boolean(ytdResult?.ytdFields) &&
+    Boolean(ytdResult?.basis);
+
+  const existingSnapshot = payload.tax_calculation_snapshot || {};
+  const existingAssumptions = existingSnapshot.assumptions || {};
+
+  if (!isReady) {
+    return {
+      ...payload,
+      tax_calculation_snapshot: {
+        ...existingSnapshot,
+        assumptions: {
+          ...existingAssumptions,
+          ytd_calculation_deferred_to_phase_2c: true,
+          ytd_calculation_deferred: true,
+        },
+        ytd_calculation: {
+          phase: "2C_B_ACTIVE",
+          status: ytdResult?.status || "DEFERRED_UNKNOWN",
+          paye_applied_to_payroll: false,
+          ...(ytdResult?.basis || {}),
+          ...(ytdResult?.incompletePriorRecordId
+            ? { incomplete_prior_record_id: ytdResult.incompletePriorRecordId }
+            : {}),
+        },
+      },
+      ytd_gross_emoluments: null,
+      ytd_eligible_deductions: null,
+      ytd_taxable_emoluments: null,
+      ytd_cumulative_tax: null,
+    };
+  }
+
+  const previousCurrentPeriodPaye = roundPayrollTaxSnapshotAmount(
+    payload.paye_tax,
+  );
+  const appliedCurrentPeriodPaye = roundPayrollTaxSnapshotAmount(
+    ytdResult.basis.shadow_current_period_paye,
+  );
+  const payeChange = roundPayrollTaxSnapshotAmount(
+    appliedCurrentPeriodPaye - previousCurrentPeriodPaye,
+  );
+
+  const previousTotalDeductions = Number(payload.total_deductions || 0);
+  const previousNetPay = Number(payload.net_pay || 0);
+
+  const totalDeductions = roundPayrollTaxSnapshotAmount(
+    (Number.isFinite(previousTotalDeductions) ? previousTotalDeductions : 0) +
+      payeChange,
+  );
+  const netPay = roundPayrollTaxSnapshotAmount(
+    (Number.isFinite(previousNetPay) ? previousNetPay : 0) - payeChange,
+  );
+
+  const baselineCalculatedPayeTax = roundPayrollTaxSnapshotAmount(
+    existingSnapshot.baseline_calculated_paye_tax ?? previousCurrentPeriodPaye,
+  );
+
+  const logisticsAllowance = Number(payload.logistics_allowance || 0);
+  const dataAirtimeAllowance = Number(payload.data_airtime_allowance || 0);
+  const monthlySalaryPlusLogistics =
+    Number.isFinite(logisticsAllowance) && logisticsAllowance > 0
+      ? roundPayrollTaxSnapshotAmount(
+        Math.max(
+          0,
+          netPay -
+            (Number.isFinite(dataAirtimeAllowance) ? dataAirtimeAllowance : 0),
+        ),
+      )
+      : payload.monthly_salary_plus_logistics ?? null;
+
+  return {
+    ...payload,
+    ...ytdResult.ytdFields,
+    paye_tax: appliedCurrentPeriodPaye,
+    total_deductions: totalDeductions,
+    net_pay: netPay,
+    monthly_salary_plus_logistics: monthlySalaryPlusLogistics,
+    tax_calculation_snapshot: {
+      ...existingSnapshot,
+      final_saved_paye_tax: appliedCurrentPeriodPaye,
+      paye_adjustment_from_baseline: roundPayrollTaxSnapshotAmount(
+        appliedCurrentPeriodPaye - baselineCalculatedPayeTax,
+      ),
+      assumptions: {
+        ...existingAssumptions,
+        ytd_calculation_deferred_to_phase_2c: false,
+        ytd_calculation_deferred: false,
+      },
+      ytd_calculation: {
+        phase: "2C_B_ACTIVE",
+        status: "READY_APPLIED",
+        engine_status: ytdResult.status,
+        paye_applied_to_payroll: true,
+        ...ytdResult.basis,
+        previous_current_period_paye: previousCurrentPeriodPaye,
+        applied_current_period_paye: appliedCurrentPeriodPaye,
+        paye_change_from_pre_ytd_payload: payeChange,
+      },
+    },
+  };
+}
+
+async function applyPayrollYtdToNewPayload(payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+
+  const employeeId = String(payload.employee_id || "").trim();
+  const payDate = String(payload.pay_date || "").trim();
+  const payrollModel = String(payload.payroll_model || "")
+    .trim()
+    .toUpperCase();
+
+  // =========================================================
+  // PAYROLL TAX YTD ISOLATION - PHASE 3
+  // 10B-D1 - Extend the existing HRP-80 payroll tenant boundary to
+  // cumulative YTD history. Every payroll payload must belong to an employee
+  // in the current company workspace before any history is read or written.
+  // =========================================================
+  const currentTenantEmployeeIds = getCurrentTenantEmployeeIdSet();
+  if (!employeeId || !currentTenantEmployeeIds.has(employeeId)) {
+    throw new Error(
+      "Payroll YTD tenant safety: selected employee is outside the current company workspace.",
+    );
+  }
+
+  if (
+    !employeeId ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(payDate) ||
+    payrollModel !== "REGULAR" ||
+    payload.is_finalised !== true ||
+    String(payload.tax_rule_version || "") !== PAYROLL_TAX_RULE_VERSION ||
+    getPayrollTaxSnapshotVersion(payload.tax_calculation_snapshot) < 2
+  ) {
+    return payload;
+  }
+
+  const taxYear = Number(payDate.slice(0, 4));
+  const yearStart = String(taxYear) + "-01-01";
+
+  const supabase = getSupabaseClient();
+  const response = await supabase
+    .from("payroll_records")
+    .select(
+      "id,employee_id,pay_date,gross_pay,paye_tax,is_finalised,tax_rule_version,tax_calculation_snapshot,ytd_gross_emoluments,ytd_eligible_deductions,ytd_taxable_emoluments,ytd_cumulative_tax",
+    )
+    .eq("employee_id", employeeId)
+    .eq("is_finalised", true)
+    .gte("pay_date", yearStart)
+    .lt("pay_date", payDate)
+    .order("pay_date", { ascending: true });
+
+  if (response.error) {
+    throw new Error(
+      "Could not load prior payroll tax history: " + response.error.message,
+    );
+  }
+
+  const priorRows = Array.isArray(response.data) ? response.data : [];
+  const crossStaffRow = priorRows.find((row) => {
+    return String(row?.employee_id || "").trim() !== employeeId;
+  });
+
+  if (crossStaffRow) {
+    throw new Error(
+      "Payroll YTD staff safety: prior payroll history returned a different employee.",
+    );
+  }
+
+  const ytdResult = calculatePayrollYtdShadowFromHistory({
+    priorRows,
+    currentPayload: payload,
+  });
+
+  return applyPayrollYtdResultToPayload(payload, ytdResult);
 }
 
 function calculatePayrollGrossPay() {
@@ -41272,15 +47335,14 @@ function getStatutoryDeductionBaseAmount(deductionType = "") {
   const type = String(deductionType || "").trim();
 
   if (type === "EMPLOYEE_PENSION" || type === "EMPLOYER_PENSION") {
-    // PAYROLL WORKFLOW UX REPAIR - STEP 7B
-    // Pension setup should calculate from the final visible BHT after salary
-    // setup and allowance components have been applied, not from an earlier
-    // pre-setup Regular structure snapshot.
     return calculateCurrentVisibleBhtForPension();
   }
 
   if (type === "NHF") {
-    return calculateRegularBasicPay();
+    return getPayrollAmountForTaxCalculation(
+      state.dom.payrollBasicPay,
+      calculateRegularBasicPay(),
+    );
   }
 
   return calculatePayrollGrossPay();
@@ -41311,22 +47373,15 @@ function calculateStatutoryDeductionAmount(record = {}) {
   }
 
   if (type === "EMPLOYEE_PENSION") {
-    // PAYROLL WORKFLOW UX REPAIR - STEP 7B
-    // Rule-based Employee Pension applies only when HR created an active
-    // statutory pension setup row. It uses 8% of final visible BHT.
     return calculateCurrentVisibleBhtForPension() * 0.08;
   }
 
   if (type === "EMPLOYER_PENSION") {
-    // PAYROLL WORKFLOW UX REPAIR - STEP 7B
-    // Rule-based Employer Pension applies only when HR created an active
-    // statutory employer pension setup row. It uses 10% of final visible BHT.
-    // This remains employer cost and is excluded from employee Net Pay.
     return calculateCurrentVisibleBhtForPension() * 0.1;
   }
 
   if (type === "NHF") {
-    return calculateRegularBasicPay() * 0.025;
+    return getStatutoryDeductionBaseAmount("NHF") * 0.025;
   }
 
   return 0;
@@ -41358,26 +47413,28 @@ function clearPayrollStatutoryDeductionPreviewValues() {
 // Run Payroll batch and CSV import will be checked/wired after this is confirmed.
 // =========================================================
 
+
 function isPayrollEmployeeOverrideActiveForDate(record = {}, payrollDateValue = "") {
-  const status = normalizeText(record.status || "");
-  if (status !== "active") return false;
+  if (!isPayrollEmployeeAdjustmentRecord(record)) return false;
+  if (normalizeText(record.status || "") !== "active") return false;
 
   const payrollDateTime = parsePayrollEffectiveDateToTime(payrollDateValue);
   const effectiveDateTime = parsePayrollEffectiveDateToTime(record.effective_date);
-  const endDateTime = record.end_date
-    ? parsePayrollEffectiveDateToTime(record.end_date)
-    : null;
+  const endDateTime = parsePayrollEffectiveDateToTime(record.end_date);
 
-  if (!Number.isFinite(payrollDateTime) || !Number.isFinite(effectiveDateTime)) {
+  if (
+    !Number.isFinite(payrollDateTime) ||
+    !Number.isFinite(effectiveDateTime) ||
+    !Number.isFinite(endDateTime)
+  ) {
     return false;
   }
 
-  if (payrollDateTime < effectiveDateTime) return false;
-  if (endDateTime !== null && Number.isFinite(endDateTime) && payrollDateTime > endDateTime) {
-    return false;
-  }
+  const startMonth = String(record.effective_date || "").slice(0, 7);
+  const endMonth = String(record.end_date || "").slice(0, 7);
+  if (!startMonth || startMonth !== endMonth) return false;
 
-  return true;
+  return payrollDateTime >= effectiveDateTime && payrollDateTime <= endDateTime;
 }
 
 function getActivePayrollEmployeeOverridesForMaster(
@@ -41408,27 +47465,90 @@ function getActivePayrollEmployeeOverridesForMaster(
     });
 }
 
+
+function getPayrollEmployeeAdjustmentAmountsForMaster(
+  payrollMasterRecordId = "",
+  payrollDateValue = "",
+) {
+  const totals = {
+    bonus: 0,
+    overtime: 0,
+    otherEarning: 0,
+    otherDeduction: 0,
+    totalCount: 0,
+  };
+
+  getActivePayrollEmployeeOverridesForMaster(
+    payrollMasterRecordId,
+    payrollDateValue,
+  ).forEach((record) => {
+    if (!isPayrollEmployeeAdjustmentRecord(record)) return;
+
+    const amount = Number(record.override_value || 0);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    const element = String(record.override_element || "").trim();
+    if (element === "BONUS") totals.bonus += amount;
+    if (element === "OVERTIME") totals.overtime += amount;
+    if (element === "OTHER_ALLOWANCE") totals.otherEarning += amount;
+    if (element === "OTHER") totals.otherDeduction += amount;
+    totals.totalCount += 1;
+  });
+
+  return totals;
+}
+
+function applyPayrollAdjustmentAmountToField(field, amount = 0) {
+  if (!field) return;
+
+  const previousAdjustment = Number(field.dataset.phase5AdjustmentAmount || 0);
+  const currentValue = Number(field.value || 0);
+  const baseline = Number.isFinite(currentValue - previousAdjustment)
+    ? currentValue - previousAdjustment
+    : 0;
+  const nextAmount = Number(amount || 0);
+
+  setNumericFieldValue(field, Math.max(baseline, 0) + (Number.isFinite(nextAmount) ? nextAmount : 0));
+  field.dataset.phase5AdjustmentAmount = String(Number.isFinite(nextAmount) ? nextAmount : 0);
+}
+
+function getCurrentPayrollAdjustmentAmounts() {
+  const employeeId = String(state.dom.payrollEmployeeId?.value || "").trim();
+  const payrollDate = getCurrentPayrollCalculationDate();
+  if (!employeeId) return { bonus: 0, overtime: 0, otherEarning: 0, otherDeduction: 0, totalCount: 0 };
+
+  const payrollMaster = getEffectivePayrollMasterRecordForEmployeeAtDate(
+    employeeId,
+    payrollDate,
+  );
+
+  if (!payrollMaster?.id) return { bonus: 0, overtime: 0, otherEarning: 0, otherDeduction: 0, totalCount: 0 };
+
+  return getPayrollEmployeeAdjustmentAmountsForMaster(payrollMaster.id, payrollDate);
+}
+
+function applyActivePayrollEmployeeEarningAdjustmentsToPayrollForm() {
+  if (isCurrentPayrollFinalisedCorrectionMode()) return;
+  const totals = getCurrentPayrollAdjustmentAmounts();
+  applyPayrollAdjustmentAmountToField(state.dom.payrollBonus, totals.bonus);
+  applyPayrollAdjustmentAmountToField(state.dom.payrollOvertime, totals.overtime);
+  applyPayrollAdjustmentAmountToField(state.dom.payrollOtherAllowance, totals.otherEarning);
+}
+
+function applyActivePayrollEmployeeDeductionAdjustmentsToPayrollForm() {
+  if (isCurrentPayrollFinalisedCorrectionMode()) return;
+  const totals = getCurrentPayrollAdjustmentAmounts();
+  applyPayrollAdjustmentAmountToField(state.dom.payrollOtherDeductions, totals.otherDeduction);
+}
+
 function calculatePayrollEmployeeOverrideValue(record = {}, currentAmount = 0) {
-  const method = String(record.override_method || "").trim();
-  const value = Number(record.override_value || 0);
+  if (!isPayrollEmployeeAdjustmentRecord(record)) return null;
+
+  const amount = Number(record.override_value || 0);
   const current = Number(currentAmount || 0);
 
-  if (method === "EXEMPTION") {
-    return 0;
-  }
-
-  if (method === "FIXED_AMOUNT") {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (method === "PERCENTAGE") {
-    if (!Number.isFinite(value) || !Number.isFinite(current)) return null;
-    return current * (value / 100);
-  }
-
-  // Rule replacement is stored for traceability in this step.
-  // It needs a defined calculation rule before it can safely change payroll values.
-  return null;
+  if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(current)) return null;
+  return current + amount;
 }
 
 function resolveBatchPayrollBaseSalaryWithEmployeeOverride(
@@ -41659,7 +47779,7 @@ function stripPayrollEmployeeOverrideAuditFromNotes(notes = "") {
       (line) =>
         !String(line || "")
           .trim()
-          .startsWith("Employee override audit:"),
+          .match(/^(?:Employee override audit|Payroll adjustment audit):/i),
     )
     .join("\n")
     .trim();
@@ -41679,7 +47799,7 @@ function getPayrollRecordEmployeeOverrideAuditSummary(record = {}) {
   return String(record.notes || "")
     .split(/\r?\n/)
     .find((line) =>
-      String(line || "").trim().startsWith("Employee override audit:"),
+      String(line || "").trim().match(/^(?:Employee override audit|Payroll adjustment audit):/i),
     ) || "";
 }
 
@@ -41861,7 +47981,9 @@ function calculateCurrentVisibleBhtForPension() {
 // - Employer Pension must not be assumed unless active Statutory Deduction setup exists.
 // - Employer Pension is a company cost and still must not reduce employee Net Pay.
 function refreshRegularPayrollBaselineDeductionsFromCurrentValues() {
-  if (!isAlpatechRegularSelected()) {
+  // PAYE remains a Regular payroll calculation for every tenant.
+  // Only the Alpatech earnings split is tenant-specific.
+  if (getSelectedPayrollModel() !== "REGULAR") {
     return;
   }
 
@@ -42099,10 +48221,15 @@ function updatePayrollModelUi(source = "group") {
   }
 
   const isRegular = getSelectedPayrollModel() === "REGULAR";
+  const isEditMode = Boolean(
+    String(state.dom.editingPayrollId?.value || state.currentEditingPayroll?.id || "").trim(),
+  );
 
+  // BEXHR PHASE 6: technical earnings/deduction fields stay hidden during
+  // normal Run Payroll. Historical Edit Payroll Record can still reveal them.
   state.dom.alpatechRegularRev2Section?.classList.toggle(
     "d-none",
-    !isRegular,
+    !isRegular || !isEditMode,
   );
 
   syncPayrollCalculatedFieldLockState();
@@ -42111,7 +48238,10 @@ function updatePayrollModelUi(source = "group") {
 }
 
 function isAlpatechRegularSelected() {
-  return getSelectedPayrollModel() === "REGULAR";
+  return (
+    isCurrentTenantAlpatechWorkspace() &&
+    getSelectedPayrollModel() === "REGULAR"
+  );
 }
 
 function percentInputToDecimal(value, fallbackPercent = 0) {
@@ -42226,7 +48356,33 @@ function getPayrollAmountForTaxCalculation(field, fallbackAmount = 0) {
 // PAYE must be calculated from the final visible earning values on the
 // Single Employee Finalisation form, not only from the original percentage
 // split. This keeps tax aligned after Allowance Components are pulled from Setup.
+function getCurrentPayrollActualTaxReliefContributions() {
+  const totals = {
+    employeePension: 0,
+    nhf: 0,
+    health: 0,
+  };
+  const healthReliefTypes = new Set(["NHIS", "NHIA", "HEALTH", "HEALTH_INSURANCE"]);
+
+  getActiveStatutoryDeductionsForCurrentPayroll().forEach((record) => {
+    const type = String(record.deduction_type || "").trim();
+    if (!type || type === "PAYE" || type === "EMPLOYER_PENSION") return;
+
+    const amount = calculateStatutoryDeductionAmount(record);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    if (type === "EMPLOYEE_PENSION") totals.employeePension = amount;
+    if (type === "NHF") totals.nhf = amount;
+    if (healthReliefTypes.has(type)) totals.health += amount;
+  });
+
+  return totals;
+}
+
 function calculateRegularPayeTax() {
+  const adjustmentAmounts = getCurrentPayrollAdjustmentAmounts();
+  const reliefContributions = getCurrentPayrollActualTaxReliefContributions();
+
   return calculateNta2025MonthlyPayeTaxFromComponents({
     basicPay: getPayrollAmountForTaxCalculation(
       state.dom.payrollBasicPay,
@@ -42253,6 +48409,12 @@ function calculateRegularPayeTax() {
     overtime: toNullableNumber(state.dom.payrollOvertime?.value),
     logisticsAllowance: toNullableNumber(state.dom.payrollLogisticsAllowance?.value),
     dataAirtimeAllowance: toNullableNumber(state.dom.payrollDataAirtimeAllowance?.value),
+    oneOffBonus: adjustmentAmounts.bonus,
+    oneOffOvertime: adjustmentAmounts.overtime,
+    oneOffOtherAllowance: adjustmentAmounts.otherEarning,
+    monthlyPensionContribution: reliefContributions.employeePension,
+    monthlyNhfContribution: reliefContributions.nhf,
+    monthlyHealthContribution: reliefContributions.health,
   });
 }
 
@@ -42284,7 +48446,7 @@ function updatePayrollPayeTaxNote() {
   const grossPay = calculatePayrollGrossPay();
 
   const shouldShowExemptionNote =
-    isAlpatechRegularSelected() &&
+    getSelectedPayrollModel() === "REGULAR" &&
     Number.isFinite(payeValue) &&
     payeValue === 0 &&
     grossPay > 0;
@@ -42352,6 +48514,175 @@ function applyAlpatechRegularRev2DerivedFields() {
   );
 }
 
+
+// BEXHR PHASE 6 - SIMPLIFIED RUN PAYROLL
+// Compatibility controls remain available to historical Edit Payroll Record,
+// but normal create mode shows only business inputs and a calculated preview.
+function setPhase6PayrollCompatibilityVisibility(isVisible = false) {
+  document
+    .querySelectorAll(".phase6-payroll-compat-field, .phase6-payroll-reference")
+    .forEach((element) => {
+      element.classList.toggle("d-none", !isVisible);
+    });
+}
+
+function renderPhase6RunPayrollPreview() {
+  const hasEmployee = Boolean(
+    String(state.dom.payrollEmployeeId?.value || "").trim(),
+  );
+
+  const setMoney = (elementId, field) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    if (!hasEmployee) {
+      element.textContent = "--";
+      return;
+    }
+
+    const amount = Number(field?.value || 0);
+    element.textContent = Number.isFinite(amount)
+      ? formatCurrency(amount, "NGN")
+      : "--";
+  };
+
+  setMoney("phase6PreviewMonthlyGross", state.dom.payrollBaseSalary);
+  setMoney("phase6PreviewGrossPay", state.dom.payrollGrossPay);
+  setMoney("phase6PreviewPaye", state.dom.payrollPayeTax);
+  setMoney("phase6PreviewTotalDeductions", state.dom.payrollTotalDeductions);
+  setMoney("phase6PreviewNetPay", state.dom.payrollNetPay);
+
+  // BEXHR GROUP E V2 - PAYE EXPLAINER + SINGLE PREVIEW LABEL: show only effective and supported adjustments; read-only label.
+  const adjustmentNote = document.getElementById("phase6PayrollAdjustmentNote");
+  if (adjustmentNote) {
+    const totals = hasEmployee && !isCurrentPayrollFinalisedCorrectionMode()
+      ? getCurrentPayrollAdjustmentAmounts() : null;
+    const parts = [
+      ["Bonus", totals?.bonus],
+      ["Overtime", totals?.overtime],
+      ["Other earning", totals?.otherEarning],
+      ["Other deduction", totals?.otherDeduction],
+    ]
+      .filter(([, value]) => Number.isFinite(Number(value)) && Number(value) > 0)
+      .map(([name, value]) => name + " " + formatCurrency(Number(value), "NGN"));
+    adjustmentNote.textContent = parts.length
+      ? "Payroll adjustment applied: " + parts.join(" · ")
+      : "";
+    adjustmentNote.classList.toggle("d-none", parts.length === 0);
+  }
+}
+
+function clearPhase6CreateDerivedPayrollFields() {
+  if (String(state.dom.editingPayrollId?.value || "").trim()) return;
+
+  [
+    state.dom.payrollBasicPay,
+    state.dom.payrollHousingAllowance,
+    state.dom.payrollTransportAllowance,
+    state.dom.payrollUtilityAllowance,
+    state.dom.payrollMedicalAllowance,
+    state.dom.payrollOtherAllowance,
+    state.dom.payrollBonus,
+    state.dom.payrollOvertime,
+    state.dom.payrollLogisticsAllowance,
+    state.dom.payrollDataAirtimeAllowance,
+    state.dom.payrollGrossPay,
+    state.dom.payrollPayeTax,
+    state.dom.payrollWhtTax,
+    state.dom.payrollEmployeePension,
+    state.dom.payrollEmployerPension,
+    state.dom.payrollOtherDeductions,
+    state.dom.payrollTotalDeductions,
+    state.dom.payrollNetPay,
+  ].forEach((field) => setNumericFieldValue(field, 0));
+
+  if (state.dom.payrollOtherDeductions) {
+    state.dom.payrollOtherDeductions.dataset.systemOtherDeductionAmount = "0";
+  }
+}
+
+function applyGenericTenantGrossPayDerivedFields() {
+  if (
+    isCurrentTenantAlpatechWorkspace() ||
+    getSelectedPayrollModel() !== "REGULAR"
+  ) {
+    return;
+  }
+
+  const monthlyGrossSalary = toNullableNumber(
+    state.dom.payrollBaseSalary?.value,
+  );
+
+  // Generic tenants use the agreed Monthly Gross Salary directly instead of
+  // inheriting Alpatech's 50/10/10/10/20 structure.
+  setNumericFieldValue(state.dom.payrollBasicPay, monthlyGrossSalary);
+  setNumericFieldValue(state.dom.payrollHousingAllowance, 0);
+  setNumericFieldValue(state.dom.payrollTransportAllowance, 0);
+  setNumericFieldValue(state.dom.payrollUtilityAllowance, 0);
+  setNumericFieldValue(state.dom.payrollOtherAllowance, 0);
+  setNumericFieldValue(state.dom.regularBht, monthlyGrossSalary);
+
+  const activePayrollMaster = getCurrentManualPayrollMasterForOverride();
+  const payrollDate = getCurrentPayrollCalculationDate();
+  const allowances = getActiveManualPayrollAllowanceComponentsForMaster(
+    activePayrollMaster?.id || "",
+    payrollDate,
+  );
+
+  const setExtra = (field, amount) => {
+    setNumericFieldValue(field, Number(amount || 0));
+  };
+
+  setExtra(state.dom.payrollMedicalAllowance, allowances.medicalAllowance);
+  setExtra(state.dom.payrollBonus, allowances.bonus);
+  setExtra(state.dom.payrollOvertime, allowances.overtime);
+  setExtra(state.dom.payrollLogisticsAllowance, allowances.logisticsAllowance);
+  setExtra(state.dom.payrollDataAirtimeAllowance, allowances.dataAirtimeAllowance);
+}
+
+function getNextPhase6PayrollCycle(payCycle = "") {
+  const match = String(payCycle || "").trim().match(
+    /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})$/,
+  );
+
+  if (!match) return "";
+
+  const months = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+
+  const monthIndex = months.indexOf(match[1]);
+  const year = Number(match[2]);
+  if (monthIndex < 0 || !Number.isFinite(year)) return "";
+
+  const nextDate = new Date(year, monthIndex + 1, 1);
+  return months[nextDate.getMonth()] + " " + nextDate.getFullYear();
+}
+
+function advancePhase6RunPayrollPeriod(completedPayCycle = "") {
+  const nextPayCycle = getNextPhase6PayrollCycle(completedPayCycle);
+  if (!nextPayCycle) return;
+
+  const applyIfAvailable = (select) => {
+    if (!select) return false;
+    const exists = Array.from(select.options || []).some(
+      (option) => option.value === nextPayCycle,
+    );
+    if (!exists) return false;
+    select.value = nextPayCycle;
+    return true;
+  };
+
+  if (applyIfAvailable(state.dom.payrollPayCycle)) {
+    updatePayDateFromPayCycle();
+  }
+
+  if (applyIfAvailable(state.dom.batchPayrollPayCycle)) {
+    updateBatchPayDateFromPayCycle();
+  }
+}
+
 function recalculatePayrollFormTotals() {
   // PAYROLL WORKFLOW UX REPAIR - STEP 7
   // Single Employee Finalisation calculation order:
@@ -42381,29 +48712,31 @@ function recalculatePayrollFormTotals() {
   if (isAlpatechRegularSelected()) {
     applyAlpatechRegularRev2DerivedFields();
 
-    // PAYROLL WORKFLOW UX REPAIR - STEP 6
-    // Pull active earning setup rows into the form before final statutory
-    // and net pay calculations are performed.
-    // Do not replace a finalised historical snapshot with current allowance setup.
+    // Preserve Alpatech allowance-component behaviour inside the tenant fence.
     if (!isFinalisedCorrection) {
       applyActivePayrollAllowanceComponentsToPayrollForm();
     }
-
-    // PAYROLL WORKFLOW UX REPAIR - STEP 7
-    // Recalculate baseline PAYE and pensions after setup allowances are present.
-    refreshRegularPayrollBaselineDeductionsFromCurrentValues();
+  } else if (
+    !isFinalisedCorrection &&
+    getSelectedPayrollModel() === "REGULAR"
+  ) {
+    // Generic tenants use Monthly Gross Salary directly; they do not inherit
+    // the Alpatech 50/10/10/10/20 calculation structure.
+    applyGenericTenantGrossPayDerivedFields();
   }
 
   // DESCRIPTION ITEM 4 - STEP 5 FIX
   // Apply active statutory setup and configured Other Deductions after the
   // baseline calculation. Where statutory records exist, they intentionally
   // override the baseline PAYE / pension values.
+  applyActivePayrollEmployeeEarningAdjustmentsToPayrollForm();
+  refreshRegularPayrollBaselineDeductionsFromCurrentValues();
   applyActivePayrollStatutoryDeductionsToPayrollForm();
 
   // DESCRIPTION ITEM 5 - STEP 5A
   // Employee-specific overrides remain final HR exceptions after standard
   // setup and statutory setup have been applied.
-  applyActivePayrollEmployeeOverridesToPayrollForm();
+  applyActivePayrollEmployeeDeductionAdjustmentsToPayrollForm();
 
   const grossPay = calculatePayrollGrossPay();
   const totalDeductions = calculatePayrollTotalDeductions();
@@ -42427,6 +48760,7 @@ function recalculatePayrollFormTotals() {
 
   updatePayrollPayeTaxNote();
   syncPayrollCalculationValidity();
+  renderPhase6RunPayrollPreview();
   updatePayrollSubmitButtonState();
 }
 
@@ -42694,6 +49028,7 @@ function renderPayrollStructurePreview() {
 function buildRegularPayrollModelFields() {
   const regularPayrollStructureMetadata =
     getRegularPayrollStructureMetadata();
+  const usesAlpatechStructuredSplit = isCurrentTenantAlpatechWorkspace();
 
   return {
     payroll_model: "REGULAR",
@@ -42713,26 +49048,21 @@ function buildRegularPayrollModelFields() {
 
     new_base_salary: toNullableNumber(state.dom.regularNewBaseSalary?.value),
 
-    basic_percent: percentInputToDecimal(
-      state.dom.regularBasicPercent?.value,
-      50,
-    ),
-    housing_percent: percentInputToDecimal(
-      state.dom.regularHousingPercent?.value,
-      10,
-    ),
-    transport_percent: percentInputToDecimal(
-      state.dom.regularTransportPercent?.value,
-      10,
-    ),
-    utility_percent: percentInputToDecimal(
-      state.dom.regularUtilityPercent?.value,
-      10,
-    ),
-    other_allowance_percent: percentInputToDecimal(
-      state.dom.regularOtherAllowancePercent?.value,
-      20,
-    ),
+    basic_percent: usesAlpatechStructuredSplit
+      ? percentInputToDecimal(state.dom.regularBasicPercent?.value, 50)
+      : null,
+    housing_percent: usesAlpatechStructuredSplit
+      ? percentInputToDecimal(state.dom.regularHousingPercent?.value, 10)
+      : null,
+    transport_percent: usesAlpatechStructuredSplit
+      ? percentInputToDecimal(state.dom.regularTransportPercent?.value, 10)
+      : null,
+    utility_percent: usesAlpatechStructuredSplit
+      ? percentInputToDecimal(state.dom.regularUtilityPercent?.value, 10)
+      : null,
+    other_allowance_percent: usesAlpatechStructuredSplit
+      ? percentInputToDecimal(state.dom.regularOtherAllowancePercent?.value, 20)
+      : null,
 
     bht: toNullableNumber(state.dom.regularBht?.value),
     monthly_salary_plus_logistics: toNullableNumber(
@@ -42767,6 +49097,13 @@ function buildContractorPayrollModelFields() {
 }
 
 function buildPayrollPayload() {
+  const isEditMode = Boolean(
+    String(state.dom.editingPayrollId?.value || state.currentEditingPayroll?.id || "").trim(),
+  );
+  const shouldFinalise = isEditMode
+    ? Boolean(state.dom.payrollIsFinalised?.checked)
+    : true;
+
   const normalizedEmployeeGroup = normalizePayrollGroupForPayload(
     state.dom.payrollEmployeeGroup?.value || "",
   );
@@ -42793,6 +49130,9 @@ function buildPayrollPayload() {
 
   const employeeOverrideAuditSummary =
     getManualPayrollEmployeeOverrideAuditSummary();
+  const manualAdjustmentAmounts = getCurrentPayrollAdjustmentAmounts();
+  const manualTaxReliefContributions =
+    getCurrentPayrollActualTaxReliefContributions();
   // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1D
   // Manual payroll also needs a payroll ID.
   // Preserve an existing reference during edit; otherwise generate a new one.
@@ -42838,10 +49178,11 @@ function buildPayrollPayload() {
     ...payrollModelFields,
 
     // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - STEP 2
-    // A submitted payroll should be stored as a completed/finalised payroll entry.
-    // Keep "Authorised" because this is the current valid status used by the app,
-    // while final completion is represented by is_finalised = true below.
-    status: "Authorised",
+    // Normal Run Payroll derives the workflow state. Historical Edit Payroll
+    // Record keeps compatibility with an already-saved status.
+    status: isEditMode
+      ? String(state.dom.payrollStatus?.value || "Authorised").trim() || "Authorised"
+      : "Authorised",
     // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1E
     // Save the generated or preserved payroll ID on the payroll record.
     payroll_reference: manualPayrollReference,
@@ -42869,6 +49210,33 @@ function buildPayrollPayload() {
     total_deductions: toNullableNumber(state.dom.payrollTotalDeductions?.value),
     net_pay: toNullableNumber(state.dom.payrollNetPay?.value),
 
+    // PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B
+    // Snapshot the final visible Regular payroll values after setup, statutory
+    // deductions, and employee overrides have already been applied.
+    ...buildPayrollTaxSnapshotFieldsFromPayrollValues({
+      payrollModel: getSelectedPayrollModel(),
+      payDate: String(state.dom.payrollPayDate?.value || "").trim() || null,
+      basicPay: toNullableNumber(state.dom.payrollBasicPay?.value),
+      housingAllowance: toNullableNumber(state.dom.payrollHousingAllowance?.value),
+      transportAllowance: toNullableNumber(state.dom.payrollTransportAllowance?.value),
+      utilityAllowance: toNullableNumber(state.dom.payrollUtilityAllowance?.value),
+      otherAllowance: toNullableNumber(state.dom.payrollOtherAllowance?.value),
+      medicalAllowance: toNullableNumber(state.dom.payrollMedicalAllowance?.value),
+      bonus: toNullableNumber(state.dom.payrollBonus?.value),
+      overtime: toNullableNumber(state.dom.payrollOvertime?.value),
+      logisticsAllowance: toNullableNumber(state.dom.payrollLogisticsAllowance?.value),
+      dataAirtimeAllowance: toNullableNumber(state.dom.payrollDataAirtimeAllowance?.value),
+      oneOffBonus: manualAdjustmentAmounts.bonus,
+      oneOffOvertime: manualAdjustmentAmounts.overtime,
+      oneOffOtherAllowance: manualAdjustmentAmounts.otherEarning,
+      monthlyPensionContribution: manualTaxReliefContributions.employeePension,
+      monthlyNhfContribution: manualTaxReliefContributions.nhf,
+      monthlyHealthContribution: manualTaxReliefContributions.health,
+      grossPay: toNullableNumber(state.dom.payrollGrossPay?.value),
+      employeePension: toNullableNumber(state.dom.payrollEmployeePension?.value),
+      payeTax: toNullableNumber(state.dom.payrollPayeTax?.value),
+    }),
+
     currency:
       String(state.dom.payrollCurrency?.value || "NGN").trim().toUpperCase() ||
       "NGN",
@@ -42876,7 +49244,7 @@ function buildPayrollPayload() {
     // Respect the Mark as Finalised checkbox.
     // Bank details no longer control payroll finalisation; they only affect
     // payment readiness and later bank/payment export checks.
-    is_finalised: Boolean(state.dom.payrollIsFinalised?.checked),
+    is_finalised: shouldFinalise,
     // DESCRIPTION ITEM 5 - STEP 5C
     // Keep manual payroll notes, but append a final override audit snapshot
     // when an active employee-specific override affected this payroll record.
@@ -42885,10 +49253,10 @@ function buildPayrollPayload() {
       employeeOverrideAuditSummary,
     ),
     processed_by: state.currentUser?.id || null,
-    approved_by: Boolean(state.dom.payrollIsFinalised?.checked)
+    approved_by: shouldFinalise
       ? state.currentUser?.id || null
       : null,
-    approved_at: Boolean(state.dom.payrollIsFinalised?.checked)
+    approved_at: shouldFinalise
       ? new Date().toISOString()
       : null,
   };
@@ -43064,8 +49432,15 @@ async function handleBatchPayrollSubmit() {
     // records created together can be traced as one payroll run.
     const payrollBatchReference = buildDatestampedPayrollReference("PAY");
 
-    const batchPayload = preparedRows.map((preparedRow) =>
+    const baseBatchPayload = preparedRows.map((preparedRow) =>
       buildBatchPayrollRecordPayload(preparedRow, payrollBatchReference),
+    );
+
+    // PAYROLL TAX YTD ENGINE - PHASE 2C-A
+    // Shadow-calculate cumulative YTD per employee before the existing insert.
+    // PAYE itself is intentionally unchanged until Phase 2C-B is verified.
+    const batchPayload = await Promise.all(
+      baseBatchPayload.map((payload) => applyPayrollYtdToNewPayload(payload)),
     );
 
     const supabase = getSupabaseClient();
@@ -43113,10 +49488,12 @@ async function handleBatchPayrollSubmit() {
 
     syncSelectAllEmployeesForPayrollCheckbox();
     resetPayrollForm();
+    advancePhase6RunPayrollPeriod(payCycle);
 
     scrollToPayrollRecordsAfterSubmit();
   } catch (error) {
     console.error("Error submitting batch payroll:", error);
+
     showPageAlert(
       "danger",
       error.message ||
@@ -43185,11 +49562,55 @@ async function handlePayrollSave() {
   }
 
   let payrollPayload = null;
-
   try {
     setPayrollSaveLoading(true, isEditMode);
 
+    // BEXHR PHASE 6: block accidental duplicate single-employee payroll for
+    // the same employee + pay period before a new record is inserted.
+    if (!isEditMode && selectedSingleEmployeeId) {
+      const selectedPayCycle = String(
+        state.dom.payrollPayCycle?.value || "",
+      ).trim();
+
+      const existingSinglePeriodRecords =
+        await getExistingBatchPayrollRecordsForPeriod(
+          selectedPayCycle,
+          [selectedSingleEmployeeId],
+        );
+
+      if (existingSinglePeriodRecords.length) {
+        const message = `Payroll already exists for this employee for <strong>${escapeHtml(
+          selectedPayCycle,
+        )}</strong>. Review the existing Payroll Record or choose the next pay period.`;
+
+        showPageAlert("warning", message);
+        showDashboardToast("warning", "Duplicate payroll blocked", message);
+        return;
+      }
+    }
+
     payrollPayload = buildPayrollPayload();
+
+    // PAYROLL TAX HISTORY SNAPSHOT - PHASE 2B
+    // Phase 2B never invents tax history for an older edited payroll row.
+    // Preserve whatever tax-history fields the record already had. Newly
+    // created rows receive the snapshot from buildPayrollPayload().
+    if (isEditMode) {
+      const existingPayrollRecord = state.currentEditingPayroll || {};
+
+      payrollPayload.tax_rule_version =
+        existingPayrollRecord.tax_rule_version ?? null;
+      payrollPayload.tax_calculation_snapshot =
+        existingPayrollRecord.tax_calculation_snapshot ?? null;
+      payrollPayload.ytd_gross_emoluments =
+        existingPayrollRecord.ytd_gross_emoluments ?? null;
+      payrollPayload.ytd_eligible_deductions =
+        existingPayrollRecord.ytd_eligible_deductions ?? null;
+      payrollPayload.ytd_taxable_emoluments =
+        existingPayrollRecord.ytd_taxable_emoluments ?? null;
+      payrollPayload.ytd_cumulative_tax =
+        existingPayrollRecord.ytd_cumulative_tax ?? null;
+    }
 
     // PAYROLL FINALISATION CORRECTION - STEP 2B
     // Mark corrected finalised payroll records without creating a duplicate row.
@@ -43216,10 +49637,15 @@ async function handlePayrollSave() {
     // before the save starts, so finalisation readiness can be checked first.
 
     if (isBatchPayrollSubmission) {
-      const batchPayload = selectedBatchEmployeeIds.map((employeeId) => ({
+      const baseBatchPayload = selectedBatchEmployeeIds.map((employeeId) => ({
         ...payrollPayload,
         employee_id: employeeId,
       }));
+
+      // PAYROLL TAX YTD ENGINE - PHASE 2C-A
+      const batchPayload = await Promise.all(
+        baseBatchPayload.map((payload) => applyPayrollYtdToNewPayload(payload)),
+      );
 
       response = await supabase
         .from("payroll_records")
@@ -43284,6 +49710,9 @@ async function handlePayrollSave() {
         .select("*")
         .maybeSingle();
     } else {
+      // PAYROLL TAX YTD ENGINE - PHASE 2C-A
+      payrollPayload = await applyPayrollYtdToNewPayload(payrollPayload);
+
       response = await supabase
         .from("payroll_records")
         .insert([payrollPayload])
@@ -43323,13 +49752,19 @@ async function handlePayrollSave() {
         : "The payroll record was created successfully.",
     );
 
+    const completedPayCycle = String(payrollPayload.pay_cycle || "").trim();
     resetPayrollForm();
+
+    if (!isEditMode) {
+      advancePhase6RunPayrollPeriod(completedPayCycle);
+    }
 
     // SUBMIT PAYROLL - DESCRIPTION ITEM 2 - SCROLL FIX FINAL
     // After successful single payroll submit/update, move HR to Payroll Records.
     scrollToPayrollRecordsAfterSubmit();
   } catch (error) {
     console.error("Error saving payroll record:", error);
+
     showPageAlert(
       "danger",
       error.message ||
@@ -43555,10 +49990,41 @@ function initHrSelfServiceNotificationBridge() {
 
 let _hrSelfServiceInitialised = false;
 
-function initHrSelfServiceOnFirstOpen() {
+// BEXHR HR SELF-SERVICE FIRST-PAINT STABILISATION - R-02.2
+// Resolve the requested Self-Service area before the HR workspace becomes visible.
+// This is UI sequencing only; no leave/payroll data, permissions, or queries change.
+let _hrSelfServiceInitPromise = null;
+let _hrPendingSelfServiceSection = "";
+
+function getPreferredHrSelfServiceSection() {
+  if (_hrPendingSelfServiceSection === "leave" || _hrPendingSelfServiceSection === "payroll") {
+    return _hrPendingSelfServiceSection;
+  }
+
+  try {
+    const requestedSection = String(
+      new URLSearchParams(window.location.search || "").get("section") || "",
+    ).trim().toLowerCase();
+
+    if (requestedSection === "leave" || requestedSection === "payroll") {
+      return requestedSection;
+    }
+  } catch (error) {
+    console.warn("HR Self-Service URL section could not be resolved.", error);
+  }
+
+  const rememberedTask = String(getRememberedHrNavigationTask?.() || "").trim();
+  if (rememberedTask === "selfservice.leave") return "leave";
+  if (rememberedTask === "selfservice.payroll") return "payroll";
+
+  return "payroll";
+}
+
+function initHrSelfServiceOnFirstOpen(preferredSection = getPreferredHrSelfServiceSection()) {
   initHrSelfServiceNotificationBridge();
 
-  if (_hrSelfServiceInitialised) return;
+  const section = preferredSection === "leave" ? "leave" : "payroll";
+
   if (!window.EmployeeSelfService) {
     console.warn("EmployeeSelfService module is not loaded.");
     showDashboardToast(
@@ -43566,18 +50032,53 @@ function initHrSelfServiceOnFirstOpen() {
       "Self-service could not load",
       "The employee self-service module is not available. Refresh the page and try again.",
     );
-    return;
+    return Promise.resolve();
   }
-  _hrSelfServiceInitialised = true;
-  window.EmployeeSelfService.init(state.currentUser, state.currentProfile).catch((err) => {
-    console.error("Employee self-service init error:", err);
-    _hrSelfServiceInitialised = false; // allow retry on next open
-    showDashboardToast(
-      "danger",
-      "Self-service could not load",
-      escapeHtml(err?.message || "Your leave and payroll records could not be loaded."),
-    );
+
+  window.EmployeeSelfService.prepare?.(section, {
+    leaveView: section === "leave" ? "request" : undefined,
   });
+
+  if (_hrSelfServiceInitialised) {
+    window.EmployeeSelfService.show?.(section, {
+      leaveView: section === "leave" ? "request" : undefined,
+    });
+    return Promise.resolve();
+  }
+
+  if (_hrSelfServiceInitPromise) {
+    return _hrSelfServiceInitPromise.then(() => {
+      window.EmployeeSelfService.show?.(section, {
+        leaveView: section === "leave" ? "request" : undefined,
+      });
+    });
+  }
+
+  _hrSelfServiceInitPromise = window.EmployeeSelfService
+    .init(state.currentUser, state.currentProfile, {
+      initialSection: section,
+      leaveView: section === "leave" ? "request" : undefined,
+    })
+    .then(() => {
+      _hrSelfServiceInitialised = true;
+      window.EmployeeSelfService.show?.(section, {
+        leaveView: section === "leave" ? "request" : undefined,
+      });
+    })
+    .catch((err) => {
+      console.error("Employee self-service init error:", err);
+      _hrSelfServiceInitialised = false;
+      showDashboardToast(
+        "danger",
+        "Self-service could not load",
+        escapeHtml(err?.message || "Your leave and payroll records could not be loaded."),
+      );
+    })
+    .finally(() => {
+      _hrSelfServiceInitPromise = null;
+    });
+
+  return _hrSelfServiceInitPromise;
 }
 
 // HR EMPLOYEE SALARY SETUP MODERN RECORD CARDS - v1.0.1
@@ -43685,8 +50186,8 @@ function initHrSelfServiceOnFirstOpen() {
     const employeeName = employeeLines[0] || "Employee";
     const gradeLevel = String(gradeCell.innerText || "--").trim();
     const salary = String(salaryCell.innerText || "--").trim();
-    const effectiveDate = String(effectiveCell.innerText || "--").trim();
-    const payCycle = String(cycleCell.innerText || "--").trim();
+    const startMonth = String(effectiveCell.innerText || "--").trim();
+    const payBasis = String(cycleCell.innerText || "--").trim();
     const updatedDate = String(updatedCell.innerText || "--").trim();
 
     const statusContent = document.createElement("div");
@@ -43735,9 +50236,9 @@ function initHrSelfServiceOnFirstOpen() {
 
     const details = document.createElement("div");
     details.className = "hr-salary-record-details";
-    details.appendChild(createDetail("Salary", salary));
-    details.appendChild(createDetail("Effective date", effectiveDate));
-    details.appendChild(createDetail("Pay cycle", payCycle));
+    details.appendChild(createDetail("Monthly Gross Salary", salary));
+    details.appendChild(createDetail("Starts From", startMonth));
+    details.appendChild(createDetail("Pay Basis", payBasis));
     details.appendChild(createDetail("Last updated", updatedDate));
 
     article.appendChild(header);

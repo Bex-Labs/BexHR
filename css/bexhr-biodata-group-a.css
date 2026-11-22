@@ -1,0 +1,162 @@
+/* BexHR Group A: original Alpatech extended biodata; compact form unchanged for other tenants. */
+#employeeFormSteps.hr-create-employee-stepper {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem !important;
+  width: 100%;
+}
+#employeeFormSteps .bexhr-form-step-connector {
+  display: block !important;
+  flex: 1 1 auto;
+  min-width: 14px;
+  max-width: none;
+  height: 2px;
+  margin: 0 0 1.1rem;
+}
+#employeeFormSteps .bexhr-form-step {
+  flex: 0 1 auto;
+  min-width: 60px;
+}
+/* Four evenly distributed visible steps in standard tenant workspaces. */
+body:not(.bexhr-ga-alpatech) #employeeFormSteps [data-step="3"],
+body:not(.bexhr-ga-alpatech) #employeeFormSteps [data-step="6"],
+body:not(.bexhr-ga-alpatech) #employeeFormSteps [data-step="7"] {
+  display: none !important;
+}
+/* The original seven navigation steps are displayed for the verified Alpatech tenant only. */
+body.bexhr-ga-alpatech #employeeFormSteps [data-step="3"],
+body.bexhr-ga-alpatech #employeeFormSteps [data-step="6"],
+body.bexhr-ga-alpatech #employeeFormSteps [data-step="7"] { display: flex !important; }
+body.bexhr-ga-alpatech #employeeCreateForm [data-employee-form-section="dependants"]:not([hidden]),
+body.bexhr-ga-alpatech #employeeCreateForm [data-employee-form-section="education"]:not([hidden]),
+body.bexhr-ga-alpatech #employeeCreateForm [data-employee-form-section="documents"]:not([hidden]) { display: block !important; }
+/* Restore historical input elements; their existing IDs, validation and core payroll links remain unchanged. */
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#personalEmail),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#alternativePhoneNumber),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#gender),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#maritalStatus),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#stateOfOrigin),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#localGovernmentArea),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#meansOfIdentification),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#identificationDocumentNumber),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#identificationIssueState),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#employeeIdentityEvidenceInput),
+body.bexhr-ga-alpatech #employeeCreateForm [data-employee-form-section="address"]:has(#employeePermanentAddressLine1):not([hidden]),
+body.bexhr-ga-alpatech #employeeCreateForm [data-employee-form-section="address"]:has(#employeeCurrentPostalCode):not([hidden]) .col-md-6:has(#employeeCurrentPostalCode),
+body.bexhr-ga-alpatech #employeeCreateForm [data-employee-form-section="next-of-kin"]:not([hidden]) .col-md-6:has(#employeeNextOfKinEmail),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#hmoProvider),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#hmoPlan),
+body.bexhr-ga-alpatech #employeeCreateForm .row.g-4 > [class*="col-"]:has(#hmoNumber) { display: block !important; }
+/* Respect the in-form navigation; never force a hidden section visible. */
+body.bexhr-ga-alpatech #employeeCreateForm [data-employee-form-section][hidden] { display: none !important; }
+.bexhr-ga-panel { border:1px solid #d1e5e4; background:#f7fcfc; border-radius:14px; padding:16px; }
+.bexhr-ga-field-row { display:flex; align-items:center; justify-content:space-between; gap:12px; border-top:1px solid #dce8e7; padding:9px 0; }
+.bexhr-ga-field-row span { min-width:0; overflow-wrap:anywhere; }
+@media (max-width: 860px) {
+  #employeeFormSteps.hr-create-employee-stepper { overflow-x:auto; justify-content:flex-start; }
+  #employeeFormSteps .bexhr-form-step-connector { flex: 0 0 28px; }
+}
+@media (max-width: 575px) {
+  #employeeFormSteps .bexhr-form-step { min-width:47px; }
+  #employeeFormSteps .bexhr-step-label { font-size:0.62rem; }
+}
+/* Four standard steps must have exactly three visible connecting lines. */
+body:not(.bexhr-ga-alpatech) #employeeFormSteps [data-step="5"] + .bexhr-form-step-connector,
+body:not(.bexhr-ga-alpatech) #employeeFormSteps [data-step="6"] + .bexhr-form-step-connector { display:none !important; }
+/* Step 3 is hidden for standard tenants, but its connector bridges visible steps 2 and 4. */
+body:not(.bexhr-ga-alpatech) #employeeFormSteps [data-step="3"] + .bexhr-form-step-connector { display:block !important; }
+
+/* GROUP A V4 - the UI must never expose data belonging to an inactive step. */
+#employeeFormSteps.hr-create-employee-stepper .hr-employee-form-tab { cursor: pointer; }
+#employeeFormSteps.hr-create-employee-stepper .hr-employee-form-tab:focus-visible { outline: 2px solid #089f9d; outline-offset: 4px; border-radius: 12px; }
+#employeeCreateForm [data-employee-form-section][hidden] { display: none !important; }
+/* Keep the original compact four-step SaaS form for all non-Alpatech tenants. */
+body:not(.bexhr-ga-alpatech) #employeeFormSteps [data-step="2"] + .bexhr-form-step-connector { display: none !important; }
+body:not(.bexhr-ga-alpatech) #employeeFormSteps [data-step="3"] + .bexhr-form-step-connector { display: block !important; }
+body:not(.bexhr-ga-alpatech) #employeeFormSteps [data-step="5"] + .bexhr-form-step-connector { display: none !important; }
+/* No bulky custom-field management form unless HR Admin opens its disclosure. */
+#bexhrGaPanel[hidden], #bexhrGaManager[hidden], #bexhrGaOptionsWrap[hidden] { display: none !important; }
+#bexhrGaPanel.bexhr-ga-panel { padding: 0; background: transparent; border: 1px solid #d1e5e4; }
+#bexhrGaPanel .bexhr-ga-summary { padding: 13px 17px; cursor: pointer; font-weight: 650; color: #0d7979; }
+#bexhrGaPanel #bexhrGaManager { padding: 0 16px 16px; }
+#bexhrGaPanel:not([open]) { background: #f9fcfc; }
+#bexhrGaPanel[open] { background: #f7fcfc; }
+/* BEXHR_GROUP_A_V5: user-created headings become real, accessible numbered steps. */
+#employeeFormSteps .bexhr-ga-dynamic-step {
+  display: flex !important;
+  flex: 0 0 auto;
+  cursor: pointer;
+  min-width: 82px;
+  max-width: 155px;
+}
+#employeeFormSteps .bexhr-ga-dynamic-step .bexhr-step-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  line-height: 1.25;
+}
+#employeeFormSteps .bexhr-ga-dynamic-connector,
+body:not(.bexhr-ga-alpatech) #employeeFormSteps [data-step="5"] + .bexhr-ga-dynamic-connector {
+  display: block !important;
+  flex: 0 1 54px;
+  min-width: 14px;
+}
+#employeeFormSteps.bexhr-ga-has-custom-steps {
+  overflow-x: auto;
+  justify-content: flex-start;
+  scrollbar-width: thin;
+}
+#employeeFormSteps.bexhr-ga-has-custom-steps .bexhr-form-step-connector:not(.bexhr-ga-dynamic-connector) {
+  flex: 1 1 36px;
+}
+#bexhrGaNewHeadingWrap[hidden] { display: none !important; }
+#employeeCreateForm .bexhr-ga-values-section[hidden] { display: none !important; }
+
+/* GROUP A V6: tidy actions, responsive feedback and consistent required labels. */
+.bexhr-ga-row-actions { position:relative; flex:0 0 auto; }
+.bexhr-ga-row-actions > summary { list-style:none; cursor:pointer; }
+.bexhr-ga-row-actions > summary::-webkit-details-marker { display:none; }
+.bexhr-ga-action-items { display:flex; gap:.35rem; flex-wrap:wrap; justify-content:flex-end; padding:.4rem 0; }
+.bexhr-ga-required-star { color:#dc3545 !important; font-weight:700; }
+#bexhrGaCancelEdit[hidden] { display:none !important; }
+#bexhrGaPanel button[aria-busy="true"] { cursor:wait; opacity:.85; }
+@media(max-width:600px) { .bexhr-ga-field-row { align-items:flex-start; } .bexhr-ga-action-items { flex-direction:column; } }
+
+/* Group A V6.2: same Actions control and fixed accessible menu as Employee Directory. */
+#bexhrGaFieldList .hr-people-actions-toggle {
+  display:inline-flex; align-items:center; justify-content:center; gap:.35rem;
+  min-width:88px; min-height:44px; padding:.48rem .55rem;
+  border:1.5px solid #087f7a; border-radius:10px;
+  background:#fff; color:#075a56; font:inherit; font-size:.9rem;
+  font-weight:750; white-space:nowrap; cursor:pointer; flex:0 0 auto;
+}
+#bexhrGaFieldList .hr-people-actions-toggle:hover,
+#bexhrGaFieldList .hr-people-actions-toggle[aria-expanded="true"] { background:#e8f6f4; }
+#bexhrGaFieldActionsPortal[hidden] { display:none !important; }
+#bexhrGaFieldActionsPortal.hr-people-actions-portal {
+  position:fixed; z-index:20000; max-height:calc(100dvh - 24px);
+  overflow-y:auto; padding:.4rem; border:1px solid #b8c8d6;
+  border-radius:14px; background:#fff;
+  box-shadow:0 22px 46px rgba(16,36,56,.22);
+}
+#bexhrGaFieldActionsPortal .hr-people-menu-item {
+  display:flex !important; align-items:center; justify-content:flex-start;
+  gap:.8rem; width:100%; min-height:46px; margin:0;
+  padding:.65rem .75rem; border:0 !important; border-radius:9px;
+  background:#fff !important; box-shadow:none !important;
+  color:#1a364b !important; font:inherit; font-size:.95rem;
+  font-weight:650; line-height:1.35; text-align:left;
+  white-space:normal; cursor:pointer;
+}
+#bexhrGaFieldActionsPortal .hr-people-menu-item > i { font-size:1.1rem; flex:0 0 1.3rem; }
+#bexhrGaFieldActionsPortal .hr-people-menu-item:hover:not(:disabled) { background:#e8f6f4 !important; }
+#bexhrGaFieldActionsPortal .hr-people-menu-item:disabled { cursor:not-allowed; opacity:.55; }
+#bexhrGaFieldList .hr-people-actions-toggle:focus-visible,
+#bexhrGaFieldActionsPortal .hr-people-menu-item:focus-visible { outline:3px solid #0a6b66; outline-offset:3px; }
+@media(max-width:480px) { #bexhrGaFieldList .hr-people-actions-toggle { min-width:78px; font-size:.84rem; padding:.45rem .3rem; } }
+@media(forced-colors:active) {
+  #bexhrGaFieldList .hr-people-actions-toggle,
+  #bexhrGaFieldActionsPortal { border:1px solid CanvasText !important; }
+}
