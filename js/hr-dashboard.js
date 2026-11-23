@@ -1210,6 +1210,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Reveal the remembered HR workspace immediately after authentication,
     // profile loading, form reset, and workspace restoration are complete.
     revealRestoredHrWorkspace();
+    // BEXHR_PA_CHOOSER_LATENCY_20261123: passive PA return timing at first authenticated shell paint.
+    try {
+      const rawReturn = window.sessionStorage.getItem('bexhr:pa:return-navigation-start:v1');
+      const mark = rawReturn ? JSON.parse(rawReturn) : null;
+      const age = Date.now() - Number(mark?.startedAt);
+      if (rawReturn && (!Number.isFinite(age) || age > 60000)) {
+        window.sessionStorage.removeItem('bexhr:pa:return-navigation-start:v1');
+      } else if (mark?.destination) {
+        const url = new URL(mark.destination, window.location.href);
+        if (url.origin === window.location.origin &&
+            url.pathname.replace(/\.html$/i, '') === window.location.pathname.replace(/\.html$/i, '')) {
+          console.info('[BexHR PA timing] Return to dashboard first visible shell (ms):', age);
+          window.sessionStorage.removeItem('bexhr:pa:return-navigation-start:v1');
+        }
+      }
+    } catch (_) { /* Timing is optional; never delay workspace rendering. */ }
 
     // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - STEP 5
     // Build the Pay Cycle dropdown dynamically before resetting the payroll form.
@@ -27682,26 +27698,79 @@ async function isCurrentHrEmployeeExcludedFromActivePaCycle() {
   }
 }
 
+// BEXHR_PA_CHOOSER_LATENCY_20261123: HR chooser shell paints immediately.
+// Live HR/manager/personal entitlement checks still determine the only options.
+function bexhrPaShowHrChooserPending() {
+  const previous = document.getElementById('hrPerformanceAppraisalChooser');
+  if (typeof previous?.bexhrPaCancel === 'function') previous.bexhrPaCancel();
+  else previous?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'hrPerformanceAppraisalChooser';
+  overlay.className = 'position-fixed top-0 start-0 w-100 h-100 hr-operating-guide-modal hr-performance-appraisal-chooser-modal';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Checking available appraisal workspaces');
+  const stage = document.createElement('div');
+  stage.className = 'hr-operating-guide-stage';
+  const dialog = document.createElement('div');
+  dialog.className = 'hr-operating-guide-shell hr-performance-appraisal-chooser-shell';
+  dialog.innerHTML = `
+    <header class="hr-operating-guide-header"><div class="hr-operating-guide-heading">
+      <span class="hr-operating-guide-heading-icon" aria-hidden="true"><i class="bi bi-clipboard2-check"></i></span>
+      <div><span class="hr-operating-guide-kicker">Performance Appraisal</span>
+        <h2>Choose your appraisal workspace</h2>
+        <p>Checking your currently authorised workspaces...</p></div>
+    </div><button type="button" class="hr-operating-guide-close" data-bexhr-pa-cancel aria-label="Close appraisal workspace chooser"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
+    <div class="hr-operating-guide-body"><p role="status" aria-live="polite">Checking reporting scope and appraisal participation...</p></div>
+    <footer class="hr-operating-guide-footer"><span>Access checks complete before a workspace can open.</span></footer>`;
+  stage.appendChild(dialog);
+  overlay.appendChild(stage);
+  let cancelled = false;
+  const keydown = (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); close(); }
+  };
+  const close = () => {
+    if (cancelled) return;
+    cancelled = true;
+    document.removeEventListener('keydown', keydown);
+    overlay.remove();
+    document.body?.classList.remove('hr-operating-guide-open');
+  };
+  overlay.bexhrPaCancel = close;
+  dialog.querySelector('[data-bexhr-pa-cancel]').addEventListener('click', close);
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay || event.target === stage) close();
+  });
+  document.addEventListener('keydown', keydown);
+  document.body.appendChild(overlay);
+  document.body?.classList.add('hr-operating-guide-open');
+  return { get cancelled() { return cancelled || !overlay.isConnected; }, finish: close };
+}
 async function showHrPerformanceAppraisalChooser() {
-  const managerScope =
-    await getHrPerformanceAppraisalManagerScope();
-
+  const pending = bexhrPaShowHrChooserPending();
+  const startedAt = window.performance.now();
+  let managerScope;
+  let employeeExcludedFromActivePaCycle = true;
+  try {
+    // Run the existing live checks concurrently, never from cached grants.
+    const [scope, highest, excludedInCycle] = await Promise.all([
+      getHrPerformanceAppraisalManagerScope(),
+      window.BexHRGroupBV13.isHighest(getSupabaseClient(), getCurrentHrEmployeeRecord()),
+      isCurrentHrEmployeeExcludedFromActivePaCycle(),
+    ]);
+    managerScope = scope;
+    employeeExcludedFromActivePaCycle = Boolean(highest || excludedInCycle);
+  } catch (error) {
+    pending.finish();
+    console.error('HR PA chooser readiness failed:', error);
+    showPageAlert('warning', 'Appraisal workspaces could not be verified. Please try again.');
+    return;
+  }
+  if (pending.cancelled) return;
   const hasManagerReviewCapability =
     managerScope.primaryEmployeeIds.length > 0 ||
     managerScope.secondaryEmployeeIds.length > 0;
-
-  // BEXHR_GROUP_B_V13_PATCH: PA exclusion follows current hierarchy even without cycles.
-  const employeeExcludedFromActivePaCycle =
-    await window.BexHRGroupBV13.isHighest(getSupabaseClient(), getCurrentHrEmployeeRecord()) ||
-    await isCurrentHrEmployeeExcludedFromActivePaCycle();
-
-  const existingChooser = document.getElementById(
-    "hrPerformanceAppraisalChooser",
-  );
-
-  if (existingChooser) {
-    existingChooser.remove();
-  }
+  console.info('[BexHR PA timing] HR chooser eligibility (ms):', Math.round(window.performance.now() - startedAt));
 
   const overlay = document.createElement("div");
   overlay.id = "hrPerformanceAppraisalChooser";
@@ -27970,10 +28039,12 @@ async function showHrPerformanceAppraisalChooser() {
   if (
     availableWorkspaceButtons.length === 1
   ) {
+    pending.finish();
     availableWorkspaceButtons[0].click();
     return;
   }
 
+  pending.finish();
   document.addEventListener(
     "keydown",
     handleKeydown,
@@ -39350,6 +39421,12 @@ function populateHrSupportingManagerOptions(employeeId, assignedManagerIds = [])
       return `<option value="${escapeHtml(candidateId)}">${escapeHtml(displayName)}${meta ? ` - ${escapeHtml(meta)}` : ""}</option>`;
     }),
   ].join("");
+  // The modal disables this selector while loading. Restore interaction
+  // after the existing hierarchy-safe candidate list has been resolved.
+  select.disabled = candidates.length === 0;
+  if (candidates.length === 0 && select.options.length) {
+    select.options[0].textContent = "No eligible supporting managers for this employee";
+  }
 }
 
 let hrSupportingManagerLoadGeneration = 0;

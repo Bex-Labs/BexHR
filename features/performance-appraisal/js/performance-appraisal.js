@@ -408,7 +408,146 @@
       userId: user.id,
       employeeId: employee?.id || null,
       tenantId: profile.tenant_id,
+      // Display-only account identity comes from this verified profile, not PA context.
+      displayName: String(profile.full_name || user.email || "Signed-in user").trim(),
+      // BEXHR_PA_CANONICAL_PROFILE_ROLE_20261123: account role is independent of PA workspace mode.
+      accountRole: String(profile.role || "").trim().toLowerCase(),
+      hrAccessLevel: String(profile.hr_access_level || "").trim().toLowerCase(),
     };
+  }
+
+  function bexPaShowVerifiedAccount(identity) {
+    if (!identity?.userId) return;
+    const area = document.getElementById("bexPaSignedInAccount");
+    const name = document.getElementById("bexPaAccountName");
+    const role = document.getElementById("bexPaAccountRole");
+    const avatar = document.getElementById("bexPaAccountAvatar");
+    if (!area || !name || !role || !avatar) return;
+    const displayName = String(identity.displayName || "Signed-in user").trim();
+    // Display the signed-in BexHR account role, never the currently selected PA persona.
+    // This mirrors the dashboard: an HR Admin in My Appraisal still reads HR Admin.
+    const accountRole = String(identity.accountRole || "").trim().toLowerCase();
+    const hrAccessLevel = String(identity.hrAccessLevel || "").trim().toLowerCase();
+    // BEXHR_PA_COVERAGE_ROLE_PARITY_AND_NO_GREEN_STRIPE_20261123
+    // Reuse the Manager Dashboard terminology for confirmed Primary / Secondary
+    // coverage. This is DISPLAY ONLY: never use the PA context as permission.
+    // HR Admin / HR Standard roles remain independent of active PA workspace.
+    let accountRoleLabel = "BexHR account";
+    let managerCoverage = "none";
+    if (accountRole === "hr") {
+      accountRoleLabel = hrAccessLevel === "tenant_admin" ? "HR Admin" : "HR Standard";
+    } else if (accountRole === "manager") {
+      accountRoleLabel = "Manager";
+      const context = bexPaGetIntegratedContext();
+      const matchesVerifiedManager = Boolean(
+        identity?.employeeId &&
+        context?.sourceDashboard === "manager-dashboard" &&
+        String(context?.managerEmployeeId || "").trim() ===
+          String(identity.employeeId).trim()
+      );
+      if (matchesVerifiedManager) {
+        const primaryIds = Array.isArray(context.managedEmployeeIds)
+          ? context.managedEmployeeIds
+          : [];
+        const secondaryIds = Array.isArray(context.secondaryEmployeeIds)
+          ? context.secondaryEmployeeIds
+          : [];
+        const hasPrimary = primaryIds.some(id => String(id || "").trim());
+        const hasSecondary = secondaryIds.some(id => String(id || "").trim());
+        if (hasPrimary && hasSecondary) {
+          accountRoleLabel = "Mixed Manager Coverage";
+          managerCoverage = "mixed";
+        } else if (hasPrimary) {
+          accountRoleLabel = "Primary Manager";
+          managerCoverage = "primary";
+        } else if (hasSecondary) {
+          accountRoleLabel = "Secondary Manager";
+          managerCoverage = "secondary";
+        }
+      }
+    } else if (accountRole === "employee") {
+      accountRoleLabel = "Employee";
+    } else if (accountRole === "admin" || accountRole === "super_admin") {
+      accountRoleLabel = "Admin";
+    }
+    name.textContent = displayName;
+    role.textContent = accountRoleLabel;
+    role.dataset.bexPaCoverage = managerCoverage;
+    role.dataset.bexPaRole = accountRole === "hr"
+      ? (hrAccessLevel === "tenant_admin" ? "hr-admin" : "hr-standard")
+      : (accountRole === "manager" ? "manager" :
+        accountRole === "employee" ? "employee" : "other");
+    role.setAttribute("aria-label", `BexHR account role: ${accountRoleLabel}`);
+    avatar.textContent = displayName.split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join("").toUpperCase() || "PA";
+    area.hidden = false;
+  }
+
+  // BEXHR_PA_VERIFIED_AVATAR_INHERIT_20261123: display only.
+  // Reuse the authenticated dashboard photo and signed-URL session cache.
+  // Missing images and network failures retain the verified initials.
+  async function bexPaLoadVerifiedAccountAvatar(identity) {
+    if (!identity?.userId || !identity?.tenantId) return;
+    const avatar = document.getElementById("bexPaAccountAvatar");
+    if (!avatar || !window.supabaseClient) return;
+
+    const stillCurrent = () =>
+      String(bexPaPersistence.userId || "") === String(identity.userId) &&
+      String(bexPaPersistence.tenantId || "") === String(identity.tenantId) &&
+      document.getElementById("bexPaAccountAvatar") === avatar;
+
+    try {
+      const { data: profile, error: profileError } = await window.supabaseClient
+        .from("profiles")
+        .select("profile_image_path")
+        .eq("id", identity.userId)
+        .eq("tenant_id", identity.tenantId)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      if (!stillCurrent()) return;
+      const filePath = String(profile?.profile_image_path || "").trim();
+      if (!filePath) return;
+
+      // Same cache format and 50-minute expiry as Manager/Employee dashboards.
+      const cacheKey = `bexhr:profile-image:signed-url:v1:${identity.userId}:${filePath}`;
+      let signedUrl = "";
+      try {
+        const cached = JSON.parse(window.sessionStorage.getItem(cacheKey) || "null");
+        if (cached && Number(cached.expiresAt) > Date.now()) {
+          signedUrl = String(cached.signedUrl || "");
+        }
+      } catch (_) { /* Cache is optional. */ }
+
+      if (!signedUrl) {
+        const { data, error } = await window.supabaseClient.storage
+          .from("profile-images")
+          .createSignedUrl(filePath, 3600);
+        if (error) throw error;
+        signedUrl = String(data?.signedUrl || "");
+        if (signedUrl) {
+          try {
+            window.sessionStorage.setItem(cacheKey, JSON.stringify({
+              signedUrl, expiresAt: Date.now() + 50 * 60 * 1000
+            }));
+          } catch (_) { /* Cache is optional. */ }
+        }
+      }
+      if (!signedUrl || !stillCurrent()) return;
+
+      // Keep initials visible until the private image successfully loads.
+      const img = new Image();
+      img.alt = "";
+      img.decoding = "async";
+      img.className = "bex-pa-account-avatar-image";
+      img.onload = () => {
+        if (stillCurrent()) avatar.replaceChildren(img);
+      };
+      img.onerror = () => {
+        try { window.sessionStorage.removeItem(cacheKey); } catch (_) {}
+      };
+      img.src = signedUrl;
+    } catch (error) {
+      console.warn("PA account photo unavailable; keeping initials.", error);
+    }
   }
   async function bexPaLoadRemoteDataset(datasetName) {
     const tableName =
@@ -3061,11 +3200,66 @@
     document.head.appendChild(style);
   }
 
+  // BEXHR_PA_COMMAND_HEADER_20261123: shared across HR Admin, HR Standard,
+  // Manager Goals and My Appraisal. Never changes permissions or PA ownership.
   function bexPaUpdateIntegratedWorkspaceLabel() {
     if (bexPaElements.integratedWorkspaceLabel) {
       bexPaElements.integratedWorkspaceLabel.textContent =
         bexPaGetWorkspaceLabelForMode();
     }
+
+    const cycleName = document.getElementById("bexPaHeaderCycleName");
+    const cycleStatus = document.getElementById("bexPaHeaderCycleStatus");
+    const activeCycle = (bexPaState.cycles || []).find(
+      (cycle) => String(cycle?.status || "").trim().toLowerCase() === "active"
+    );
+    if (cycleName) {
+      cycleName.textContent = activeCycle
+        ? String(activeCycle.name || "Active appraisal cycle").trim()
+        : "No active appraisal cycle";
+    }
+    if (cycleStatus) {
+      cycleStatus.hidden = !activeCycle;
+      if (activeCycle) cycleStatus.textContent = "Active";
+    }
+    bexPaInstallCommandHeaderScrollState();
+  }
+
+  // Canonical tenant-scoped visual label: already-established dashboard context,
+  // accepted only if its tenant ID matches the authenticated PA identity.
+  // Display-only. No additional network request and no authorization change.
+  function bexPaSetVerifiedHeaderTenant(verifiedIdentity) {
+    const element = document.getElementById("bexPaHeaderTenantLabel");
+    if (!element) return;
+    element.textContent = "BexHR";
+    const tenantId = String(verifiedIdentity?.tenantId || "").trim();
+    if (!tenantId) return;
+    try {
+      const stored = window.localStorage.getItem(BEX_PA_TENANT_CONTEXT_STORAGE_KEY);
+      const context = stored ? JSON.parse(stored) : null;
+      if (String(context?.tenantId || "").trim() !== tenantId) return;
+      const name = String(context?.companyName || context?.tenantName || "").trim();
+      if (name) element.textContent = name;
+    } catch (_) { /* Preserve the neutral BexHR label. */ }
+  }
+
+  function bexPaInstallCommandHeaderScrollState() {
+    const toolbar = bexPaElements.integratedToolbar;
+    if (!toolbar || toolbar.dataset.bexPaScrollBound === "true") return;
+    toolbar.dataset.bexPaScrollBound = "true";
+    let scheduled = false;
+    const applyScrollState = () => {
+      toolbar.classList.toggle("bex-pa-command-scrolled", window.scrollY > 110);
+    };
+    window.addEventListener("scroll", () => {
+      if (scheduled) return;
+      scheduled = true;
+      window.requestAnimationFrame(() => {
+        scheduled = false;
+        applyScrollState();
+      });
+    }, { passive: true });
+    applyScrollState();
   }
 
   function bexPaEnsureIntegratedWorkspaceSwitchButton() {
@@ -3091,8 +3285,16 @@
       button.className =
         "btn btn-outline-primary btn-sm bex-pa-workspace-switch-button";
       button.innerHTML =
-        '<i class="bi bi-grid" aria-hidden="true"></i><span>Switch workspace</span>';
-      button.addEventListener("click", bexPaShowWorkspaceChooser);
+        '<i class="bi bi-grid" aria-hidden="true"></i><span class="visually-hidden">Switch workspace</span>';
+      button.setAttribute("title", "Switch appraisal workspace");
+      button.addEventListener("click", () => {
+        const start = window.performance.now();
+        bexPaShowWorkspaceChooser();
+        window.requestAnimationFrame(() => {
+          console.info('[BexHR PA timing] In-PA switcher modal rendered (ms):',
+            Math.round(window.performance.now() - start));
+        });
+      });
       actions.insertBefore(button, backLink);
     }
 
@@ -3331,7 +3533,16 @@
           return;
         }
         closeChooser();
+        // Let the modal close paint before the existing heavy workspace render.
+        // Data permissions and switchable roles remain unchanged.
+        await new Promise(resolve => window.requestAnimationFrame(() =>
+          window.setTimeout(resolve, 0)));
+        const switchStarted = window.performance.now();
         await bexPaSwitchWorkspaceMode(mode);
+        window.requestAnimationFrame(() => {
+          console.info('[BexHR PA timing] In-PA workspace render (ms):',
+            Math.round(window.performance.now() - switchStarted));
+        });
       });
 
       grid.appendChild(button);
@@ -6918,6 +7129,7 @@
     );
   }
   function bexPaRenderCycles() {
+    bexPaUpdateIntegratedWorkspaceLabel();
     if (!bexPaElements.cycleTableBody) {
       return;
     }
@@ -21091,10 +21303,23 @@
           "click",
           (event) => {
             event.preventDefault();
-
-            window.location.assign(
-              dashboard.href,
-            );
+            // Immediate visible response. The destination still performs its
+            // normal authentication/tenant checks; no history or auth shortcut.
+            const returnLink = event.currentTarget;
+            returnLink?.setAttribute('aria-busy', 'true');
+            if (returnLink) returnLink.style.cursor = 'progress';
+            console.info('[BexHR PA timing] Return-to-dashboard navigation started:', dashboard.href);
+            try {
+              window.sessionStorage.setItem('bexhr:pa:return-navigation-start:v1',
+                JSON.stringify({ destination: new URL(dashboard.href, window.location.href).href, startedAt: Date.now() }));
+            } catch (_) { /* Timing is optional; never block navigation. */ }
+            try {
+              window.location.assign(dashboard.href);
+            } catch (error) {
+              returnLink?.removeAttribute('aria-busy');
+              if (returnLink) returnLink.style.cursor = '';
+              throw error;
+            }
           },
         );
 
@@ -21125,7 +21350,33 @@
         const verifiedIdentity = await bexPaResolvePersistenceIdentity();
         await bexPaVerifyPersonalAppraisalAccess(verifiedIdentity);
         if (!bexPaCanOpenPersonalAppraisal() && bexPaActiveMode === "employee") bexPaActiveMode = "";
-        await bexPaHydrateRemoteState();
+        bexPaShowVerifiedAccount(verifiedIdentity);
+        bexPaSetVerifiedHeaderTenant(verifiedIdentity);
+        // Non-blocking: never delay PA data or navigation for an avatar photo.
+        void bexPaLoadVerifiedAccountAvatar(verifiedIdentity);
+        // Independent directory and PA records: avoid a second network waterfall.
+        await Promise.all([bexPaHydrateRemoteState(), bexPaLoadGoalDirectory()]);
+        // BEXHR_PA_CHOOSER_LATENCY_20261123: optional idle same-origin document hint.
+        // Runs only after verified PA hydration, never preloads protected data.
+        (() => {
+          const href = bexPaElements.backToDashboardLink?.href;
+          if (!href) return;
+          const warm = () => {
+            try {
+              const url = new URL(href, window.location.href);
+              if (url.origin !== window.location.origin) return;
+              if (document.querySelector('link[data-bexhr-pa-return-prefetch]')) return;
+              const hint = document.createElement('link');
+              hint.rel = 'prefetch';
+              hint.href = url.href;
+              hint.dataset.bexhrPaReturnPrefetch = 'true';
+              document.head.appendChild(hint);
+            } catch (_) { /* Optional hint must never affect PA navigation. */ }
+          };
+          if (typeof window.requestIdleCallback === 'function')
+            window.requestIdleCallback(warm, { timeout: 6000 });
+          else window.setTimeout(warm, 3000);
+        })();
         // BEXHR_H12_PA_NATIVE_WORKSPACE_SWITCHER_20261114: PA identity already verified; reuse native live menu.
         if (window.BexHRPaNativeWorkspaceSwitcher?.init) {
           void window.BexHRPaNativeWorkspaceSwitcher.init(verifiedIdentity).catch(error => {
@@ -21178,7 +21429,7 @@
       bexPaPersistence.lastError = null;
     }
 
-    await bexPaLoadGoalDirectory();
+    // Integrated mode already loaded this directory in parallel with remote state.
     await bexPaCompleteEligibleCycles();
 
     // Reconcile only unresolved position setup using trusted current PA data.
@@ -21736,7 +21987,7 @@
       window.performance.now() -
       loaderStartedAt;
 
-    const minimumLoaderTime = 650;
+    const minimumLoaderTime = 300;
 
     const remainingLoaderTime =
       Math.max(

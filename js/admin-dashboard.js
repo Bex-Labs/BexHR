@@ -72,18 +72,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     // refreshes continue. Fresh login still opens Profile because logout clears memory.
     restoreAdminWorkspaceAfterRefresh();
 
-    // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
-    // Load tenant/company records after Admin access is confirmed.
-    await refreshTenantWorkspace();
+    // BEXHR_SYSTEMWIDE_LOGIN_STARTUP_20261123: access + fresh Admin profile
+    // are verified. Begin company loading and reveal the authenticated shell;
+    // company/access lists and their actions continue loading normally.
+    const adminTenantStartupPromise = refreshTenantWorkspace();
+    releaseAdminWorkspaceLoader();
+    await adminTenantStartupPromise;
 
-    // ADMIN EMAIL SETUP - STEP 1D
-    // Load Admin-owned approved validation recipients after companies are loaded,
-    // because each recipient is scoped to a company workspace.
-    await refreshAdminEmailSetupWorkspace();
-
-    // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
-    // Load profiles so Admin can manage company-scoped user access.
-    await refreshProfileTenantLinkingWorkspace();
+    // BEXHR_SYSTEMWIDE_LOGIN_STARTUP_20261123: both reads depend on the
+    // company list, but not on one another. Preserve each original RPC and
+    // all protected permission checks while eliminating a network waterfall.
+    await Promise.all([
+      refreshAdminEmailSetupWorkspace(),
+      refreshProfileTenantLinkingWorkspace(),
+    ]);
 
     // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
     // Complete startup before restoring the remembered Admin position.
@@ -91,9 +93,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     restoreAdminSavedLocationAfterData();
 
-    // ADMIN WORKSPACE LOADER - v1.0.2
-    // Existing authenticated Admin startup data is now ready.
-    releaseAdminWorkspaceLoader();
+    // Admin data is now ready; the authenticated shell was already revealed.
+    // Keep the existing post-load scroll restoration above unchanged.
 
     // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
     // Expose tenant edit action for the Tenant Records table.

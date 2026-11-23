@@ -52,7 +52,7 @@ function releaseLandingPageLoader() {
 // Keep the landing loader visible long enough to feel intentional
 // on fast connections. Slower real page loads receive no extra delay.
 
-const BEXHR_LANDING_LOADER_MINIMUM_MS = 1200;
+const BEXHR_LANDING_LOADER_MINIMUM_MS = 300; // BEXHR_SYSTEMWIDE_LOGIN_STARTUP_20261123 - visual delay only
 
 const bexhrLandingLoaderStartedAt =
   window.performance.now();
@@ -1351,6 +1351,12 @@ document.addEventListener("DOMContentLoaded", function () {
       const submitButton = loginForm.querySelector("button[type='submit']");
       const originalButtonHtml = submitButton.innerHTML;
 
+      // BEXHR_SYSTEMWIDE_LOGIN_STARTUP_20261123: timings only, never log credentials.
+      const loginTimingStartedAt = window.performance.now();
+      const noteLoginTiming = (stage) => {
+        console.info('[BexHR login timing]', stage, Math.round(window.performance.now() - loginTimingStartedAt), 'ms elapsed');
+      };
+
       submitButton.disabled = true;
       submitButton.innerHTML = `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Signing In...`;
 
@@ -1360,6 +1366,7 @@ document.addEventListener("DOMContentLoaded", function () {
             email,
             password,
           });
+        noteLoginTiming('Password response');
 
         if (authError) {
           showAlert(
@@ -1384,6 +1391,7 @@ document.addEventListener("DOMContentLoaded", function () {
           )
           .eq("id", authData.user.id)
           .single();
+        noteLoginTiming('Profile response');
 
         if (profileError) {
           console.error("Profile fetch error:", profileError);
@@ -1490,6 +1498,7 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
+        noteLoginTiming('Tenant verified');
         // HRP-80 - ADMIN TENANT LOGIN EXEMPTION - STEP 4B
         // Cache tenant context only for tenant-based users.
         // Platform Admin does not belong to one tenant and should not inherit a stale
@@ -1538,6 +1547,7 @@ document.addEventListener("DOMContentLoaded", function () {
         // Do not create the local application session or redirect HR until Supabase
         // confirms the session has reached AAL2 through TOTP MFA.
         const loginNeedsHrMfa = await isHrMfaRequiredForLoginProfile(profile);
+        noteLoginTiming('MFA requirement resolved');
         if (loginNeedsHrMfa) {
           try {
             await startHrDashboardMfaFlow(loginContext);

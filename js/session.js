@@ -1098,11 +1098,14 @@ function getCurrentWorkspaceKey() {
     attachAuthStateListener();
     attachActiveProfileLifecycleChecks();
 
-    try {
-      await initialiseWorkspaceSwitcher(result.profile);
-    } catch (error) {
+    // BEXHR_SYSTEMWIDE_LOGIN_STARTUP_20261123: the page is already authorised.
+    // Workspace menu enrichment performs its own live entitlement read. It is
+    // presentation/navigation only; do not block the authenticated dashboard
+    // waiting for that optional network request. No choices are exposed until
+    // the existing server-side entitlement checks complete.
+    void initialiseWorkspaceSwitcher(result.profile).catch((error) => {
       console.warn("Workspace switcher could not be initialised:", error);
-    }
+    });
 
     return result;
   }

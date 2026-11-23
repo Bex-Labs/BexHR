@@ -10,6 +10,8 @@ try {
   console.warn("Manager dashboard scroll restoration could not be set to manual.", error);
 }
 let managerWorkspaceRefreshPromise = null;
+// PA navigation must not wait for unrelated leave/delegation requests.
+let managerPaTeamReadyPromise = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   try {
@@ -79,6 +81,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     // tenant branding, navigation, title, and subtitle are ready.
     // Dashboard values and the responsibility badge continue progressively.
     revealRestoredManagerWorkspace();
+    // BEXHR_PA_CHOOSER_LATENCY_20261123: passive PA return timing at first authenticated shell paint.
+    try {
+      const rawReturn = window.sessionStorage.getItem('bexhr:pa:return-navigation-start:v1');
+      const mark = rawReturn ? JSON.parse(rawReturn) : null;
+      const age = Date.now() - Number(mark?.startedAt);
+      if (rawReturn && (!Number.isFinite(age) || age > 60000)) {
+        window.sessionStorage.removeItem('bexhr:pa:return-navigation-start:v1');
+      } else if (mark?.destination) {
+        const url = new URL(mark.destination, window.location.href);
+        if (url.origin === window.location.origin &&
+            url.pathname.replace(/\.html$/i, '') === window.location.pathname.replace(/\.html$/i, '')) {
+          console.info('[BexHR PA timing] Return to dashboard first visible shell (ms):', age);
+          window.sessionStorage.removeItem('bexhr:pa:return-navigation-start:v1');
+        }
+      }
+    } catch (_) { /* Timing is optional; never delay workspace rendering. */ }
 
     // Wait for the existing Manager refresh to finish so startup failures
     // still flow through the surrounding error handler.
@@ -1887,20 +1905,77 @@ async function isCurrentManagerExcludedFromActivePaCycle() {
   }
 }
 
+// BEXHR_PA_CHOOSER_LATENCY_20261123: show the real chooser shell immediately.
+// Choices remain unavailable until all existing live eligibility checks finish.
+function bexhrPaShowManagerChooserPending() {
+  ensureManagerPerformanceAppraisalChooserStyles();
+  const previous = document.getElementById('managerPerformanceAppraisalChooser');
+  if (typeof previous?.bexhrPaCancel === 'function') previous.bexhrPaCancel();
+  else previous?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'managerPerformanceAppraisalChooser';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Checking available appraisal workspaces');
+  const dialog = document.createElement('section');
+  dialog.className = 'manager-pa-chooser-dialog';
+  dialog.innerHTML = `
+    <div class="manager-pa-chooser-header">
+      <span class="manager-pa-chooser-icon" aria-hidden="true"><i class="bi bi-clipboard2-check"></i></span>
+      <div><p class="manager-pa-chooser-kicker">Performance Appraisal</p>
+        <h2 class="manager-pa-chooser-title">Choose your appraisal workspace</h2>
+        <p class="manager-pa-chooser-description">Checking your currently authorised workspaces...</p></div>
+      <button type="button" class="manager-pa-chooser-close" data-bexhr-pa-cancel aria-label="Close appraisal workspace chooser"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </div>
+    <div class="manager-pa-chooser-grid" style="display:block;min-height:92px" role="status" aria-live="polite">Checking reporting scope and appraisal participation...</div>
+    <div class="manager-pa-chooser-footer"><span>Access checks are performed before a workspace can open.</span></div>`;
+  overlay.appendChild(dialog);
+  let cancelled = false;
+  const keydown = (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); close(); }
+  };
+  const close = () => {
+    if (cancelled) return;
+    cancelled = true;
+    document.removeEventListener('keydown', keydown);
+    overlay.remove();
+  };
+  overlay.bexhrPaCancel = close;
+  dialog.querySelector('[data-bexhr-pa-cancel]').addEventListener('click', close);
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  document.addEventListener('keydown', keydown);
+  document.body.appendChild(overlay);
+  return { get cancelled() { return cancelled || !overlay.isConnected; }, finish: close };
+}
 async function showManagerPerformanceAppraisalChooser() {
-  const existingChooser = document.getElementById(
-    "managerPerformanceAppraisalChooser",
-  );
-
-  if (existingChooser) {
-    existingChooser.remove();
+  const pending = bexhrPaShowManagerChooserPending();
+  const startedAt = window.performance.now();
+  let employeeExcludedFromActivePaCycle = true;
+  try {
+    // Wait only for the existing manager-team readiness gate, not leave loads.
+    const ready = managerPaTeamReadyPromise || managerWorkspaceRefreshPromise;
+    if (ready) await ready;
+    if (pending.cancelled) return;
+    if (!state.currentManagerEmployeeRecord?.id) {
+      pending.finish();
+      showPageAlert('warning', 'Your manager employee record has not loaded. Please refresh and try again.');
+      return;
+    }
+    // Both checks remain mandatory. Running them concurrently removes one
+    // unnecessary remote-request waterfall without changing either result.
+    const [highest, excludedInCycle] = await Promise.all([
+      window.BexHRGroupBV13.isHighest(getSupabaseClient(), state.currentManagerEmployeeRecord),
+      isCurrentManagerExcludedFromActivePaCycle(),
+    ]);
+    employeeExcludedFromActivePaCycle = Boolean(highest || excludedInCycle);
+  } catch (error) {
+    pending.finish();
+    console.error('Manager PA chooser readiness failed:', error);
+    showPageAlert('warning', 'Appraisal workspaces could not be verified. Please try again.');
+    return;
   }
-
-  // BEXHR_GROUP_B_V13_PATCH: configured/highest-occupied head has no My Appraisal,
-  // even when no PA cycle exists. Existing PA snapshot check stays in force.
-  const employeeExcludedFromActivePaCycle =
-    await window.BexHRGroupBV13.isHighest(getSupabaseClient(), state.currentManagerEmployeeRecord) ||
-    await isCurrentManagerExcludedFromActivePaCycle();
+  if (pending.cancelled) return;
+  console.info('[BexHR PA timing] Manager chooser eligibility (ms):', Math.round(window.performance.now() - startedAt));
 
   ensureManagerPerformanceAppraisalChooserStyles();
 
@@ -2062,10 +2137,12 @@ async function showManagerPerformanceAppraisalChooser() {
   if (
     availableWorkspaceButtons.length === 1
   ) {
+    pending.finish();
     availableWorkspaceButtons[0].click();
     return;
   }
 
+  pending.finish();
   document.body.append(overlay);
 
   workspaceGrid
@@ -2076,13 +2153,16 @@ async function showManagerPerformanceAppraisalChooser() {
 async function openManagerPerformanceAppraisal(
   mode = "auto",
 ) {
-  if (managerWorkspaceRefreshPromise) {
-    await managerWorkspaceRefreshPromise;
-  }
-
+  // Show the chooser shell first. Readiness checks now happen inside it.
   if (mode === "auto") {
     await showManagerPerformanceAppraisalChooser();
     return;
+  }
+
+  // Keep the original reporting-team gate for actual PA navigation.
+  const managerPaReadiness = managerPaTeamReadyPromise || managerWorkspaceRefreshPromise;
+  if (managerPaReadiness) {
+    await managerPaReadiness;
   }
 
   if (
@@ -6142,7 +6222,10 @@ async function refreshManagerWorkspace({ quiet = false } = {}) {
     renderTeamLoadingState();
   }
 
-  const teamLoaded = await loadAssignedTeamMembers();
+  // Keep this promise separate from the slower leave/delegation refresh.
+  const teamLoadPromise = loadAssignedTeamMembers();
+  managerPaTeamReadyPromise = teamLoadPromise;
+  const teamLoaded = await teamLoadPromise;
 
   if (!teamLoaded) {
     state.pendingLeaveRequests = [];
@@ -6258,6 +6341,9 @@ async function loadAssignedTeamMembers() {
       return false;
     }
 
+    // Parallel, tenant-scoped directory requests: portal access does not depend
+    // on the employee-record request. Access rules and returned data are unchanged.
+    const portalAccessRowsPromise = loadManagerTeamPortalAccessStatusRows();
     const { data: employeeRows, error: employeeError } = await supabase
       .from("employees")
       .select("*")
@@ -6316,7 +6402,7 @@ async function loadAssignedTeamMembers() {
     // Load manager-safe portal access status for all employees currently in
     // this manager's reporting scope. This fixes false "No login" values
     // caused by profiles RLS blocking direct frontend reads.
-    const portalAccessRows = await loadManagerTeamPortalAccessStatusRows();
+    const portalAccessRows = await portalAccessRowsPromise;
     const portalAccessByEmployeeId = new Map(
       portalAccessRows.map((row) => [String(row.employee_id), row]),
     );

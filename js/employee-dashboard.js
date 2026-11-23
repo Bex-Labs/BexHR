@@ -288,21 +288,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     // continues loading progressively inside the visible dashboard.
     releaseEmployeeWorkspaceLoader();
 
-    // EMPLOYEE ASSIGNED MANAGERS VISIBILITY - STEP 1
-    // The employee record must resolve first because reporting relationships
-    // belong to employees.id. The RPC performs the final authenticated lookup
-    // and tenant restriction independently.
-    await loadEmployeeReportingManagers();
-
-    // BEXHR R-14A TOP-LEVEL LEAVE HANDLING
-    // Leave readiness uses its own narrow RPC so UI and database enforce the
-    // same active-Primary-Manager rule.
-    await loadEmployeeLeavePrimaryManagerReadiness();
-
-    await loadEmployeeLeaveBalances();
-    await loadLeaveTypes();
-    await loadEmployeeLeaveRequests();
-    await loadEmployeePayroll();
+    // BEXHR_SYSTEMWIDE_LOGIN_STARTUP_20261123: after verified identity,
+    // these tenant-restricted reads are independent. Keep each original live
+    // RPC/query and the readiness-based Leave submission guard intact.
+    await Promise.all([
+      loadEmployeeReportingManagers(),
+      loadEmployeeLeavePrimaryManagerReadiness(),
+      loadEmployeeLeaveBalances(),
+      loadLeaveTypes(),
+      loadEmployeeLeaveRequests(),
+      loadEmployeePayroll(),
+    ]);
 
     // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
     // Workspace restore already happened early after authentication.
@@ -1665,14 +1661,29 @@ function stopLeaveAutoRefresh() {
   }
 }
 
-async function refreshEmployeeLeaveViewsSilently() {
-  try {
-    await loadEmployeeLeavePrimaryManagerReadiness();
-    await loadEmployeeLeaveRequests();
-    await loadEmployeeLeaveBalances();
-  } catch (error) {
-    console.warn("Silent leave refresh failed:", error);
-  }
+// BEXHR_SYSTEMWIDE_LOGIN_STARTUP_20261123: focus, visibility and timer can
+// all request a refresh. Share one in-flight read so they do not multiply it.
+let employeeLeaveSilentRefreshInFlight = null;
+function refreshEmployeeLeaveViewsSilently() {
+  if (employeeLeaveSilentRefreshInFlight) return employeeLeaveSilentRefreshInFlight;
+  const task = (async () => {
+    try {
+      await loadEmployeeLeavePrimaryManagerReadiness();
+      await Promise.all([
+        loadEmployeeLeaveRequests(),
+        loadEmployeeLeaveBalances(),
+      ]);
+    } catch (error) {
+      console.warn("Silent leave refresh failed:", error);
+    }
+  })();
+  employeeLeaveSilentRefreshInFlight = task;
+  void task.finally(() => {
+    if (employeeLeaveSilentRefreshInFlight === task) {
+      employeeLeaveSilentRefreshInFlight = null;
+    }
+  });
+  return task;
 }
 
 function waitForNextPaint() {

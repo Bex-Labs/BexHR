@@ -169,6 +169,7 @@
                 </div>
 
                 <div class="d-flex align-items-center gap-3">
+
                     <!-- BEXHR_H12_PA_NATIVE_WORKSPACE_SWITCHER_20261114: shown only after live dual-workspace entitlement. -->
                     <div id="bexPaAuthSwitcherArea" class="bex-pa-auth-switcher-area d-none" hidden>
                         <button type="button" class="manager-modern-account-button bex-pa-auth-switcher-button"
@@ -269,23 +270,42 @@
                         <div class="bex-pa-integrated-toolbar d-none mb-4" id="bexPaIntegratedToolbar">
 
                             <div class="bex-pa-integrated-context">
-                                <span class="bex-pa-integrated-icon" aria-hidden="true">
-                                    <i class="bi bi-clipboard2-check"></i>
-                                </span>
+  <span class="bex-pa-integrated-icon" aria-hidden="true">
+    <i class="bi bi-clipboard2-check"></i>
+  </span>
+  <div class="bex-pa-command-copy">
+    <div class="bex-pa-command-eyebrow">
+      <span id="bexPaHeaderTenantLabel">BexHR</span>
+      <span class="bex-pa-command-dot" aria-hidden="true">/</span>
+      <span>PERFORMANCE APPRAISAL</span>
+    </div>
+    <p class="bex-pa-integrated-title mb-0" id="bexPaIntegratedWorkspaceLabel" aria-live="polite">Performance Appraisal</p>
+    <div class="bex-pa-command-meta" aria-label="Current appraisal cycle">
+      <span class="bex-pa-command-cycle" id="bexPaHeaderCycleName">Appraisal cycles</span>
+      <span class="bex-pa-command-status" id="bexPaHeaderCycleStatus" hidden>Active</span>
+    </div>
+  </div>
+</div>
 
-                                <p class="bex-pa-integrated-title mb-0" id="bexPaIntegratedWorkspaceLabel">
-                                    BexHR workspace
-                                </p>
-                            </div>
-
+                            <div class="bex-pa-integrated-actions">
+                        <!-- Verified session identity: display-only, no new role or navigation permissions. -->
+                        <div class="bex-pa-account-card" id="bexPaSignedInAccount" hidden
+                             aria-label="Current signed-in Performance Appraisal account">
+                            <span class="bex-pa-account-avatar" id="bexPaAccountAvatar" aria-hidden="true">PA</span>
+                            <span class="bex-pa-account-copy">
+                                <strong id="bexPaAccountName"></strong>
+                                <small class="bex-pa-account-role-pill" id="bexPaAccountRole"></small>
+                            </span>
+                        </div>
                             <a class="btn btn-outline-secondary btn-sm bex-pa-integrated-return"
-                                id="bexPaBackToDashboardLink" href="../../index.html">
-                                <i class="bi bi-arrow-left me-2" aria-hidden="true"></i>
+                                id="bexPaBackToDashboardLink" href="../../index.html" title="Back to dashboard">
+                                <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
 
-                                <span id="bexPaBackToDashboardLabel">
+                                <span class="visually-hidden" id="bexPaBackToDashboardLabel">
                                     Back to Dashboard
                                 </span>
                             </a>
+                            </div>
                         </div>
 
                         <div class="visually-hidden" id="bexPaAnnouncement" role="status" aria-live="polite"></div>
