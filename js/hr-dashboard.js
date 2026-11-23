@@ -16215,9 +16215,16 @@ async function saveEmployeeReportingLinesForEmployee(employeeId) {
 
 // EMPLOYEE BIODATA COMPLETION - STEP 3C
 // Load saved child reporting lines when HR edits an employee.
+let hrEmployeeReportingEditLoadGeneration = 0;
 async function loadEmployeeReportingLinesForEdit(employeeId) {
+  const loadGeneration = ++hrEmployeeReportingEditLoadGeneration;
   const employeeKey = String(employeeId || "").trim();
   resetEmployeeReportingLineRows();
+  const primarySelect = state.dom.assignedLineManagerEmployeeId;
+  if (primarySelect) {
+    primarySelect.replaceChildren(new Option("Loading current Primary Manager...", ""));
+    primarySelect.disabled = true;
+  }
 
   if (!employeeKey) return;
 
@@ -16232,6 +16239,8 @@ async function loadEmployeeReportingLinesForEdit(employeeId) {
       .order("created_at", { ascending: true });
 
     if (error) throw error;
+    if (loadGeneration !== hrEmployeeReportingEditLoadGeneration ||
+        String(state.currentEditingEmployee?.id || state.dom.editingEmployeeId?.value || "") !== employeeKey) return;
 
     const rows = (Array.isArray(data) ? data : []).filter(
       (row) => normalizeText(row?.status || "active") === "active",
@@ -16241,15 +16250,14 @@ async function loadEmployeeReportingLinesForEdit(employeeId) {
       (row) => normalizeText(row.manager_type) === "primary",
     );
 
-    if (primaryRow?.manager_employee_id) {
-      populateAssignedLineManagerOptions(primaryRow.manager_employee_id);
-
-      if (state.dom.assignedLineManagerEmployeeId) {
-        state.dom.assignedLineManagerEmployeeId.value = primaryRow.manager_employee_id;
-      }
-
-      applyAssignedLineManagerSelection();
+    // Rebuild choices only after the current employee's live assignments load.
+    // A legacy line_manager name must not appear as a saved active Primary.
+    populateAssignedLineManagerOptions(primaryRow?.manager_employee_id || "");
+    if (primarySelect) {
+      primarySelect.value = primaryRow?.manager_employee_id || "";
+      primarySelect.disabled = false;
     }
+    applyAssignedLineManagerSelection();
 
     // EMPLOYEE REPORTING-LINE LEGACY ROW RECOVERY - v1.0.0
     // Only render additional reporting rows that contain a real saved manager.
@@ -39209,6 +39217,8 @@ function getHrSupportingManagerModal() {
 }
 
 function closeHrSupportingManagerModal() {
+  hrSupportingManagerOpenGeneration += 1;
+  hrSupportingManagerLoadGeneration += 1;
   const modalElement = document.getElementById("hrSupportingManagerModal");
   if (!modalElement) return;
 
@@ -39342,7 +39352,10 @@ function populateHrSupportingManagerOptions(employeeId, assignedManagerIds = [])
   ].join("");
 }
 
+let hrSupportingManagerLoadGeneration = 0;
+let hrSupportingManagerOpenGeneration = 0;
 async function loadHrSupportingManagersForModal(employeeId) {
+  const loadGeneration = ++hrSupportingManagerLoadGeneration;
   const employeeKey = String(employeeId || "").trim();
   const list = document.getElementById("hrSupportingManagerCurrentList");
   if (!employeeKey || !list) return;
@@ -39364,6 +39377,10 @@ async function loadHrSupportingManagersForModal(employeeId) {
     .order("created_at", { ascending: true });
 
   if (error) throw error;
+  if (loadGeneration !== hrSupportingManagerLoadGeneration ||
+      String(document.getElementById("hrSupportingManagerEmployeeId")?.value || "") !== employeeKey) {
+    return;
+  }
 
   const activeRows = (data || []).filter(
     (row) => normalizeText(row?.status || "active") === "active",
@@ -39726,6 +39743,7 @@ ${canChangePrimaryManager
 }
 
 async function openEmployeeReportingManagerWorkspace(employeeId) {
+  const openGeneration = ++hrSupportingManagerOpenGeneration;
   if (!canCurrentUserMaintainPeopleData()) {
     showHrPeopleAccessDeniedMessage();
     return;
@@ -39782,12 +39800,27 @@ async function openEmployeeReportingManagerWorkspace(employeeId) {
     !returnEmployeeId,
   );
 
+  // Never paint a prior employee's Primary/Secondary manager details.
+  const primarySummary = document.getElementById("hrSupportingManagerPrimarySummary");
+  const currentList = document.getElementById("hrSupportingManagerCurrentList");
+  const loadingMarkup = '<div class="small text-secondary py-2">Loading current reporting assignments...</div>';
+  if (primarySummary) primarySummary.innerHTML = loadingMarkup;
+  if (currentList) currentList.innerHTML = loadingMarkup;
+  for (const selectId of ["hrPrimaryManagerSelect", "hrSupportingManagerSelect"]) {
+    const select = document.getElementById(selectId);
+    if (select) {
+      select.replaceChildren(new Option("Loading current managers...", ""));
+      select.disabled = true;
+    }
+  }
   modalElement.classList.remove("d-none");
   modalElement.setAttribute("aria-hidden", "false");
   document.body?.classList.add("hr-employee-access-modal-open");
 
   try {
     await loadHrPrimaryReportingHierarchy();
+    if (openGeneration !== hrSupportingManagerOpenGeneration ||
+        String(document.getElementById("hrSupportingManagerEmployeeId")?.value || "") !== String(employee.id)) return;
     await loadHrSupportingManagersForModal(employee.id);
     window.requestAnimationFrame(() => {
       document.getElementById("hrSupportingManagerSelect")?.focus();
