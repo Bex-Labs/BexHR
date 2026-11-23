@@ -104,6 +104,17 @@ body.bexhr-employee-visual-refresh #payrollHistoryCardCollapse.d-none {
   <!-- BexHR Employee Leave History - compact, HR Self-Service-aligned focused view. -->
   <style id="bexhrEmployeeLeaveHistoryCompactV1">
     /* The History tab shows only its own card: no inherited equal-height panel. */
+    body #leaveSection[data-employee-leave-view="history"] #leaveHistoryCardCollapse {
+      width: 100% !important;
+      min-width: 0 !important;
+      align-self: stretch !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"] .employee-leave-history-actions {
+      display: flex !important;
+      justify-content: flex-end !important;
+      width: 100% !important;
+      flex: none !important;
+    }
     body #leaveSection[data-employee-leave-view="history"] .employee-leave-main-row {
       align-items: flex-start !important;
       height: auto !important;
@@ -1183,11 +1194,6 @@ body.bexhr-employee-visual-refresh #payrollHistoryCardCollapse.d-none {
                 </div>
 
                 <div class="hr-self-service-card-toolbar">
-                  <button id="refreshLeaveRequestsBtn"
-                    class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
-                    type="button">
-                    <i class="bi bi-arrow-clockwise me-2"></i>Refresh History
-                  </button>
                   <button type="button" id="toggleLeaveHistoryCardBtn"
                     class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
                     aria-expanded="true" aria-controls="leaveHistoryCardCollapse" title="Collapse leave history">
@@ -1198,6 +1204,13 @@ body.bexhr-employee-visual-refresh #payrollHistoryCardCollapse.d-none {
               </div>
 
               <div id="leaveHistoryCardCollapse">
+                <div class="employee-leave-history-actions d-flex justify-content-end mb-3">
+                  <button id="refreshLeaveRequestsBtn"
+                    class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
+                    type="button">
+                    <i class="bi bi-arrow-clockwise me-2"></i>Refresh History
+                  </button>
+                </div>
 
                 <!-- EMPLOYEE DASHBOARD FINAL QA - STEP 1R-A
                      Contain only the growing leave history records.
