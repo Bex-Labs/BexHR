@@ -11629,7 +11629,7 @@
     }
   }
 
-  function bexPaOpenProgressUpdateDialog(
+  async function bexPaOpenProgressUpdateDialog(
     individualGoalId = null,
   ) {
     bexPaResetProgressUpdateForm();
@@ -11804,6 +11804,7 @@
   async function bexPaHandleProgressUpdateSubmit(event) {
     event.preventDefault();
     bexPaClearProgressUpdateError();
+    if (!(await bexPaRequireManagerReadiness(bexPaShowProgressUpdateError))) return;
 
     if (!bexPaCanAddProgressUpdates() || bexPaProgressSaveInFlight) {
       return;
@@ -20243,7 +20244,8 @@
   }
 
   // PRE-7B - Review detail route is retired for every persona.
-  function bexPaOpenSelfAppraisal(appraisalId, options = {}) {
+  async function bexPaOpenSelfAppraisal(appraisalId, options = {}) {
+    if (!(await bexPaRequireManagerReadiness(bexPaShowSelfAppraisalError))) return;
     // H12 Gate 5: original role/cycle reviewer guards are now reachable.
     const appraisal =
       bexPaGetEligibleEmployeeAppraisals().find(
@@ -20333,12 +20335,44 @@
     return "";
   }
 
+  // System-wide PA lock: backend is authoritative; the UI explains the lock.
+  async function bexPaRequireManagerReadiness(showError = () => {}) {
+    if (!bexPaIsIntegratedPersistenceContext()) return true;
+    let notice = document.getElementById("bexPaManagerReadinessNotice");
+    const reveal = (message) => {
+      if (!notice) {
+        notice = document.createElement("div");
+        notice.id = "bexPaManagerReadinessNotice";
+        notice.className = "alert alert-warning m-3";
+        notice.setAttribute("role", "alert");
+        document.body.prepend(notice);
+      }
+      notice.textContent = message;
+      notice.hidden = false;
+      showError(message);
+    };
+    try {
+      if (!window.supabaseClient) throw new Error("Workspace unavailable");
+      const { data, error } = await window.supabaseClient.rpc("bexhr_pa_my_manager_readiness");
+      if (error) throw error;
+      if (data?.ready !== true) {
+        reveal(data?.message || "Manager Assignment Required: Leave and appraisal actions are locked until HR assigns an eligible manager.");
+        return false;
+      }
+      if (notice) notice.hidden = true;
+      return true;
+    } catch (error) {
+      reveal("Manager assignment could not be verified. Contact HR or try again.");
+      return false;
+    }
+  }
   async function bexPaHandleSelfAppraisalSubmit(
     event,
     isFinalSubmission = false,
   ) {
     event.preventDefault();
     bexPaClearSelfAppraisalError();
+    if (!(await bexPaRequireManagerReadiness(bexPaShowSelfAppraisalError))) return;
 
     const appraisal =
       bexPaGetEligibleEmployeeAppraisals().find(
