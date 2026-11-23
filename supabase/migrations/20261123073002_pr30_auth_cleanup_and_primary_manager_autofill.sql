@@ -196,7 +196,7 @@ BEGIN
   LOOP
     v_manager_id := NULL;
     v_candidate_count := 0;
-    SELECT count(*),min(m.id) INTO v_candidate_count,v_manager_id
+    SELECT count(*),(array_agg(m.id ORDER BY m.id))[1] INTO v_candidate_count,v_manager_id
       FROM public.employees m
       JOIN public.profiles p ON p.id=m.user_id
        AND p.tenant_id=p_tenant_id
