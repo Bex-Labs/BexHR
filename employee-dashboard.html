@@ -1183,6 +1183,11 @@ body.bexhr-employee-visual-refresh #payrollHistoryCardCollapse.d-none {
                 </div>
 
                 <div class="hr-self-service-card-toolbar">
+                  <button id="refreshLeaveRequestsBtn"
+                    class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
+                    type="button">
+                    <i class="bi bi-arrow-clockwise me-2"></i>Refresh History
+                  </button>
                   <button type="button" id="toggleLeaveHistoryCardBtn"
                     class="btn btn-outline-secondary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
                     aria-expanded="true" aria-controls="leaveHistoryCardCollapse" title="Collapse leave history">
@@ -1193,16 +1198,6 @@ body.bexhr-employee-visual-refresh #payrollHistoryCardCollapse.d-none {
               </div>
 
               <div id="leaveHistoryCardCollapse">
-                <!-- EMPLOYEE UI CLEANUP - STEP 1O-C
-                     Refresh belongs inside the opened history card body,
-                     while the header keeps only the collapse control. -->
-                <div class="d-flex justify-content-end mb-3">
-                  <button id="refreshLeaveRequestsBtn"
-                    class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
-                    type="button">
-                    <i class="bi bi-arrow-clockwise me-2"></i>Refresh History
-                  </button>
-                </div>
 
                 <!-- EMPLOYEE DASHBOARD FINAL QA - STEP 1R-A
                      Contain only the growing leave history records.
