@@ -101,6 +101,59 @@ body.bexhr-employee-visual-refresh #payrollHistoryCardCollapse.d-none {
     display: block !important;
 }
 </style>
+  <!-- BexHR Employee Leave History - compact, HR Self-Service-aligned focused view. -->
+  <style id="bexhrEmployeeLeaveHistoryCompactV1">
+    /* The History tab shows only its own card: no inherited equal-height panel. */
+    body #leaveSection[data-employee-leave-view="history"] .employee-leave-main-row {
+      align-items: flex-start !important;
+      height: auto !important;
+      min-height: 0 !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"]
+      .employee-leave-main-row > .employee-leave-focused-column {
+      display: block !important;
+      align-self: flex-start !important;
+      height: auto !important;
+      min-height: 0 !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"] #employeeLeaveHistoryCard,
+    body #leaveSection[data-employee-leave-view="history"] #employeeLeaveHistoryCard > .card-body {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      flex: none !important;
+      align-self: flex-start !important;
+      overflow: visible !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"] #employeeLeaveHistoryCard > .card-body {
+      display: block !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"] #leaveHistoryCardCollapse:not(.d-none) {
+      display: block !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      flex: none !important;
+      overflow: visible !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"] .employee-leave-history-scroll-area {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: min(48vh, 360px) !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      overscroll-behavior: contain;
+    }
+    body #leaveSection[data-employee-leave-view="history"] #leaveRequestsEmptyState {
+      min-height: 0 !important;
+      padding-bottom: 0 !important;
+    }
+    @media (max-width: 1199.98px) {
+      body #leaveSection[data-employee-leave-view="history"] .employee-leave-history-scroll-area {
+        max-height: 360px !important;
+      }
+    }
+  </style>
 </head>
 
 <body class="dashboard-page bexhr-has-sidebar bexhr-employee-visual-refresh employee-workspace-booting"
