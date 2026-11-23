@@ -31,6 +31,32 @@
   const SESSION_REFRESH_LEEWAY_MS =
     60 * 1000;
 
+  // BEXHR_LOGOUT_TRANSITION_20261123: this is a UX state, never an auth grant.
+  // It prevents stale page requests from showing alerts while logout navigates.
+  let logoutInProgress = false;
+
+  function isLogoutInProgress() {
+    return logoutInProgress;
+  }
+
+  function showLogoutTransition() {
+    try {
+      if (!document.body || document.getElementById('bexhr-logout-transition')) return;
+      const overlay = document.createElement('div');
+      overlay.id = 'bexhr-logout-transition';
+      overlay.setAttribute('role', 'status');
+      overlay.setAttribute('aria-live', 'polite');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:#f5f8fc;color:#12253e;text-align:center;';
+      const message = document.createElement('div');
+      message.textContent = '';
+      message.style.cssText = 'font:600 17px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;';
+      overlay.appendChild(message);
+      // Existing page loader handles the transition.
+    } catch (error) {
+      console.warn('BexHR sign-out transition could not be displayed:', error);
+    }
+  }
+
   function getSupabaseClient() {
     // Single agreed global client name for the whole app
     if (!window.supabaseClient) {
@@ -362,6 +388,11 @@
   }
 
   async function logoutUser(reason = "logout") {
+    // BEXHR_LOGOUT_TRANSITION_20261123: mark intent before the asynchronous
+    // Supabase signOut call, so any pending HR request knows we are leaving.
+    if (logoutInProgress) return;
+    logoutInProgress = true;
+    if (reason === "logout") showLogoutTransition();
     const supabase = getSupabaseClient();
     const preserveTrustedHrSession =
       shouldPreserveTrustedHrSession(reason);
@@ -1270,6 +1301,7 @@ function getCurrentWorkspaceKey() {
     stopIdleTimeout,
     resetIdleTimer,
     logoutUser,
+    isLogoutInProgress,
     redirectToRoleDashboard,
     hasManagerWorkspaceAccess,
     initialiseWorkspaceSwitcher,

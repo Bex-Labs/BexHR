@@ -1445,6 +1445,13 @@ document.addEventListener("DOMContentLoaded", function () {
         // Email/password sign-in succeeded. Non-admin users must belong to the
         // entered Company/Tenant ID before the app creates a local session or redirects.
         let tenantValidation;
+        // Check MFA requirements while tenant validation runs.
+        const hrMfaCheckPromise = profile.must_change_password === true
+          ? null
+          : isHrMfaRequiredForLoginProfile(profile).then(
+              (required) => ({ required, error: null }),
+              (error) => ({ required: false, error }),
+            );
 
         try {
           // HRP-80 - ADMIN TENANT LOGIN EXEMPTION - STEP 4B
@@ -1546,7 +1553,9 @@ document.addEventListener("DOMContentLoaded", function () {
         // HR DASHBOARD TWO-FACTOR AUTHENTICATION - STEP 2A
         // Do not create the local application session or redirect HR until Supabase
         // confirms the session has reached AAL2 through TOTP MFA.
-        const loginNeedsHrMfa = await isHrMfaRequiredForLoginProfile(profile);
+        const hrMfaCheck = await hrMfaCheckPromise;
+        if (hrMfaCheck.error) throw hrMfaCheck.error;
+        const loginNeedsHrMfa = hrMfaCheck.required;
         noteLoginTiming('MFA requirement resolved');
         if (loginNeedsHrMfa) {
           try {

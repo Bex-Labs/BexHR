@@ -1573,6 +1573,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
   } catch (error) {
+    // BEXHR_LOGOUT_TRANSITION_20261123: startup may still be awaiting reads
+    // after sign-out begins. Never present that expected teardown as an HR error.
+    if (window.SessionManager?.isLogoutInProgress?.()) return;
     console.error("Error initialising HR dashboard:", error);
 
     // HR WORKSPACE FIRST PAINT FINALISATION - STEP 3
@@ -29796,6 +29799,9 @@ async function loadLatestHrProfile() {
 }
 
 function showPageAlert(type, message) {
+  // BEXHR_LOGOUT_TRANSITION_20261123: no stale tenant/session alerts during
+  // navigation away. Normal signed-in missing-tenant errors remain unchanged.
+  if (window.SessionManager?.isLogoutInProgress?.()) return;
   if (!state.dom.pageAlert) return;
   state.dom.pageAlert.className = `alert alert-${type} mb-4`;
   state.dom.pageAlert.innerHTML = message;
