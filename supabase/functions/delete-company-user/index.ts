@@ -285,6 +285,14 @@ if (!employeeRecords.length) {
     }
   }
 
+  // Preserve referenced grants/audit attribution before Auth cascade deletes the profile.
+  const { error: orphanPrepareError } = await supabaseAdmin.rpc(
+    "admin_prepare_auth_user_delete", { p_profile_id: profileId },
+  );
+  if (orphanPrepareError) {
+    throw new Error(`Unlinked Auth reference cleanup failed: ${orphanPrepareError.message}`);
+  }
+
   // Remove the Auth identity when one still exists.
   if (targetAuthData?.user?.id) {
     const { error: unlinkedAuthDeleteError } =
@@ -394,6 +402,16 @@ if (!employeeRecords.length) {
 
 // The transactional employee purge releases employee_number and work_email.
 // Supabase Auth cleanup below releases the login email separately.
+
+// The SQL employee purge and Auth deletion are separate transactions.
+// First archive/correct restrictive profile references. This also enables
+// a safe retry after an earlier attempt removed the employee record.
+const { error: prepareAuthDeleteError } = await supabaseAdmin.rpc(
+  "admin_prepare_auth_user_delete", { p_profile_id: profileId },
+);
+if (prepareAuthDeleteError) {
+  throw new Error(`Auth reference cleanup failed: ${prepareAuthDeleteError.message}`);
+}
 
 const { error: authDeleteError } =
       await supabaseAdmin.auth.admin.deleteUser(

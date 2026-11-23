@@ -2318,20 +2318,9 @@ async function loadEmployeeRecord(userId, userEmail) {
     }
   }
 
-  // P7 Stage B: never retain a raw NIN from a legacy employees row in
-  // Employee Self Service state. Only a protected, authenticated four-digit
-  // suffix can be carried into a profile or correction-request display.
+  // Keep legacy raw NIN out of Employee Self Service.
+  // The cancelled NIN integration must not trigger obsolete RPC requests.
   employee = { ...employee, nin: null };
-  try {
-    const { data: lastFour, error: ninMaskError } = await supabase.rpc(
-      "bexhr_p7_nin_last4_for_self",
-    );
-    if (!ninMaskError && /^\d{4}$/.test(String(lastFour || ""))) {
-      employee.nin = String(lastFour);
-    }
-  } catch (_ninMaskError) {
-    // Display is optional. No fallback to the raw employees.nin column.
-  }
   state.employeeRecord = employee;
   applyResolvedIdentity(employee);
   renderEmployeeRecord(employee);

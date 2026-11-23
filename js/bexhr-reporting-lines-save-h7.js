@@ -85,7 +85,7 @@
       if (backendReady) {
         // H6C's original two-form handoff remains the fallback on old backend only.
         openEditor.hidden = true;
-        notice('Review, confirm and save. Existing employee managers are not reassigned.');
+        notice('Review, confirm and save. The system updates only uniquely resolvable outdated Primary Managers after saving.');
       } else {
         notice('Save becomes available after the verified departmental reporting database upgrade.');
       }
@@ -142,7 +142,7 @@
       }
       const message = 'Save the reporting line for ' + reviewed.childLabel +
         '?\n\nCurrently: ' + reviewed.oldLabel + '\nNew: ' + reviewed.nextLabel +
-        '\n\nExisting employees and their Primary/Secondary Managers will not be reassigned. ' +
+        '\n\nEligible Primary Managers may be reconciled after saving; Secondary Managers are preserved. ' +
         'PA and Leave impact must be separately verified.';
       if (!root.confirm(message)) return;
       busy = true; refreshButtons();
@@ -169,7 +169,7 @@
               (reviewed.desiredParentId === TOP ? '' : reviewed.desiredParentId)) {
           throw new Error('The server response could not be verified. Refresh to inspect the saved line; do not retry blindly.');
         }
-        result.textContent = 'Reporting line saved. Existing employee manager assignments were not changed.';
+        result.textContent = 'Reporting line saved. Eligible Primary Manager assignments have been reconciled; review unresolved exceptions in Manage Managers.';
         reset();
         if (typeof root.refreshOrganizationHrSetupValues === 'function') {
           try { await root.refreshOrganizationHrSetupValues(); }

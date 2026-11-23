@@ -101,6 +101,77 @@ body.bexhr-employee-visual-refresh #payrollHistoryCardCollapse.d-none {
     display: block !important;
 }
 </style>
+  <!-- BexHR Employee Leave History - compact, HR Self-Service-aligned focused view. -->
+  <style id="bexhrEmployeeLeaveHistoryCompactV1">
+    /* The History tab shows only its own card: no inherited equal-height panel. */
+    body #leaveSection[data-employee-leave-view="history"] #leaveHistoryCardCollapse {
+      width: 100% !important;
+      min-width: 0 !important;
+      align-self: stretch !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"] .employee-leave-history-actions {
+      display: flex !important;
+      justify-content: flex-end !important;
+      width: 100% !important;
+      flex: none !important;
+    }
+    /* Refresh hides with its panel; history data and event handlers unchanged. */
+    body #leaveSection #employeeLeaveHistoryCard:has(#leaveHistoryCardCollapse.d-none)
+      > .card-body > .employee-leave-history-actions {
+      display: none !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"] .employee-leave-main-row {
+      align-items: flex-start !important;
+      height: auto !important;
+      min-height: 0 !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"]
+      .employee-leave-main-row > .employee-leave-focused-column {
+      display: block !important;
+      align-self: flex-start !important;
+      height: auto !important;
+      min-height: 0 !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"] #employeeLeaveHistoryCard,
+    body #leaveSection[data-employee-leave-view="history"] #employeeLeaveHistoryCard > .card-body {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      flex: none !important;
+      align-self: flex-start !important;
+      overflow: visible !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"] #employeeLeaveHistoryCard > .card-body {
+      display: block !important;
+      width: 100% !important;
+      align-self: stretch !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"] #leaveHistoryCardCollapse:not(.d-none) {
+      display: block !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      flex: none !important;
+      overflow: visible !important;
+    }
+    body #leaveSection[data-employee-leave-view="history"] .employee-leave-history-scroll-area {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: min(48vh, 360px) !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      overscroll-behavior: contain;
+    }
+    body #leaveSection[data-employee-leave-view="history"] #leaveRequestsEmptyState {
+      min-height: 0 !important;
+      padding-bottom: 0 !important;
+    }
+    @media (max-width: 1199.98px) {
+      body #leaveSection[data-employee-leave-view="history"] .employee-leave-history-scroll-area {
+        max-height: 360px !important;
+      }
+    }
+  </style>
 </head>
 
 <body class="dashboard-page bexhr-has-sidebar bexhr-employee-visual-refresh employee-workspace-booting"
@@ -1139,18 +1210,16 @@ body.bexhr-employee-visual-refresh #payrollHistoryCardCollapse.d-none {
                 </div>
               </div>
 
-              <div id="leaveHistoryCardCollapse">
-                <!-- EMPLOYEE UI CLEANUP - STEP 1O-C
-                     Refresh belongs inside the opened history card body,
-                     while the header keeps only the collapse control. -->
-                <div class="d-flex justify-content-end mb-3">
-                  <button id="refreshLeaveRequestsBtn"
-                    class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
-                    type="button">
-                    <i class="bi bi-arrow-clockwise me-2"></i>Refresh History
-                  </button>
-                </div>
+              <!-- Full-width card-body action row, matching Latest Decision. -->
+              <div class="employee-leave-history-actions d-flex justify-content-end mb-3 w-100">
+                <button id="refreshLeaveRequestsBtn"
+                  class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center text-nowrap"
+                  type="button">
+                  <i class="bi bi-arrow-clockwise me-2"></i>Refresh History
+                </button>
+              </div>
 
+              <div id="leaveHistoryCardCollapse">
                 <!-- EMPLOYEE DASHBOARD FINAL QA - STEP 1R-A
                      Contain only the growing leave history records.
                      Existing IDs are preserved so refresh, empty state,

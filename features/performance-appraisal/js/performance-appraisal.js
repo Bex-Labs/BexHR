@@ -1618,7 +1618,17 @@
       if (!error && data && ["CONFIGURED_ROOT", "HIGHEST_OCCUPIED", "HAS_OCCUPIED_PARENT", "SETUP_NEEDED"].includes(data.status)) {
         bexPaPersonalAppraisalPositionStatus = data.status;
         bexPaPersonalAppraisalVerifiedIdentity = { employeeId, tenantId: String(identity?.tenantId || "").trim() };
-        bexPaPersonalAppraisalAllowed = data.status === "HAS_OCCUPIED_PARENT";
+        // A configured parent alone is insufficient: require the current
+        // active employee-level Primary route before showing My Appraisal.
+        if (data.status === "HAS_OCCUPIED_PARENT") {
+          const { data: readiness, error: readinessError } = await window.supabaseClient.rpc(
+            "bexhr_pa_my_manager_readiness",
+          );
+          bexPaPersonalAppraisalAllowed = !readinessError &&
+            readiness?.ready === true && readiness?.route === "PRIMARY_MANAGER";
+        } else {
+          bexPaPersonalAppraisalAllowed = false;
+        }
       }
     } catch (_) { /* On lookup failure do not grant a personal appraisal. */ }
   }
