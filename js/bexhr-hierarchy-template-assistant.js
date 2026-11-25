@@ -211,21 +211,48 @@
       if (!snapshot) { showMessage('Organisation setup data is not available yet.'); return; }
       currentPlan = generate({ ...snapshot, mode: modeInput.value, selectedRootId: rootSelect.value });
       const notes = currentPlan.warnings.map((warning) => warning.message);
-      const rows = currentPlan.proposals.map((p) => {
-        const desc = p.state === 'preserved' ? 'Saved' : p.state === 'suggested' ? 'Suggested' :
-          p.state === 'preview-only' ? 'Preview only' : 'Needs review';
-        return `<tr><td>${escapeHtml(p.jobTitle)}</td><td>${escapeHtml(p.parentTitle || 'Select manually')}</td>` +
-          `<td>${escapeHtml(desc)}</td><td>` +
-          (p.editable && canMaintain ? `<button type="button" class="btn btn-sm btn-outline-primary" ` +
-          `data-bexhr-hierarchy-review="${escapeHtml(p.jobTitleId)}">Review in form</button>` :
-          `<span class="small text-secondary">${escapeHtml(p.note)}</span>`) + '</td></tr>';
-      }).join('');
-      preview.innerHTML = '<div class="table-responsive" style="max-height:360px;overflow-y:auto"><table class="table table-sm align-middle mb-0">' +
-        '<thead><tr><th>Existing position</th><th>Suggested parent</th><th>State</th><th>Next action</th></tr></thead>' +
-        `<tbody>${rows || '<tr><td colspan="4">No positions configured yet.</td></tr>'}</tbody></table></div>`;
+      const saved = currentPlan.proposals.filter((p) => p.state === 'preserved');
+      const pending = currentPlan.proposals.filter((p) => p.state !== 'preserved');
+      const highest = currentPlan.positions.find((p) => p.id === currentPlan.rootId);
+      const savedHighest = saved.some((p) => p.jobTitleId === currentPlan.rootId && !p.parentId);
+      const overview = '<p class="small text-secondary mb-2">' +
+        (highest ? (savedHighest ? 'Saved highest position: <strong>' : 'Suggested highest position: <strong>') +
+          escapeHtml(highest.job_title) + '</strong> | ' : 'Highest position: not set | ') +
+        saved.length + ' saved | ' + pending.length + ' still to set up</p>';
+      const renderTable = (items) => {
+        const rows = items.map((p) => {
+          const desc = p.state === 'preserved' ? 'Saved' : p.state === 'suggested' ? 'Suggested' :
+            p.state === 'preview-only' ? 'Preview only' : 'Needs review';
+          return '<tr><td>' + escapeHtml(p.jobTitle) + '</td><td>' +
+            escapeHtml(p.parentTitle || 'Select manually') + '</td><td>' + escapeHtml(desc) + '</td><td>' +
+            (p.editable && canMaintain ? '<button type="button" class="btn btn-sm btn-outline-primary" ' +
+              'data-bexhr-hierarchy-review="' + escapeHtml(p.jobTitleId) + '">Review in form</button>' :
+              '<span class="small text-secondary">' + escapeHtml(p.note) + '</span>') +
+            '</td></tr>';
+        }).join('');
+        return '<div class="table-responsive" style="max-height:360px;overflow-y:auto">' +
+          '<table class="table table-sm align-middle mb-0">' +
+          '<thead><tr><th>Job position</th><th>Reports to / suggested parent</th><th>State</th><th>Next action</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table></div>';
+      };
+      let toReview;
+      if (pending.length) {
+        toReview = '<p class="small mb-2">Only positions needing setup appear below. Review each suggestion before saving it in Reporting Lines.</p>' +
+          renderTable(pending);
+      } else if (currentPlan.positions.length) {
+        toReview = '<p class="small mb-0">All active positions already have saved reporting lines. ' +
+          'The starter template has nothing new to suggest. To change an existing line, use Reporting Lines above.</p>';
+      } else {
+        toReview = '<p class="small mb-0">Add job positions first, then preview suggested reporting lines here.</p>';
+      }
+      const existing = saved.length ? '<details class="mt-3"><summary class="small fw-semibold">' +
+        'View ' + saved.length + ' saved reporting lines (read-only)</summary><div class="mt-2">' +
+        renderTable(saved) + '</div></details>' : '';
+      preview.innerHTML = overview + toReview + existing;
       preview.hidden = false;
       showMessage((notes.length ? notes.join(' ') + ' ' : '') +
-        'Suggestions never save automatically. Existing links and employees are unchanged.');
+        'No reporting links, employee managers, or permissions were changed. ' +
+        'If an old job position still appears, review it in Job Titles.');
     }
     function refreshRootOptions() {
       if (!snapshot || !rootSelect) return;
