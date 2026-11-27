@@ -31618,9 +31618,7 @@ function renderOrganizationDepartmentsTable() {
   const tbody = state.dom.organizationDepartmentsTableBody;
   if (!tbody) return;
 
-  const records = sortOrganizationDepartmentsByLatestActivity(
-    state.organizationDepartments || [],
-  );
+  const records = [...(state.organizationDepartments || [])].sort((a, b) => String(a.department_name || "").localeCompare(String(b.department_name || ""), undefined, { sensitivity: "base" }));
 
   tbody.innerHTML = "";
 
@@ -32082,9 +32080,7 @@ function renderOrganizationJobTitlesTable() {
   const tbody = state.dom.organizationJobTitlesTableBody;
   if (!tbody) return;
 
-  const records = sortOrganizationJobTitlesByLatestActivity(
-    state.organizationJobTitles || [],
-  );
+  const records = [...(state.organizationJobTitles || [])].sort((a, b) => String(a.job_title || "").localeCompare(String(b.job_title || ""), undefined, { sensitivity: "base" }));
 
   tbody.innerHTML = "";
 

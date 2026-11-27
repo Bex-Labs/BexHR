@@ -4808,7 +4808,7 @@ body.bex-pa-page #bexPaGeneratedProgressReport .table-responsive {
   border-radius: 18px;
   background: linear-gradient(115deg, #fff 0%, #fff 69%, #f5fbfb 100%);
   box-shadow: 0 13px 32px rgba(8, 31, 51, .08);
-  transition: padding 160ms ease, min-height 160ms ease, box-shadow 160ms ease;
+  transition: box-shadow 160ms ease;
 }
 .bex-pa-page #bexPaIntegratedToolbar.d-none { display: none !important; }
 .bex-pa-page #bexPaIntegratedToolbar::before {
@@ -4979,17 +4979,8 @@ body.bex-pa-page #bexPaGeneratedProgressReport .table-responsive {
   transform: translateY(-1px);
   box-shadow: 0 3px 11px rgba(15, 64, 80, .09);
 }
-.bex-pa-page #bexPaIntegratedToolbar.bex-pa-command-scrolled {
-  min-height: 69px;
-  padding-top: .53rem;
-  padding-bottom: .53rem;
-  box-shadow: 0 9px 24px rgba(8, 31, 51, .12);
-}
-.bex-pa-page #bexPaIntegratedToolbar.bex-pa-command-scrolled .bex-pa-integrated-icon {
-  width: 36px;
-  height: 36px;
-  flex-basis: 36px;
-}
+.bex-pa-page #bexPaIntegratedToolbar.bex-pa-command-scrolled { box-shadow: 0 9px 24px rgba(8, 31, 51, .12); }
+
 @media (max-width: 960px) {
   .bex-pa-page #bexPaIntegratedToolbar {
     gap: .7rem;
